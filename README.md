@@ -1,16 +1,21 @@
-# gym_buddy_app
+# Gym Buddy App
 
-A new Flutter project.
+A Flutter application for finding workout partners and tracking fitness goals together.
 
-## Getting Started
+## Features
+- User authentication
+- Find and add gym buddies
+- Schedule workouts together
+- Track workout streaks
+- Social accountability system
 
-This project is a starting point for a Flutter application.
+## Status
+🚧 Under Development
 
-A few resources to get you started if this is your first Flutter project:
+## Tech Stack
+- Flutter
+- Dart
+- Supabase (planned)
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Developer
+Created by Danzabello
