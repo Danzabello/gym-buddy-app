@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
 import 'config/supabase.dart';
 import 'services/auth_service.dart';
+import 'signup_screen.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -197,10 +199,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     const Text("Don't have an account? "),
                     TextButton(
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Sign up page coming soon!'),
-                            backgroundColor: Colors.blue,
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const SignUpScreen(),
                           ),
                         );
                       },

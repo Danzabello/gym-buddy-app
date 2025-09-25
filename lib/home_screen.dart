@@ -1,4 +1,7 @@
+import 'main.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -423,10 +426,14 @@ class ProfilePage extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           ElevatedButton(
-            onPressed: () {
-              // This will go back to login screen
-              Navigator.of(context).pushReplacement(
+            onPressed: () async {
+              // Sign out from Supabase
+              await Supabase.instance.client.auth.signOut();
+    
+              // Navigate to login and remove all previous routes
+              Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (route) => false,
               );
             },
             style: ElevatedButton.styleFrom(
@@ -598,16 +605,5 @@ class _StatCard extends StatelessWidget {
         ),
       ],
     );
-  }
-}
-
-// Import this at the top of main.dart to use LoginScreen here
-class LoginScreen extends StatelessWidget {
-  const LoginScreen({super.key});
-  
-  @override
-  Widget build(BuildContext context) {
-    // Placeholder - the real LoginScreen is in main.dart
-    return Container();
   }
 }
