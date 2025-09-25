@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
-import 'home_screen.dart';  // Add this import!
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'home_screen.dart';
+import 'config/supabase.dart';
+import 'services/auth_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  await Supabase.initialize(
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
+  );
+  
   runApp(const GymBuddyApp());
 }
 
@@ -32,7 +42,9 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final AuthService _authService = AuthService();
   bool _isPasswordVisible = false;
+  bool _isLoading = false;
 
   @override
   Widget build(BuildContext context) {
@@ -120,13 +132,36 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 24),
                 // Login Button
                 ElevatedButton(
-                  onPressed: () {
-                    // Navigate to home screen
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(
-                        builder: (context) => const HomeScreen(),
-                      ),
+                  onPressed: _isLoading ? null : () async {
+                    setState(() {
+                      _isLoading = true;
+                    });
+                    
+                    final error = await _authService.signIn(
+                      email: _emailController.text.trim(),
+                      password: _passwordController.text,
                     );
+                    
+                    setState(() {
+                      _isLoading = false;
+                    });
+                    
+                    if (error == null) {
+                      // Success! Navigate to home screen
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(
+                          builder: (context) => const HomeScreen(),
+                        ),
+                      );
+                    } else {
+                      // Show error message
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Login failed: $error'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -136,14 +171,23 @@ class _LoginScreenState extends State<LoginScreen> {
                     backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
                   ),
-                  child: const Text(
-                    'LOGIN',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
+                  child: _isLoading 
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white, 
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text(
+                        'LOGIN',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
                 ),
                 const SizedBox(height: 16),
                 // Sign Up Link
