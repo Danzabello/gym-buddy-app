@@ -1,7 +1,7 @@
 import 'main.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
+import 'services/friend_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -190,9 +190,117 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
-// Friends/Buddies Page
-class FriendsPage extends StatelessWidget {
+// NEW Friends/Buddies Page with Real Functionality
+class FriendsPage extends StatefulWidget {
   const FriendsPage({super.key});
+
+  @override
+  State<FriendsPage> createState() => _FriendsPageState();
+}
+
+class _FriendsPageState extends State<FriendsPage> {
+  final FriendService _friendService = FriendService();
+  final TextEditingController _searchController = TextEditingController();
+  
+  List<Map<String, dynamic>> _friends = [];
+  List<Map<String, dynamic>> _pendingRequests = [];
+  List<Map<String, dynamic>> _searchResults = [];
+  bool _isLoading = true;
+  bool _isSearching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFriends();
+  }
+
+  Future<void> _loadFriends() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    final friends = await _friendService.getFriends();
+    final pending = await _friendService.getPendingRequests();
+
+    setState(() {
+      _friends = friends;
+      _pendingRequests = pending;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _searchUsers(String query) async {
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isSearching = true;
+    });
+
+    final results = await _friendService.searchUsers(query);
+
+    setState(() {
+      _searchResults = results;
+      _isSearching = false;
+    });
+  }
+
+  Future<void> _sendFriendRequest(String friendId) async {
+    final success = await _friendService.sendFriendRequest(friendId);
+    
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Friend request sent!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      _searchController.clear();
+      setState(() {
+        _searchResults = [];
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Already friends or request pending'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
+  }
+
+  Future<void> _acceptRequest(String requestId) async {
+    final success = await _friendService.acceptFriendRequest(requestId);
+    
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Friend request accepted!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      _loadFriends(); // Reload to update lists
+    }
+  }
+
+  Future<void> _declineRequest(String requestId) async {
+    final success = await _friendService.declineFriendRequest(requestId);
+    
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Friend request declined'),
+          backgroundColor: Colors.grey,
+        ),
+      );
+      _loadFriends(); // Reload to update lists
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -200,72 +308,251 @@ class FriendsPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Gym Buddies'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person_add),
-            onPressed: () {},
-          ),
-        ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Active Buddies Section
-          const Text(
-            'Active Buddies',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          _BuddyCard(
-            name: 'John Smith',
-            status: 'At the gym now',
-            streak: '15 days',
-            isOnline: true,
-          ),
-          _BuddyCard(
-            name: 'Sarah Johnson',
-            status: 'Last seen 2 hours ago',
-            streak: '8 days',
-            isOnline: false,
-          ),
-          const SizedBox(height: 20),
-          
-          // Pending Invites
-          const Text(
-            'Pending Invites',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Colors.grey[300],
-                child: const Icon(Icons.person, color: Colors.white),
-              ),
-              title: const Text('Mike Wilson'),
-              subtitle: const Text('Wants to be your gym buddy'),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.check, color: Colors.green),
-                    onPressed: () {},
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _loadFriends,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Search Bar
+                      TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search for gym buddies...',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() {
+                                      _searchResults = [];
+                                    });
+                                  },
+                                )
+                              : null,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                        ),
+                        onChanged: (value) {
+                          _searchUsers(value);
+                        },
+                      ),
+                      
+                      // Search Results
+                      if (_searchResults.isNotEmpty) ...[
+                        const SizedBox(height: 20),
+                        const Text(
+                          'Search Results',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        ..._searchResults.map((user) {
+                          return Card(
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: Colors.blue,
+                                child: Text(
+                                  user['display_name']?.substring(0, 1).toUpperCase() ?? '?',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                              title: Text(user['display_name'] ?? 'Unknown'),
+                              subtitle: Text(
+                                'Level: ${user['fitness_level'] ?? 'Not specified'}',
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.person_add),
+                                onPressed: () => _sendFriendRequest(user['id']),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        const SizedBox(height: 20),
+                      ],
+                      
+                      // Pending Requests
+                      if (_pendingRequests.isNotEmpty) ...[
+                        const SizedBox(height: 20),
+                        const Text(
+                          'Pending Requests',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        ..._pendingRequests.map((request) {
+                          final profile = request['user_profiles'];
+                          return Card(
+                            color: Colors.orange[50],
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: Colors.orange,
+                                child: Text(
+                                  profile?['display_name']?.substring(0, 1).toUpperCase() ?? '?',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              ),
+                              title: Text(profile?['display_name'] ?? 'Unknown'),
+                              subtitle: const Text('Wants to be your gym buddy'),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.check, color: Colors.green),
+                                    onPressed: () => _acceptRequest(request['id']),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, color: Colors.red),
+                                    onPressed: () => _declineRequest(request['id']),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                      
+                      // Active Buddies
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Your Gym Buddies',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            '${_friends.length} buddies',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      if (_friends.isEmpty)
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Center(
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.group_add,
+                                    size: 48,
+                                    color: Colors.grey[400],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'No gym buddies yet',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Search for friends to start training together!',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[500],
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        ..._friends.map((friend) {
+                          return Card(
+                            child: ListTile(
+                              leading: Stack(
+                                children: [
+                                  CircleAvatar(
+                                    backgroundColor: Colors.green,
+                                    child: Text(
+                                      friend['display_name']?.substring(0, 1).toUpperCase() ?? '?',
+                                      style: const TextStyle(color: Colors.white),
+                                    ),
+                                  ),
+                                  // Online indicator (mock for now)
+                                  Positioned(
+                                    right: 0,
+                                    bottom: 0,
+                                    child: Container(
+                                      width: 12,
+                                      height: 12,
+                                      decoration: BoxDecoration(
+                                        color: Colors.green,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 2,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              title: Text(friend['display_name'] ?? 'Unknown'),
+                              subtitle: Text(
+                                '${friend['workout_days_per_week'] ?? 0} days/week • ${friend['fitness_level'] ?? 'beginner'}',
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.local_fire_department,
+                                    color: Colors.orange,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '0', // Will add streak tracking later
+                                    style: const TextStyle(fontSize: 14),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                    ],
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.red),
-                    onPressed: () {},
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-        ],
-      ),
     );
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 }
 
-// Schedule Page
+// Schedule Page (unchanged)
 class SchedulePage extends StatelessWidget {
   const SchedulePage({super.key});
 
@@ -345,7 +632,7 @@ class SchedulePage extends StatelessWidget {
   }
 }
 
-// Profile Page
+// Profile Page (unchanged)
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
 
@@ -481,58 +768,7 @@ class _QuickActionButton extends StatelessWidget {
   }
 }
 
-class _BuddyCard extends StatelessWidget {
-  final String name;
-  final String status;
-  final String streak;
-  final bool isOnline;
 
-  const _BuddyCard({
-    required this.name,
-    required this.status,
-    required this.streak,
-    required this.isOnline,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: Stack(
-          children: [
-            CircleAvatar(
-              backgroundColor: Colors.grey[300],
-              child: const Icon(Icons.person, color: Colors.white),
-            ),
-            if (isOnline)
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                ),
-              ),
-          ],
-        ),
-        title: Text(name),
-        subtitle: Text(status),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.local_fire_department, color: Colors.orange, size: 20),
-            Text(streak, style: const TextStyle(fontSize: 12)),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _DayCircle extends StatelessWidget {
   final String day;
