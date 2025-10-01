@@ -6,22 +6,32 @@ class FriendService {
   // Search for users by name
   Future<List<Map<String, dynamic>>> searchUsers(String query) async {
     try {
+      print('🔎 searchUsers called with: "$query"');
+      
       if (query.isEmpty) return [];
       
       final currentUserId = _supabase.auth.currentUser?.id;
-      if (currentUserId == null) return [];
+      print('👤 Current user ID: $currentUserId');
+      
+      if (currentUserId == null) {
+        print('❌ No user logged in!');
+        return [];
+      }
 
       // Search in user_profiles for display names
       final response = await _supabase
           .from('user_profiles')
           .select('id, display_name, age, fitness_level')
           .ilike('display_name', '%$query%')
-          .neq('id', currentUserId)  // Don't show current user
+          .neq('id', currentUserId)
           .limit(20);
 
+      print('✅ Database returned ${response.length} results');
+      print('📄 Results: $response');
+      
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      print('Error searching users: $e');
+      print('❌ Error searching users: $e');
       return [];
     }
   }
