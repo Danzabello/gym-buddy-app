@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class FriendService {
@@ -6,15 +7,15 @@ class FriendService {
   // Search for users by name
   Future<List<Map<String, dynamic>>> searchUsers(String query) async {
     try {
-      print('🔎 searchUsers called with: "$query"');
+      if (kDebugMode) print('🔎 searchUsers called with: "$query"');
       
       if (query.isEmpty) return [];
       
       final currentUserId = _supabase.auth.currentUser?.id;
-      print('👤 Current user ID: $currentUserId');
+      if (kDebugMode) print('👤 Current user ID: $currentUserId');
       
       if (currentUserId == null) {
-        print('❌ No user logged in!');
+        if (kDebugMode) print('❌ No user logged in!');
         return [];
       }
 
@@ -26,12 +27,14 @@ class FriendService {
           .neq('id', currentUserId)
           .limit(20);
 
-      print('✅ Database returned ${response.length} results');
-      print('📄 Results: $response');
+      if (kDebugMode) {
+        print('✅ Database returned ${response.length} results');
+        print('📄 Results: $response');
+      }
       
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      print('❌ Error searching users: $e');
+      if (kDebugMode) print('❌ Error searching users: $e');
       return [];
     }
   }
@@ -51,7 +54,7 @@ class FriendService {
           .maybeSingle();
 
       if (existing != null) {
-        print('Friendship already exists');
+        if (kDebugMode) print('Friendship already exists');
         return false;
       }
 
@@ -64,7 +67,7 @@ class FriendService {
 
       return true;
     } catch (e) {
-      print('Error sending friend request: $e');
+      if (kDebugMode) print('Error sending friend request: $e');
       return false;
     }
   }
@@ -79,7 +82,7 @@ class FriendService {
 
       return true;
     } catch (e) {
-      print('Error accepting friend request: $e');
+      if (kDebugMode) print('Error accepting friend request: $e');
       return false;
     }
   }
@@ -94,7 +97,7 @@ class FriendService {
 
       return true;
     } catch (e) {
-      print('Error declining friend request: $e');
+      if (kDebugMode) print('Error declining friend request: $e');
       return false;
     }
   }
@@ -123,7 +126,7 @@ class FriendService {
 
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      print('Error getting pending requests: $e');
+      if (kDebugMode) print('Error getting pending requests: $e');
       return [];
     }
   }
@@ -161,7 +164,7 @@ class FriendService {
 
       return List<Map<String, dynamic>>.from(profiles);
     } catch (e) {
-      print('Error getting friends: $e');
+      if (kDebugMode) print('Error getting friends: $e');
       return [];
     }
   }

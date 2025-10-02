@@ -207,6 +207,10 @@ class _FriendsPageState extends State<FriendsPage> {
   List<Map<String, dynamic>> _searchResults = [];
   bool _isLoading = true;
   bool _isSearching = false;
+  
+  // NEW: Loading state tracking
+  String? _sendingRequestTo;
+  String? _processingRequestId;
 
   @override
   void initState() {
@@ -250,8 +254,17 @@ class _FriendsPageState extends State<FriendsPage> {
     });
   }
 
+  // UPDATED: With loading state
   Future<void> _sendFriendRequest(String friendId) async {
+    setState(() {
+      _sendingRequestTo = friendId;
+    });
+    
     final success = await _friendService.sendFriendRequest(friendId);
+    
+    setState(() {
+      _sendingRequestTo = null;
+    });
     
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -274,8 +287,17 @@ class _FriendsPageState extends State<FriendsPage> {
     }
   }
 
+  // UPDATED: With loading state
   Future<void> _acceptRequest(String requestId) async {
+    setState(() {
+      _processingRequestId = requestId;
+    });
+    
     final success = await _friendService.acceptFriendRequest(requestId);
+    
+    setState(() {
+      _processingRequestId = null;
+    });
     
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -284,12 +306,43 @@ class _FriendsPageState extends State<FriendsPage> {
           backgroundColor: Colors.green,
         ),
       );
-      _loadFriends(); // Reload to update lists
+      _loadFriends();
     }
   }
 
+  // UPDATED: With confirmation dialog and loading state
   Future<void> _declineRequest(String requestId) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Decline Friend Request'),
+        content: const Text('Are you sure you want to decline this friend request?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Decline'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _processingRequestId = requestId;
+    });
+    
     final success = await _friendService.declineFriendRequest(requestId);
+    
+    setState(() {
+      _processingRequestId = null;
+    });
     
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -298,7 +351,7 @@ class _FriendsPageState extends State<FriendsPage> {
           backgroundColor: Colors.grey,
         ),
       );
-      _loadFriends(); // Reload to update lists
+      _loadFriends();
     }
   }
 
@@ -348,7 +401,7 @@ class _FriendsPageState extends State<FriendsPage> {
                         },
                       ),
                       
-                      // Search Results
+                      // Search Results - UPDATED WITH LOADING STATE
                       if (_searchResults.isNotEmpty) ...[
                         const SizedBox(height: 20),
                         const Text(
@@ -373,17 +426,24 @@ class _FriendsPageState extends State<FriendsPage> {
                               subtitle: Text(
                                 'Level: ${user['fitness_level'] ?? 'Not specified'}',
                               ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.person_add),
-                                onPressed: () => _sendFriendRequest(user['id']),
-                              ),
+                              // UPDATED: Show loading spinner while sending request
+                              trailing: _sendingRequestTo == user['id']
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : IconButton(
+                                      icon: const Icon(Icons.person_add),
+                                      onPressed: () => _sendFriendRequest(user['id']),
+                                    ),
                             ),
                           );
                         }).toList(),
                         const SizedBox(height: 20),
                       ],
                       
-                      // Pending Requests
+                      // Pending Requests - UPDATED WITH LOADING STATE
                       if (_pendingRequests.isNotEmpty) ...[
                         const SizedBox(height: 20),
                         const Text(
@@ -408,25 +468,34 @@ class _FriendsPageState extends State<FriendsPage> {
                               ),
                               title: Text(profile?['display_name'] ?? 'Unknown'),
                               subtitle: const Text('Wants to be your gym buddy'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.check, color: Colors.green),
-                                    onPressed: () => _acceptRequest(request['id']),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.close, color: Colors.red),
-                                    onPressed: () => _declineRequest(request['id']),
-                                  ),
-                                ],
-                              ),
+                              // UPDATED: Show loading spinner while processing
+                              trailing: _processingRequestId == request['id']
+                                  ? const SizedBox(
+                                      width: 48,
+                                      height: 24,
+                                      child: Center(
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      ),
+                                    )
+                                  : Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.check, color: Colors.green),
+                                          onPressed: () => _acceptRequest(request['id']),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.close, color: Colors.red),
+                                          onPressed: () => _declineRequest(request['id']),
+                                        ),
+                                      ],
+                                    ),
                             ),
                           );
                         }).toList(),
                       ],
                       
-                      // Active Buddies
+                      // Active Buddies (unchanged)
                       const SizedBox(height: 20),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -496,7 +565,6 @@ class _FriendsPageState extends State<FriendsPage> {
                                       style: const TextStyle(color: Colors.white),
                                     ),
                                   ),
-                                  // Online indicator (mock for now)
                                   Positioned(
                                     right: 0,
                                     bottom: 0,
@@ -529,7 +597,7 @@ class _FriendsPageState extends State<FriendsPage> {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    '0', // Will add streak tracking later
+                                    '0',
                                     style: const TextStyle(fontSize: 14),
                                   ),
                                 ],
