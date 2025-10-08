@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/friend_service.dart';
 import 'services/workout_service.dart';
+import 'services/streak_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -60,9 +61,78 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// Dashboard/Home Page
-class DashboardPage extends StatelessWidget {
+// Dashboard/Home Page with Real Streak Data
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
+
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  final StreakService _streakService = StreakService();
+  
+  Map<String, dynamic>? _streakInfo;
+  bool _hasCheckedInToday = false;
+  bool _isLoading = true;
+  bool _isCheckingIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStreakData();
+  }
+
+  Future<void> _loadStreakData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    final streakInfo = await _streakService.getStreakInfo();
+    final hasCheckedIn = await _streakService.hasCheckedInToday();
+
+    setState(() {
+      _streakInfo = streakInfo;
+      _hasCheckedInToday = hasCheckedIn;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _checkIn() async {
+    setState(() {
+      _isCheckingIn = true;
+    });
+
+    final result = await _streakService.checkIn();
+
+    setState(() {
+      _isCheckingIn = false;
+    });
+
+    if (result != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Check-in successful! Keep up the streak!'),
+          backgroundColor: Colors.green,
+          action: SnackBarAction(
+            label: 'VIEW',
+            textColor: Colors.white,
+            onPressed: () {
+              // Could navigate to streak history page
+            },
+          ),
+        ),
+      );
+      _loadStreakData(); // Refresh data
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Already checked in today!'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,59 +141,163 @@ class DashboardPage extends StatelessWidget {
         title: const Text('Gym Buddy'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Welcome Card
-            Card(
-              elevation: 4,
-              child: Padding(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _loadStreakData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Welcome back!',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Ready to crush your workout?',
-                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            
-            // Streak Card
-            Card(
-              color: Colors.orange[50],
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Icon(Icons.local_fire_department, 
-                         size: 48, 
-                         color: Colors.orange[700]),
-                    const SizedBox(width: 16),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Current Streak',
-                          style: TextStyle(fontSize: 16),
+                    // Welcome Card
+                    Card(
+                      elevation: 4,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Welcome back!',
+                              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _hasCheckedInToday 
+                                  ? 'Great job checking in today!'
+                                  : 'Ready to crush your workout?',
+                              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                            ),
+                          ],
                         ),
-                        Text(
-                          '7 Days',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.orange[700],
-                          ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    // Streak Card with Real Data
+                    Card(
+                      color: Colors.orange[50],
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Icon(Icons.local_fire_department, 
+                                 size: 48, 
+                                 color: Colors.orange[700]),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Current Streak',
+                                    style: TextStyle(fontSize: 16),
+                                  ),
+                                  Text(
+                                    '${_streakInfo?['current_streak'] ?? 0} Days',
+                                    style: TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.orange[700],
+                                    ),
+                                  ),
+                                  if ((_streakInfo?['longest_streak'] ?? 0) > 0)
+                                    Text(
+                                      'Best: ${_streakInfo?['longest_streak']} days',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            // Check-in Button
+                            ElevatedButton.icon(
+                              onPressed: _hasCheckedInToday || _isCheckingIn ? null : _checkIn,
+                              icon: _isCheckingIn
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : Icon(_hasCheckedInToday ? Icons.check : Icons.fitness_center),
+                              label: Text(_hasCheckedInToday ? 'Checked In' : 'Check In'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _hasCheckedInToday ? Colors.green : Colors.orange[700],
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    // Today's Workout (unchanged)
+                    const Text(
+                      "Today's Workout",
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    Card(
+                      child: ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Colors.blue,
+                          child: Icon(Icons.fitness_center, color: Colors.white),
+                        ),
+                        title: const Text('Upper Body Day'),
+                        subtitle: const Text('with John Smith • 6:00 PM'),
+                        trailing: ElevatedButton(
+                          onPressed: () {},
+                          child: const Text('View'),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    // Quick Actions
+                    const Text(
+                      'Quick Actions',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _QuickActionButton(
+                          icon: Icons.add_circle_outline,
+                          label: 'New Workout',
+                          color: Colors.green,
+                          onTap: () {
+                            // Navigate to Schedule tab
+                            final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+                            homeState?.setState(() {
+                              homeState._selectedIndex = 2; // Schedule tab
+                            });
+                          },
+                        ),
+                        _QuickActionButton(
+                          icon: Icons.person_add,
+                          label: 'Find Buddy',
+                          color: Colors.blue,
+                          onTap: () {
+                            // Navigate to Buddies tab
+                            final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+                            homeState?.setState(() {
+                              homeState._selectedIndex = 1; // Buddies tab
+                            });
+                          },
+                        ),
+                        _QuickActionButton(
+                          icon: Icons.history,
+                          label: 'Streak History',
+                          color: Colors.purple,
+                          onTap: () {
+                            _showStreakHistory();
+                          },
                         ),
                       ],
                     ),
@@ -131,62 +305,244 @@ class DashboardPage extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            
-            // Today's Workout
-            const Text(
-              "Today's Workout",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              child: ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Colors.blue,
-                  child: Icon(Icons.fitness_center, color: Colors.white),
-                ),
-                title: const Text('Upper Body Day'),
-                subtitle: const Text('with John Smith • 6:00 PM'),
-                trailing: ElevatedButton(
-                  onPressed: () {},
-                  child: const Text('Check In'),
-                ),
+    );
+  }
+
+  void _showStreakHistory() {
+    showDialog(
+      context: context,
+      builder: (context) => _StreakHistoryDialog(),
+    );
+  }
+}
+
+// Streak History Dialog
+class _StreakHistoryDialog extends StatefulWidget {
+  @override
+  State<_StreakHistoryDialog> createState() => _StreakHistoryDialogState();
+}
+
+class _StreakHistoryDialogState extends State<_StreakHistoryDialog> {
+  final StreakService _streakService = StreakService();
+  List<Map<String, dynamic>> _checkIns = [];
+  Map<String, dynamic> _stats = {
+    'total_workouts': 0,
+    'this_week': 0,
+    'this_month': 0,
+    'current_streak': 0,
+    'longest_streak': 0,
+  };
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    final checkIns = await _streakService.getCheckInHistory(limit: 30);
+    final stats = await _streakService.getStreakStats();
+
+    setState(() {
+      _checkIns = checkIns;
+      _stats = stats;
+      _isLoading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Streak History'),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 400,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  // Stats Summary - FIXED OVERFLOW
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[50],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        Expanded(
+                          child: _StatItem('Total', '${_stats['total_workouts'] ?? 0}'),
+                        ),
+                        Container(
+                          width: 1,
+                          height: 40,
+                          color: Colors.orange[200],
+                        ),
+                        Expanded(
+                          child: _StatItem('This Month', '${_stats['this_month'] ?? 0}'),
+                        ),
+                        Container(
+                          width: 1,
+                          height: 40,
+                          color: Colors.orange[200],
+                        ),
+                        Expanded(
+                          child: _StatItem('Best Streak', '${_stats['longest_streak'] ?? 0}'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Check-in History
+                  const Text(
+                    'Recent Check-ins',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: _checkIns.isEmpty
+                        ? const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.fitness_center, size: 48, color: Colors.grey),
+                                SizedBox(height: 8),
+                                Text('No workouts yet'),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Complete a workout to start your streak!',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: _checkIns.length,
+                            itemBuilder: (context, index) {
+                              final checkIn = _checkIns[index];
+                              // Safely extract data with null checks
+                              final workoutType = checkIn['workout_type'] as String? ?? 'Workout';
+                              final workoutDate = checkIn['workout_date'] as String? ?? '';
+                              final workoutTime = checkIn['workout_time'] as String? ?? '';
+                              final duration = checkIn['actual_duration_minutes'] as int?;
+                              
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                leading: CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: Colors.green,
+                                  child: const Icon(Icons.check, color: Colors.white, size: 16),
+                                ),
+                                title: Text(
+                                  workoutType,
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                                subtitle: Text(
+                                  workoutDate.isNotEmpty 
+                                      ? '${_formatDate(workoutDate)}${workoutTime.isNotEmpty ? ' • ${_formatTime(workoutTime)}' : ''}'
+                                      : 'Date unknown',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                trailing: duration != null
+                                    ? Text(
+                                        '${duration}m',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.orange,
+                                        ),
+                                      )
+                                    : null,
+                              );
+                            },
+                          ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 20),
-            
-            // Quick Actions
-            const Text(
-              'Quick Actions',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _QuickActionButton(
-                  icon: Icons.add_circle_outline,
-                  label: 'Log Workout',
-                  color: Colors.green,
-                  onTap: () {},
-                ),
-                _QuickActionButton(
-                  icon: Icons.person_add,
-                  label: 'Find Buddy',
-                  color: Colors.blue,
-                  onTap: () {},
-                ),
-                _QuickActionButton(
-                  icon: Icons.camera_alt,
-                  label: 'Progress Pic',
-                  color: Colors.purple,
-                  onTap: () {},
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return 'Unknown';
+    try {
+      final date = DateTime.parse(dateStr);
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final checkDate = DateTime(date.year, date.month, date.day);
+      
+      if (checkDate == today) return 'Today';
+      if (checkDate == today.subtract(const Duration(days: 1))) return 'Yesterday';
+      
+      final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return '${days[date.weekday - 1]}, ${date.month}/${date.day}';
+    } catch (e) {
+      return dateStr;
+    }
+  }
+
+  String _formatTime(String? timeStr) {
+    if (timeStr == null || timeStr.isEmpty) return '';
+    try {
+      // timeStr is in format "HH:MM:SS"
+      final parts = timeStr.split(':');
+      if (parts.length < 2) return timeStr;
+      
+      final hour = int.parse(parts[0]);
+      final minute = parts[1];
+      final period = hour >= 12 ? 'PM' : 'AM';
+      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+      return '$displayHour:$minute $period';
+    } catch (e) {
+      return timeStr;
+    }
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _StatItem(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: Colors.orange,
+          ),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.grey,
+          ),
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
+        ),
+      ],
     );
   }
 }
