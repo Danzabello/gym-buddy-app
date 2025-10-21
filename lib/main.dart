@@ -4,7 +4,7 @@ import 'home_screen.dart';
 import 'config/supabase.dart';
 import 'services/auth_service.dart';
 import 'signup_screen.dart';
-
+import 'services/coach_max_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,9 +28,60 @@ class GymBuddyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const LoginScreen(),
+      home: const AuthWrapper(),
       debugShowCheckedModeBanner: false,
     );
+  }
+}
+
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  final CoachMaxService _coachMaxService = CoachMaxService();
+  bool _isInitializing = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeCoachMax();
+  }
+
+  Future<void> _initializeCoachMax() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    
+    if (user != null) {
+      // User is logged in - schedule Coach Max check-in if needed
+      await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
+    }
+    
+    setState(() {
+      _isInitializing = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isInitializing) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    // Check if user is logged in
+    final user = Supabase.instance.client.auth.currentUser;
+    
+    if (user != null) {
+      return const HomeScreen();
+    } else {
+      return const LoginScreen();
+    }
   }
 }
 
@@ -45,6 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final AuthService _authService = AuthService();
+  final CoachMaxService _coachMaxService = CoachMaxService(); // NEW
   bool _isPasswordVisible = false;
   bool _isLoading = false;
 
@@ -149,7 +201,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     });
                     
                     if (error == null) {
-                      // Success! Navigate to home screen
+                      // Success! Schedule Coach Max check-in
+                      final user = Supabase.instance.client.auth.currentUser;
+                      if (user != null) {
+                        await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
+                      }
+                      
+                      // Navigate to home screen
                       Navigator.of(context).pushReplacement(
                         MaterialPageRoute(
                           builder: (context) => const HomeScreen(),

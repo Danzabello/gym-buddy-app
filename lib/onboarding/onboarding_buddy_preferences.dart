@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../home_screen.dart';
+import '../home_screen.dart';
+import '../services/coach_max_service.dart';
 
 class OnboardingBuddyPreferences extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -15,6 +16,7 @@ class OnboardingBuddyPreferences extends StatefulWidget {
 }
 
 class _OnboardingBuddyPreferencesState extends State<OnboardingBuddyPreferences> {
+  final CoachMaxService _coachMaxService = CoachMaxService();
   bool _lookingForBuddy = true;
   String _workoutStyle = 'both';
   bool _openToGroups = false;
@@ -53,11 +55,30 @@ class _OnboardingBuddyPreferencesState extends State<OnboardingBuddyPreferences>
         'updated_at': DateTime.now().toIso8601String(),
       });
 
+      // Initialize Coach Max
+      final coachMaxSuccess = await _coachMaxService.initializeCoachMaxForUser(user.id);
+      if (!coachMaxSuccess) {
+        throw Exception('Failed to initialize Coach Max');
+      }
+
       // Navigate to home screen
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
           (route) => false,
+        );
+        
+        // Show welcome message with Coach Max
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_coachMaxService.getMotivationalMessage(
+              currentStreak: 0,
+              hasCheckedInToday: false,
+              messageType: null,
+            )),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
         );
       }
     } catch (e) {
@@ -273,7 +294,7 @@ class _OnboardingBuddyPreferencesState extends State<OnboardingBuddyPreferences>
                             ),
                           ),
                           Text(
-                            'Let\'s start your fitness journey',
+                            'Coach Max will be your training buddy!',
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey,

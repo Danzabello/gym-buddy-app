@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/friend_service.dart';
 import 'services/workout_service.dart';
-import 'services/streak_service.dart';
+import 'services/team_streak_service.dart';
+import 'widgets/coach_max_widget.dart';
+
+
+// import 'services/streak_service.dart'; Not using it anymore
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -70,9 +74,10 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  final StreakService _streakService = StreakService();
+  final TeamStreakService _teamStreakService = TeamStreakService();
   
-  Map<String, dynamic>? _streakInfo;
+  TeamStreak? _highestStreak;
+  List<TeamStreak> _allStreaks = [];
   bool _hasCheckedInToday = false;
   bool _isLoading = true;
   bool _isCheckingIn = false;
@@ -88,11 +93,18 @@ class _DashboardPageState extends State<DashboardPage> {
       _isLoading = true;
     });
 
-    final streakInfo = await _streakService.getStreakInfo();
-    final hasCheckedIn = await _streakService.hasCheckedInToday();
+    // Get all streaks
+    final allStreaks = await _teamStreakService.getAllUserStreaks();
+    
+    // Get highest streak for main display
+    final highestStreak = await _teamStreakService.getHighestStreak();
+    
+    // Check if already checked in today
+    final hasCheckedIn = await _teamStreakService.hasCheckedInToday();
 
     setState(() {
-      _streakInfo = streakInfo;
+      _allStreaks = allStreaks;
+      _highestStreak = highestStreak;
       _hasCheckedInToday = hasCheckedIn;
       _isLoading = false;
     });
@@ -103,22 +115,22 @@ class _DashboardPageState extends State<DashboardPage> {
       _isCheckingIn = true;
     });
 
-    final result = await _streakService.checkIn();
+    final result = await _teamStreakService.checkInAllTeams();
 
     setState(() {
       _isCheckingIn = false;
     });
 
-    if (result != null) {
+    if (result['success'] == true) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Check-in successful! Keep up the streak!'),
+          content: Text(result['message'] ?? 'Check-in successful!'),
           backgroundColor: Colors.green,
           action: SnackBarAction(
             label: 'VIEW',
             textColor: Colors.white,
             onPressed: () {
-              // Could navigate to streak history page
+              _showAllStreaks();
             },
           ),
         ),
@@ -126,8 +138,8 @@ class _DashboardPageState extends State<DashboardPage> {
       _loadStreakData(); // Refresh data
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Already checked in today!'),
+        SnackBar(
+          content: Text(result['message'] ?? 'Check-in failed'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -176,64 +188,153 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                     const SizedBox(height: 20),
                     
-                    // Streak Card with Real Data
-                    Card(
-                      color: Colors.orange[50],
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            Icon(Icons.local_fire_department, 
-                                 size: 48, 
-                                 color: Colors.orange[700]),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                    // Main Streak Card with Coach Max (around line 200)
+                    if (_highestStreak != null) ...[
+                      Card(
+                        color: Colors.orange[50],
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            children: [
+                              // Coach Max Widget at the top
+                              CoachMaxWidget(
+                                currentStreak: _highestStreak!.currentStreak,
+                                hasCheckedInToday: _hasCheckedInToday,
+                                showSpeechBubble: true,
+                              ),
+                              
+                              const SizedBox(height: 16),
+                              const Divider(),
+                              const SizedBox(height: 16),
+                              
+                              // Header with team name
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text(
-                                    'Current Streak',
-                                    style: TextStyle(fontSize: 16),
-                                  ),
-                                  Text(
-                                    '${_streakInfo?['current_streak'] ?? 0} Days',
-                                    style: TextStyle(
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.orange[700],
-                                    ),
-                                  ),
-                                  if ((_streakInfo?['longest_streak'] ?? 0) > 0)
-                                    Text(
-                                      'Best: ${_streakInfo?['longest_streak']} days',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey[600],
+                                  Row(
+                                    children: [
+                                      Text(
+                                        _highestStreak!.teamEmoji,
+                                        style: const TextStyle(fontSize: 24),
                                       ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _highestStreak!.teamName,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (_allStreaks.length > 1)
+                                    TextButton(
+                                      onPressed: _showAllStreaks,
+                                      child: Text('${_allStreaks.length} streaks'),
                                     ),
                                 ],
                               ),
-                            ),
-                            // Check-in Button
-                            ElevatedButton.icon(
-                              onPressed: _hasCheckedInToday || _isCheckingIn ? null : _checkIn,
-                              icon: _isCheckingIn
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : Icon(_hasCheckedInToday ? Icons.check : Icons.fitness_center),
-                              label: Text(_hasCheckedInToday ? 'Checked In' : 'Check In'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: _hasCheckedInToday ? Colors.green : Colors.orange[700],
-                                foregroundColor: Colors.white,
+                              const SizedBox(height: 12),
+                              
+                              // Main streak display
+                              Row(
+                                children: [
+                                  Icon(Icons.local_fire_department, 
+                                      size: 48, 
+                                      color: Colors.orange[700]),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Current Streak',
+                                          style: TextStyle(fontSize: 16),
+                                        ),
+                                        Text(
+                                          '${_highestStreak!.currentStreak} Days',
+                                          style: TextStyle(
+                                            fontSize: 28,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.orange[700],
+                                          ),
+                                        ),
+                                        if (_highestStreak!.longestStreak > 0)
+                                          Text(
+                                            'Best: ${_highestStreak!.longestStreak} days',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  
+                                  // Check-in Button
+                                  ElevatedButton.icon(
+                                    onPressed: _hasCheckedInToday || _isCheckingIn ? null : _checkIn,
+                                    icon: _isCheckingIn
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          )
+                                        : Icon(_hasCheckedInToday ? Icons.check : Icons.fitness_center),
+                                    label: Text(_hasCheckedInToday ? 'Checked In' : 'Check In'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: _hasCheckedInToday ? Colors.green : Colors.orange[700],
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
+                              
+                              // Team completion status
+                              if (_highestStreak!.members.length > 1) ...[
+                                const SizedBox(height: 16),
+                                _buildTeamCompletionBar(_highestStreak!),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
+                    ] else ...[
+                      // No streaks yet
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Center(
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.local_fire_department,
+                                  size: 48,
+                                  color: Colors.grey[400],
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No active streaks yet',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Check in to start your streak!',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[500],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    
                     const SizedBox(height: 20),
                     
                     // Today's Workout (unchanged)
@@ -272,10 +373,9 @@ class _DashboardPageState extends State<DashboardPage> {
                           label: 'New Workout',
                           color: Colors.green,
                           onTap: () {
-                            // Navigate to Schedule tab
                             final homeState = context.findAncestorStateOfType<_HomeScreenState>();
                             homeState?.setState(() {
-                              homeState._selectedIndex = 2; // Schedule tab
+                              homeState._selectedIndex = 2;
                             });
                           },
                         ),
@@ -284,20 +384,17 @@ class _DashboardPageState extends State<DashboardPage> {
                           label: 'Find Buddy',
                           color: Colors.blue,
                           onTap: () {
-                            // Navigate to Buddies tab
                             final homeState = context.findAncestorStateOfType<_HomeScreenState>();
                             homeState?.setState(() {
-                              homeState._selectedIndex = 1; // Buddies tab
+                              homeState._selectedIndex = 1;
                             });
                           },
                         ),
                         _QuickActionButton(
                           icon: Icons.history,
-                          label: 'Streak History',
+                          label: 'All Streaks',
                           color: Colors.purple,
-                          onTap: () {
-                            _showStreakHistory();
-                          },
+                          onTap: _showAllStreaks,
                         ),
                       ],
                     ),
@@ -308,160 +405,148 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showStreakHistory() {
+  // Build team completion bar (shows who checked in)
+  Widget _buildTeamCompletionBar(TeamStreak streak) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Team Progress',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            Text(
+              '${streak.todayCheckIns.length}/${streak.members.length} checked in',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        
+        // Progress bar
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: LinearProgressIndicator(
+            value: streak.completionPercentage,
+            minHeight: 8,
+            backgroundColor: Colors.grey[300],
+            valueColor: AlwaysStoppedAnimation<Color>(
+              streak.isCompleteToday ? Colors.green : Colors.orange,
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: 8),
+        
+        // Member avatars
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: streak.members.map((member) {
+            final hasCheckedIn = streak.todayCheckIns.any(
+              (checkIn) => checkIn.userId == member.userId
+            );
+            
+            return Chip(
+              avatar: CircleAvatar(
+                backgroundColor: hasCheckedIn ? Colors.green : Colors.grey[400],
+                child: Icon(
+                  hasCheckedIn ? Icons.check : Icons.person,
+                  size: 16,
+                  color: Colors.white,
+                ),
+              ),
+              label: Text(
+                member.displayName,
+                style: const TextStyle(fontSize: 12),
+              ),
+              backgroundColor: hasCheckedIn ? Colors.green[50] : Colors.grey[200],
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  // Show all streaks dialog
+  void _showAllStreaks() {
     showDialog(
       context: context,
-      builder: (context) => _StreakHistoryDialog(),
+      builder: (context) => _AllStreaksDialog(streaks: _allStreaks),
     );
   }
 }
 
-// Streak History Dialog
-class _StreakHistoryDialog extends StatefulWidget {
-  @override
-  State<_StreakHistoryDialog> createState() => _StreakHistoryDialogState();
-}
+// All Streaks Dialog
+class _AllStreaksDialog extends StatelessWidget {
+  final List<TeamStreak> streaks;
 
-class _StreakHistoryDialogState extends State<_StreakHistoryDialog> {
-  final StreakService _streakService = StreakService();
-  List<Map<String, dynamic>> _checkIns = [];
-  Map<String, dynamic> _stats = {
-    'total_workouts': 0,
-    'this_week': 0,
-    'this_month': 0,
-    'current_streak': 0,
-    'longest_streak': 0,
-  };
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadHistory();
-  }
-
-  Future<void> _loadHistory() async {
-    final checkIns = await _streakService.getCheckInHistory(limit: 30);
-    final stats = await _streakService.getStreakStats();
-
-    setState(() {
-      _checkIns = checkIns;
-      _stats = stats;
-      _isLoading = false;
-    });
-  }
+  const _AllStreaksDialog({required this.streaks});
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Streak History'),
+      title: const Text('All Your Streaks'),
       content: SizedBox(
         width: double.maxFinite,
         height: 400,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : Column(
-                children: [
-                  // Stats Summary - FIXED OVERFLOW
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[50],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Expanded(
-                          child: _StatItem('Total', '${_stats['total_workouts'] ?? 0}'),
-                        ),
-                        Container(
-                          width: 1,
-                          height: 40,
-                          color: Colors.orange[200],
-                        ),
-                        Expanded(
-                          child: _StatItem('This Month', '${_stats['this_month'] ?? 0}'),
-                        ),
-                        Container(
-                          width: 1,
-                          height: 40,
-                          color: Colors.orange[200],
-                        ),
-                        Expanded(
-                          child: _StatItem('Best Streak', '${_stats['longest_streak'] ?? 0}'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Check-in History
-                  const Text(
-                    'Recent Check-ins',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: _checkIns.isEmpty
-                        ? const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.fitness_center, size: 48, color: Colors.grey),
-                                SizedBox(height: 8),
-                                Text('No workouts yet'),
-                                SizedBox(height: 4),
-                                Text(
-                                  'Complete a workout to start your streak!',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
+        child: streaks.isEmpty
+            ? const Center(
+                child: Text('No active streaks yet!'),
+              )
+            : ListView.builder(
+                itemCount: streaks.length,
+                itemBuilder: (context, index) {
+                  final streak = streaks[index];
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: ListTile(
+                      leading: Text(
+                        streak.teamEmoji,
+                        style: const TextStyle(fontSize: 32),
+                      ),
+                      title: Text(
+                        streak.teamName,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 4),
+                          Text(
+                            '${streak.currentStreak} day streak',
+                            style: const TextStyle(
+                              color: Colors.orange,
+                              fontWeight: FontWeight.w600,
                             ),
-                          )
-                        : ListView.builder(
-                            itemCount: _checkIns.length,
-                            itemBuilder: (context, index) {
-                              final checkIn = _checkIns[index];
-                              // Safely extract data with null checks
-                              final workoutType = checkIn['workout_type'] as String? ?? 'Workout';
-                              final workoutDate = checkIn['workout_date'] as String? ?? '';
-                              final workoutTime = checkIn['workout_time'] as String? ?? '';
-                              final duration = checkIn['actual_duration_minutes'] as int?;
-                              
-                              return ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                leading: CircleAvatar(
-                                  radius: 16,
-                                  backgroundColor: Colors.green,
-                                  child: const Icon(Icons.check, color: Colors.white, size: 16),
-                                ),
-                                title: Text(
-                                  workoutType,
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                                subtitle: Text(
-                                  workoutDate.isNotEmpty 
-                                      ? '${_formatDate(workoutDate)}${workoutTime.isNotEmpty ? ' • ${_formatTime(workoutTime)}' : ''}'
-                                      : 'Date unknown',
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                                trailing: duration != null
-                                    ? Text(
-                                        '${duration}m',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.orange,
-                                        ),
-                                      )
-                                    : null,
-                              );
-                            },
                           ),
-                  ),
-                ],
+                          if (streak.members.length > 1)
+                            Text(
+                              '${streak.todayCheckIns.length}/${streak.members.length} checked in today',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                        ],
+                      ),
+                      trailing: Icon(
+                        streak.isCompleteToday 
+                            ? Icons.check_circle 
+                            : Icons.pending,
+                        color: streak.isCompleteToday 
+                            ? Colors.green 
+                            : Colors.orange,
+                      ),
+                    ),
+                  );
+                },
               ),
       ),
       actions: [
@@ -472,42 +557,9 @@ class _StreakHistoryDialogState extends State<_StreakHistoryDialog> {
       ],
     );
   }
-
-  String _formatDate(String? dateStr) {
-    if (dateStr == null || dateStr.isEmpty) return 'Unknown';
-    try {
-      final date = DateTime.parse(dateStr);
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final checkDate = DateTime(date.year, date.month, date.day);
-      
-      if (checkDate == today) return 'Today';
-      if (checkDate == today.subtract(const Duration(days: 1))) return 'Yesterday';
-      
-      final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      return '${days[date.weekday - 1]}, ${date.month}/${date.day}';
-    } catch (e) {
-      return dateStr;
-    }
-  }
-
-  String _formatTime(String? timeStr) {
-    if (timeStr == null || timeStr.isEmpty) return '';
-    try {
-      // timeStr is in format "HH:MM:SS"
-      final parts = timeStr.split(':');
-      if (parts.length < 2) return timeStr;
-      
-      final hour = int.parse(parts[0]);
-      final minute = parts[1];
-      final period = hour >= 12 ? 'PM' : 'AM';
-      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-      return '$displayHour:$minute $period';
-    } catch (e) {
-      return timeStr;
-    }
-  }
 }
+
+
 
 class _StatItem extends StatelessWidget {
   final String label;
