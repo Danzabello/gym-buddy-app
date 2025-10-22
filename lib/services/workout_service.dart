@@ -52,7 +52,9 @@ class WorkoutService {
             creator:user_profiles!user_id(display_name, fitness_level),
             buddy:user_profiles!buddy_id(display_name, fitness_level)
           ''')
-          .eq('status', 'scheduled')
+          .or('user_id.eq.$currentUserId,buddy_id.eq.$currentUserId')
+          .neq('status', 'completed')
+          .neq('status', 'cancelled')
           .gte('workout_date', today)
           .order('workout_date')
           .order('workout_time');
@@ -61,6 +63,36 @@ class WorkoutService {
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       if (kDebugMode) print('❌ Error getting workouts: $e');
+      return [];
+    }
+  }
+
+  // Get today's workouts specifically
+  Future<List<Map<String, dynamic>>> getTodaysWorkouts() async {
+    try {
+      final currentUserId = _supabase.auth.currentUser?.id;
+      if (currentUserId == null) return [];
+
+      final today = DateTime.now().toIso8601String().split('T')[0];
+
+      // Get workouts for today where user is creator or buddy, and status is not cancelled
+      final response = await _supabase
+          .from('workouts')
+          .select('''
+            *,
+            creator:user_profiles!user_id(display_name, fitness_level),
+            buddy:user_profiles!buddy_id(display_name, fitness_level)
+          ''')
+          .or('user_id.eq.$currentUserId,buddy_id.eq.$currentUserId')
+          .eq('workout_date', today)
+          .neq('status', 'cancelled')
+          .neq('status', 'completed')
+          .order('workout_time');
+
+      if (kDebugMode) print('📋 Found ${response.length} workouts for today');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      if (kDebugMode) print('❌ Error getting today\'s workouts: $e');
       return [];
     }
   }

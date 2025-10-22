@@ -419,13 +419,13 @@ class CoachMaxService {
     
     // If specific type requested
     if (messageType != null) {
-      final messages = _getMessagesByType(messageType);
+      final messages = _getMessagesByType(messageType, currentStreak);
       return messages[random.nextInt(messages.length)];
     }
 
     // Context-based messages
     if (hasCheckedInToday) {
-      return _getCheckedInMessages()[random.nextInt(_getCheckedInMessages().length)];
+      return _getCheckedInMessages(currentStreak)[random.nextInt(_getCheckedInMessages(currentStreak).length)];
     }
 
     if (currentStreak == 0) {
@@ -433,17 +433,17 @@ class CoachMaxService {
     }
 
     if (currentStreak >= 30) {
-      return _getLongStreakMessages()[random.nextInt(_getLongStreakMessages().length)];
+      return _getLongStreakMessages(currentStreak)[random.nextInt(_getLongStreakMessages(currentStreak).length)];
     }
 
     if (currentStreak >= 7) {
-      return _getWeekStreakMessages()[random.nextInt(_getWeekStreakMessages().length)];
+      return _getWeekStreakMessages(currentStreak)[random.nextInt(_getWeekStreakMessages(currentStreak).length)];
     }
 
-    return _getGeneralMessages()[random.nextInt(_getGeneralMessages().length)];
+    return _getGeneralMessages(currentStreak)[random.nextInt(_getGeneralMessages(currentStreak).length)];
   }
 
-  List<String> _getMessagesByType(String type) {
+  List<String> _getMessagesByType(String type, int currentStreak) {
     switch (type) {
       case 'motivational':
         return [
@@ -451,6 +451,9 @@ class CoachMaxService {
           "Every workout counts. You've got this!",
           "Consistency beats perfection. Keep showing up!",
           "Your future self will thank you for this workout!",
+          currentStreak > 0 
+            ? "Day $currentStreak! You're building something incredible!"
+            : "Today is day 1 of your journey! Let's make it count!",
         ];
       case 'chill':
         return [
@@ -458,6 +461,9 @@ class CoachMaxService {
           "No rush, but I'm here whenever you're ready!",
           "Take your time, I'll be here 🤙",
           "Feeling good today? Let's get moving when you're ready!",
+          currentStreak > 0
+            ? "Day $currentStreak vibes! You're doing great 🌟"
+            : "No pressure, just here to support you!",
         ];
       case 'drill_sergeant':
         return [
@@ -465,9 +471,12 @@ class CoachMaxService {
           "No excuses! Time to work!",
           "Winners train, losers complain. Which are you?",
           "Pain is temporary, glory is forever! MOVE IT!",
+          currentStreak > 0
+            ? "DAY $currentStreak! KEEP THAT FIRE BURNING! 🔥"
+            : "TODAY IS DAY ONE! LET'S BUILD A WARRIOR!",
         ];
       default:
-        return _getGeneralMessages();
+        return _getGeneralMessages(currentStreak);
     }
   }
 
@@ -480,41 +489,49 @@ class CoachMaxService {
     ];
   }
 
-  List<String> _getCheckedInMessages() {
+  List<String> _getCheckedInMessages(int currentStreak) {
     return [
       "Already done! Nice work today! 🎉",
       "Crushed it! See you tomorrow! 💪",
       "That's what I'm talking about! Great job! 🔥",
       "Boom! Another day in the books! 📚",
       "You're unstoppable! Keep it going! ⚡",
+      currentStreak > 0
+        ? "Day $currentStreak complete! Streak alive! 🔥"
+        : "Day 1 complete! The journey begins! 🌟",
     ];
   }
 
-  List<String> _getWeekStreakMessages() {
+  List<String> _getWeekStreakMessages(int currentStreak) {
     return [
-      "7+ days strong! You're building something special! 🔥",
-      "Look at that streak! Consistency is key! 💪",
+      "$currentStreak days strong! You're building something special! 🔥",
+      "Look at that $currentStreak-day streak! Consistency is key! 💪",
       "A week down! Your dedication is inspiring!",
       "This is becoming a habit! Love it! 📈",
+      "$currentStreak consecutive days! You're on fire! 🔥",
     ];
   }
 
-  List<String> _getLongStreakMessages() {
+  List<String> _getLongStreakMessages(int currentStreak) {
     return [
-      "30+ DAYS! You're a legend! 🏆",
-      "This streak is INSANE! Keep it alive! 🔥🔥🔥",
+      "$currentStreak DAYS! You're a legend! 🏆",
+      "This $currentStreak-day streak is INSANE! Keep it alive! 🔥🔥🔥",
       "You're in the zone! Don't stop now! 💎",
-      "Champion mentality! This is incredible! 👑",
+      "Champion mentality! $currentStreak days strong! 👑",
+      "$currentStreak days and counting! Unstoppable! ⚡",
     ];
   }
 
-  List<String> _getGeneralMessages() {
+  List<String> _getGeneralMessages(int currentStreak) {
     return [
       "Ready to work? Let's do this! 💪",
       "Another day, another opportunity! Let's go!",
       "Time to get after it! You in?",
       "Let's keep the momentum going! 🚀",
       "Show up and show out! Let's get it!",
+      currentStreak > 0
+        ? "Day $currentStreak awaits! Let's make it count! 🔥"
+        : "Your journey starts today! Let's go! 💪",
     ];
   }
 }
