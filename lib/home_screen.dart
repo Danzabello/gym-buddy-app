@@ -6,6 +6,8 @@ import 'services/workout_service.dart';
 import 'services/team_streak_service.dart';
 import 'widgets/coach_max_widget.dart';
 import 'package:confetti/confetti.dart';
+import 'package:flutter/services.dart';
+import 'widgets/user_avatar.dart';
 
 
 // import 'services/streak_service.dart'; Not using it anymore
@@ -94,22 +96,469 @@ class _DashboardPageState extends State<DashboardPage> {
 
   late ConfettiController _confettiController;
   int _lastCelebratedStreak = 0;
+  
+  // NEW: For streak navigation
+  int _currentStreakIndex = 0;
+  final PageController _pageController = PageController();
+
+  int _currentCarouselIndex = 0;
+  late PageController _carouselController;
 
   @override
   void initState() {
     super.initState();
+    _carouselController = PageController(
+    viewportFraction: 0.35,
+    initialPage: 1000, // Start in middle for infinite scroll
+    );
+
     _loadStreakData();
     _updateCountdown();
     Future.delayed(const Duration(minutes: 1), _updateCountdown);
 
     _confettiController = ConfettiController(duration: const Duration(seconds: 3));
-
   }
 
   @override
   void dispose() {
-    _confettiController.dispose();  // ADD THIS LINE
+    _confettiController.dispose();
+    _carouselController.dispose();
     super.dispose();
+  }
+
+  Widget _buildStreakCarousel() {
+    if (_allStreaks.isEmpty) {
+      return _buildNoStreaksCard();
+    }
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.white, Colors.blue[50]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          children: [
+            // Title
+            Text(
+              'Your Active Streaks (${_allStreaks.length})',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+            
+            // CAROUSEL
+            SizedBox(
+              height: 200,
+              child: _allStreaks.length == 1
+                  ? _buildSingleStreakView(_allStreaks[0])  // ← NEW: Special case for 1 streak
+                  : PageView.builder(
+                      controller: _carouselController,
+                      onPageChanged: (index) {
+                        setState(() {
+                          _currentCarouselIndex = index % _allStreaks.length;
+                        });
+                        HapticFeedback.selectionClick();
+                      },
+                      itemCount: _allStreaks.length >= 3 
+                          ? _allStreaks.length * 1000  // Infinite scroll for 3+
+                          : _allStreaks.length,        // No infinite for 1-2
+                      itemBuilder: (context, index) {
+                        final streakIndex = index % _allStreaks.length;
+                        final streak = _allStreaks[streakIndex];
+                        final isFocused = streakIndex == _currentCarouselIndex;
+                        
+                        return AnimatedBuilder(
+                          animation: _carouselController,
+                          builder: (context, child) {
+                            double scale = 1.0;
+                            if (_carouselController.position.haveDimensions) {
+                              final page = _carouselController.page ?? index.toDouble();
+                              final diff = (page - index).abs();
+                              scale = (1 - (diff * 0.45)).clamp(0.55, 1.0);
+                            }
+                            
+                            return Transform.scale(
+                              scale: scale,
+                              child: Center(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    _carouselController.animateToPage(
+                                      index,
+                                      duration: const Duration(milliseconds: 300),
+                                      curve: Curves.easeInOut,
+                                    );
+                                  },
+                                  child: _buildCarouselAvatar(streak, isFocused),
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+            ),
+            
+            const SizedBox(height: 20),
+            
+            // STREAK INFO for focused streak
+            _buildStreakInfo(_allStreaks[_currentCarouselIndex]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSingleStreakView(TeamStreak streak) {
+    return Center(
+      child: _buildCarouselAvatar(streak, true),  // Always focused
+    );
+  }
+
+  Widget _buildCarouselAvatar(TeamStreak streak, bool isFocused) {
+    final isCoachMax = streak.isCoachMaxTeam;
+    
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: isFocused ? 140 : 75,
+          height: isFocused ? 140 : 75,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              colors: isCoachMax 
+                  ? [Colors.blue[400]!, Colors.purple[400]!]
+                  : [Colors.orange[400]!, Colors.red[400]!],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(
+              color: isFocused ? Colors.blue : Colors.transparent,
+              width: isFocused ? 4 : 0,
+            ),
+            boxShadow: isFocused
+                ? [
+                    BoxShadow(
+                      color: Colors.blue.withOpacity(0.4),
+                      blurRadius: 20,
+                      spreadRadius: 5,
+                    ),
+                  ]
+                : [],
+          ),
+          child: Center(
+            child: Text(
+              streak.teamEmoji,
+              style: TextStyle(fontSize: isFocused ? 60 : 35),
+            ),
+          ),
+        ),
+        if (isFocused) ...[
+          const SizedBox(height: 12),
+          Text(
+            streak.teamName,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildStreakInfo(TeamStreak streak) {
+    final checkedInCount = streak.todayCheckIns.length;
+    final totalMembers = streak.members.length;
+    final isComplete = checkedInCount >= totalMembers;
+    
+    Color statusColor;
+    String statusText;
+    IconData statusIcon;
+    
+    if (checkedInCount == 0) {
+      statusColor = Colors.orange;
+      statusText = '⚠️ 0/$totalMembers Checked In';
+      statusIcon = Icons.warning_amber_rounded;
+    } else if (checkedInCount < totalMembers) {
+      statusColor = Colors.blue;
+      statusText = '⏳ $checkedInCount/$totalMembers Checked In';
+      statusIcon = Icons.pending;
+    } else {
+      statusColor = Colors.green;
+      statusText = '✓ Streak Complete!';
+      statusIcon = Icons.check_circle;
+    }
+    
+    return Column(
+      children: [
+        // Streak count
+        Text(
+          '${streak.currentStreak} Day Streak',
+          style: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[800],
+          ),
+        ),
+        
+        const SizedBox(height: 12),
+        
+        // Progress bar
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: LinearProgressIndicator(
+            value: checkedInCount / totalMembers,
+            minHeight: 8,
+            backgroundColor: Colors.grey[300],
+            valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+          ),
+        ),
+        
+        const SizedBox(height: 12),
+        
+        // Status badge
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: statusColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: statusColor, width: 2),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(statusIcon, color: statusColor, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                statusText,
+                style: TextStyle(
+                  color: statusColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 12),
+        
+        // Individual member status
+        if (streak.members.length > 1)
+          Wrap(
+            spacing: 12,
+            children: streak.members.map((member) {
+              final hasCheckedIn = streak.todayCheckIns.any(
+                (checkIn) => checkIn.userId == member.userId
+              );
+              
+              return Chip(
+                avatar: Icon(
+                  hasCheckedIn ? Icons.check : Icons.schedule,
+                  size: 16,
+                  color: hasCheckedIn ? Colors.green : Colors.orange,
+                ),
+                label: Text(
+                  member.displayName,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                backgroundColor: hasCheckedIn 
+                    ? Colors.green[50] 
+                    : Colors.orange[50],
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildThreeCardLayout() {
+    final currentStreak = _allStreaks.isNotEmpty 
+        ? _allStreaks[_currentCarouselIndex] 
+        : null;
+    
+    return Row(
+      children: [
+        // CARD 1: Coach Max Quote
+        Expanded(
+          child: _buildCoachMaxCard(currentStreak),
+        ),
+        const SizedBox(width: 12),
+        
+        // CARD 2: Check In Button
+        Expanded(
+          child: _buildCheckInCard(),
+        ),
+        const SizedBox(width: 12),
+        
+        // CARD 3: Stats
+        Expanded(
+          child: _buildStatsCard(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCoachMaxCard(TeamStreak? streak) {
+    String quote = "Let's crush today! 💪";
+    
+    if (streak != null) {
+      if (streak.isCompleteToday) {
+        quote = "Both checked in!\nYou're unstoppable! 🔥";
+      } else if (streak.currentStreak >= 7) {
+        quote = "${streak.currentStreak} days!\nKeep it going! 🚀";
+      }
+    }
+    
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.blue[50]!, Colors.purple[50]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              '🤖',
+              style: TextStyle(fontSize: 32),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              quote,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[800],
+                height: 1.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCheckInCard() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: _hasCheckedInToday 
+                ? [Colors.green[100]!, Colors.green[200]!]
+                : [Colors.orange[100]!, Colors.orange[200]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _hasCheckedInToday ? Icons.check_circle : Icons.local_fire_department,
+              size: 40,
+              color: _hasCheckedInToday ? Colors.green[700] : Colors.orange[700],
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: _hasCheckedInToday || _isCheckingIn ? null : _checkIn,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _hasCheckedInToday ? Colors.green : Colors.orange[700],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: _isCheckingIn
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(
+                      _hasCheckedInToday ? 'Done! ✓' : 'Check In',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatsCard() {
+    final checkedInStreaks = _allStreaks.where((s) => s.isCompleteToday).length;
+    
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.white, Colors.blue[50]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '$checkedInStreaks/${_allStreaks.length}',
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue[700],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Complete',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _updateCountdown() {
@@ -126,7 +575,6 @@ class _DashboardPageState extends State<DashboardPage> {
       _timeUntilMidnight = '${hours}h ${minutes}m';
     });
     
-    // Schedule next update
     Future.delayed(const Duration(minutes: 1), _updateCountdown);
   }
 
@@ -135,19 +583,27 @@ class _DashboardPageState extends State<DashboardPage> {
       _isLoading = true;
     });
 
-    // Get current user ID
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
 
-    // Get all streaks
     final allStreaks = await _teamStreakService.getAllUserStreaks();
     
-    // Get highest streak for main display
-    final highestStreak = await _teamStreakService.getHighestStreak();
+    // 🔍 DEBUG: See what we're getting
+    print('🔥 Raw streaks count: ${allStreaks.length}');
+    for (var streak in allStreaks) {
+      print('  - ${streak.teamName} (${streak.teamId}) - CoachMax: ${streak.isCoachMaxTeam}');
+    }
     
-    // Check if already checked in today
+    // ✅ BETTER FIX: Remove duplicate team IDs
+    final Map<String, TeamStreak> uniqueStreaksMap = {};
+    for (final streak in allStreaks) {
+      uniqueStreaksMap[streak.teamId] = streak;
+    }
+    final uniqueStreaks = uniqueStreaksMap.values.toList();
+    
+    print('✅ After deduplication: ${uniqueStreaks.length} streaks');
+    
+    final highestStreak = await _teamStreakService.getHighestStreak();
     final hasCheckedIn = await _teamStreakService.hasCheckedInToday();
-
-    // Get today's workouts  
     final todaysWorkouts = await _workoutService.getTodaysWorkouts();
 
     final friendService = FriendService();
@@ -167,7 +623,7 @@ class _DashboardPageState extends State<DashboardPage> {
     if (friends.length >= 3) achievements++;
 
     setState(() {
-      _allStreaks = allStreaks;
+      _allStreaks = uniqueStreaks;  // ✅ Use deduplicated list
       _highestStreak = highestStreak;
       _hasCheckedInToday = hasCheckedIn;
       _todaysWorkouts = todaysWorkouts;
@@ -181,9 +637,27 @@ class _DashboardPageState extends State<DashboardPage> {
     });
   }
 
+  Future<Map<String, dynamic>?> _loadUserProfile() async {
+    try {
+      final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+      if (currentUserId == null) return null;
+
+      final response = await Supabase.instance.client
+          .from('user_profiles')
+          .select('avatar_id, display_name')
+          .eq('id', currentUserId)
+          .single();
+
+      return response;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+
   Future<void> _checkIn() async {
-    // Double-check before proceeding
     if (_hasCheckedInToday) {
+      HapticFeedback.mediumImpact();  // ✅ HAPTIC FEEDBACK!
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('You\'ve already checked in today! 💪'),
@@ -194,6 +668,8 @@ class _DashboardPageState extends State<DashboardPage> {
       return;
     }
 
+    HapticFeedback.lightImpact();  // ✅ HAPTIC FEEDBACK ON PRESS!
+    
     setState(() {
       _isCheckingIn = true;
     });
@@ -205,7 +681,8 @@ class _DashboardPageState extends State<DashboardPage> {
     });
 
     if (result['success'] == true) {
-      // Success animation or feedback
+      HapticFeedback.heavyImpact();  // ✅ SUCCESS HAPTIC!
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -223,6 +700,7 @@ class _DashboardPageState extends State<DashboardPage> {
             label: 'VIEW',
             textColor: Colors.white,
             onPressed: () {
+              HapticFeedback.selectionClick();  // ✅ HAPTIC FEEDBACK!
               _showAllStreaks();
             },
           ),
@@ -230,12 +708,10 @@ class _DashboardPageState extends State<DashboardPage> {
       );
 
       await _loadStreakData();
-
       _checkForMilestone();
-
-      _loadStreakData(); // Refresh data
     } else {
-      // Handle duplicate or error
+      HapticFeedback.mediumImpact();  // ✅ ERROR HAPTIC!
+      
       final message = result['message'] ?? 'Check-in failed';
       final isDuplicate = message.toLowerCase().contains('already');
       
@@ -256,7 +732,6 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
       );
       
-      // If it was a duplicate, refresh to update the UI
       if (isDuplicate) {
         _loadStreakData();
       }
@@ -267,428 +742,117 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-      Scaffold(
-        appBar: AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _getGreeting(),
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+        Scaffold(
+          backgroundColor: const Color(0xFFF5F7FA),
+          appBar: AppBar(
+            elevation: 0,
+            title: Text(
+              _getGreeting(),
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            flexibleSpace: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.blue[700]!, Colors.purple[600]!],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
               ),
-              Text(
-                _getCurrentDate(),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[700],
-                  fontWeight: FontWeight.normal,
+            ),
+            actions: [
+              Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('No new notifications'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    },
+                  ),
+                  if (_pendingRequests > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          '$_pendingRequests',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: IconButton(
+                  icon: const Icon(Icons.settings, color: Colors.white),
+                  onPressed: () {
+                    // Navigate to settings
+                    final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+                    homeState?.setState(() {
+                      homeState._selectedIndex = 3; // Profile page
+                    });
+                  },
                 ),
               ),
             ],
           ),
-          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-          actions: [
-            // Notification bell
-            Stack(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.notifications_outlined),
-                  onPressed: () {
-                    // TODO: Show notifications
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('No new notifications'),
-                        duration: Duration(seconds: 1),
-                      ),
-                    );
-                  },
-                ),
-                // Badge for unread notifications
-                if (_pendingRequests > 0)
-                  Positioned(
-                    right: 8,
-                    top: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
-                      child: Text(
-                        '$_pendingRequests',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
+          body: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                  onRefresh: _loadStreakData,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // NEW CAROUSEL SECTION
+                        _buildStreakCarousel(),
+                        
+                        const SizedBox(height: 24),
+                        
+                        // THREE CARD LAYOUT
+                        _buildThreeCardLayout(),
+                        
+                        const SizedBox(height: 24),
+                        
+                        // QUICK ACTIONS
+                        _buildQuickActionsSection(),
+                        
+                        const SizedBox(height: 20),
+                      ],
                     ),
                   ),
-              ],
-            ),
-            // Profile avatar
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: CircleAvatar(
-                backgroundColor: Colors.blue[700],
-                radius: 18,
-                child: const Icon(
-                  Icons.person,
-                  color: Colors.white,
-                  size: 20,
                 ),
-              ),
-            ),
-          ],
         ),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                onRefresh: _loadStreakData,
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Welcome Card
-                      Card(
-                        elevation: 4,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Welcome back!',
-                                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _hasCheckedInToday 
-                                    ? 'Great job checking in today!'
-                                    : 'Ready to crush your workout?',
-                                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      Card(
-                        elevation: 2,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              _buildQuickStat(
-                                icon: Icons.local_fire_department,
-                                value: '${_highestStreak?.currentStreak ?? 0}',
-                                label: 'Days',
-                                color: Colors.orange,
-                              ),
-                              Container(
-                                height: 30,
-                                width: 1,
-                                color: Colors.grey[300],
-                              ),
-                              _buildQuickStat(
-                                icon: Icons.fitness_center,
-                                value: '$_totalWorkouts',
-                                label: 'Workouts',
-                                color: Colors.blue,
-                              ),
-                              Container(
-                                height: 30,
-                                width: 1,
-                                color: Colors.grey[300],
-                              ),
-                              _buildQuickStat(
-                                icon: Icons.people,
-                                value: '$_buddyCount',
-                                label: 'Buddies',
-                                color: Colors.green,
-                              ),
-                              Container(
-                                height: 30,
-                                width: 1,
-                                color: Colors.grey[300],
-                              ),
-                              _buildQuickStat(
-                                icon: Icons.emoji_events,
-                                value: '$_achievementCount',
-                                label: 'Badges',
-                                color: Colors.purple,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      
-                      // Main Streak Card with Coach Max 
-                      if (_highestStreak != null) ...[
-                        Card(
-                          color: Colors.orange[50],
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              children: [
-                                // Coach Max Widget at the top
-                                CoachMaxWidget(
-                                  currentStreak: _highestStreak!.currentStreak,
-                                  hasCheckedInToday: _hasCheckedInToday,
-                                  showSpeechBubble: true,
-                                ),
-                                
-                                const SizedBox(height: 16),
-                                const Divider(),
-                                const SizedBox(height: 16),
-                                
-                                // Header with team name
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          _highestStreak!.teamEmoji,
-                                          style: const TextStyle(fontSize: 24),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          _highestStreak!.teamName,
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    if (_allStreaks.length > 1)
-                                      TextButton(
-                                        onPressed: _showAllStreaks,
-                                        child: Text('${_allStreaks.length} streaks'),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                
-                                // Main streak display
-                                Row(
-                                  children: [
-                                    _buildProgressRing(
-                                      currentStreak: _highestStreak!.currentStreak,
-                                      nextMilestone: _getNextMilestone(_highestStreak!.currentStreak),
-                                      color: Colors.orange[700]!,
-                                      child: Icon(
-                                        Icons.local_fire_department,
-                                        size: 40,
-                                        color: Colors.orange[700],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const Text(
-                                            'Current Streak',
-                                            style: TextStyle(fontSize: 16),
-                                          ),
-                                          Text(
-                                            '${_highestStreak!.currentStreak} Days',
-                                            style: TextStyle(
-                                              fontSize: 28,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.orange[700],
-                                            ),
-                                          ),
-                                          if (_highestStreak!.longestStreak > 0)
-                                            Text(
-                                              'Best: ${_highestStreak!.longestStreak} days',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[600],
-                                              ),
-                                            ),
-                                          const SizedBox(height: 4),
-                                          // Next milestone indicator
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: Colors.orange[100],
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              'Next: ${_getMilestoneName(_getNextMilestone(_highestStreak!.currentStreak))} (${_getNextMilestone(_highestStreak!.currentStreak)} days)',
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: Colors.orange[900],
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ),  
-                                        ],
-                                      ),
-                                    ),
-                                    
-                                    // Check-in Button
-                                    ElevatedButton.icon(
-                                      onPressed: _hasCheckedInToday || _isCheckingIn ? null : _checkIn,
-                                      icon: _isCheckingIn
-                                          ? const SizedBox(
-                                              width: 16,
-                                              height: 16,
-                                              child: CircularProgressIndicator(strokeWidth: 2),
-                                            )
-                                          : Icon(_hasCheckedInToday ? Icons.check : Icons.fitness_center),
-                                      label: Text(_hasCheckedInToday ? 'Checked In' : 'Check In'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: _hasCheckedInToday ? Colors.green : Colors.orange[700],
-                                        foregroundColor: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                
-                                // Team completion status
-                                if (_highestStreak!.members.length > 1) ...[
-                                  const SizedBox(height: 16),
-                                  _buildTeamCompletionBar(_highestStreak!),
-                                ],
-
-                                const SizedBox(height: 16),
-                                const Divider(),
-                                const SizedBox(height: 12),
-                                _buildCalendarHeatMap(),
-                                
-                              ],
-                            ),
-                          ),
-                        ),
-                      ] else ...[
-                        // No streaks yet
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(32),
-                            child: Center(
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.local_fire_department,
-                                    size: 48,
-                                    color: Colors.grey[400],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'No active streaks yet',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Check in to start your streak!',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey[500],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                      
-                      const SizedBox(height: 20),
-                      
-                      // Today's Workout (unchanged)
-                      const Text(
-                        "Today's Workout",
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 12),
-                      Card(
-                        child: ListTile(
-                          leading: const CircleAvatar(
-                            backgroundColor: Colors.blue,
-                            child: Icon(Icons.fitness_center, color: Colors.white),
-                          ),
-                          title: const Text('Upper Body Day'),
-                          subtitle: const Text('with John Smith • 6:00 PM'),
-                          trailing: ElevatedButton(
-                            onPressed: () {},
-                            child: const Text('View'),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      
-                      // Quick Actions
-                      const Text(
-                        'Quick Actions',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _QuickActionButton(
-                            icon: Icons.add_circle_outline,
-                            label: 'New Workout',
-                            color: Colors.green,
-                            onTap: () {
-                              final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-                              homeState?.setState(() {
-                                homeState._selectedIndex = 2;
-                              });
-                            },
-                          ),
-                          _QuickActionButton(
-                            icon: Icons.person_add,
-                            label: 'Find Buddy',
-                            color: Colors.blue,
-                            onTap: () {
-                              final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-                              homeState?.setState(() {
-                                homeState._selectedIndex = 1;
-                              });
-                            },
-                          ),
-                          _QuickActionButton(
-                            icon: Icons.history,
-                            label: 'All Streaks',
-                            color: Colors.purple,
-                            onTap: _showAllStreaks,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Align(
+        Align(
           alignment: Alignment.topCenter,
           child: ConfettiWidget(
             confettiController: _confettiController,
-            blastDirection: 3.14 / 2, // down
+            blastDirection: 3.14 / 2,
             emissionFrequency: 0.05,
             numberOfParticles: 50,
             maxBlastForce: 100,
@@ -704,7 +868,863 @@ class _DashboardPageState extends State<DashboardPage> {
             ],
           ),
         ),
-      ],    
+      ],
+    );
+  }
+
+  // REDESIGNED: Quick stats row
+  Widget _buildQuickStatsRow() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.white, Colors.blue[50]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildQuickStat(
+              icon: Icons.local_fire_department,
+              value: '${_highestStreak?.currentStreak ?? 0}',
+              label: 'Day Streak',
+              color: Colors.orange[700]!,
+            ),
+            _buildVerticalDivider(),
+            _buildQuickStat(
+              icon: Icons.fitness_center,
+              value: '$_totalWorkouts',
+              label: 'Workouts',
+              color: Colors.blue[700]!,
+            ),
+            _buildVerticalDivider(),
+            _buildQuickStat(
+              icon: Icons.people,
+              value: '$_buddyCount',
+              label: 'Buddies',
+              color: Colors.green[700]!,
+            ),
+            _buildVerticalDivider(),
+            _buildQuickStat(
+              icon: Icons.emoji_events,
+              value: '$_achievementCount',
+              label: 'Badges',
+              color: Colors.purple[700]!,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVerticalDivider() {
+    return Container(
+      height: 40,
+      width: 1,
+      color: Colors.grey[300],
+    );
+  }
+
+  Widget _buildQuickStat({
+    required IconData icon,
+    required String value,
+    required String label,
+    required Color color,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 24),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: Colors.grey[600],
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  // REDESIGNED: Main streak card with centered avatar
+  Widget _buildMainStreakCard() {
+    final currentStreak = _allStreaks[_currentStreakIndex];
+    final isCoachMax = currentStreak.isCoachMaxTeam;
+    
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: isCoachMax 
+                ? [Colors.blue[50]!, Colors.purple[50]!]
+                : [Colors.orange[50]!, Colors.red[50]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          children: [
+            // Header with navigation arrows
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Left arrow
+                if (_allStreaks.length > 1)
+                  IconButton(
+                    icon: Icon(
+                      Icons.arrow_back_ios,
+                      color: isCoachMax ? Colors.blue[700] : Colors.orange[700],
+                    ),
+                    onPressed: _currentStreakIndex > 0
+                        ? () {
+                            setState(() {
+                              _currentStreakIndex--;
+                            });
+                            _pageController.animateToPage(
+                              _currentStreakIndex,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                            );
+                          }
+                        : null,
+                  )
+                else
+                  const SizedBox(width: 48),
+                
+                // Team badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isCoachMax ? Colors.blue[100] : Colors.orange[100],
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        currentStreak.teamEmoji,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        currentStreak.teamName,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: isCoachMax ? Colors.blue[900] : Colors.orange[900],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Right arrow
+                if (_allStreaks.length > 1)
+                  IconButton(
+                    icon: Icon(
+                      Icons.arrow_forward_ios,
+                      color: isCoachMax ? Colors.blue[700] : Colors.orange[700],
+                    ),
+                    onPressed: _currentStreakIndex < _allStreaks.length - 1
+                        ? () {
+                            setState(() {
+                              _currentStreakIndex++;
+                            });
+                            _pageController.animateToPage(
+                              _currentStreakIndex,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                            );
+                          }
+                        : null,
+                  )
+                else
+                  const SizedBox(width: 48),
+              ],
+            ),
+            
+            const SizedBox(height: 20),
+            
+            // CENTERED AVATAR with progress ring
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                // Progress ring
+                SizedBox(
+                  width: 140,
+                  height: 140,
+                  child: TweenAnimationBuilder<double>(
+                    duration: const Duration(milliseconds: 1000),
+                    curve: Curves.easeInOut,
+                    tween: Tween<double>(
+                      begin: 0.0,
+                      end: currentStreak.currentStreak / _getNextMilestone(currentStreak.currentStreak),
+                    ),
+                    builder: (context, value, _) => CircularProgressIndicator(
+                      value: value > 1.0 ? 1.0 : value,
+                      strokeWidth: 10,
+                      backgroundColor: Colors.grey[300],
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isCoachMax ? Colors.blue[700]! : Colors.orange[700]!,
+                      ),
+                    ),
+                  ),
+                ),
+                
+                // Avatar in center
+                Container(
+                  width: 110,
+                  height: 110,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: isCoachMax 
+                          ? [Colors.blue[400]!, Colors.purple[400]!]
+                          : [Colors.orange[400]!, Colors.red[400]!],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (isCoachMax ? Colors.blue : Colors.orange).withOpacity(0.4),
+                        blurRadius: 20,
+                        spreadRadius: 5,
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Text(
+                      isCoachMax ? '🤖' : '🔥',
+                      style: const TextStyle(fontSize: 50),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 24),
+            
+            // Streak number
+            Text(
+              '${currentStreak.currentStreak} Days',
+              style: TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.bold,
+                color: isCoachMax ? Colors.blue[900] : Colors.orange[900],
+              ),
+            ),
+            
+            const SizedBox(height: 4),
+            
+            Text(
+              'Current Streak',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+              ),
+            ),
+            
+            const SizedBox(height: 8),
+            
+            // Best streak
+            if (currentStreak.longestStreak > 0)
+              Text(
+                'Best: ${currentStreak.longestStreak} days',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            
+            const SizedBox(height: 16),
+            
+            // Next milestone
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: isCoachMax ? Colors.blue[100] : Colors.orange[100],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'Next: ${_getMilestoneName(_getNextMilestone(currentStreak.currentStreak))} (${_getNextMilestone(currentStreak.currentStreak)} days)',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isCoachMax ? Colors.blue[900] : Colors.orange[900],
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+            
+            // Check-in button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _hasCheckedInToday || _isCheckingIn ? null : _checkIn,
+                icon: _isCheckingIn
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Icon(_hasCheckedInToday ? Icons.check_circle : Icons.fitness_center),
+                label: Text(
+                  _hasCheckedInToday ? 'Checked In Today! 🎉' : 'Check In Now',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _hasCheckedInToday ? Colors.green : (isCoachMax ? Colors.blue[700] : Colors.orange[700]),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 4,
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 20),
+            
+            // Team progress
+            if (currentStreak.members.length > 1) ...[
+              const Divider(),
+              const SizedBox(height: 12),
+              _buildTeamCompletionBar(currentStreak),
+              const SizedBox(height: 12),
+            ],
+            
+            // Calendar heatmap
+            const Divider(),
+            const SizedBox(height: 12),
+            _buildCalendarHeatMap(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // No streaks card
+  Widget _buildNoStreaksCard() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        padding: const EdgeInsets.all(40),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.grey[100]!, Colors.grey[200]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(
+                Icons.local_fire_department,
+                size: 64,
+                color: Colors.grey[400],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No active streaks yet',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[700],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Check in to start your streak!',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Today's workout section
+  Widget _buildTodaysWorkoutSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              "Today's Workouts",
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2C3E50),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+                homeState?.setState(() {
+                  homeState._selectedIndex = 2;
+                });
+              },
+              child: const Text('View All'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        
+        // Show real workouts or create prompt
+        if (_todaysWorkouts.isEmpty)
+          _buildCreateWorkoutPromptDashboard()
+        else
+          ..._todaysWorkouts.map((workout) => _buildWorkoutCardDashboard(workout)).toList(),
+      ],
+    );
+  }
+
+  Widget _buildWorkoutCardDashboard(Map<String, dynamic> workout) {
+    final creator = workout['creator'];
+    final buddy = workout['buddy'];
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final isCreator = workout['user_id'] == currentUserId;
+    final isBuddy = workout['buddy_id'] == currentUserId;
+    final buddyStatus = workout['buddy_status'];
+    
+    String buddyName = 'Solo';
+    Color buddyColor = Colors.grey[700]!;
+    
+    if (buddy != null && isCreator) {
+      buddyName = buddy['display_name'] ?? 'Unknown';
+      buddyColor = buddyStatus == 'accepted' ? Colors.green[700]! : Colors.orange[700]!;
+    } else if (creator != null && isBuddy) {
+      buddyName = creator['display_name'] ?? 'Unknown';
+      buddyColor = Colors.blue[700]!;
+    }
+    
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.white, Colors.blue[50]!],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: ListTile(
+          contentPadding: const EdgeInsets.all(16),
+          leading: Stack(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: _getWorkoutColorDash(workout['workout_type']).withOpacity(0.2),
+                child: Icon(
+                  _getWorkoutIcon(workout['workout_type']),  // ✅ NEW ICON!
+                  color: _getWorkoutColorDash(workout['workout_type']),
+                  size: 28,
+                ),
+              ),
+              if (isBuddy && buddyStatus == 'pending')
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.orange,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.notification_important,
+                      color: Colors.white,
+                      size: 12,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  workout['workout_type'] ?? 'Workout',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              if (isBuddy && buddyStatus == 'pending')
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'INVITE',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.schedule, size: 14, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Text(
+                    workout['workout_time'] ?? '',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                  const SizedBox(width: 12),
+                  Icon(Icons.person, size: 14, color: buddyColor),
+                  const SizedBox(width: 4),
+                  Text(
+                    buddyName,
+                    style: TextStyle(
+                      color: buddyColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              if (workout['planned_duration_minutes'] != null) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(Icons.timer, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatDurationDash(workout['planned_duration_minutes']),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+          trailing: _buildWorkoutActionButtonDashboard(workout),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWorkoutActionButtonDashboard(Map<String, dynamic> workout) {
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final isBuddy = workout['buddy_id'] == currentUserId;
+    final buddyStatus = workout['buddy_status'];
+    
+    if (isBuddy && buddyStatus == 'pending') {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.check_circle, color: Colors.green, size: 20),
+            onPressed: () {
+              HapticFeedback.lightImpact();  // ✅ HAPTIC FEEDBACK!
+              _acceptWorkoutInviteDash(workout['id']);
+            },
+            tooltip: 'Accept',
+          ),
+          IconButton(
+            icon: const Icon(Icons.cancel, color: Colors.red, size: 20),
+            onPressed: () {
+              HapticFeedback.lightImpact();  // ✅ HAPTIC FEEDBACK!
+              _declineWorkoutInviteDash(workout['id']);
+            },
+            tooltip: 'Decline',
+          ),
+        ],
+      );
+    }
+    
+    return ElevatedButton(
+      onPressed: () {
+        HapticFeedback.selectionClick();  // ✅ HAPTIC FEEDBACK!
+        final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+        homeState?.setState(() {
+          homeState._selectedIndex = 2;
+        });
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.blue[700],
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      ),
+      child: const Text('View'),
+    );
+  }
+
+  Widget _buildCreateWorkoutPromptDashboard() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        onTap: _showQuickCreateWorkoutDialog,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.blue[50]!, Colors.purple[50]!],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                Icons.add_circle_outline,
+                size: 48,
+                color: Colors.blue[700],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'No workouts scheduled today',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Create a workout with a friend!',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _showQuickCreateWorkoutDialog,
+                icon: const Icon(Icons.add),
+                label: const Text('Create Workout'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[700],
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showQuickCreateWorkoutDialog() async {
+    final friendService = FriendService();
+    final friends = await friendService.getFriends();
+    
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      builder: (context) => _CreateWorkoutDialog(
+        friends: friends,
+        onWorkoutCreated: _loadStreakData,
+      ),
+    );
+  }
+
+  Future<void> _acceptWorkoutInviteDash(String workoutId) async {
+    final success = await _workoutService.acceptWorkoutInvitation(workoutId);
+    
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Workout invitation accepted! 🎉'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      _loadStreakData();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to accept invitation'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _declineWorkoutInviteDash(String workoutId) async {
+    final success = await _workoutService.declineWorkoutInvitation(workoutId);
+    
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Workout invitation declined'),
+          backgroundColor: Colors.grey,
+        ),
+      );
+      _loadStreakData();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to decline invitation'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  String _formatDurationDash(int? minutes) {
+    if (minutes == null) return '';
+    final hours = minutes ~/ 60;
+    final mins = minutes % 60;
+    if (hours > 0) {
+      return mins > 0 ? '${hours}h ${mins}m' : '${hours}h';
+    }
+    return '${mins}m';
+  }
+
+  // Quick actions section
+  Widget _buildQuickActionsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Quick Actions',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF2C3E50),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildQuickActionCard(
+              icon: Icons.add_circle_outline,
+              label: 'New Workout',
+              color: Colors.green[700]!,
+              onTap: () {
+                final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+                homeState?.setState(() {
+                  homeState._selectedIndex = 2;
+                });
+              },
+            ),
+            _buildQuickActionCard(
+              icon: Icons.person_add,
+              label: 'Find Buddy',
+              color: Colors.blue[700]!,
+              onTap: () {
+                final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+                homeState?.setState(() {
+                  homeState._selectedIndex = 1;
+                });
+              },
+            ),
+            _buildQuickActionCard(
+              icon: Icons.history,
+              label: 'All Streaks',
+              color: Colors.purple[700]!,
+              onTap: _showAllStreaks,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQuickActionCard({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: InkWell(
+          onTap: () {
+            HapticFeedback.selectionClick();  // ✅ HAPTIC FEEDBACK!
+            onTap();
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 28),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[800],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -735,7 +1755,6 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         const SizedBox(height: 8),
         
-        // Progress bar
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: LinearProgressIndicator(
@@ -750,7 +1769,6 @@ class _DashboardPageState extends State<DashboardPage> {
         
         const SizedBox(height: 8),
         
-        // Member avatars
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -780,7 +1798,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // Show all streaks dialog
   void _showAllStreaks() {
     showDialog(
       context: context,
@@ -809,132 +1826,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return '${days[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}';
   }
 
-  Widget _buildQuickStat({
-    required IconData icon,
-    required String value,
-    required String label,
-    required Color color,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 4),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey[600],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildProgressRing({
-    required int currentStreak,
-    required int nextMilestone,
-    required Color color,
-    required Widget child,
-  }) {
-    final progress = currentStreak / nextMilestone;
-    
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        // Background ring (make it darker/more visible)
-        SizedBox(
-          width: 80,
-          height: 80,
-          child: CircularProgressIndicator(
-            value: 1.0,
-            strokeWidth: 8, // THICKER
-            backgroundColor: Colors.grey[300], // DARKER
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.grey[300]!),
-          ),
-        ),
-        // Progress ring (animated)
-        SizedBox(
-          width: 80,
-          height: 80,
-          child: TweenAnimationBuilder<double>(
-            duration: const Duration(milliseconds: 1000),
-            curve: Curves.easeInOut,
-            tween: Tween<double>(
-              begin: 0.0,
-              end: progress > 1.0 ? 1.0 : progress,
-            ),
-            builder: (context, value, _) => CircularProgressIndicator(
-              value: value,
-              strokeWidth: 8, // THICKER
-              backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation<Color>(color),
-            ),
-          ),
-        ),
-        // Percentage text (optional - shows progress)
-        if (progress > 0 && progress < 1)
-          Positioned(
-            bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: color, width: 1),
-              ),
-              child: Text(
-                '${(progress * 100).toInt()}%',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-            ),
-          ),
-        // Center content (flame icon)
-        child,
-      ],
-    );
-  }
-
-  int _getNextMilestone(int currentStreak) {
-    if (currentStreak < 7) return 7;
-    if (currentStreak < 30) return 30;
-    if (currentStreak < 100) return 100;
-    return currentStreak + 100; // Keep going!
-  }
-
-  String _getMilestoneName(int milestone) {
-    switch (milestone) {
-      case 7:
-        return '🔥 On Fire';
-      case 30:
-        return '💎 Diamond';
-      case 100:
-        return '👑 Legend';
-      default:
-        return '⚡ Unstoppable';
-    }
-  }
-
   Widget _buildCalendarHeatMap() {
-    // Get last 7 days of check-ins
     final today = DateTime.now();
     final last7Days = List.generate(7, (index) {
       return today.subtract(Duration(days: 6 - index));
@@ -1006,21 +1898,15 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   bool _isDateCheckedIn(DateTime date) {
-    // Check if this date is in our check-in history
     if (_highestStreak == null) return false;
     
-    final dateStr = date.toIso8601String().split('T')[0];
-    
-    // Check today's check-ins
     if (_isSameDay(date, DateTime.now())) {
       return _hasCheckedInToday;
     }
     
-    // For past dates, check if within current streak
     final today = DateTime.now();
     final daysDiff = today.difference(date).inDays;
     
-    // If within current streak range, it's checked in
     if (daysDiff <= _highestStreak!.currentStreak && daysDiff >= 0) {
       return true;
     }
@@ -1043,17 +1929,11 @@ class _DashboardPageState extends State<DashboardPage> {
     if (_highestStreak == null) return;
     
     final currentStreak = _highestStreak!.currentStreak;
-    
-    // Check if we hit a new milestone
     final milestones = [1, 3, 7, 14, 30, 50, 100, 365];
     
     if (milestones.contains(currentStreak) && currentStreak > _lastCelebratedStreak) {
       _lastCelebratedStreak = currentStreak;
-      
-      // Trigger confetti!
       _confettiController.play();
-      
-      // Show celebration dialog
       _showMilestoneDialog(currentStreak);
     }
   }
@@ -1113,6 +1993,7 @@ class _DashboardPageState extends State<DashboardPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Column(
           children: [
             Text(
@@ -1158,6 +2039,169 @@ class _DashboardPageState extends State<DashboardPage> {
         ],
       ),
     );
+  }
+
+  int _getNextMilestone(int currentStreak) {
+    if (currentStreak < 7) return 7;
+    if (currentStreak < 30) return 30;
+    if (currentStreak < 100) return 100;
+    return currentStreak + 100;
+  }
+
+  String _getMilestoneName(int milestone) {
+    switch (milestone) {
+      case 7:
+        return '🔥 On Fire';
+      case 30:
+        return '💎 Diamond';
+      case 100:
+        return '👑 Legend';
+      default:
+        return '⚡ Unstoppable';
+    }
+  }
+
+  IconData _getWorkoutIcon(String? type) {
+    switch (type?.toLowerCase()) {
+      case 'cardio':
+        return Icons.directions_run;
+      case 'strength':
+      case 'weights':
+        return Icons.fitness_center;
+      case 'upper body':
+        return Icons.accessibility_new;
+      case 'lower body':
+      case 'legs':
+      case 'leg day':
+        return Icons.directions_walk;
+      case 'full body':
+        return Icons.sports_gymnastics;
+      case 'hiit':
+        return Icons.flash_on;
+      case 'yoga':
+        return Icons.self_improvement;
+      default:
+        return Icons.sports;
+    }
+  }
+
+  Widget _buildEmptyWorkoutsState() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.blue[50]!, Colors.purple[50]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Animated Icon
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.8, end: 1.0),
+              duration: const Duration(milliseconds: 1500),
+              curve: Curves.easeInOut,
+              builder: (context, value, child) {
+                return Transform.scale(
+                  scale: value,
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[100],
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.calendar_today,
+                      size: 64,
+                      color: Colors.blue[700],
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No workouts scheduled today',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Create a workout with a friend\nand start crushing your goals!',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                _showQuickCreateWorkoutDialog();
+              },
+              icon: const Icon(Icons.add_circle),
+              label: const Text('Create Your First Workout'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue[700],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _QuickTip(icon: Icons.people, text: 'Train together'),
+                const SizedBox(width: 16),
+                _QuickTip(icon: Icons.local_fire_department, text: 'Build streaks'),
+                const SizedBox(width: 16),
+                _QuickTip(icon: Icons.emoji_events, text: 'Earn badges'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getWorkoutColorDash(String? type) {
+    switch (type?.toLowerCase()) {
+      case 'cardio':
+        return Colors.red[700]!;
+      case 'strength':
+      case 'weights':
+        return Colors.blue[700]!;
+      case 'legs':
+      case 'leg day':
+      case 'lower body':
+        return Colors.orange[700]!;
+      case 'upper body':
+        return Colors.purple[700]!;
+      case 'full body':
+        return Colors.indigo[700]!;
+      case 'hiit':
+        return Colors.deepOrange[700]!;
+      case 'yoga':
+        return Colors.teal[700]!;
+      default:
+        return Colors.green[700]!;
+    }
   }
 
 }
@@ -1498,12 +2542,9 @@ class _FriendsPageState extends State<FriendsPage> {
                         ..._searchResults.map((user) {
                           return Card(
                             child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: Colors.blue,
-                                child: Text(
-                                  user['display_name']?.substring(0, 1).toUpperCase() ?? '?',
-                                  style: const TextStyle(color: Colors.white),
-                                ),
+                              leading: UserAvatar(
+                                avatarId: user['avatar_id'],
+                                size: 40,
                               ),
                               title: Text(user['display_name'] ?? 'Unknown'),
                               subtitle: Text(
@@ -1541,12 +2582,9 @@ class _FriendsPageState extends State<FriendsPage> {
                           return Card(
                             color: Colors.orange[50],
                             child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: Colors.orange,
-                                child: Text(
-                                  profile?['display_name']?.substring(0, 1).toUpperCase() ?? '?',
-                                  style: const TextStyle(color: Colors.white),
-                                ),
+                              leading: UserAvatar(
+                                avatarId: profile?['avatar_id'],
+                                size: 40,
                               ),
                               title: Text(profile?['display_name'] ?? 'Unknown'),
                               subtitle: const Text('Wants to be your gym buddy'),
@@ -1639,12 +2677,9 @@ class _FriendsPageState extends State<FriendsPage> {
                             child: ListTile(
                               leading: Stack(
                                 children: [
-                                  CircleAvatar(
-                                    backgroundColor: Colors.green,
-                                    child: Text(
-                                      friend['display_name']?.substring(0, 1).toUpperCase() ?? '?',
-                                      style: const TextStyle(color: Colors.white),
-                                    ),
+                                  UserAvatar(
+                                    avatarId: friend['avatar_id'],
+                                    size: 40,
                                   ),
                                   Positioned(
                                     right: 0,
@@ -1698,6 +2733,180 @@ class _FriendsPageState extends State<FriendsPage> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Widget _buildEmptyFriendsState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Animated Icon
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: 1.0),
+              duration: const Duration(milliseconds: 1200),
+              curve: Curves.elasticOut,
+              builder: (context, value, child) {
+                return Transform.scale(
+                  scale: value,
+                  child: Container(
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.green[100]!, Colors.blue[100]!],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.green.withOpacity(0.3),
+                          blurRadius: 20,
+                          spreadRadius: 5,
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.group_add,
+                      size: 72,
+                      color: Colors.green[700],
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 32),
+            Text(
+              'Find Your Gym Buddies!',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Working out is better with friends.\nSearch for people and start training together!',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+                height: 1.6,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.blue[50],
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.blue[700],
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Center(
+                          child: Text(
+                            '1',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Text(
+                          'Search for friends using the search bar above',
+                          style: TextStyle(color: Colors.grey[700]),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.blue[700],
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Center(
+                          child: Text(
+                            '2',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Text(
+                          'Send friend requests',
+                          style: TextStyle(color: Colors.grey[700]),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.blue[700],
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Center(
+                          child: Text(
+                            '3',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Text(
+                          'Schedule workouts together and build streaks!',
+                          style: TextStyle(color: Colors.grey[700]),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              '💡 Tip: Invite your real-life gym buddies!',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.orange[700],
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -1919,152 +3128,309 @@ class _SchedulePageState extends State<SchedulePage> {
         final isCreator = workout['user_id'] == currentUserId;
         final isBuddy = workout['buddy_id'] == currentUserId;
         final buddyStatus = workout['buddy_status'];
+        final workoutStatus = workout['status'];
 
         return Card(
+          elevation: 3,
           margin: const EdgeInsets.only(bottom: 12),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: _getWorkoutColor(workout['workout_type']),
-              child: const Icon(Icons.fitness_center, color: Colors.white),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.white,
+                  _getWorkoutStatusColor(workoutStatus).withOpacity(0.05),
+                ],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
             ),
-            title: Row(
+            child: Column(
               children: [
-                Text(
-                  workout['workout_type'] ?? 'Workout',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                // Main content
+                ListTile(
+                  contentPadding: const EdgeInsets.all(16),
+                  leading: Stack(
+                    children: [
+                      Hero(
+                        tag: 'workout_${workout['id']}',
+                        child: CircleAvatar(
+                          radius: 28,
+                          backgroundColor: _getWorkoutColor(workout['workout_type']).withOpacity(0.2),
+                          child: Icon(
+                            _getWorkoutIcon(workout['workout_type']),
+                            color: _getWorkoutColor(workout['workout_type']),
+                            size: 28,
+                          ),
+                        ),
+                      ),
+                      if (isBuddy && buddyStatus == 'pending')
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.orange,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Icon(
+                              Icons.notification_important,
+                              color: Colors.white,
+                              size: 10,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          workout['workout_type'] ?? 'Workout',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                      _buildStatusBadge(workoutStatus),  // ✅ NEW STATUS BADGE!
+                    ],
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 8),
+                      // Date and time row
+                      Row(
+                        children: [
+                          Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_formatDate(workout['workout_date'])} • ${workout['workout_time']}',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      // Duration and buddy row
+                      Wrap(
+                        spacing: 12,
+                        children: [
+                          if (workout['planned_duration_minutes'] != null)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.timer, size: 14, color: Colors.grey[600]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _formatDuration(workout['planned_duration_minutes']),
+                                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          if (buddy != null || creator != null)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.person, size: 14, color: Colors.blue[700]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  isCreator 
+                                      ? 'with ${buddy?['display_name'] ?? 'Unknown'}'
+                                      : 'with ${creator?['display_name'] ?? 'Unknown'}',
+                                  style: TextStyle(
+                                    color: Colors.blue[700],
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                      // In progress timer
+                      if (workoutStatus == 'in_progress') ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.orange[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.timer, size: 14, color: Colors.orange[700]),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Started ${_timeAgo(workout['workout_started_at'])}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.orange[900],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      // Pending invite banner
+                      if (isBuddy && buddyStatus == 'pending') ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.orange[50],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange[200]!),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.mail, size: 16, color: Colors.orange[700]),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '${creator?['display_name']} invited you to join!',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.orange[900],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  trailing: PopupMenuButton(
+                    itemBuilder: (context) {
+                      if (isBuddy && buddyStatus == 'pending') {
+                        return [
+                          const PopupMenuItem(
+                            value: 'accept',
+                            child: Row(
+                              children: [
+                                Icon(Icons.check_circle, color: Colors.green),
+                                SizedBox(width: 8),
+                                Text('Accept Invite'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuItem(
+                            value: 'decline',
+                            child: Row(
+                              children: [
+                                Icon(Icons.cancel, color: Colors.red),
+                                SizedBox(width: 8),
+                                Text('Decline Invite'),
+                              ],
+                            ),
+                          ),
+                        ];
+                      }
+                      
+                      return [
+                        if (workoutStatus == 'scheduled')
+                          const PopupMenuItem(
+                            value: 'start',
+                            child: Row(
+                              children: [
+                                Icon(Icons.play_arrow, color: Colors.blue),
+                                SizedBox(width: 8),
+                                Text('Start Workout'),
+                              ],
+                            ),
+                          ),
+                        if (workoutStatus == 'in_progress')
+                          const PopupMenuItem(
+                            value: 'complete',
+                            child: Row(
+                              children: [
+                                Icon(Icons.check_circle, color: Colors.green),
+                                SizedBox(width: 8),
+                                Text('Complete'),
+                              ],
+                            ),
+                          ),
+                        if (isCreator && workoutStatus == 'scheduled')
+                          const PopupMenuItem(
+                            value: 'cancel',
+                            child: Row(
+                              children: [
+                                Icon(Icons.cancel, color: Colors.red),
+                                SizedBox(width: 8),
+                                Text('Cancel'),
+                              ],
+                            ),
+                          ),
+                      ];
+                    },
+                    onSelected: (value) {
+                      HapticFeedback.selectionClick();
+                      if (value == 'start') {
+                        _startWorkout(workout['id']);
+                      } else if (value == 'complete') {
+                        _completeWorkout(workout['id']);
+                      } else if (value == 'cancel') {
+                        _cancelWorkout(workout['id']);
+                      } else if (value == 'accept') {
+                        _acceptInvitation(workout['id']);
+                      } else if (value == 'decline') {
+                        _declineInvitation(workout['id']);
+                      }
+                    },
+                  ),
                 ),
+                // Quick action buttons for pending invites
                 if (isBuddy && buddyStatus == 'pending')
                   Container(
-                    margin: const EdgeInsets.only(left: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.orange,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'INVITE',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              HapticFeedback.lightImpact();
+                              _acceptInvitation(workout['id']);
+                            },
+                            icon: const Icon(Icons.check, size: 20),
+                            label: const Text('Accept'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              HapticFeedback.lightImpact();
+                              _declineInvitation(workout['id']);
+                            },
+                            icon: const Icon(Icons.close, size: 20),
+                            label: const Text('Decline'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red,
+                              side: const BorderSide(color: Colors.red),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
               ],
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 4),
-                Text(
-                  '${_formatDate(workout['workout_date'])} • ${workout['workout_time']}',
-                ),
-                if (workout['planned_duration_minutes'] != null)
-                  Text(
-                    'Duration: ${_formatDuration(workout['planned_duration_minutes'])}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                if (workout['status'] == 'in_progress')
-                  Text(
-                    'IN PROGRESS - Started ${_timeAgo(workout['workout_started_at'])}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.green,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                if (buddy != null)
-                  Text(
-                    isCreator 
-                        ? 'with ${buddy['display_name']} ${buddyStatus == 'accepted' ? '✓' : '(pending)'}'
-                        : 'with ${creator['display_name']}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w500,
-                      color: buddyStatus == 'accepted' ? Colors.green : Colors.orange,
-                    ),
-                  )
-                else
-                  const Text('Solo workout'),
-              ],
-            ),
-            trailing: PopupMenuButton(
-              itemBuilder: (context) {
-                // If user is the invited buddy and hasn't responded
-                if (isBuddy && buddyStatus == 'pending') {
-                  return [
-                    const PopupMenuItem(
-                      value: 'accept',
-                      child: Row(
-                        children: [
-                          Icon(Icons.check_circle, color: Colors.green),
-                          SizedBox(width: 8),
-                          Text('Accept Invite'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'decline',
-                      child: Row(
-                        children: [
-                          Icon(Icons.cancel, color: Colors.red),
-                          SizedBox(width: 8),
-                          Text('Decline Invite'),
-                        ],
-                      ),
-                    ),
-                  ];
-                }
-                
-                // Normal menu for creator or accepted workouts
-                return [
-                  if (workout['status'] == 'scheduled')
-                    const PopupMenuItem(
-                      value: 'start',
-                      child: Row(
-                        children: [
-                          Icon(Icons.play_arrow, color: Colors.blue),
-                          SizedBox(width: 8),
-                          Text('Start Workout'),
-                        ],
-                      ),
-                    ),
-                  if (workout['status'] == 'in_progress')
-                    const PopupMenuItem(
-                      value: 'complete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.check_circle, color: Colors.green),
-                          SizedBox(width: 8),
-                          Text('Complete'),
-                        ],
-                      ),
-                    ),
-                  if (isCreator && workout['status'] == 'scheduled')
-                    const PopupMenuItem(
-                      value: 'cancel',
-                      child: Row(
-                        children: [
-                          Icon(Icons.cancel, color: Colors.red),
-                          SizedBox(width: 8),
-                          Text('Cancel'),
-                        ],
-                      ),
-                    ),
-                ];
-              },
-              onSelected: (value) {
-                if (value == 'start') {
-                  _startWorkout(workout['id']);
-                } else if (value == 'complete') {
-                  _completeWorkout(workout['id']);
-                } else if (value == 'cancel') {
-                  _cancelWorkout(workout['id']);
-                } else if (value == 'accept') {
-                  _acceptInvitation(workout['id']);
-                } else if (value == 'decline') {
-                  _declineInvitation(workout['id']);
-                }
-              },
             ),
           ),
         );
@@ -2075,18 +3441,131 @@ class _SchedulePageState extends State<SchedulePage> {
   Color _getWorkoutColor(String? type) {
     switch (type?.toLowerCase()) {
       case 'cardio':
-        return Colors.red;
+        return Colors.red[700]!;
       case 'strength':
       case 'weights':
-        return Colors.blue;
+        return Colors.blue[700]!;
       case 'legs':
       case 'leg day':
-        return Colors.orange;
+      case 'lower body':
+        return Colors.orange[700]!;
       case 'upper body':
-        return Colors.purple;
+        return Colors.purple[700]!;
+      case 'full body':
+        return Colors.indigo[700]!;
+      case 'hiit':
+        return Colors.deepOrange[700]!;
+      case 'yoga':
+        return Colors.teal[700]!;
       default:
-        return Colors.green;
+        return Colors.green[700]!;
     }
+  }
+
+  IconData _getWorkoutIcon(String? type) {
+    switch (type?.toLowerCase()) {
+      case 'cardio':
+        return Icons.directions_run;
+      case 'strength':
+      case 'weights':
+        return Icons.fitness_center;
+      case 'upper body':
+        return Icons.accessibility_new;
+      case 'lower body':
+      case 'legs':
+      case 'leg day':
+        return Icons.directions_walk;
+      case 'full body':
+        return Icons.sports_gymnastics;
+      case 'hiit':
+        return Icons.flash_on;
+      case 'yoga':
+        return Icons.self_improvement;
+      default:
+        return Icons.sports;
+    }
+  }
+
+  String _getWorkoutStatusText(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'scheduled':
+        return 'Scheduled';
+      case 'in_progress':
+        return 'In Progress';
+      case 'completed':
+        return 'Completed';
+      case 'cancelled':
+        return 'Cancelled';
+      default:
+        return 'Unknown';
+    }
+  }
+
+  IconData _getWorkoutStatusIcon(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'scheduled':
+        return Icons.schedule;
+      case 'in_progress':
+        return Icons.play_circle;
+      case 'completed':
+        return Icons.check_circle;
+      case 'cancelled':
+        return Icons.cancel;
+      default:
+        return Icons.help_outline;
+    }
+  }
+
+  Color _getWorkoutStatusColor(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'scheduled':
+        return Colors.blue[700]!;
+      case 'in_progress':
+        return Colors.orange[700]!;
+      case 'completed':
+        return Colors.green[700]!;
+      case 'cancelled':
+        return Colors.red[700]!;
+      default:
+        return Colors.grey[700]!;
+    }
+  }
+
+  Widget _buildStatusBadge(String? status) {
+    final statusText = _getWorkoutStatusText(status);
+    final statusIcon = _getWorkoutStatusIcon(status);
+    final statusColor = _getWorkoutStatusColor(status);
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: statusColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: statusColor.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            statusIcon,
+            size: 14,
+            color: statusColor,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            statusText,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: statusColor,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String _formatDate(String? dateStr) {
@@ -2106,6 +3585,8 @@ class _SchedulePageState extends State<SchedulePage> {
       return dateStr;
     }
   }
+
+  
 
   String _formatDuration(int? minutes) {
     if (minutes == null) return '';
@@ -2131,6 +3612,8 @@ class _SchedulePageState extends State<SchedulePage> {
       return '';
     }
   }
+  
+
 }
 
 // Create Workout Dialog
@@ -2172,6 +3655,15 @@ class _CreateWorkoutDialogState extends State<_CreateWorkoutDialog> {
     'Other',
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    print('📋 Friends in dialog: ${widget.friends.length}');
+    widget.friends.forEach((friend) {
+      print('  - ${friend['display_name']} (${friend['id']})');
+    });
+  }
+
   Future<void> _createWorkout() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -2198,8 +3690,12 @@ class _CreateWorkoutDialogState extends State<_CreateWorkoutDialog> {
       widget.onWorkoutCreated();
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Workout scheduled!'),
+        SnackBar(
+          content: Text(
+            _selectedBuddyId != null 
+                ? 'Workout invitation sent! 🎉'
+                : 'Workout scheduled! 💪',
+          ),
           backgroundColor: Colors.green,
         ),
       );
@@ -2216,6 +3712,7 @@ class _CreateWorkoutDialogState extends State<_CreateWorkoutDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: const Text('Schedule Workout'),
       content: Form(
         key: _formKey,
@@ -2309,22 +3806,31 @@ class _CreateWorkoutDialogState extends State<_CreateWorkoutDialog> {
               ),
               const SizedBox(height: 16),
               
-              // Buddy Selection
+              // Buddy Selection - FIXED WITHOUT EXPANDED
               DropdownButtonFormField<String?>(
                 value: _selectedBuddyId,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Workout Buddy (Optional)',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
+                  helperText: widget.friends.isEmpty 
+                      ? 'Add friends to invite them!' 
+                      : '${widget.friends.length} friend${widget.friends.length == 1 ? '' : 's'} available',
+                  helperStyle: TextStyle(
+                    color: widget.friends.isEmpty ? Colors.orange : Colors.grey,
+                  ),
                 ),
                 items: [
                   const DropdownMenuItem<String?>(
                     value: null,
-                    child: Text('Solo Workout'),
+                    child: Text('👤 Solo Workout'),
                   ),
                   ...widget.friends.map<DropdownMenuItem<String?>>((friend) {
+                    final name = friend['display_name'] ?? 'Unknown';
+                    final initial = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?';
+                    
                     return DropdownMenuItem<String?>(
                       value: friend['id'] as String?,
-                      child: Text(friend['display_name'] ?? 'Unknown'),
+                      child: Text('🟢 $name'),  // Simple text, no complex Row widget
                     );
                   }),
                 ],
@@ -2332,6 +3838,13 @@ class _CreateWorkoutDialogState extends State<_CreateWorkoutDialog> {
                   setState(() {
                     _selectedBuddyId = value;
                   });
+                  if (value != null) {
+                    final friendName = widget.friends
+                        .firstWhere((f) => f['id'] == value)['display_name'];
+                    print('🎯 Selected buddy: $friendName ($value)');
+                  } else {
+                    print('🎯 Selected: Solo workout');
+                  }
                 },
               ),
               const SizedBox(height: 16),
@@ -2356,11 +3869,22 @@ class _CreateWorkoutDialogState extends State<_CreateWorkoutDialog> {
         ),
         ElevatedButton(
           onPressed: _isCreating ? null : _createWorkout,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue[700],
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
           child: _isCreating
               ? const SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
               : const Text('Schedule'),
         ),
@@ -2389,8 +3913,40 @@ class _CreateWorkoutDialogState extends State<_CreateWorkoutDialog> {
 }
 
 // Profile Page
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  Future<Map<String, dynamic>?> _loadProfileData() async {
+    try {
+      final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+      if (currentUserId == null) return null;
+
+      final response = await Supabase.instance.client
+          .from('user_profiles')
+          .select('avatar_id, display_name, created_at')
+          .eq('id', currentUserId)
+          .single();
+
+      return response;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null) return '2024';
+    try {
+      final date = DateTime.parse(dateStr);
+      return '${date.year}';
+    } catch (e) {
+      return '2024';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2409,24 +3965,37 @@ class ProfilePage extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           // Profile Header
-          const Center(
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 50,
-                  backgroundColor: Colors.blue,
-                  child: Icon(Icons.person, size: 50, color: Colors.white),
-                ),
-                SizedBox(height: 16),
-                Text(
-                  'Your Name',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  'Member since 2024',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ],
+          Center(
+            child: FutureBuilder<Map<String, dynamic>?>(
+              future: _loadProfileData(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const CircularProgressIndicator();
+                }
+                
+                final profile = snapshot.data!;
+                
+                return Column(
+                  children: [
+                    UserAvatar(
+                      avatarId: profile['avatar_id'],
+                      size: 100,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      profile['display_name'] ?? 'User',
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'Member since ${_formatDate(profile['created_at'])}',
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           const SizedBox(height: 30),
@@ -2593,6 +4162,69 @@ class _StatCard extends StatelessWidget {
         Text(
           label,
           style: const TextStyle(color: Colors.grey),
+        ),
+      ],
+    );
+  }
+}
+
+class _QuickTip extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _QuickTip({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, size: 20, color: Colors.grey[600]),
+        const SizedBox(height: 4),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 10,
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BenefitRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  const _BenefitRow({
+    required this.icon,
+    required this.text,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: color, size: 24),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[700],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
       ],
     );

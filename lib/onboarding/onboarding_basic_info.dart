@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'onboarding_fitness_goals.dart';
-
+import 'onboarding_avatar_selection.dart';  // ← Only need this import now
 
 class OnboardingBasicInfo extends StatefulWidget {
   const OnboardingBasicInfo({super.key});
@@ -48,10 +47,10 @@ class _OnboardingBasicInfoState extends State<OnboardingBasicInfo> {
         'gender': _selectedGender,
       };
 
-      // Navigate to fitness goals screen
+      // Navigate to AVATAR selection screen
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => OnboardingFitnessGoals(userData: userData),
+          builder: (_) => OnboardingAvatarSelection(userData: userData),
         ),
       );
     }
@@ -69,7 +68,7 @@ class _OnboardingBasicInfoState extends State<OnboardingBasicInfo> {
             children: [
               // Progress indicator
               LinearProgressIndicator(
-                value: 0.25,
+                value: 0.2, // 20% (step 1 of 5)
                 backgroundColor: Colors.grey[300],
                 valueColor: AlwaysStoppedAnimation<Color>(
                   Theme.of(context).colorScheme.primary,

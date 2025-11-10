@@ -22,7 +22,7 @@ class FriendService {
       // Search in user_profiles for display names
       final response = await _supabase
           .from('user_profiles')
-          .select('id, display_name, age, fitness_level')
+          .select('id, display_name, age, fitness_level, avatar_id')
           .ilike('display_name', '%$query%')
           .neq('id', currentUserId)
           .limit(20);
@@ -43,31 +43,37 @@ class FriendService {
   Future<bool> sendFriendRequest(String friendId) async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
-      if (currentUserId == null) return false;
+      if (currentUserId == null) {
+        if (kDebugMode) print('❌ No user logged in');
+        return false;
+      }
 
-      // Check if friendship already exists
+      if (kDebugMode) print('📤 Sending friend request from $currentUserId to $friendId');
+
+      // Check if friendship already exists (either direction)
       final existing = await _supabase
           .from('friendships')
           .select()
-          .or('user_id.eq.$currentUserId,friend_id.eq.$currentUserId')
-          .or('user_id.eq.$friendId,friend_id.eq.$friendId')
+          .or('and(user_id.eq.$currentUserId,friend_id.eq.$friendId),and(user_id.eq.$friendId,friend_id.eq.$currentUserId)')
           .maybeSingle();
 
       if (existing != null) {
-        if (kDebugMode) print('Friendship already exists');
+        if (kDebugMode) print('⚠️ Friendship already exists: ${existing['status']}');
         return false;
       }
 
       // Create friend request
-      await _supabase.from('friendships').insert({
+      final response = await _supabase.from('friendships').insert({
         'user_id': currentUserId,
         'friend_id': friendId,
         'status': 'pending',
-      });
+      }).select();  // ✅ ADD .select() to get the created record back
+
+      if (kDebugMode) print('✅ Friend request created: $response');
 
       return true;
     } catch (e) {
-      if (kDebugMode) print('Error sending friend request: $e');
+      if (kDebugMode) print('❌ Error sending friend request: $e');
       return false;
     }
   }
@@ -75,15 +81,86 @@ class FriendService {
   // Accept friend request
   Future<bool> acceptFriendRequest(String requestId) async {
     try {
-      await _supabase
+      final currentUserId = _supabase.auth.currentUser?.id;
+      if (currentUserId == null) return false;
+
+      if (kDebugMode) print('✅ Accepting friend request: $requestId');
+
+      // Get the friendship details BEFORE updating
+      final friendship = await _supabase
           .from('friendships')
-          .update({'status': 'accepted'})
-          .eq('id', requestId);
+          .select('user_id, friend_id')
+          .eq('id', requestId)
+          .single();
+
+      final friendUserId = friendship['user_id'] as String;
+
+      // Accept the friend request
+      await _supabase.from('friendships').update({
+        'status': 'accepted',
+      }).eq('id', requestId);
+
+      if (kDebugMode) print('✅ Friendship accepted');
+
+      // 🔥 NEW: Create a team streak for this friendship!
+      await _createTeamStreak(currentUserId, friendUserId);
 
       return true;
     } catch (e) {
-      if (kDebugMode) print('Error accepting friend request: $e');
+      if (kDebugMode) print('❌ Error accepting friend request: $e');
       return false;
+    }
+  }
+
+  // 🔥 NEW: Helper method to create team streak
+  Future<void> _createTeamStreak(String userId1, String userId2) async {
+    try {
+      if (kDebugMode) print('🔥 Creating team streak for $userId1 and $userId2');
+
+      // Get both users' display names
+      final user1Profile = await _supabase
+          .from('user_profiles')
+          .select('display_name')
+          .eq('id', userId1)
+          .single();
+
+      final user2Profile = await _supabase
+          .from('user_profiles')
+          .select('display_name')
+          .eq('id', userId2)
+          .single();
+
+      final user1Name = user1Profile['display_name'] as String;
+      final user2Name = user2Profile['display_name'] as String;
+
+      // Create team streak
+      final teamStreak = await _supabase.from('team_streaks').insert({
+        'team_name': '$user1Name & $user2Name',
+        'team_emoji': '💪',  // Default emoji
+        'current_streak': 0,
+        'longest_streak': 0,
+        'last_check_in_date': null,
+      }).select().single();
+
+      final teamStreakId = teamStreak['id'] as String;
+
+      if (kDebugMode) print('✅ Team streak created: $teamStreakId');
+
+      // Add both members to the team
+      await _supabase.from('team_members').insert([
+        {
+          'team_streak_id': teamStreakId,
+          'user_id': userId1,
+        },
+        {
+          'team_streak_id': teamStreakId,
+          'user_id': userId2,
+        },
+      ]);
+
+      if (kDebugMode) print('✅ Team members added');
+    } catch (e) {
+      if (kDebugMode) print('❌ Error creating team streak: $e');
     }
   }
 
@@ -106,27 +183,43 @@ class FriendService {
   Future<List<Map<String, dynamic>>> getPendingRequests() async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
-      if (currentUserId == null) return [];
+      if (currentUserId == null) {
+        if (kDebugMode) print('❌ No user logged in');
+        return [];
+      }
 
-      // Get requests where current user is the friend_id (someone requested them)
+      if (kDebugMode) print('📥 Getting pending requests for $currentUserId');
+
+      // Get pending friend requests WHERE YOU ARE THE RECIPIENT
       final response = await _supabase
           .from('friendships')
           .select('''
             id,
             user_id,
+            friend_id,
+            status,
             created_at,
-            user_profiles!user_id (
+            user_profiles!friendships_user_id_fkey (
+              id,
               display_name,
-              age,
+              avatar_id,
               fitness_level
             )
-          ''')
+          ''')  // ✅ FIXED: Added comma between avatar_id and fitness_level
           .eq('friend_id', currentUserId)
-          .eq('status', 'pending');
+          .eq('status', 'pending')
+          .order('created_at', ascending: false);
+
+      if (kDebugMode) {
+        print('✅ Found ${response.length} pending requests');
+        for (var req in response) {
+          print('  - From: ${req['user_profiles']?['display_name']} (${req['user_id']})');
+        }
+      }
 
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      if (kDebugMode) print('Error getting pending requests: $e');
+      if (kDebugMode) print('❌ Error getting pending requests: $e');
       return [];
     }
   }

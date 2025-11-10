@@ -47,6 +47,7 @@ class _OnboardingBuddyPreferencesState extends State<OnboardingBuddyPreferences>
         'display_name': widget.userData['display_name'],
         'age': widget.userData['age'],
         'gender': widget.userData['gender'],
+        'avatar_id': widget.userData['avatar_id'],  // ← ADD THIS LINE
         'fitness_goals': widget.userData['fitness_goals'],
         'workout_days_per_week': widget.userData['workout_days_per_week'],
         'preferred_workout_time': widget.userData['preferred_workout_time'],
