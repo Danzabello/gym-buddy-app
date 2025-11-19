@@ -80,6 +80,8 @@ class FriendService {
 
   // Accept friend request with BACKFILL functionality
   Future<bool> acceptFriendRequest(String requestId) async {
+    print('🎯🎯🎯 ACCEPT FRIEND REQUEST CALLED WITH ID: $requestId 🎯🎯🎯');
+    
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return false;
@@ -94,6 +96,8 @@ class FriendService {
           .single();
 
       final friendUserId = friendship['user_id'] as String;
+      
+      print('👥 Current user: $currentUserId, Friend user: $friendUserId');
 
       // Accept the friend request
       await _supabase.from('friendships').update({
@@ -103,20 +107,28 @@ class FriendService {
       if (kDebugMode) print('✅ Friendship accepted');
 
       // 🔥 Create a team and get the team ID back
+      print('🏗️ About to create team...');
       final teamData = await _createTeamStreakAndGetIds(currentUserId, friendUserId);
+      
+      print('📦 Team data returned: $teamData');
       
       // 🔥 BACKFILL: If users have already checked in today, apply it to new team
       if (teamData != null && teamData['teamId'] != null && teamData['streakId'] != null) {
+        print('✨ Team data is valid, calling backfill...');
         await _backfillTodaysCheckIns(
           teamData['teamId']!, 
           teamData['streakId']!, 
           currentUserId, 
           friendUserId
         );
+        print('✨ Backfill completed!');
+      } else {
+        print('⚠️ Team data was null or incomplete, skipping backfill');
       }
 
       return true;
     } catch (e) {
+      print('💥💥💥 ERROR in acceptFriendRequest: $e 💥💥💥');
       if (kDebugMode) print('❌ Error accepting friend request: $e');
       return false;
     }
@@ -124,6 +136,8 @@ class FriendService {
 
   // 🔥 Modified: Create team streak and return both team and streak IDs
   Future<Map<String, String>?> _createTeamStreakAndGetIds(String userId1, String userId2) async {
+    print('🏗️🏗️🏗️ CREATE TEAM CALLED FOR: $userId1 and $userId2 🏗️🏗️🏗️');
+    
     try {
       if (kDebugMode) print('🔥 Creating team for $userId1 and $userId2');
 
@@ -182,11 +196,14 @@ class FriendService {
       final streakId = teamStreak['id'] as String;
       if (kDebugMode) print('✅ Team streak created: $streakId');
 
+      print('✅✅✅ RETURNING teamId: $teamId, streakId: $streakId ✅✅✅');
+      
       return {
         'teamId': teamId,
         'streakId': streakId,
       };
     } catch (e) {
+      print('💥💥💥 ERROR in _createTeamStreakAndGetIds: $e 💥💥💥');
       if (kDebugMode) print('❌ Error creating team streak: $e');
       return null;
     }
@@ -199,11 +216,21 @@ class FriendService {
     String userId1, 
     String userId2
   ) async {
+    print('🚨🚨🚨 BACKFILL FUNCTION CALLED! 🚨🚨🚨');
+    print('📋 Parameters: teamId=$teamId, streakId=$streakId');
+    print('👥 Users: user1=$userId1, user2=$userId2');
+    
     try {
-      final today = DateTime.now().toIso8601String().split('T')[0];
-      if (kDebugMode) print('🔄 Checking for today\'s check-ins to backfill...');
+      // Use consistent UTC date for today
+      final now = DateTime.now().toUtc();
+      final todayUtc = DateTime.utc(now.year, now.month, now.day);
+      final today = todayUtc.toIso8601String().split('T')[0];
+      
+      print('📅 Checking for check-ins on date: $today');
+      if (kDebugMode) print('🔄 Checking for today\'s check-ins to backfill (date: $today)...');
 
       // Check if user1 has checked in today (in ANY team)
+      print('🔍 Checking if user1 ($userId1) has checked in today...');
       final user1CheckIn = await _supabase
           .from('daily_team_checkins')
           .select('check_in_time')
@@ -211,8 +238,11 @@ class FriendService {
           .eq('check_in_date', today)
           .limit(1)
           .maybeSingle();
+      
+      print('   User1 check-in result: ${user1CheckIn != null ? "FOUND" : "NOT FOUND"}');
 
       // Check if user2 has checked in today (in ANY team)  
+      print('🔍 Checking if user2 ($userId2) has checked in today...');
       final user2CheckIn = await _supabase
           .from('daily_team_checkins')
           .select('check_in_time')
@@ -220,11 +250,14 @@ class FriendService {
           .eq('check_in_date', today)
           .limit(1)
           .maybeSingle();
+      
+      print('   User2 check-in result: ${user2CheckIn != null ? "FOUND" : "NOT FOUND"}');
 
       int backfilledCount = 0;
 
       // Backfill user1's check-in if they checked in today
       if (user1CheckIn != null) {
+        print('✅ Backfilling check-in for user1...');
         await _supabase.from('daily_team_checkins').insert({
           'team_streak_id': streakId,
           'user_id': userId1,
@@ -232,11 +265,12 @@ class FriendService {
           'check_in_time': user1CheckIn['check_in_time'],
         });
         backfilledCount++;
-        if (kDebugMode) print('✅ Backfilled check-in for user $userId1');
+        print('✅ Backfilled check-in for user $userId1');
       }
 
       // Backfill user2's check-in if they checked in today
       if (user2CheckIn != null) {
+        print('✅ Backfilling check-in for user2...');
         await _supabase.from('daily_team_checkins').insert({
           'team_streak_id': streakId,
           'user_id': userId2,
@@ -244,28 +278,32 @@ class FriendService {
           'check_in_time': user2CheckIn['check_in_time'],
         });
         backfilledCount++;
-        if (kDebugMode) print('✅ Backfilled check-in for user $userId2');
+        print('✅ Backfilled check-in for user $userId2');
       }
+
+      print('📊 BACKFILL SUMMARY: $backfilledCount users had check-ins to backfill');
 
       // If both users had checked in today, update the streak immediately
       if (backfilledCount == 2) {
-        if (kDebugMode) print('🔥 Both users had checked in - updating streak!');
+        print('🔥🔥🔥 BOTH USERS HAD CHECKED IN - UPDATING STREAK! 🔥🔥🔥');
         
+        // Set the streak to 1 and update the last_workout_date to today
         await _supabase.from('team_streaks').update({
           'current_streak': 1,
           'longest_streak': 1,
-          'last_workout_date': today,
-          'updated_at': DateTime.now().toIso8601String(),
+          'last_workout_date': today,  // This is crucial!
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
         }).eq('id', streakId);
 
-        if (kDebugMode) print('✅ Streak updated to 1 for new team');
+        print('✅✅✅ STREAK UPDATED TO 1 FOR NEW TEAM! ✅✅✅');
       } else if (backfilledCount == 1) {
-        if (kDebugMode) print('⏳ Only one user had checked in - waiting for the other');
+        print('⏳ Only one user had checked in - waiting for the other');
       } else {
-        if (kDebugMode) print('🆕 Neither user had checked in yet today');
+        print('🆕 Neither user had checked in yet today');
       }
 
     } catch (e) {
+      print('💥💥💥 ERROR in _backfillTodaysCheckIns: $e 💥💥💥');
       if (kDebugMode) print('❌ Error backfilling check-ins: $e');
     }
   }
