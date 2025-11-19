@@ -21,14 +21,37 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+
+  final GlobalKey<_DashboardPageState> _dashboardKey = GlobalKey<_DashboardPageState>();
   
   // Different pages for each tab
-  final List<Widget> _pages = [
-    const DashboardPage(),
-    const FriendsPage(),
-    const SchedulePage(),
-    const ProfilePage(),
-  ];
+  late List<Widget> _pages;
+  
+  @override
+  void initState() {
+    super.initState();
+    // Initialize pages with the dashboard key
+    _pages = [
+      DashboardPage(key: _dashboardKey),  // Add the key here
+      const FriendsPage(),
+      const SchedulePage(),
+      const ProfilePage(),
+    ];
+  }
+
+  void _onTabChanged(int index) {
+    final previousIndex = _selectedIndex;
+    
+    setState(() {
+      _selectedIndex = index;
+    });
+    
+    // Refresh dashboard when returning to it from friends page
+    if (index == 0 && previousIndex == 1) {
+      // Access the dashboard state and trigger refresh
+      _dashboardKey.currentState?._loadStreakData();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,11 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: _pages[_selectedIndex],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+        onDestinationSelected: _onTabChanged,  // Use the new method
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
@@ -67,6 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+
 
 // Dashboard/Home Page with Real Streak Data
 class DashboardPage extends StatefulWidget {
@@ -115,8 +135,15 @@ class _DashboardPageState extends State<DashboardPage> {
     _loadStreakData();
     _updateCountdown();
     Future.delayed(const Duration(minutes: 1), _updateCountdown);
-
     _confettiController = ConfettiController(duration: const Duration(seconds: 3));
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _setupAppLifecycleListener();
+    });
+  }
+
+  void _setupAppLifecycleListener() {
+    _loadStreakData();
   }
 
   @override
@@ -229,6 +256,63 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildCarouselAvatar(TeamStreak streak, bool isFocused) {
     final isCoachMax = streak.isCoachMaxTeam;
     
+    // For Coach Max, use the robot emoji
+    if (isCoachMax) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: isFocused ? 140 : 75,
+            height: isFocused ? 140 : 75,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [Colors.blue[400]!, Colors.purple[400]!],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              border: Border.all(
+                color: isFocused ? Colors.blue : Colors.transparent,
+                width: isFocused ? 4 : 0,
+              ),
+              boxShadow: isFocused
+                  ? [
+                      BoxShadow(
+                        color: Colors.blue.withOpacity(0.4),
+                        blurRadius: 20,
+                        spreadRadius: 5,
+                      ),
+                    ]
+                  : [],
+            ),
+            child: Center(
+              child: Text(
+                '🤖',
+                style: TextStyle(fontSize: isFocused ? 60 : 35),
+              ),
+            ),
+          ),
+          if (isFocused) ...[
+            const SizedBox(height: 12),
+            Text(
+              streak.teamName,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final friendMember = streak.members.firstWhere(
+      (member) => member.userId != currentUserId,
+      orElse: () => streak.members.first,
+    );
+    
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -239,9 +323,7 @@ class _DashboardPageState extends State<DashboardPage> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: LinearGradient(
-              colors: isCoachMax 
-                  ? [Colors.blue[400]!, Colors.purple[400]!]
-                  : [Colors.orange[400]!, Colors.red[400]!],
+              colors: [Colors.orange[400]!, Colors.red[400]!],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -259,17 +341,17 @@ class _DashboardPageState extends State<DashboardPage> {
                   ]
                 : [],
           ),
-          child: Center(
-            child: Text(
-              streak.teamEmoji,
-              style: TextStyle(fontSize: isFocused ? 60 : 35),
+          child: ClipOval(
+            child: UserAvatar(
+              avatarId: friendMember.avatarId,
+              size: isFocused ? 140 : 75,
             ),
           ),
         ),
         if (isFocused) ...[
           const SizedBox(height: 12),
           Text(
-            streak.teamName,
+            friendMember.displayName,
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -354,34 +436,6 @@ class _DashboardPageState extends State<DashboardPage> {
             ],
           ),
         ),
-        
-        const SizedBox(height: 12),
-        
-        // Individual member status
-        if (streak.members.length > 1)
-          Wrap(
-            spacing: 12,
-            children: streak.members.map((member) {
-              final hasCheckedIn = streak.todayCheckIns.any(
-                (checkIn) => checkIn.userId == member.userId
-              );
-              
-              return Chip(
-                avatar: Icon(
-                  hasCheckedIn ? Icons.check : Icons.schedule,
-                  size: 16,
-                  color: hasCheckedIn ? Colors.green : Colors.orange,
-                ),
-                label: Text(
-                  member.displayName,
-                  style: const TextStyle(fontSize: 12),
-                ),
-                backgroundColor: hasCheckedIn 
-                    ? Colors.green[50] 
-                    : Colors.orange[50],
-              );
-            }).toList(),
-          ),
       ],
     );
   }
@@ -707,9 +761,11 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
       );
 
+      // ✅ Wait a moment for database to process, then refresh
+      await Future.delayed(const Duration(milliseconds: 500));
       await _loadStreakData();
       _checkForMilestone();
-    } else {
+    }else {
       HapticFeedback.mediumImpact();  // ✅ ERROR HAPTIC!
       
       final message = result['message'] ?? 'Check-in failed';
@@ -2434,7 +2490,22 @@ class _FriendsPageState extends State<FriendsPage> {
           backgroundColor: Colors.green,
         ),
       );
-      _loadFriends();
+      await _loadFriends();
+      
+      // ✅ NEW: Force refresh the home page to show new streak
+      if (mounted) {
+        final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+        if (homeState != null) {
+          // Switch to home tab
+          homeState.setState(() {
+            homeState._selectedIndex = 0;
+          });
+          // Force reload dashboard
+          final dashboardState = homeState._pages[0] as DashboardPage;
+          final dashboardStateKey = dashboardState.key as GlobalKey<_DashboardPageState>?;
+          dashboardStateKey?.currentState?._loadStreakData();
+        }
+      }
     }
   }
 

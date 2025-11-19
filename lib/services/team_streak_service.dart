@@ -10,11 +10,13 @@ class TeamMember {
   final String userId;
   final String displayName;
   final bool isCoachMax;
-  
+  final String? avatarId;
+
   TeamMember({
     required this.userId,
     required this.displayName,
     required this.isCoachMax,
+    this.avatarId,
   });
 }
 
@@ -99,6 +101,9 @@ class TeamStreakService {
         return [];
       }
 
+      if (kDebugMode) print('🔍 Getting all streaks for user: $currentUserId');
+
+  
       // Get all teams user is part of
       final teamsResponse = await _supabase
           .from('team_members')
@@ -113,16 +118,30 @@ class TeamStreakService {
           ''')
           .eq('user_id', currentUserId);
 
+      if (kDebugMode) {
+        print('📊 Teams response: $teamsResponse');
+        print('📊 Found ${teamsResponse.length} team memberships');
+      }
+
       final List<TeamStreak> streaks = [];
       
       for (final teamData in teamsResponse) {
         final team = teamData['buddy_teams'];
+        if (team == null) {
+          if (kDebugMode) print('⚠️ Skipping null team data');
+          continue;
+        }
+        
         final teamId = team['id'] as String;
+        if (kDebugMode) print('🔄 Processing team: ${team['team_name']} ($teamId)');
         
         // Get active streak for this team
         final streakData = await _getTeamStreakData(teamId);
         if (streakData != null) {
+          if (kDebugMode) print('✅ Added streak: ${streakData.teamName}');
           streaks.add(streakData);
+        } else {
+          if (kDebugMode) print('⚠️ No streak data for team: ${team['team_name']}');
         }
       }
       
@@ -134,7 +153,10 @@ class TeamStreakService {
       });
 
       if (kDebugMode) {
-        print('✅ Found ${streaks.length} active streaks');
+        print('✅ Returning ${streaks.length} active streaks');
+        for (var s in streaks) {
+          print('  - ${s.teamName} (${s.teamId})');
+        }
       }
 
       return streaks;
@@ -147,12 +169,16 @@ class TeamStreakService {
   /// Get streak data for a specific team
   Future<TeamStreak?> _getTeamStreakData(String teamId) async {
     try {
+      if (kDebugMode) print('  🔍 Getting streak data for team: $teamId');
+      
       // Get team info
       final teamResponse = await _supabase
           .from('buddy_teams')
           .select('id, team_name, team_emoji, is_coach_max_team')
           .eq('id', teamId)
           .single();
+
+      if (kDebugMode) print('  ✅ Team info: ${teamResponse['team_name']}');
 
       // Get active streak
       final streakResponse = await _supabase
@@ -162,47 +188,56 @@ class TeamStreakService {
           .eq('is_active', true)
           .maybeSingle();
 
+      if (streakResponse == null) {
+        if (kDebugMode) print('  ⚠️ No active streak found for team: $teamId');
+        return null;
+      }
+
+      if (kDebugMode) print('  ✅ Found active streak: ${streakResponse['id']}');
+
       // Get team members
       final membersResponse = await _supabase
-          .from('team_members')
-          .select('''
-            user_id,
-            role,
-            user_profiles!inner(display_name)
-          ''')
-          .eq('team_id', teamId);
+      .from('team_members')
+      .select('user_id, user_profiles!inner(display_name, avatar_id)')
+      .eq('team_id', teamId);
+
+      if (kDebugMode) print('  ✅ Found ${membersResponse.length} team members');
 
       final members = <TeamMember>[];
       for (final member in membersResponse) {
+        final profile = member['user_profiles'];
         members.add(TeamMember(
           userId: member['user_id'],
-          displayName: member['user_profiles']['display_name'] ?? 'Unknown',
+          displayName: profile['display_name'] ?? 'Unknown',
           isCoachMax: member['user_id'] == coachMaxId,
+          avatarId: profile?['avatar_id'],
         ));
       }
 
       // Get today's check-ins for this team
       final todayCheckIns = await _getTodayCheckIns(
-        streakResponse?['id'],
+        streakResponse['id'],
         teamId,
       );
 
+      if (kDebugMode) print('  ✅ Found ${todayCheckIns.length} check-ins today');
+
       return TeamStreak(
-        id: streakResponse?['id'] ?? '',
+        id: streakResponse['id'] ?? '',
         teamId: teamId,
         teamName: teamResponse['team_name'] ?? 'Unnamed Team',
         teamEmoji: teamResponse['team_emoji'] ?? '🔥',
-        currentStreak: streakResponse?['current_streak'] ?? 0,
-        longestStreak: streakResponse?['longest_streak'] ?? 0,
-        lastWorkoutDate: streakResponse?['last_workout_date'] != null
-            ? DateTime.parse(streakResponse!['last_workout_date'])
+        currentStreak: streakResponse['current_streak'] ?? 0,
+        longestStreak: streakResponse['longest_streak'] ?? 0,
+        lastWorkoutDate: streakResponse['last_workout_date'] != null
+            ? DateTime.parse(streakResponse['last_workout_date'])
             : null,
         isCoachMaxTeam: teamResponse['is_coach_max_team'] ?? false,
         members: members,
         todayCheckIns: todayCheckIns,
       );
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting team streak data: $e');
+      if (kDebugMode) print('  ❌ Error getting team streak data: $e');
       return null;
     }
   }
@@ -212,27 +247,69 @@ class TeamStreakService {
     if (streakId == null) return [];
     
     try {
-      final today = DateTime.now().toIso8601String().split('T')[0];
+      // ✅ FIX: Get ALL recent check-ins and filter in Dart to avoid timezone issues
+      if (kDebugMode) print('  📅 Getting recent check-ins for streak: $streakId');
       
       final response = await _supabase
           .from('daily_team_checkins')
           .select('''
             user_id,
             check_in_time,
+            check_in_date,
             user_profiles!inner(display_name)
           ''')
           .eq('team_streak_id', streakId)
-          .eq('check_in_date', today)
-          .order('check_in_time', ascending: true);
+          .order('check_in_time', ascending: false)
+          .limit(20);
 
+      if (kDebugMode) {
+        print('  📊 Found ${response.length} total check-ins for this streak');
+      }
+
+      // Filter to today's check-ins in Dart
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      
       final checkIns = <CheckInStatus>[];
-      for (int i = 0; i < response.length; i++) {
-        checkIns.add(CheckInStatus(
-          userId: response[i]['user_id'],
-          displayName: response[i]['user_profiles']['display_name'] ?? 'Unknown',
-          checkInTime: DateTime.parse(response[i]['check_in_time']),
-          order: i + 1, // 1-indexed for flame visual
-        ));
+      int orderIndex = 0;
+      
+      for (var record in response) {
+        try {
+          final checkInDate = DateTime.parse(record['check_in_date']);
+          final checkInDay = DateTime(checkInDate.year, checkInDate.month, checkInDate.day);
+          
+          if (checkInDay.isAtSameMomentAs(today)) {
+            checkIns.add(CheckInStatus(
+              userId: record['user_id'],
+              displayName: record['user_profiles']['display_name'] ?? 'Unknown',
+              checkInTime: DateTime.parse(record['check_in_time']),
+              order: orderIndex + 1,
+            ));
+            orderIndex++;
+          }
+        } catch (e) {
+          if (kDebugMode) print('  ⚠️ Error parsing check-in date: $e');
+        }
+      }
+      
+      // Sort by check-in time (earliest first)
+      checkIns.sort((a, b) => a.checkInTime.compareTo(b.checkInTime));
+      
+      // Re-assign order after sorting
+      for (int i = 0; i < checkIns.length; i++) {
+        checkIns[i] = CheckInStatus(
+          userId: checkIns[i].userId,
+          displayName: checkIns[i].displayName,
+          checkInTime: checkIns[i].checkInTime,
+          order: i + 1,
+        );
+      }
+
+      if (kDebugMode) {
+        print('  ✅ Found ${checkIns.length} check-ins for today');
+        for (var checkIn in checkIns) {
+          print('     - ${checkIn.displayName} at ${checkIn.checkInTime}');
+        }
       }
 
       return checkIns;
@@ -262,6 +339,7 @@ class TeamStreakService {
   // ============================================
   
   /// Check in for ALL active teams (one check-in updates all streaks)
+  
   Future<Map<String, dynamic>> checkInAllTeams() async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
@@ -269,7 +347,12 @@ class TeamStreakService {
         return {'success': false, 'message': 'Not logged in'};
       }
 
-      final today = DateTime.now().toIso8601String().split('T')[0];
+      // ✅ FIX: Use UTC date consistently
+      final now = DateTime.now().toUtc();
+      final todayUtc = DateTime.utc(now.year, now.month, now.day);
+      final today = todayUtc.toIso8601String().split('T')[0];
+      
+      if (kDebugMode) print('🔄 Check-in date: $today (UTC)');
       
       // Get all user's teams
       final streaks = await getAllUserStreaks();
@@ -291,8 +374,18 @@ class TeamStreakService {
       
       // Check in to each team
       for (final streak in streaks) {
-        final success = await _checkInToTeam(streak.id, streak.teamId);
-        if (success) successCount++;
+        if (kDebugMode) print('🔄 Checking in to team: ${streak.teamName}');
+        
+        final success = await _checkInToTeam(streak.id, streak.teamId, today);
+        if (success) {
+          successCount++;
+          
+          // ✅ If this is a Coach Max team, make Coach Max check in too
+          if (streak.isCoachMaxTeam) {
+            if (kDebugMode) print('🤖 Auto-checking in Coach Max...');
+            await _checkInCoachMax(streak.id, today);
+          }
+        }
       }
 
       if (kDebugMode) {
@@ -310,14 +403,44 @@ class TeamStreakService {
     }
   }
 
+  /// Helper method to check in Coach Max
+  Future<void> _checkInCoachMax(String streakId, String today) async {
+    try {
+      // Check if Coach Max already checked in
+      final existing = await _supabase
+          .from('daily_team_checkins')
+          .select('id')
+          .eq('team_streak_id', streakId)
+          .eq('user_id', coachMaxId)
+          .eq('check_in_date', today)
+          .maybeSingle();
+
+      if (existing != null) {
+        if (kDebugMode) print('✅ Coach Max already checked in');
+        return;
+      }
+
+      // Check in Coach Max
+      await _supabase.from('daily_team_checkins').insert({
+        'team_streak_id': streakId,
+        'user_id': coachMaxId,
+        'check_in_date': today,
+        'check_in_time': DateTime.now().toUtc().toIso8601String(),
+      });
+
+      if (kDebugMode) print('✅ Coach Max checked in successfully');
+    } catch (e) {
+      if (kDebugMode) print('❌ Error checking in Coach Max: $e');
+    }
+  }
+
   /// Check in to a specific team
-  Future<bool> _checkInToTeam(String streakId, String teamId) async {
+  Future<bool> _checkInToTeam(String streakId, String teamId, String today) async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return false;
 
-      final now = DateTime.now();
-      final today = now.toIso8601String().split('T')[0];
+      final now = DateTime.now().toUtc();
 
       // Insert check-in
       await _supabase.from('daily_team_checkins').insert({
@@ -340,37 +463,42 @@ class TeamStreakService {
   /// Update team streak after check-in
   Future<void> _updateTeamStreak(String streakId, String teamId, String today) async {
     try {
-      // Get total members (excluding Coach Max for counting)
-      final membersResponse = await _supabase
-          .from('team_members')
-          .select('user_id')
-          .eq('team_id', teamId)
-          .neq('user_id', coachMaxId);
-      
-      final totalMembers = membersResponse.length;
+    // Get total members (excluding Coach Max for counting)
+    final membersResponse = await _supabase
+        .from('team_members')
+        .select('user_id')
+        .eq('team_id', teamId)
+        .neq('user_id', coachMaxId);
+    
+    final totalMembers = membersResponse.length;
 
-      // Get today's check-ins
-      final checkInsResponse = await _supabase
-          .from('daily_team_checkins')
-          .select('user_id')
-          .eq('team_streak_id', streakId)
-          .eq('check_in_date', today)
-          .neq('user_id', coachMaxId);
+    // Get today's check-ins
+    final checkInsResponse = await _supabase
+        .from('daily_team_checkins')
+        .select('user_id')
+        .eq('team_streak_id', streakId)
+        .eq('check_in_date', today)
+        .neq('user_id', coachMaxId);
 
-      final checkedInMembers = checkInsResponse.length;
+    final checkedInMembers = checkInsResponse.length;
 
-      if (kDebugMode) {
-        print('📊 Team check-in status: $checkedInMembers/$totalMembers');
-      }
-
-      // If all members checked in, increment streak
-      if (checkedInMembers >= totalMembers) {
-        await _incrementStreak(streakId, today);
-      }
-    } catch (e) {
-      if (kDebugMode) print('❌ Error updating team streak: $e');
+    if (kDebugMode) {
+      print('📊 Team check-in status: $checkedInMembers/$totalMembers');
+      print('📊 Team members: ${membersResponse.map((m) => m['user_id'])}');
+      print('📊 Checked in: ${checkInsResponse.map((m) => m['user_id'])}');
     }
+
+    // If all members checked in, increment streak
+    if (checkedInMembers >= totalMembers) {
+      if (kDebugMode) print('🎉 All members checked in! Incrementing streak...');
+      await _incrementStreak(streakId, today);
+    } else {
+      if (kDebugMode) print('⏳ Waiting for more members to check in...');
+    }
+  } catch (e) {
+    if (kDebugMode) print('❌ Error updating team streak: $e');
   }
+}
 
   /// Increment streak when all members check in
   Future<void> _incrementStreak(String streakId, String today) async {
@@ -418,7 +546,7 @@ class TeamStreakService {
         'current_streak': newStreak,
         'longest_streak': newLongest,
         'last_workout_date': today,
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', streakId);
 
       if (kDebugMode) {
@@ -439,7 +567,10 @@ class TeamStreakService {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return false;
 
-      final today = DateTime.now().toIso8601String().split('T')[0];
+      // ✅ FIX: Use UTC date
+      final now = DateTime.now().toUtc();
+      final todayUtc = DateTime.utc(now.year, now.month, now.day);
+      final today = todayUtc.toIso8601String().split('T')[0];
 
       final response = await _supabase
           .from('daily_team_checkins')

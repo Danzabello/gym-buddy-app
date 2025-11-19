@@ -78,7 +78,7 @@ class FriendService {
     }
   }
 
-  // Accept friend request
+  // Accept friend request with BACKFILL functionality
   Future<bool> acceptFriendRequest(String requestId) async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
@@ -102,8 +102,18 @@ class FriendService {
 
       if (kDebugMode) print('✅ Friendship accepted');
 
-      // 🔥 NEW: Create a team streak for this friendship!
-      await _createTeamStreak(currentUserId, friendUserId);
+      // 🔥 Create a team and get the team ID back
+      final teamData = await _createTeamStreakAndGetIds(currentUserId, friendUserId);
+      
+      // 🔥 BACKFILL: If users have already checked in today, apply it to new team
+      if (teamData != null && teamData['teamId'] != null && teamData['streakId'] != null) {
+        await _backfillTodaysCheckIns(
+          teamData['teamId']!, 
+          teamData['streakId']!, 
+          currentUserId, 
+          friendUserId
+        );
+      }
 
       return true;
     } catch (e) {
@@ -112,10 +122,10 @@ class FriendService {
     }
   }
 
-  // 🔥 NEW: Helper method to create team streak
-  Future<void> _createTeamStreak(String userId1, String userId2) async {
+  // 🔥 Modified: Create team streak and return both team and streak IDs
+  Future<Map<String, String>?> _createTeamStreakAndGetIds(String userId1, String userId2) async {
     try {
-      if (kDebugMode) print('🔥 Creating team streak for $userId1 and $userId2');
+      if (kDebugMode) print('🔥 Creating team for $userId1 and $userId2');
 
       // Get both users' display names
       final user1Profile = await _supabase
@@ -133,34 +143,130 @@ class FriendService {
       final user1Name = user1Profile['display_name'] as String;
       final user2Name = user2Profile['display_name'] as String;
 
-      // Create team streak
-      final teamStreak = await _supabase.from('team_streaks').insert({
+      // Create buddy team
+      final team = await _supabase.from('buddy_teams').insert({
         'team_name': '$user1Name & $user2Name',
-        'team_emoji': '💪',  // Default emoji
-        'current_streak': 0,
-        'longest_streak': 0,
-        'last_check_in_date': null,
+        'team_emoji': '💪',
+        'is_coach_max_team': false,
+        'max_members': 2,
+        'created_by': userId1,
       }).select().single();
 
-      final teamStreakId = teamStreak['id'] as String;
-
-      if (kDebugMode) print('✅ Team streak created: $teamStreakId');
+      final teamId = team['id'] as String;
+      if (kDebugMode) print('✅ Team created: $teamId');
 
       // Add both members to the team
       await _supabase.from('team_members').insert([
         {
-          'team_streak_id': teamStreakId,
+          'team_id': teamId,
           'user_id': userId1,
+          'role': 'member',
         },
         {
-          'team_streak_id': teamStreakId,
+          'team_id': teamId,
           'user_id': userId2,
+          'role': 'member',
         },
       ]);
 
       if (kDebugMode) print('✅ Team members added');
+
+      // Create team streak
+      final teamStreak = await _supabase.from('team_streaks').insert({
+        'team_id': teamId,
+        'current_streak': 0,
+        'longest_streak': 0,
+        'is_active': true,
+      }).select().single();
+
+      final streakId = teamStreak['id'] as String;
+      if (kDebugMode) print('✅ Team streak created: $streakId');
+
+      return {
+        'teamId': teamId,
+        'streakId': streakId,
+      };
     } catch (e) {
       if (kDebugMode) print('❌ Error creating team streak: $e');
+      return null;
+    }
+  }
+
+  // 🔥 NEW: Backfill today's check-ins for newly created team
+  Future<void> _backfillTodaysCheckIns(
+    String teamId, 
+    String streakId, 
+    String userId1, 
+    String userId2
+  ) async {
+    try {
+      final today = DateTime.now().toIso8601String().split('T')[0];
+      if (kDebugMode) print('🔄 Checking for today\'s check-ins to backfill...');
+
+      // Check if user1 has checked in today (in ANY team)
+      final user1CheckIn = await _supabase
+          .from('daily_team_checkins')
+          .select('check_in_time')
+          .eq('user_id', userId1)
+          .eq('check_in_date', today)
+          .limit(1)
+          .maybeSingle();
+
+      // Check if user2 has checked in today (in ANY team)  
+      final user2CheckIn = await _supabase
+          .from('daily_team_checkins')
+          .select('check_in_time')
+          .eq('user_id', userId2)
+          .eq('check_in_date', today)
+          .limit(1)
+          .maybeSingle();
+
+      int backfilledCount = 0;
+
+      // Backfill user1's check-in if they checked in today
+      if (user1CheckIn != null) {
+        await _supabase.from('daily_team_checkins').insert({
+          'team_streak_id': streakId,
+          'user_id': userId1,
+          'check_in_date': today,
+          'check_in_time': user1CheckIn['check_in_time'],
+        });
+        backfilledCount++;
+        if (kDebugMode) print('✅ Backfilled check-in for user $userId1');
+      }
+
+      // Backfill user2's check-in if they checked in today
+      if (user2CheckIn != null) {
+        await _supabase.from('daily_team_checkins').insert({
+          'team_streak_id': streakId,
+          'user_id': userId2,
+          'check_in_date': today,
+          'check_in_time': user2CheckIn['check_in_time'],
+        });
+        backfilledCount++;
+        if (kDebugMode) print('✅ Backfilled check-in for user $userId2');
+      }
+
+      // If both users had checked in today, update the streak immediately
+      if (backfilledCount == 2) {
+        if (kDebugMode) print('🔥 Both users had checked in - updating streak!');
+        
+        await _supabase.from('team_streaks').update({
+          'current_streak': 1,
+          'longest_streak': 1,
+          'last_workout_date': today,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', streakId);
+
+        if (kDebugMode) print('✅ Streak updated to 1 for new team');
+      } else if (backfilledCount == 1) {
+        if (kDebugMode) print('⏳ Only one user had checked in - waiting for the other');
+      } else {
+        if (kDebugMode) print('🆕 Neither user had checked in yet today');
+      }
+
+    } catch (e) {
+      if (kDebugMode) print('❌ Error backfilling check-ins: $e');
     }
   }
 
@@ -205,7 +311,7 @@ class FriendService {
               avatar_id,
               fitness_level
             )
-          ''')  // ✅ FIXED: Added comma between avatar_id and fitness_level
+          ''')
           .eq('friend_id', currentUserId)
           .eq('status', 'pending')
           .order('created_at', ascending: false);
