@@ -8,6 +8,10 @@ import 'widgets/coach_max_widget.dart';
 import 'package:confetti/confetti.dart';
 import 'package:flutter/services.dart';
 import 'widgets/user_avatar.dart';
+import 'services/team_sync_service.dart';
+import 'package:flutter/foundation.dart';
+
+
 
 
 // import 'services/streak_service.dart'; Not using it anymore
@@ -49,6 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Refresh dashboard when returning to it from friends page
     if (index == 0 && previousIndex == 1) {
       // Access the dashboard state and trigger refresh
+      _dashboardKey.currentState?._syncTeamCheckIns();
       _dashboardKey.currentState?._loadStreakData();
     }
   }
@@ -99,6 +104,7 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   final TeamStreakService _teamStreakService = TeamStreakService();
   final WorkoutService _workoutService = WorkoutService();
+  final TeamSyncService _teamSyncService = TeamSyncService();
 
   
   TeamStreak? _highestStreak;
@@ -637,6 +643,8 @@ class _DashboardPageState extends State<DashboardPage> {
       _isLoading = true;
     });
 
+    await _syncTeamCheckIns();
+
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
 
     final allStreaks = await _teamStreakService.getAllUserStreaks();
@@ -690,6 +698,8 @@ class _DashboardPageState extends State<DashboardPage> {
       _isLoading = false;
     });
   }
+
+  
 
   Future<Map<String, dynamic>?> _loadUserProfile() async {
     try {
@@ -2257,6 +2267,38 @@ class _DashboardPageState extends State<DashboardPage> {
         return Colors.teal[700]!;
       default:
         return Colors.green[700]!;
+    }
+  }
+
+  Future<void> _syncTeamCheckIns() async {
+    if (kDebugMode) print('🔄 Dashboard: Starting team sync...');
+    
+    final result = await _teamSyncService.syncAllTeamsCheckIns();
+    
+    if (result['success'] == true && result['synced'] > 0) {
+      if (kDebugMode) print('✅ Dashboard: Synced ${result['synced']} teams');
+      
+      // Show a subtle notification if teams were synced
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.sync, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Text('Synced check-ins to ${result['synced']} team${result['synced'] == 1 ? "" : "s"}'),
+              ],
+            ),
+            backgroundColor: Colors.blue,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
     }
   }
 

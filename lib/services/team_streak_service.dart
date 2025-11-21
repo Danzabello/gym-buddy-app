@@ -124,7 +124,7 @@ class TeamStreakService {
       }
 
       final List<TeamStreak> streaks = [];
-      
+
       for (final teamData in teamsResponse) {
         final team = teamData['buddy_teams'];
         if (team == null) {
@@ -133,15 +133,13 @@ class TeamStreakService {
         }
         
         final teamId = team['id'] as String;
-        if (kDebugMode) print('🔄 Processing team: ${team['team_name']} ($teamId)');
+        if (kDebugMode) print('🔄 Processing team: ${team['team_name']} ($teamId)');  // ← Debug line
         
         // Get active streak for this team
         final streakData = await _getTeamStreakData(teamId);
         if (streakData != null) {
           if (kDebugMode) print('✅ Added streak: ${streakData.teamName}');
           streaks.add(streakData);
-        } else {
-          if (kDebugMode) print('⚠️ No streak data for team: ${team['team_name']}');
         }
       }
       
@@ -348,9 +346,8 @@ class TeamStreakService {
       }
 
       // ✅ FIX: Use UTC date consistently
-      final now = DateTime.now().toUtc();
-      final todayUtc = DateTime.utc(now.year, now.month, now.day);
-      final today = todayUtc.toIso8601String().split('T')[0];
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
       
       if (kDebugMode) print('🔄 Check-in date: $today (UTC)');
       
@@ -568,9 +565,8 @@ class TeamStreakService {
       if (currentUserId == null) return false;
 
       // ✅ FIX: Use UTC date
-      final now = DateTime.now().toUtc();
-      final todayUtc = DateTime.utc(now.year, now.month, now.day);
-      final today = todayUtc.toIso8601String().split('T')[0];
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
 
       final response = await _supabase
           .from('daily_team_checkins')
