@@ -10,6 +10,10 @@ import 'package:flutter/services.dart';
 import 'widgets/user_avatar.dart';
 import 'services/team_sync_service.dart';
 import 'package:flutter/foundation.dart';
+import '../widgets/break_day_section.dart';
+import 'services/break_day_service.dart';
+
+
 
 
 
@@ -101,10 +105,13 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> {
+class _DashboardPageState extends State<DashboardPage> with TickerProviderStateMixin {
+  final SupabaseClient _supabase = Supabase.instance.client;
   final TeamStreakService _teamStreakService = TeamStreakService();
   final WorkoutService _workoutService = WorkoutService();
   final TeamSyncService _teamSyncService = TeamSyncService();
+  final BreakDayService _breakDayService = BreakDayService();
+  Map<String, bool> _streakCompletionStatus = {};
 
   
   TeamStreak? _highestStreak;
@@ -130,22 +137,55 @@ class _DashboardPageState extends State<DashboardPage> {
   int _currentCarouselIndex = 0;
   late PageController _carouselController;
 
+  late AnimationController _carouselEntranceController;
+  late Animation<double> _carouselEntranceAnimation;
+  bool _hasAnimatedEntrance = false;
+
+  AppLifecycleListener? _appLifecycleListener;
+
   @override
   void initState() {
     super.initState();
+    
+    // ✅ Set initial index ONCE
+    _currentCarouselIndex = 1;
+    
+    // ✅ Create controller ONCE
     _carouselController = PageController(
-    viewportFraction: 0.35,
-    initialPage: 1000, // Start in middle for infinite scroll
+      viewportFraction: 0.35,
+      initialPage: 1,
     );
-
-    _loadStreakData();
+    
+    // ✅ ENTRANCE ANIMATION SETUP
+    _carouselEntranceController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    
+    _carouselEntranceAnimation = CurvedAnimation(
+      parent: _carouselEntranceController,
+      curve: Curves.easeOutBack,
+    );
+    
+    _initializeHomePage(); 
     _updateCountdown();
     Future.delayed(const Duration(minutes: 1), _updateCountdown);
     _confettiController = ConfettiController(duration: const Duration(seconds: 3));
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupAppLifecycleListener();
     });
+  }
+
+  // Add this new method
+  Future<void> _initializeHomePage() async {
+    // Check and reset any broken streaks FIRST
+    await _teamStreakService.checkAndResetBrokenStreaks();
+
+    // Check if user needs to set weekly plan
+    await _checkWeeklyPlan();
+    
+    // Then load streaks normally
+    await _loadStreakData();
   }
 
   void _setupAppLifecycleListener() {
@@ -154,10 +194,13 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   void dispose() {
-    _confettiController.dispose();
     _carouselController.dispose();
+    _confettiController.dispose();
+    _carouselEntranceController.dispose();
+    _appLifecycleListener?.dispose();
     super.dispose();
   }
+
 
   Widget _buildStreakCarousel() {
     if (_allStreaks.isEmpty) {
@@ -179,7 +222,6 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         child: Column(
           children: [
-            // Title
             Text(
               'Your Active Streaks (${_allStreaks.length})',
               style: TextStyle(
@@ -191,66 +233,104 @@ class _DashboardPageState extends State<DashboardPage> {
             
             const SizedBox(height: 24),
             
-            // CAROUSEL
+            // CAROUSEL - SIMPLE, NO INFINITE SCROLL
             SizedBox(
               height: 200,
-              child: _allStreaks.length == 1
-                  ? _buildSingleStreakView(_allStreaks[0])  // ← NEW: Special case for 1 streak
-                  : PageView.builder(
-                      controller: _carouselController,
-                      onPageChanged: (index) {
-                        setState(() {
-                          _currentCarouselIndex = index % _allStreaks.length;
-                        });
-                        HapticFeedback.selectionClick();
-                      },
-                      itemCount: _allStreaks.length >= 3 
-                          ? _allStreaks.length * 1000  // Infinite scroll for 3+
-                          : _allStreaks.length,        // No infinite for 1-2
-                      itemBuilder: (context, index) {
-                        final streakIndex = index % _allStreaks.length;
-                        final streak = _allStreaks[streakIndex];
-                        final isFocused = streakIndex == _currentCarouselIndex;
-                        
-                        return AnimatedBuilder(
-                          animation: _carouselController,
-                          builder: (context, child) {
-                            double scale = 1.0;
-                            if (_carouselController.position.haveDimensions) {
-                              final page = _carouselController.page ?? index.toDouble();
-                              final diff = (page - index).abs();
-                              scale = (1 - (diff * 0.45)).clamp(0.55, 1.0);
-                            }
-                            
-                            return Transform.scale(
-                              scale: scale,
-                              child: Center(
-                                child: GestureDetector(
-                                  onTap: () {
-                                    _carouselController.animateToPage(
-                                      index,
-                                      duration: const Duration(milliseconds: 300),
-                                      curve: Curves.easeInOut,
-                                    );
-                                  },
-                                  child: _buildCarouselAvatar(streak, isFocused),
+              child: AnimatedBuilder(  // ✅ WRAP WITH ENTRANCE ANIMATION
+                animation: _carouselEntranceAnimation,
+                builder: (context, child) {
+                  return Transform.translate(
+                    offset: Offset(
+                      0,
+                      (1 - _carouselEntranceAnimation.value) * 100,  // Slide up from below
+                    ),
+                    child: Opacity(
+                      opacity: _carouselEntranceAnimation.value.clamp(0.0, 1.0),
+                      child: child,
+                    ),
+                  );
+                },
+                      child: PageView.builder(
+                        controller: _carouselController,
+                        onPageChanged: (index) {
+                          setState(() {
+                            _currentCarouselIndex = index;
+                          });
+                          HapticFeedback.selectionClick();
+                        },
+                        itemCount: _allStreaks.length,
+                        itemBuilder: (context, index) {
+                          final streak = _allStreaks[index];
+                          final isFocused = index == _currentCarouselIndex;
+                          
+                          return AnimatedBuilder(
+                            animation: _carouselController,
+                            builder: (context, child) {
+                              double scale = 1.0;
+
+                              if (_carouselController.position.haveDimensions && 
+                                  _carouselEntranceAnimation.value >= 1.0) {  // ✅ ADD THIS CHECK
+                                final page = _carouselController.page ?? index.toDouble();
+                                final diff = (page - index).abs();
+                                scale = (1 - (diff * 0.45)).clamp(0.75, 1.0);
+                              } else if (index == 1) {  // ✅ During animation, only middle is large
+                                scale = 1.0;
+                              } else {  // ✅ Side avatars stay small during animation
+                                scale = 0.75;
+                              }
+                              
+                              return Transform.scale(
+                                scale: scale,
+                                child: Center(
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      _carouselController.animateToPage(
+                                        index,
+                                        duration: const Duration(milliseconds: 300),
+                                        curve: Curves.easeInOut,
+                                      );
+                                    },
+                                    child: _buildCarouselAvatar(streak, isFocused),
+                                  ),
                                 ),
-                              ),
-                            );
-                          },
-                        );
-                      },
+                              );
+                            },
+                          );
+                        },
+                      ),
                     ),
             ),
             
             const SizedBox(height: 20),
             
-            // STREAK INFO for focused streak
+            // ✅ NAME DISPLAY
+            Text(
+              _allStreaks[_currentCarouselIndex].isCoachMaxTeam 
+                  ? _allStreaks[_currentCarouselIndex].teamName
+                  : _getFriendName(_allStreaks[_currentCarouselIndex]),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // STREAK INFO
             _buildStreakInfo(_allStreaks[_currentCarouselIndex]),
           ],
         ),
       ),
     );
+  }
+
+  String _getFriendName(TeamStreak streak) {
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final friendMember = streak.members.firstWhere(
+      (member) => member.userId != currentUserId,
+      orElse: () => streak.members.first,
+    );
+    return friendMember.displayName;
   }
 
   Widget _buildSingleStreakView(TeamStreak streak) {
@@ -264,131 +344,104 @@ class _DashboardPageState extends State<DashboardPage> {
     
     // For Coach Max, use the robot emoji
     if (isCoachMax) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            width: isFocused ? 140 : 75,
-            height: isFocused ? 140 : 75,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [Colors.blue[400]!, Colors.purple[400]!],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              border: Border.all(
-                color: isFocused ? Colors.blue : Colors.transparent,
-                width: isFocused ? 4 : 0,
-              ),
-              boxShadow: isFocused
-                  ? [
-                      BoxShadow(
-                        color: Colors.blue.withOpacity(0.4),
-                        blurRadius: 20,
-                        spreadRadius: 5,
-                      ),
-                    ]
-                  : [],
-            ),
-            child: Center(
-              child: Text(
-                '🤖',
-                style: TextStyle(fontSize: isFocused ? 60 : 35),
-              ),
-            ),
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        width: isFocused ? 140 : 75,
+        height: isFocused ? 140 : 75,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: [Colors.blue[400]!, Colors.purple[400]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
-          if (isFocused) ...[
-            const SizedBox(height: 12),
-            Text(
-              streak.teamName,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ],
+          border: Border.all(
+            color: isFocused ? Colors.blue : Colors.transparent,
+            width: isFocused ? 4 : 0,
+          ),
+          boxShadow: isFocused
+              ? [
+                  BoxShadow(
+                    color: Colors.blue.withOpacity(0.4),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  ),
+                ]
+              : [],
+        ),
+        child: Center(
+          child: Text(
+            '🤖',
+            style: TextStyle(fontSize: isFocused ? 60 : 35),
+          ),
+        ),
       );
     }
 
+    // For friend streaks
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
     final friendMember = streak.members.firstWhere(
       (member) => member.userId != currentUserId,
       orElse: () => streak.members.first,
     );
     
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          width: isFocused ? 140 : 75,
-          height: isFocused ? 140 : 75,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              colors: [Colors.orange[400]!, Colors.red[400]!],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            border: Border.all(
-              color: isFocused ? Colors.blue : Colors.transparent,
-              width: isFocused ? 4 : 0,
-            ),
-            boxShadow: isFocused
-                ? [
-                    BoxShadow(
-                      color: Colors.blue.withOpacity(0.4),
-                      blurRadius: 20,
-                      spreadRadius: 5,
-                    ),
-                  ]
-                : [],
-          ),
-          child: ClipOval(
-            child: UserAvatar(
-              avatarId: friendMember.avatarId,
-              size: isFocused ? 140 : 75,
-            ),
-          ),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      width: isFocused ? 140 : 75,
+      height: isFocused ? 140 : 75,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: [Colors.orange[400]!, Colors.red[400]!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        if (isFocused) ...[
-          const SizedBox(height: 12),
-          Text(
-            friendMember.displayName,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ],
+        border: Border.all(
+          color: isFocused ? Colors.blue : Colors.transparent,
+          width: isFocused ? 4 : 0,
+        ),
+        boxShadow: isFocused
+            ? [
+                BoxShadow(
+                  color: Colors.blue.withOpacity(0.4),
+                  blurRadius: 20,
+                  spreadRadius: 5,
+                ),
+              ]
+            : [],
+      ),
+      child: ClipOval(
+        child: UserAvatar(
+          avatarId: friendMember.avatarId,
+          size: isFocused ? 140 : 75,
+        ),
+      ),
     );
   }
 
   Widget _buildStreakInfo(TeamStreak streak) {
     final checkedInCount = streak.todayCheckIns.length;
     final totalMembers = streak.members.length;
-    final isComplete = checkedInCount >= totalMembers;
+    
+    // ✅ Get pre-calculated completion status
+    final isComplete = _streakCompletionStatus[streak.id] ?? false;
     
     Color statusColor;
     String statusText;
     IconData statusIcon;
     
-    if (checkedInCount == 0) {
-      statusColor = Colors.orange;
-      statusText = '⚠️ 0/$totalMembers Checked In';
-      statusIcon = Icons.warning_amber_rounded;
-    } else if (checkedInCount < totalMembers) {
-      statusColor = Colors.blue;
-      statusText = '⏳ $checkedInCount/$totalMembers Checked In';
-      statusIcon = Icons.pending;
-    } else {
+    if (isComplete) {
       statusColor = Colors.green;
       statusText = '✓ Streak Complete!';
       statusIcon = Icons.check_circle;
+    } else if (checkedInCount == 0) {
+      statusColor = Colors.orange;
+      statusText = '⚠️ 0/$totalMembers Checked In';
+      statusIcon = Icons.warning_amber_rounded;
+    } else {
+      statusColor = Colors.blue;
+      statusText = '⏳ $checkedInCount/$totalMembers Checked In';
+      statusIcon = Icons.pending;
     }
     
     return Column(
@@ -409,7 +462,7 @@ class _DashboardPageState extends State<DashboardPage> {
         ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: LinearProgressIndicator(
-            value: checkedInCount / totalMembers,
+            value: isComplete ? 1.0 : (checkedInCount / totalMembers),
             minHeight: 8,
             backgroundColor: Colors.grey[300],
             valueColor: AlwaysStoppedAnimation<Color>(statusColor),
@@ -638,6 +691,46 @@ class _DashboardPageState extends State<DashboardPage> {
     Future.delayed(const Duration(minutes: 1), _updateCountdown);
   }
 
+  Future<bool> _isStreakCompleteToday(TeamStreak streak) async {
+    final currentUserId = _supabase.auth.currentUser?.id;
+    if (currentUserId == null) return false;
+
+    // Check if current user checked in
+    final userCheckedIn = streak.todayCheckIns.any((checkIn) => 
+      checkIn.userId == currentUserId
+    );
+
+    // Get real members (excluding Coach Max)
+    final realMembers = streak.members.where((m) => !m.isCoachMax).toList();
+    final memberIds = realMembers.map((m) => m.userId).toList();
+    
+    // Get today's date
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
+    
+    // Get break day status
+    final breakDayStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, today);
+
+    if (streak.isCoachMaxTeam) {
+      // ✅ COACH MAX TEAM
+      // Complete if user checked in OR is on break (Coach Max covers)
+      final userOnBreak = breakDayStatus[currentUserId] ?? false;
+      return userCheckedIn || userOnBreak;
+    } else {
+      // ✅ FRIEND TEAM
+      // Complete if all members checked in OR are on break
+      for (var member in realMembers) {
+        final checkedIn = streak.todayCheckIns.any((c) => c.userId == member.userId);
+        final onBreak = breakDayStatus[member.userId] ?? false;
+        
+        if (!checkedIn && !onBreak) {
+          return false; // Someone is missing
+        }
+      }
+      return true;
+    }
+  }
+
   Future<void> _loadStreakData() async {
     setState(() {
       _isLoading = true;
@@ -646,7 +739,6 @@ class _DashboardPageState extends State<DashboardPage> {
     await _syncTeamCheckIns();
 
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-
     final allStreaks = await _teamStreakService.getAllUserStreaks();
     
     // 🔍 DEBUG: See what we're getting
@@ -661,13 +753,18 @@ class _DashboardPageState extends State<DashboardPage> {
       uniqueStreaksMap[streak.teamId] = streak;
     }
     final uniqueStreaks = uniqueStreaksMap.values.toList();
-    
-    print('✅ After deduplication: ${uniqueStreaks.length} streaks');
+
+    final completionStatus = <String, bool>{};
+    for (var streak in uniqueStreaks) {
+      completionStatus[streak.id] = await _isStreakCompleteToday(streak);
+    }
     
     final highestStreak = await _teamStreakService.getHighestStreak();
     final hasCheckedIn = await _teamStreakService.hasCheckedInToday();
     final todaysWorkouts = await _workoutService.getTodaysWorkouts();
-
+    
+    print('✅ After deduplication: ${uniqueStreaks.length} streaks');
+    
     final friendService = FriendService();
     final pendingFriends = await friendService.getPendingRequests();
     final pendingWorkouts = todaysWorkouts.where((w) => 
@@ -686,6 +783,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     setState(() {
       _allStreaks = uniqueStreaks;  // ✅ Use deduplicated list
+      _streakCompletionStatus = completionStatus;
       _highestStreak = highestStreak;
       _hasCheckedInToday = hasCheckedIn;
       _todaysWorkouts = todaysWorkouts;
@@ -697,6 +795,206 @@ class _DashboardPageState extends State<DashboardPage> {
 
       _isLoading = false;
     });
+
+    if (!_hasAnimatedEntrance && _allStreaks.isNotEmpty) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          _carouselEntranceController.forward();
+          _hasAnimatedEntrance = true;
+        }
+      });
+    }
+  }
+
+  Future<void> _checkWeeklyPlan() async {
+    final needsPlan = await _breakDayService.needsToSetWeeklyPlan();
+    
+    if (needsPlan) {
+      _showWeeklyPlanDialog();
+    }
+  }
+
+  Future<void> _showWeeklyPlanDialog() async {
+    int selectedWorkoutDays = 5; // Default to 5 workout days
+    
+    final result = await showDialog<int>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final breakDays = 7 - selectedWorkoutDays;
+          
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade100,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.calendar_today,
+                    color: Colors.orange,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Weekly Workout Plan',
+                    style: TextStyle(fontSize: 20),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'How many days will you work out this week?',
+                  style: TextStyle(fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                
+                // Workout Days Selector
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.orange.shade200, width: 2),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.fitness_center, color: Colors.orange, size: 28),
+                          const SizedBox(width: 8),
+                          Text(
+                            '$selectedWorkoutDays',
+                            style: TextStyle(
+                              fontSize: 48,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange.shade700,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'workout day${selectedWorkoutDays == 1 ? '' : 's'}',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.orange.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Slider
+                      Slider(
+                        value: selectedWorkoutDays.toDouble(),
+                        min: 4,
+                        max: 7,
+                        divisions: 3,
+                        activeColor: Colors.orange,
+                        inactiveColor: Colors.orange.shade200,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            selectedWorkoutDays = value.toInt();
+                          });
+                        },
+                      ),
+                      
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('4 days', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                          Text('7 days', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Break Days Info
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.blue.shade200, width: 2),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.bedtime, color: Colors.blue, size: 24),
+                      const SizedBox(width: 8),
+                      Text(
+                        '$breakDays break day${breakDays == 1 ? '' : 's'}',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                const Text(
+                  'You can take break days when you need rest. Your streak stays safe! 💪',
+                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, breakDays),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Set Plan',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (result != null) {
+      await _breakDayService.setWeeklyBreakPlan(result);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Set $result break day${result == 1 ? '' : 's'} for this week! 🎉'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      setState(() {}); // Refresh UI
+      await _loadStreakData();
+    }
   }
 
   
@@ -898,6 +1196,14 @@ class _DashboardPageState extends State<DashboardPage> {
                         // NEW CAROUSEL SECTION
                         _buildStreakCarousel(),
                         
+                        const SizedBox(height: 24),
+
+                        BreakDaySection(
+                          onBreakTaken: () {
+                            _loadStreakData();
+                          },
+                        ),
+
                         const SizedBox(height: 24),
                         
                         // THREE CARD LAYOUT
@@ -1243,6 +1549,13 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             
             const SizedBox(height: 24),
+
+            BreakDaySection(
+              onBreakTaken: () {
+                // Refresh streaks when break status changes
+                _loadStreakData();
+              },
+            ),
             
             // Check-in button
             SizedBox(

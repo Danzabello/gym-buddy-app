@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'break_day_service.dart';
+
 
 // ============================================
 // MODEL CLASSES (moved outside service)
@@ -85,6 +87,7 @@ class TeamStreak {
 
 class TeamStreakService {
   final SupabaseClient _supabase = Supabase.instance.client;
+  final BreakDayService _breakDayService = BreakDayService();
   
   static const String coachMaxId = '00000000-0000-0000-0000-000000000001';
 
@@ -345,6 +348,13 @@ class TeamStreakService {
         return {'success': false, 'message': 'Not logged in'};
       }
 
+      // ✅ Check if user is on break today and auto-cancel it
+      final onBreak = await _breakDayService.isCurrentUserOnBreakToday();
+      if (onBreak) {
+        if (kDebugMode) print('🔄 User was on break, cancelling it...');
+        await _breakDayService.cancelBreakDay();
+      }
+
       // ✅ FIX: Use UTC date consistently
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
@@ -393,6 +403,7 @@ class TeamStreakService {
         'success': true,
         'message': 'Checked in to $successCount team${successCount == 1 ? '' : 's'}!',
         'teams_updated': successCount,
+        'break_cancelled': onBreak, // Let UI know if we cancelled a break
       };
     } catch (e) {
       if (kDebugMode) print('❌ Error checking in: $e');
@@ -460,45 +471,68 @@ class TeamStreakService {
   /// Update team streak after check-in
   Future<void> _updateTeamStreak(String streakId, String teamId, String today) async {
     try {
-    // Get total members (excluding Coach Max for counting)
-    final membersResponse = await _supabase
-        .from('team_members')
-        .select('user_id')
-        .eq('team_id', teamId)
-        .neq('user_id', coachMaxId);
-    
-    final totalMembers = membersResponse.length;
+      // Get total members (excluding Coach Max for counting)
+      final membersResponse = await _supabase
+          .from('team_members')
+          .select('user_id')
+          .eq('team_id', teamId)
+          .neq('user_id', coachMaxId);
+      
+      final memberIds = membersResponse.map((m) => m['user_id'] as String).toList();
+      final totalMembers = memberIds.length;
 
-    // Get today's check-ins
-    final checkInsResponse = await _supabase
-        .from('daily_team_checkins')
-        .select('user_id')
-        .eq('team_streak_id', streakId)
-        .eq('check_in_date', today)
-        .neq('user_id', coachMaxId);
+      if (kDebugMode) print('📊 Team has $totalMembers members (excluding Coach Max)');
 
-    final checkedInMembers = checkInsResponse.length;
+      // Get today's check-ins (excluding Coach Max)
+      final checkInsResponse = await _supabase
+          .from('daily_team_checkins')
+          .select('user_id')
+          .eq('team_streak_id', streakId)
+          .eq('check_in_date', today)
+          .neq('user_id', coachMaxId);
 
-    if (kDebugMode) {
-      print('📊 Team check-in status: $checkedInMembers/$totalMembers');
-      print('📊 Team members: ${membersResponse.map((m) => m['user_id'])}');
-      print('📊 Checked in: ${checkInsResponse.map((m) => m['user_id'])}');
+      final checkedInMembers = checkInsResponse.length;
+
+      // ✅ NEW: Get break day status for all members
+      final breakDayStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, today);
+      
+      // Count how many people are participating today (checked in OR on break)
+      int participatingMembers = 0;
+      for (var userId in memberIds) {
+        final onBreak = breakDayStatus[userId] ?? false;
+        final checkedIn = checkInsResponse.any((c) => c['user_id'] == userId);
+        
+        if (onBreak || checkedIn) {
+          participatingMembers++;
+        }
+      }
+
+      if (kDebugMode) {
+        print('📊 Team participation status:');
+        print('  - Total members: $totalMembers');
+        print('  - Checked in: $checkedInMembers');
+        print('  - Participating (check-in OR break): $participatingMembers');
+        for (var userId in memberIds) {
+          final onBreak = breakDayStatus[userId] ?? false;
+          final checkedIn = checkInsResponse.any((c) => c['user_id'] == userId);
+          print('  - User $userId: ${onBreak ? "ON BREAK" : checkedIn ? "CHECKED IN" : "MISSING"}');
+        }
+      }
+
+      // ✅ If all members are participating (checked in or on break), increment streak
+      if (participatingMembers >= totalMembers) {
+        if (kDebugMode) print('🎉 All members participating! Incrementing streak...');
+        await _incrementStreak(streakId, teamId, today);
+      } else {
+        if (kDebugMode) print('⏳ Waiting for more members... ($participatingMembers/$totalMembers participating)');
+      }
+    } catch (e) {
+      if (kDebugMode) print('❌ Error updating team streak: $e');
     }
-
-    // If all members checked in, increment streak
-    if (checkedInMembers >= totalMembers) {
-      if (kDebugMode) print('🎉 All members checked in! Incrementing streak...');
-      await _incrementStreak(streakId, today);
-    } else {
-      if (kDebugMode) print('⏳ Waiting for more members to check in...');
-    }
-  } catch (e) {
-    if (kDebugMode) print('❌ Error updating team streak: $e');
   }
-}
 
   /// Increment streak when all members check in
-  Future<void> _incrementStreak(String streakId, String today) async {
+  Future<void> _incrementStreak(String streakId, String teamId, String today) async {
     try {
       // Get current streak data
       final streakData = await _supabase
@@ -510,6 +544,15 @@ class TeamStreakService {
       final currentStreak = (streakData['current_streak'] as int?) ?? 0;
       final longestStreak = (streakData['longest_streak'] as int?) ?? 0;
       final lastWorkoutDate = streakData['last_workout_date'] as String?;
+
+      // Get all team members (excluding Coach Max)
+      final membersResponse = await _supabase
+          .from('team_members')
+          .select('user_id')
+          .eq('team_id', teamId)
+          .neq('user_id', coachMaxId);
+      
+      final memberIds = membersResponse.map((m) => m['user_id'] as String).toList();
 
       int newStreak = currentStreak;
       int newLongest = longestStreak;
@@ -527,14 +570,85 @@ class TeamStreakService {
           // Already counted today
           return;
         } else if (daysDifference == 1) {
-          // Consecutive day - increment
-          newStreak = currentStreak + 1;
-          if (newStreak > longestStreak) {
-            newLongest = newStreak;
+          // ✅ CONSECUTIVE DAY - CHECK BREAK DAY LOGIC
+          // Get today's check-ins
+          final checkInsResponse = await _supabase
+              .from('daily_team_checkins')
+              .select('user_id')
+              .eq('team_streak_id', streakId)
+              .eq('check_in_date', today)
+              .neq('user_id', coachMaxId);
+          
+          final checkedInUsers = checkInsResponse.map((c) => c['user_id'] as String).toSet();
+          
+          // Get break day status for all members
+          final breakDayStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, today);
+          
+          if (kDebugMode) {
+            print('📊 Break day analysis for $today:');
+            for (var userId in memberIds) {
+              final onBreak = breakDayStatus[userId] ?? false;
+              final checkedIn = checkedInUsers.contains(userId);
+              print('  - User $userId: ${onBreak ? "ON BREAK" : checkedIn ? "CHECKED IN" : "NOT CHECKED IN"}');
+            }
           }
-        } else {
-          // Streak broken - reset to 1
-          newStreak = 1;
+          
+          // Check if at least one person worked out (checked in and NOT on break)
+          final someoneWorkedOut = memberIds.any((userId) {
+            final onBreak = breakDayStatus[userId] ?? false;
+            final checkedIn = checkedInUsers.contains(userId);
+            return checkedIn && !onBreak;
+          });
+          
+          if (someoneWorkedOut) {
+            // ✅ At least one person worked out - streak continues and increments
+            newStreak = currentStreak + 1;
+            if (newStreak > longestStreak) {
+              newLongest = newStreak;
+            }
+            if (kDebugMode) print('🔥 Streak incremented! Someone worked out.');
+          } else {
+            // ❌ Everyone took a break - streak stays same (doesn't increment but doesn't break)
+            newStreak = currentStreak; // Stay the same
+            if (kDebugMode) print('😴 Everyone on break - streak stays at $currentStreak');
+          }
+        } else if (daysDifference > 1) {
+          // ❌ MORE THAN 1 DAY GAP - CHECK IF YESTERDAY WAS ALL BREAK DAYS
+          // We need to check if the gap is acceptable due to break days
+          bool gapIsValid = true;
+          
+          // Check each day in the gap
+          for (int i = 1; i < daysDifference; i++) {
+            final checkDate = lastDate.add(Duration(days: i));
+            final checkDateStr = DateTime(checkDate.year, checkDate.month, checkDate.day)
+                .toIso8601String()
+                .split('T')[0];
+            
+            // Get break day status for that day
+            final breakStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, checkDateStr);
+            
+            // If everyone was on break that day, the gap is valid
+            final everyoneOnBreak = memberIds.every((userId) => breakStatus[userId] ?? false);
+            
+            if (!everyoneOnBreak) {
+              // Someone wasn't on break but didn't check in - streak broken
+              gapIsValid = false;
+              break;
+            }
+          }
+          
+          if (gapIsValid) {
+            // Gap was all break days - treat as consecutive
+            newStreak = currentStreak + 1;
+            if (newStreak > longestStreak) {
+              newLongest = newStreak;
+            }
+            if (kDebugMode) print('🔥 Gap filled by break days - streak continues!');
+          } else {
+            // Streak broken - reset to 1
+            newStreak = 1;
+            if (kDebugMode) print('💔 Streak broken - resetting to 1');
+          }
         }
       }
 
@@ -618,6 +732,107 @@ class TeamStreakService {
     } catch (e) {
       if (kDebugMode) print('❌ Error getting streak history: $e');
       return [];
+    }
+  }
+
+  Future<void> checkAndResetBrokenStreaks() async {
+    try {
+      final currentUserId = _supabase.auth.currentUser?.id;
+      if (currentUserId == null) return;
+
+      if (kDebugMode) print('🔍 Checking for broken streaks...');
+
+      final streaks = await getAllUserStreaks();
+      
+      for (final streak in streaks) {
+        await _checkStreakStatus(streak);
+      }
+
+      if (kDebugMode) print('✅ Streak check complete');
+    } catch (e) {
+      if (kDebugMode) print('❌ Error checking streaks: $e');
+    }
+  }
+
+  /// Check if a specific streak should be reset
+  Future<void> _checkStreakStatus(TeamStreak streak) async {
+    try {
+      if (streak.lastWorkoutDate == null) return; // New streak, nothing to check
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final yesterday = today.subtract(const Duration(days: 1));
+      final lastWorkout = DateTime(
+        streak.lastWorkoutDate!.year,
+        streak.lastWorkoutDate!.month,
+        streak.lastWorkoutDate!.day,
+      );
+
+      // If last workout was today or yesterday, streak is fine
+      if (lastWorkout.isAtSameMomentAs(today) || 
+          lastWorkout.isAtSameMomentAs(yesterday)) {
+        return;
+      }
+
+      // Check if the gap is filled with break days
+      final daysSinceLastWorkout = today.difference(lastWorkout).inDays;
+      
+      if (daysSinceLastWorkout > 1) {
+        // Get all team members (excluding Coach Max)
+        final membersResponse = await _supabase
+            .from('team_members')
+            .select('user_id')
+            .eq('team_id', streak.teamId)
+            .neq('user_id', coachMaxId);
+        
+        final memberIds = membersResponse.map((m) => m['user_id'] as String).toList();
+        
+        // Check each day in the gap
+        bool gapIsValid = true;
+        
+        for (int i = 1; i < daysSinceLastWorkout; i++) {
+          final checkDate = lastWorkout.add(Duration(days: i));
+          final checkDateStr = DateTime(checkDate.year, checkDate.month, checkDate.day)
+              .toIso8601String()
+              .split('T')[0];
+          
+          // Get break day status for that day
+          final breakStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, checkDateStr);
+          
+          // If everyone was on break that day, the gap is valid
+          final everyoneOnBreak = memberIds.every((userId) => breakStatus[userId] ?? false);
+          
+          if (!everyoneOnBreak) {
+            // Someone wasn't on break but didn't check in - streak broken
+            gapIsValid = false;
+            break;
+          }
+        }
+        
+        if (!gapIsValid) {
+          // Streak is broken - reset it
+          if (kDebugMode) print('💔 Resetting broken streak: ${streak.teamName}');
+          await _resetStreak(streak.id);
+        } else {
+          if (kDebugMode) print('✅ Gap filled by break days: ${streak.teamName}');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('❌ Error checking streak status: $e');
+    }
+  }
+
+  /// Reset a streak to 0
+  Future<void> _resetStreak(String streakId) async {
+    try {
+      await _supabase.from('team_streaks').update({
+        'current_streak': 0,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', streakId);
+
+      if (kDebugMode) print('✅ Streak reset to 0');
+    } catch (e) {
+      if (kDebugMode) print('❌ Error resetting streak: $e');
     }
   }
 }
