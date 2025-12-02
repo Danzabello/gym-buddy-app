@@ -62,6 +62,14 @@ class _HomeScreenState extends State<HomeScreen> {
       _dashboardKey.currentState?._syncTeamCheckIns();
       _dashboardKey.currentState?._loadStreakData();
     }
+
+    if (index == 2) {
+      // Force entire page to rebuild, which will reload WorkoutInvitesCard
+      setState(() {
+        // Recreate the pages list to force rebuild
+        _pages[2] = SchedulePage(key: ValueKey('schedule_${DateTime.now().millisecondsSinceEpoch}'));
+      });
+    }
   }
 
   @override
@@ -2928,6 +2936,8 @@ class SchedulePage extends StatefulWidget {
 class _SchedulePageState extends State<SchedulePage> {
   final WorkoutService _workoutService = WorkoutService();
   final FriendService _friendService = FriendService();
+
+  int _refreshTrigger = 0;
   
   List<Map<String, dynamic>> _upcomingWorkouts = [];
   List<Map<String, dynamic>> _friends = [];
@@ -3099,9 +3109,7 @@ class _SchedulePageState extends State<SchedulePage> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: loadData,
-              child: _upcomingWorkouts.isEmpty
-                  ? _buildEmptyState()
-                  : _buildWorkoutList(),
+              child: _buildWorkoutList(),
             ),
     );
   }
@@ -3146,9 +3154,12 @@ class _SchedulePageState extends State<SchedulePage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // ADD THIS - Workout Invites Card
         const WorkoutInvitesCard(),
         const SizedBox(height: 16),
+
+      if (_upcomingWorkouts.isEmpty)
+        _buildEmptyWorkoutsCard()  // New method we'll create
+      else
         
         // YOUR EXISTING WORKOUTS - Now using .map instead of ListView.builder
         ..._upcomingWorkouts.map((workout) {
@@ -3555,6 +3566,35 @@ class _SchedulePageState extends State<SchedulePage> {
       default:
         return Colors.grey[700]!;
     }
+  }
+
+  Widget _buildEmptyWorkoutsCard() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          children: [
+            Icon(Icons.calendar_today, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No scheduled workouts',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Tap + to schedule a workout',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildStatusBadge(String? status) {

@@ -5,7 +5,12 @@ import 'user_avatar.dart';
 
 /// Widget to display pending workout invites
 class WorkoutInvitesCard extends StatefulWidget {
-  const WorkoutInvitesCard({super.key});
+  final VoidCallback? onInviteAction; 
+  
+  const WorkoutInvitesCard({
+    super.key,
+    this.onInviteAction, 
+  });
 
   @override
   State<WorkoutInvitesCard> createState() => _WorkoutInvitesCardState();
@@ -60,7 +65,8 @@ class _WorkoutInvitesCardState extends State<WorkoutInvitesCard> {
           duration: Duration(seconds: 2),
         ),
       );
-      _loadPendingInvites(); // Refresh list
+      await _loadPendingInvites(); // Refresh invites
+      widget.onInviteAction?.call(); // Notify parent
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -86,7 +92,8 @@ class _WorkoutInvitesCardState extends State<WorkoutInvitesCard> {
           duration: Duration(seconds: 2),
         ),
       );
-      _loadPendingInvites(); // Refresh list
+      await _loadPendingInvites(); // Refresh invites
+      widget.onInviteAction?.call(); // Notify parent
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
