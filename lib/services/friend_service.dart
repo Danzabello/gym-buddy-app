@@ -381,12 +381,16 @@ class FriendService {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return [];
 
+      if (kDebugMode) print('👥 getFriends() called for user: $currentUserId');
+
       // Get all accepted friendships where user is either user_id or friend_id
       final response = await _supabase
           .from('friendships')
           .select()
           .eq('status', 'accepted')
           .or('user_id.eq.$currentUserId,friend_id.eq.$currentUserId');
+
+      if (kDebugMode) print('📊 Found ${response.length} accepted friendships');
 
       // Extract friend IDs
       final friendIds = <String>[];
@@ -398,6 +402,8 @@ class FriendService {
         }
       }
 
+      if (kDebugMode) print('👤 Friend IDs: $friendIds');
+
       if (friendIds.isEmpty) return [];
 
       // Get friend profiles
@@ -406,9 +412,11 @@ class FriendService {
           .select('*')
           .inFilter('id', friendIds);
 
+      if (kDebugMode) print('✅ Loaded ${profiles.length} friend profiles');
+
       return List<Map<String, dynamic>>.from(profiles);
     } catch (e) {
-      if (kDebugMode) print('Error getting friends: $e');
+      if (kDebugMode) print('❌ Error getting friends: $e');
       return [];
     }
   }
@@ -447,6 +455,144 @@ class FriendService {
       return response['status'];
     } catch (e) {
       return 'none';
+    }
+  }
+
+  // 🆕 Remove a friend (deletes friendship and team streak)
+  Future<bool> removeFriend(String friendId) async {
+    try {
+      final currentUserId = _supabase.auth.currentUser?.id;
+      if (currentUserId == null) {
+        if (kDebugMode) print('❌ No user logged in');
+        return false;
+      }
+
+      if (kDebugMode) print('🗑️ Removing friend: $friendId');
+
+      // Step 1: Find the team between these two users
+      final team = await _findTeamBetweenUsers(currentUserId, friendId);
+      
+      if (team != null) {
+        final teamId = team['id'] as String;
+        if (kDebugMode) print('📦 Found team to delete: $teamId');
+
+        // Step 2: Delete daily check-ins first (foreign key constraint)
+        final streaks = await _supabase
+            .from('team_streaks')
+            .select('id')
+            .eq('team_id', teamId);
+        
+        for (var streak in streaks) {
+          await _supabase
+              .from('daily_team_checkins')
+              .delete()
+              .eq('team_streak_id', streak['id']);
+        }
+        
+        if (kDebugMode) print('✅ Deleted daily check-ins');
+
+        // Step 3: Delete team streaks
+        await _supabase
+            .from('team_streaks')
+            .delete()
+            .eq('team_id', teamId);
+        
+        if (kDebugMode) print('✅ Deleted team streaks');
+
+        // Step 4: Delete team members
+        await _supabase
+            .from('team_members')
+            .delete()
+            .eq('team_id', teamId);
+        
+        if (kDebugMode) print('✅ Deleted team members');
+
+        // Step 5: Delete the team itself
+        await _supabase
+            .from('buddy_teams')
+            .delete()
+            .eq('id', teamId);
+        
+        if (kDebugMode) print('✅ Deleted team');
+      }
+
+      // Step 6: Delete the friendship (works for both directions)
+      if (kDebugMode) print('🗑️ Deleting friendship between $currentUserId and $friendId');
+      
+      // Delete in both directions to be safe
+      await _supabase
+          .from('friendships')
+          .delete()
+          .eq('user_id', currentUserId)
+          .eq('friend_id', friendId);
+      
+      await _supabase
+          .from('friendships')
+          .delete()
+          .eq('user_id', friendId)
+          .eq('friend_id', currentUserId);
+
+      if (kDebugMode) print('✅ Friendship deleted');
+
+      // Verify deletion
+      final verifyResult = await _supabase
+          .from('friendships')
+          .select()
+          .or('and(user_id.eq.$currentUserId,friend_id.eq.$friendId),and(user_id.eq.$friendId,friend_id.eq.$currentUserId)');
+      
+      if (kDebugMode) print('🔍 Verification: ${verifyResult.length} friendships remain (should be 0)');
+
+      if (kDebugMode) print('✅ Friendship removed successfully');
+      return true;
+    } catch (e) {
+      if (kDebugMode) print('❌ Error removing friend: $e');
+      return false;
+    }
+  }
+
+  // 🆕 Helper: Find the team between two users
+  Future<Map<String, dynamic>?> _findTeamBetweenUsers(String userId1, String userId2) async {
+    try {
+      // Get all teams where userId1 is a member
+      final user1Teams = await _supabase
+          .from('team_members')
+          .select('team_id')
+          .eq('user_id', userId1);
+
+      final user1TeamIds = user1Teams.map((t) => t['team_id'] as String).toList();
+
+      if (user1TeamIds.isEmpty) return null;
+
+      // Find team where userId2 is also a member and it's NOT a Coach Max team
+      for (final teamId in user1TeamIds) {
+        final teamMembers = await _supabase
+            .from('team_members')
+            .select('user_id, buddy_teams!inner(is_coach_max_team)')
+            .eq('team_id', teamId);
+
+        // Check if this team has exactly 2 members and one of them is userId2
+        final isCoachMaxTeam = teamMembers.any((m) => 
+          m['buddy_teams']['is_coach_max_team'] == true
+        );
+
+        if (isCoachMaxTeam) continue; // Skip Coach Max teams
+
+        final memberIds = teamMembers.map((m) => m['user_id'] as String).toSet();
+        
+        if (memberIds.length == 2 && memberIds.contains(userId2)) {
+          // Found the team!
+          return await _supabase
+              .from('buddy_teams')
+              .select()
+              .eq('id', teamId)
+              .single();
+        }
+      }
+
+      return null;
+    } catch (e) {
+      if (kDebugMode) print('❌ Error finding team: $e');
+      return null;
     }
   }
 }

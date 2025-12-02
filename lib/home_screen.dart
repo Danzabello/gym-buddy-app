@@ -10,8 +10,11 @@ import 'package:flutter/services.dart';
 import 'widgets/user_avatar.dart';
 import 'services/team_sync_service.dart';
 import 'package:flutter/foundation.dart';
-import '../widgets/break_day_section.dart';
+import 'widgets/break_day_section.dart';
 import 'services/break_day_service.dart';
+import 'widgets/friends_page_modern.dart';
+import 'widgets/workout_invites_card.dart';
+
 
 
 
@@ -41,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Initialize pages with the dashboard key
     _pages = [
       DashboardPage(key: _dashboardKey),  // Add the key here
-      const FriendsPage(),
+      const FriendsPageModern(),
       const SchedulePage(),
       const ProfilePage(),
     ];
@@ -54,9 +57,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _selectedIndex = index;
     });
     
-    // Refresh dashboard when returning to it from friends page
+    // Refresh dashboard when returning from friends page
     if (index == 0 && previousIndex == 1) {
-      // Access the dashboard state and trigger refresh
       _dashboardKey.currentState?._syncTeamCheckIns();
       _dashboardKey.currentState?._loadStreakData();
     }
@@ -207,6 +209,42 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       return _buildNoStreaksCard();
     }
 
+    // ✅ INFINITE CAROUSEL: Always shows exactly 3 slots that wrap around
+    final displayItems = <dynamic>[null, null, null]; // 3 slots: [0, 1, 2]
+    
+    // Find Coach Max and friends
+    final coachMaxStreak = _allStreaks.firstWhere(
+      (s) => s.isCoachMaxTeam,
+      orElse: () => _allStreaks.first,
+    );
+    
+    // Get friends and sort by HIGHEST streak first
+    final friendStreaks = _allStreaks
+        .where((s) => !s.isCoachMaxTeam)
+        .toList()
+        ..sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
+    
+    // ✅ BUILD CAROUSEL ITEMS (in display order)
+    if (friendStreaks.isEmpty) {
+      // NO FRIENDS: [Add] [Coach Max] [Add]
+      displayItems[0] = null;
+      displayItems[1] = coachMaxStreak;
+      displayItems[2] = null;
+      
+    } else if (friendStreaks.length == 1) {
+      // 1 FRIEND: [Add] [Friend] [Coach Max]
+      // This way: Friend in center by default, scrollable to Coach Max or Add Friend
+      displayItems[0] = null; // Add Friend
+      displayItems[1] = friendStreaks[0]; // Highest friend in center
+      displayItems[2] = coachMaxStreak;
+      
+    } else {
+      // 2+ FRIENDS: [Coach Max] [Highest Friend] [2nd Highest Friend]
+      displayItems[0] = coachMaxStreak;
+      displayItems[1] = friendStreaks[0]; // Highest friend in center
+      displayItems[2] = friendStreaks.length > 1 ? friendStreaks[1] : null;
+    }
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -233,16 +271,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             
             const SizedBox(height: 24),
             
-            // CAROUSEL - SIMPLE, NO INFINITE SCROLL
+            // ✅ INFINITE CAROUSEL - Wraps around in a circle
             SizedBox(
               height: 200,
-              child: AnimatedBuilder(  // ✅ WRAP WITH ENTRANCE ANIMATION
+              child: AnimatedBuilder(
                 animation: _carouselEntranceAnimation,
                 builder: (context, child) {
                   return Transform.translate(
                     offset: Offset(
                       0,
-                      (1 - _carouselEntranceAnimation.value) * 100,  // Slide up from below
+                      (1 - _carouselEntranceAnimation.value) * 100,
                     ),
                     child: Opacity(
                       opacity: _carouselEntranceAnimation.value.clamp(0.0, 1.0),
@@ -250,77 +288,225 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     ),
                   );
                 },
-                      child: PageView.builder(
-                        controller: _carouselController,
-                        onPageChanged: (index) {
-                          setState(() {
-                            _currentCarouselIndex = index;
-                          });
-                          HapticFeedback.selectionClick();
-                        },
-                        itemCount: _allStreaks.length,
-                        itemBuilder: (context, index) {
-                          final streak = _allStreaks[index];
-                          final isFocused = index == _currentCarouselIndex;
-                          
-                          return AnimatedBuilder(
-                            animation: _carouselController,
-                            builder: (context, child) {
-                              double scale = 1.0;
+                child: PageView.builder(
+                  controller: _carouselController,
+                  onPageChanged: (index) {
+                    setState(() {
+                      _currentCarouselIndex = index % 3; // ✅ Wrap around using modulo
+                    });
+                    HapticFeedback.selectionClick();
+                  },
+                  // ✅ INFINITE SCROLLING: itemCount = null allows infinite scrolling
+                  itemCount: null,
+                  itemBuilder: (context, index) {
+                    // ✅ Map infinite index to our 3-item array using modulo
+                    final displayIndex = index % 3;
+                    final item = displayItems[displayIndex];
+                    final isFocused = displayIndex == _currentCarouselIndex;
+                    
+                    return AnimatedBuilder(
+                      animation: _carouselController,
+                      builder: (context, child) {
+                        double scale = 1.0;
 
-                              if (_carouselController.position.haveDimensions && 
-                                  _carouselEntranceAnimation.value >= 1.0) {  // ✅ ADD THIS CHECK
-                                final page = _carouselController.page ?? index.toDouble();
-                                final diff = (page - index).abs();
-                                scale = (1 - (diff * 0.45)).clamp(0.75, 1.0);
-                              } else if (index == 1) {  // ✅ During animation, only middle is large
-                                scale = 1.0;
-                              } else {  // ✅ Side avatars stay small during animation
-                                scale = 0.75;
-                              }
-                              
-                              return Transform.scale(
-                                scale: scale,
-                                child: Center(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      _carouselController.animateToPage(
-                                        index,
-                                        duration: const Duration(milliseconds: 300),
-                                        curve: Curves.easeInOut,
-                                      );
-                                    },
-                                    child: _buildCarouselAvatar(streak, isFocused),
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
+                        if (_carouselController.position.haveDimensions && 
+                            _carouselEntranceAnimation.value >= 1.0) {
+                          final page = _carouselController.page ?? index.toDouble();
+                          final diff = (page - index).abs();
+                          scale = (1 - (diff * 0.45)).clamp(0.75, 1.0);
+                        } else if (displayIndex == 1) {
+                          scale = 1.0;
+                        } else {
+                          scale = 0.75;
+                        }
+                        
+                        return Transform.scale(
+                          scale: scale,
+                          child: Center(
+                            child: GestureDetector(
+                              onTap: () {
+                                // ✅ Scroll to this item's position
+                                _carouselController.animateToPage(
+                                  index,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                );
+                              },
+                              child: item != null
+                                  ? _buildCarouselAvatar(item as TeamStreak, isFocused)
+                                  : _buildAddFriendPlaceholder(isFocused),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
             ),
             
             const SizedBox(height: 20),
             
-            // ✅ NAME DISPLAY
+            // NAME DISPLAY
             Text(
-              _allStreaks[_currentCarouselIndex].isCoachMaxTeam 
-                  ? _allStreaks[_currentCarouselIndex].teamName
-                  : _getFriendName(_allStreaks[_currentCarouselIndex]),
-              style: const TextStyle(
+              _getDisplayName(displayItems[_currentCarouselIndex]),
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
+                color: displayItems[_currentCarouselIndex] != null 
+                    ? Colors.black
+                    : Colors.grey[600],
               ),
             ),
             
             const SizedBox(height: 12),
             
             // STREAK INFO
-            _buildStreakInfo(_allStreaks[_currentCarouselIndex]),
+            displayItems[_currentCarouselIndex] != null
+                ? _buildStreakInfo(displayItems[_currentCarouselIndex] as TeamStreak)
+                : _buildAddFriendInfo(),
           ],
         ),
       ),
+    );
+  }
+
+  // ✅ HELPER METHOD: Get display name
+  String _getDisplayName(dynamic item) {
+    if (item == null) {
+      return 'Add a Workout Buddy!';
+    }
+    
+    final streak = item as TeamStreak;
+    if (streak.isCoachMaxTeam) {
+      return streak.teamName;
+    }
+    
+    return _getFriendName(streak);
+  }
+
+  Widget _buildAddFriendPlaceholder(bool isFocused) {
+    return GestureDetector(
+      onTap: () {
+        // Navigate to Buddies tab
+        HapticFeedback.selectionClick();
+        final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+        if (homeState != null) {
+          homeState.setState(() {
+            homeState._selectedIndex = 1; // Switch to Buddies tab
+          });
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        width: isFocused ? 140 : 75,
+        height: isFocused ? 140 : 75,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: [Colors.blue[50]!, Colors.purple[50]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border.all(
+            color: isFocused ? Colors.blue[400]! : Colors.blue[200]!,
+            width: isFocused ? 4 : 2,
+          ),
+          boxShadow: isFocused
+              ? [
+                  BoxShadow(
+                    color: Colors.blue.withOpacity(0.3),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  ),
+                ]
+              : [],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.person_add_rounded,
+              size: isFocused ? 50 : 30,
+              color: Colors.blue[600],
+            ),
+            if (isFocused) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Add\nBuddy',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blue[700],
+                  height: 1.1,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // NEW METHOD 2: Build Add Friend Info (replaces streak info when placeholder is focused)
+  Widget _buildAddFriendInfo() {
+    return Column(
+      children: [
+        // Placeholder streak count
+        Text(
+          '— Day Streak',
+          style: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[400],
+          ),
+        ),
+        
+        const SizedBox(height: 12),
+        
+        // Progress bar (empty)
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: LinearProgressIndicator(
+            value: 0.0,
+            minHeight: 8,
+            backgroundColor: Colors.grey[300],
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.grey[400]!),
+          ),
+        ),
+        
+        const SizedBox(height: 12),
+        
+        // Call to action badge
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.blue[100]!, Colors.purple[100]!],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(color: Colors.blue[300]!, width: 2),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.touch_app_rounded, color: Colors.blue[700], size: 22),
+              const SizedBox(width: 10),
+              Text(
+                'Tap to find friends!',
+                style: TextStyle(
+                  color: Colors.blue[700],
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -501,7 +687,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   Widget _buildThreeCardLayout() {
     final currentStreak = _allStreaks.isNotEmpty 
-        ? _allStreaks[_currentCarouselIndex] 
+        ? _allStreaks[_currentCarouselIndex.clamp(0, _allStreaks.length - 1)] 
         : null;
     
     return Row(
@@ -2731,611 +2917,6 @@ class _StatItem extends StatelessWidget {
   }
 }
 
-// Friends/Buddies Page with Real Functionality
-class FriendsPage extends StatefulWidget {
-  const FriendsPage({super.key});
-
-  @override
-  State<FriendsPage> createState() => _FriendsPageState();
-}
-
-class _FriendsPageState extends State<FriendsPage> {
-  final FriendService _friendService = FriendService();
-  final TextEditingController _searchController = TextEditingController();
-  
-  List<Map<String, dynamic>> _friends = [];
-  List<Map<String, dynamic>> _pendingRequests = [];
-  List<Map<String, dynamic>> _searchResults = [];
-  bool _isLoading = true;
-  bool _isSearching = false;
-  
-  // Loading state tracking
-  String? _sendingRequestTo;
-  String? _processingRequestId;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadFriends();
-  }
-
-  Future<void> _loadFriends() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    final friends = await _friendService.getFriends();
-    final pending = await _friendService.getPendingRequests();
-
-    setState(() {
-      _friends = friends;
-      _pendingRequests = pending;
-      _isLoading = false;
-    });
-  }
-
-  Future<void> _searchUsers(String query) async {
-    if (query.isEmpty) {
-      setState(() {
-        _searchResults = [];
-        _isSearching = false;
-      });
-      return;
-    }
-
-    setState(() {
-      _isSearching = true;
-    });
-
-    final results = await _friendService.searchUsers(query);
-
-    setState(() {
-      _searchResults = results;
-      _isSearching = false;
-    });
-  }
-
-  Future<void> _sendFriendRequest(String friendId) async {
-    setState(() {
-      _sendingRequestTo = friendId;
-    });
-    
-    final success = await _friendService.sendFriendRequest(friendId);
-    
-    setState(() {
-      _sendingRequestTo = null;
-    });
-    
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Friend request sent!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      _searchController.clear();
-      setState(() {
-        _searchResults = [];
-      });
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Already friends or request pending'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-    }
-  }
-
-  Future<void> _acceptRequest(String requestId) async {
-    setState(() {
-      _processingRequestId = requestId;
-    });
-    
-    final success = await _friendService.acceptFriendRequest(requestId);
-    
-    setState(() {
-      _processingRequestId = null;
-    });
-    
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Friend request accepted!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      await _loadFriends();
-      
-      // ✅ NEW: Force refresh the home page to show new streak
-      if (mounted) {
-        final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-        if (homeState != null) {
-          // Switch to home tab
-          homeState.setState(() {
-            homeState._selectedIndex = 0;
-          });
-          // Force reload dashboard
-          final dashboardState = homeState._pages[0] as DashboardPage;
-          final dashboardStateKey = dashboardState.key as GlobalKey<_DashboardPageState>?;
-          dashboardStateKey?.currentState?._loadStreakData();
-        }
-      }
-    }
-  }
-
-  Future<void> _declineRequest(String requestId) async {
-    // Show confirmation dialog
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Decline Friend Request'),
-        content: const Text('Are you sure you want to decline this friend request?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Decline'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    setState(() {
-      _processingRequestId = requestId;
-    });
-    
-    final success = await _friendService.declineFriendRequest(requestId);
-    
-    setState(() {
-      _processingRequestId = null;
-    });
-    
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Friend request declined'),
-          backgroundColor: Colors.grey,
-        ),
-      );
-      _loadFriends();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Gym Buddies'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadFriends,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Search Bar
-                      TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Search for gym buddies...',
-                          prefixIcon: const Icon(Icons.search),
-                          suffixIcon: _searchController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() {
-                                      _searchResults = [];
-                                    });
-                                  },
-                                )
-                              : null,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey[100],
-                        ),
-                        onChanged: (value) {
-                          _searchUsers(value);
-                        },
-                      ),
-                      
-                      // Search Results
-                      if (_searchResults.isNotEmpty) ...[
-                        const SizedBox(height: 20),
-                        const Text(
-                          'Search Results',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        ..._searchResults.map((user) {
-                          return Card(
-                            child: ListTile(
-                              leading: UserAvatar(
-                                avatarId: user['avatar_id'],
-                                size: 40,
-                              ),
-                              title: Text(user['display_name'] ?? 'Unknown'),
-                              subtitle: Text(
-                                'Level: ${user['fitness_level'] ?? 'Not specified'}',
-                              ),
-                              trailing: _sendingRequestTo == user['id']
-                                  ? const SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : IconButton(
-                                      icon: const Icon(Icons.person_add),
-                                      onPressed: () => _sendFriendRequest(user['id']),
-                                    ),
-                            ),
-                          );
-                        }).toList(),
-                        const SizedBox(height: 20),
-                      ],
-                      
-                      // Pending Requests
-                      if (_pendingRequests.isNotEmpty) ...[
-                        const SizedBox(height: 20),
-                        const Text(
-                          'Pending Requests',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        ..._pendingRequests.map((request) {
-                          final profile = request['user_profiles'];
-                          return Card(
-                            color: Colors.orange[50],
-                            child: ListTile(
-                              leading: UserAvatar(
-                                avatarId: profile?['avatar_id'],
-                                size: 40,
-                              ),
-                              title: Text(profile?['display_name'] ?? 'Unknown'),
-                              subtitle: const Text('Wants to be your gym buddy'),
-                              trailing: _processingRequestId == request['id']
-                                  ? const SizedBox(
-                                      width: 48,
-                                      height: 24,
-                                      child: Center(
-                                        child: CircularProgressIndicator(strokeWidth: 2),
-                                      ),
-                                    )
-                                  : Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.check, color: Colors.green),
-                                          onPressed: () => _acceptRequest(request['id']),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.close, color: Colors.red),
-                                          onPressed: () => _declineRequest(request['id']),
-                                        ),
-                                      ],
-                                    ),
-                            ),
-                          );
-                        }).toList(),
-                      ],
-                      
-                      // Active Buddies
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Your Gym Buddies',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            '${_friends.length} buddies',
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      
-                      if (_friends.isEmpty)
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(32),
-                            child: Center(
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.group_add,
-                                    size: 48,
-                                    color: Colors.grey[400],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'No gym buddies yet',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Search for friends to start training together!',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey[500],
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        )
-                      else
-                        ..._friends.map((friend) {
-                          return Card(
-                            child: ListTile(
-                              leading: Stack(
-                                children: [
-                                  UserAvatar(
-                                    avatarId: friend['avatar_id'],
-                                    size: 40,
-                                  ),
-                                  Positioned(
-                                    right: 0,
-                                    bottom: 0,
-                                    child: Container(
-                                      width: 12,
-                                      height: 12,
-                                      decoration: BoxDecoration(
-                                        color: Colors.green,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: Colors.white,
-                                          width: 2,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              title: Text(friend['display_name'] ?? 'Unknown'),
-                              subtitle: Text(
-                                '${friend['workout_days_per_week'] ?? 0} days/week • ${friend['fitness_level'] ?? 'beginner'}',
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.local_fire_department,
-                                    color: Colors.orange,
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '0',
-                                    style: const TextStyle(fontSize: 14),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  Widget _buildEmptyFriendsState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Animated Icon
-            TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0.0, end: 1.0),
-              duration: const Duration(milliseconds: 1200),
-              curve: Curves.elasticOut,
-              builder: (context, value, child) {
-                return Transform.scale(
-                  scale: value,
-                  child: Container(
-                    padding: const EdgeInsets.all(32),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.green[100]!, Colors.blue[100]!],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.green.withOpacity(0.3),
-                          blurRadius: 20,
-                          spreadRadius: 5,
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      Icons.group_add,
-                      size: 72,
-                      color: Colors.green[700],
-                    ),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 32),
-            Text(
-              'Find Your Gym Buddies!',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Working out is better with friends.\nSearch for people and start training together!',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-                height: 1.6,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.blue[700],
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Center(
-                          child: Text(
-                            '1',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          'Search for friends using the search bar above',
-                          style: TextStyle(color: Colors.grey[700]),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.blue[700],
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Center(
-                          child: Text(
-                            '2',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          'Send friend requests',
-                          style: TextStyle(color: Colors.grey[700]),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.blue[700],
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Center(
-                          child: Text(
-                            '3',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          'Schedule workouts together and build streaks!',
-                          style: TextStyle(color: Colors.grey[700]),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              '💡 Tip: Invite your real-life gym buddies!',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.orange[700],
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 // Schedule Page with Real Functionality
 class SchedulePage extends StatefulWidget {
   const SchedulePage({super.key});
@@ -3543,324 +3124,324 @@ class _SchedulePageState extends State<SchedulePage> {
   }
 
   Widget _buildWorkoutList() {
-    return ListView.builder(
+    return ListView(
       padding: const EdgeInsets.all(16),
-      itemCount: _upcomingWorkouts.length,
-      itemBuilder: (context, index) {
-        final workout = _upcomingWorkouts[index];
-        final creator = workout['creator'];
-        final buddy = workout['buddy'];
-        final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-        final isCreator = workout['user_id'] == currentUserId;
-        final isBuddy = workout['buddy_id'] == currentUserId;
-        final buddyStatus = workout['buddy_status'];
-        final workoutStatus = workout['status'];
+      children: [
+        // ADD THIS - Workout Invites Card
+        const WorkoutInvitesCard(),
+        const SizedBox(height: 16),
+        
+        // YOUR EXISTING WORKOUTS - Now using .map instead of ListView.builder
+        ..._upcomingWorkouts.map((workout) {
+          final creator = workout['creator'];
+          final buddy = workout['buddy'];
+          final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+          final isCreator = workout['user_id'] == currentUserId;
+          final isBuddy = workout['buddy_id'] == currentUserId;
+          final buddyStatus = workout['buddy_status'];
+          final workoutStatus = workout['status'];
 
-        return Card(
-          elevation: 3,
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Colors.white,
-                  _getWorkoutStatusColor(workoutStatus).withOpacity(0.05),
-                ],
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
+          return Card(
+            elevation: 3,
+            margin: const EdgeInsets.only(bottom: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.white,
+                    _getWorkoutStatusColor(workoutStatus).withOpacity(0.05),
+                  ],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
               ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              children: [
-                // Main content
-                ListTile(
-                  contentPadding: const EdgeInsets.all(16),
-                  leading: Stack(
-                    children: [
-                      Hero(
-                        tag: 'workout_${workout['id']}',
-                        child: CircleAvatar(
-                          radius: 28,
-                          backgroundColor: _getWorkoutColor(workout['workout_type']).withOpacity(0.2),
-                          child: Icon(
-                            _getWorkoutIcon(workout['workout_type']),
-                            color: _getWorkoutColor(workout['workout_type']),
-                            size: 28,
+              child: Column(
+                children: [
+                  // Main content
+                  ListTile(
+                    contentPadding: const EdgeInsets.all(16),
+                    leading: Stack(
+                      children: [
+                        Hero(
+                          tag: 'workout_${workout['id']}',
+                          child: CircleAvatar(
+                            radius: 28,
+                            backgroundColor: _getWorkoutColor(workout['workout_type']).withOpacity(0.2),
+                            child: Icon(
+                              _getWorkoutIcon(workout['workout_type']),
+                              color: _getWorkoutColor(workout['workout_type']),
+                              size: 28,
+                            ),
                           ),
                         ),
-                      ),
-                      if (isBuddy && buddyStatus == 'pending')
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
+                        if (isBuddy && buddyStatus == 'pending')
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.orange,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                              child: const Icon(
+                                Icons.notification_important,
+                                color: Colors.white,
+                                size: 10,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    title: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            workout['workout_type'] ?? 'Workout',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                        _buildStatusBadge(workoutStatus),
+                      ],
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${_formatDate(workout['workout_date'])} • ${workout['workout_time']}',
+                              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 12,
+                          children: [
+                            if (workout['planned_duration_minutes'] != null)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.timer, size: 14, color: Colors.grey[600]),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _formatDuration(workout['planned_duration_minutes']),
+                                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            if (buddy != null || creator != null)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.person, size: 14, color: Colors.blue[700]),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    isCreator 
+                                        ? 'with ${buddy?['display_name'] ?? 'Unknown'}'
+                                        : 'with ${creator?['display_name'] ?? 'Unknown'}',
+                                    style: TextStyle(
+                                      color: Colors.blue[700],
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                        if (workoutStatus == 'in_progress') ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: Colors.orange,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
+                              color: Colors.orange[100],
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Icon(
-                              Icons.notification_important,
-                              color: Colors.white,
-                              size: 10,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                  title: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          workout['workout_type'] ?? 'Workout',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                      _buildStatusBadge(workoutStatus),  // ✅ NEW STATUS BADGE!
-                    ],
-                  ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 8),
-                      // Date and time row
-                      Row(
-                        children: [
-                          Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${_formatDate(workout['workout_date'])} • ${workout['workout_time']}',
-                            style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      // Duration and buddy row
-                      Wrap(
-                        spacing: 12,
-                        children: [
-                          if (workout['planned_duration_minutes'] != null)
-                            Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.timer, size: 14, color: Colors.grey[600]),
+                                Icon(Icons.timer, size: 14, color: Colors.orange[700]),
                                 const SizedBox(width: 4),
                                 Text(
-                                  _formatDuration(workout['planned_duration_minutes']),
-                                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          if (buddy != null || creator != null)
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.person, size: 14, color: Colors.blue[700]),
-                                const SizedBox(width: 4),
-                                Text(
-                                  isCreator 
-                                      ? 'with ${buddy?['display_name'] ?? 'Unknown'}'
-                                      : 'with ${creator?['display_name'] ?? 'Unknown'}',
+                                  'Started ${_timeAgo(workout['workout_started_at'])}',
                                   style: TextStyle(
-                                    color: Colors.blue[700],
-                                    fontSize: 12,
+                                    fontSize: 11,
+                                    color: Colors.orange[900],
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ],
                             ),
+                          ),
                         ],
-                      ),
-                      // In progress timer
-                      if (workoutStatus == 'in_progress') ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.orange[100],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.timer, size: 14, color: Colors.orange[700]),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Started ${_timeAgo(workout['workout_started_at'])}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.orange[900],
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      // Pending invite banner
-                      if (isBuddy && buddyStatus == 'pending') ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.orange[50],
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.orange[200]!),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.mail, size: 16, color: Colors.orange[700]),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  '${creator?['display_name']} invited you to join!',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.orange[900],
-                                    fontWeight: FontWeight.w500,
+                        if (isBuddy && buddyStatus == 'pending') ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.orange[50],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.orange[200]!),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.mail, size: 16, color: Colors.orange[700]),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '${creator?['display_name']} invited you to join!',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.orange[900],
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  trailing: PopupMenuButton(
-                    itemBuilder: (context) {
-                      if (isBuddy && buddyStatus == 'pending') {
-                        return [
-                          const PopupMenuItem(
-                            value: 'accept',
-                            child: Row(
-                              children: [
-                                Icon(Icons.check_circle, color: Colors.green),
-                                SizedBox(width: 8),
-                                Text('Accept Invite'),
                               ],
                             ),
                           ),
-                          const PopupMenuItem(
-                            value: 'decline',
-                            child: Row(
-                              children: [
-                                Icon(Icons.cancel, color: Colors.red),
-                                SizedBox(width: 8),
-                                Text('Decline Invite'),
-                              ],
-                            ),
-                          ),
-                        ];
-                      }
-                      
-                      return [
-                        if (workoutStatus == 'scheduled')
-                          const PopupMenuItem(
-                            value: 'start',
-                            child: Row(
-                              children: [
-                                Icon(Icons.play_arrow, color: Colors.blue),
-                                SizedBox(width: 8),
-                                Text('Start Workout'),
-                              ],
-                            ),
-                          ),
-                        if (workoutStatus == 'in_progress')
-                          const PopupMenuItem(
-                            value: 'complete',
-                            child: Row(
-                              children: [
-                                Icon(Icons.check_circle, color: Colors.green),
-                                SizedBox(width: 8),
-                                Text('Complete'),
-                              ],
-                            ),
-                          ),
-                        if (isCreator && workoutStatus == 'scheduled')
-                          const PopupMenuItem(
-                            value: 'cancel',
-                            child: Row(
-                              children: [
-                                Icon(Icons.cancel, color: Colors.red),
-                                SizedBox(width: 8),
-                                Text('Cancel'),
-                              ],
-                            ),
-                          ),
-                      ];
-                    },
-                    onSelected: (value) {
-                      HapticFeedback.selectionClick();
-                      if (value == 'start') {
-                        _startWorkout(workout['id']);
-                      } else if (value == 'complete') {
-                        _completeWorkout(workout['id']);
-                      } else if (value == 'cancel') {
-                        _cancelWorkout(workout['id']);
-                      } else if (value == 'accept') {
-                        _acceptInvitation(workout['id']);
-                      } else if (value == 'decline') {
-                        _declineInvitation(workout['id']);
-                      }
-                    },
-                  ),
-                ),
-                // Quick action buttons for pending invites
-                if (isBuddy && buddyStatus == 'pending')
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              HapticFeedback.lightImpact();
-                              _acceptInvitation(workout['id']);
-                            },
-                            icon: const Icon(Icons.check, size: 20),
-                            label: const Text('Accept'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              HapticFeedback.lightImpact();
-                              _declineInvitation(workout['id']);
-                            },
-                            icon: const Icon(Icons.close, size: 20),
-                            label: const Text('Decline'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.red,
-                              side: const BorderSide(color: Colors.red),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
+                        ],
                       ],
                     ),
+                    trailing: PopupMenuButton(
+                      itemBuilder: (context) {
+                        if (isBuddy && buddyStatus == 'pending') {
+                          return [
+                            const PopupMenuItem(
+                              value: 'accept',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.check_circle, color: Colors.green),
+                                  SizedBox(width: 8),
+                                  Text('Accept Invite'),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'decline',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.cancel, color: Colors.red),
+                                  SizedBox(width: 8),
+                                  Text('Decline Invite'),
+                                ],
+                              ),
+                            ),
+                          ];
+                        }
+                        
+                        return [
+                          if (workoutStatus == 'scheduled')
+                            const PopupMenuItem(
+                              value: 'start',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.play_arrow, color: Colors.blue),
+                                  SizedBox(width: 8),
+                                  Text('Start Workout'),
+                                ],
+                              ),
+                            ),
+                          if (workoutStatus == 'in_progress')
+                            const PopupMenuItem(
+                              value: 'complete',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.check_circle, color: Colors.green),
+                                  SizedBox(width: 8),
+                                  Text('Complete'),
+                                ],
+                              ),
+                            ),
+                          if (isCreator && workoutStatus == 'scheduled')
+                            const PopupMenuItem(
+                              value: 'cancel',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.cancel, color: Colors.red),
+                                  SizedBox(width: 8),
+                                  Text('Cancel'),
+                                ],
+                              ),
+                            ),
+                        ];
+                      },
+                      onSelected: (value) {
+                        HapticFeedback.selectionClick();
+                        if (value == 'start') {
+                          _startWorkout(workout['id']);
+                        } else if (value == 'complete') {
+                          _completeWorkout(workout['id']);
+                        } else if (value == 'cancel') {
+                          _cancelWorkout(workout['id']);
+                        } else if (value == 'accept') {
+                          _acceptInvitation(workout['id']);
+                        } else if (value == 'decline') {
+                          _declineInvitation(workout['id']);
+                        }
+                      },
+                    ),
                   ),
-              ],
+                  if (isBuddy && buddyStatus == 'pending')
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                HapticFeedback.lightImpact();
+                                _acceptInvitation(workout['id']);
+                              },
+                              icon: const Icon(Icons.check, size: 20),
+                              label: const Text('Accept'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                HapticFeedback.lightImpact();
+                                _declineInvitation(workout['id']);
+                              },
+                              icon: const Icon(Icons.close, size: 20),
+                              label: const Text('Decline'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red,
+                                side: const BorderSide(color: Colors.red),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        }).toList(),
+      ],
     );
   }
 
