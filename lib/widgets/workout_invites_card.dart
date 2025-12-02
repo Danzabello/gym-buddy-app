@@ -22,6 +22,12 @@ class _WorkoutInvitesCardState extends State<WorkoutInvitesCard> {
     _loadPendingInvites();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadPendingInvites();
+  }
+
   Future<void> _loadPendingInvites() async {
     setState(() => _isLoading = true);
     final invites = await _workoutInviteService.getPendingInvites();

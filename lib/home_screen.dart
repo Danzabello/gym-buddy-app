@@ -2936,10 +2936,29 @@ class _SchedulePageState extends State<SchedulePage> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    loadData();
+    _debugCheckInvites();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _debugCheckInvites() async {
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    print('🔍 DEBUG: Current user ID: $currentUserId');
+    
+    final allInvites = await Supabase.instance.client
+        .from('workout_invites')
+        .select('*');
+    
+    print('🔍 DEBUG: ALL invites in database: $allInvites');
+    
+    final myInvites = await Supabase.instance.client
+        .from('workout_invites')
+        .select('*')
+        .eq('recipient_id', currentUserId!);
+    
+    print('🔍 DEBUG: My invites as recipient: $myInvites');
+  }
+
+  Future<void> loadData() async {
     setState(() {
       _isLoading = true;
     });
@@ -2959,7 +2978,7 @@ class _SchedulePageState extends State<SchedulePage> {
       context: context,
       builder: (context) => _CreateWorkoutDialog(
         friends: _friends,
-        onWorkoutCreated: _loadData,
+        onWorkoutCreated: loadData,
       ),
     );
   }
@@ -2973,7 +2992,7 @@ class _SchedulePageState extends State<SchedulePage> {
           backgroundColor: Colors.blue,
         ),
       );
-      _loadData();
+      loadData();
     }
   }
 
@@ -3000,7 +3019,7 @@ class _SchedulePageState extends State<SchedulePage> {
           backgroundColor: Colors.green,
         ),
       );
-      _loadData();
+      loadData();
     }
   }
 
@@ -3033,7 +3052,7 @@ class _SchedulePageState extends State<SchedulePage> {
             backgroundColor: Colors.grey,
           ),
         );
-        _loadData();
+        loadData();
       }
     }
   }
@@ -3047,7 +3066,7 @@ class _SchedulePageState extends State<SchedulePage> {
           backgroundColor: Colors.green,
         ),
       );
-      _loadData();
+      loadData();
     }
   }
 
@@ -3060,7 +3079,7 @@ class _SchedulePageState extends State<SchedulePage> {
           backgroundColor: Colors.grey,
         ),
       );
-      _loadData();
+      loadData();
     }
   }
 
@@ -3079,7 +3098,7 @@ class _SchedulePageState extends State<SchedulePage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: _loadData,
+              onRefresh: loadData,
               child: _upcomingWorkouts.isEmpty
                   ? _buildEmptyState()
                   : _buildWorkoutList(),
