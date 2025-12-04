@@ -835,4 +835,154 @@ class TeamStreakService {
       if (kDebugMode) print('❌ Error resetting streak: $e');
     }
   }
+
+  Future<Map<String, dynamic>> checkInBothBuddiesForWorkout({
+    required String userId,
+    required String buddyId, 
+    required String teamId,
+  }) async {
+    try {
+      if (kDebugMode) print('🏋️ Checking in both buddies for workout...');
+      if (kDebugMode) print('   User: $userId');
+      if (kDebugMode) print('   Buddy: $buddyId');
+      if (kDebugMode) print('   Team: $teamId');
+
+      // Get today's date
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
+
+      // Get the team's active streak
+      final streakResponse = await _supabase
+          .from('team_streaks')
+          .select('id')
+          .eq('team_id', teamId)
+          .eq('is_active', true)
+          .maybeSingle();
+
+      if (streakResponse == null) {
+        if (kDebugMode) print('⚠️ No active streak found for team');
+        return {'success': false, 'message': 'No active streak for this team'};
+      }
+
+      final streakId = streakResponse['id'] as String;
+      int checkedInCount = 0;
+
+      // Check in the current user (if not already checked in)
+      final userCheckedIn = await _checkInUserToTeamSafe(
+        userId, 
+        streakId, 
+        teamId, 
+        today,
+      );
+      if (userCheckedIn) checkedInCount++;
+
+      // Check in the buddy (if not already checked in)
+      final buddyCheckedIn = await _checkInUserToTeamSafe(
+        buddyId, 
+        streakId, 
+        teamId, 
+        today,
+      );
+      if (buddyCheckedIn) checkedInCount++;
+
+      // Now check if streak should be updated
+      // (this will only increment if ALL members are now checked in)
+      await _updateTeamStreak(streakId, teamId, today);
+
+      if (kDebugMode) {
+        print('✅ Buddy workout check-in complete!');
+        print('   New check-ins created: $checkedInCount');
+      }
+
+      return {
+        'success': true,
+        'message': checkedInCount > 0 
+            ? 'Both buddies checked in! 🎉' 
+            : 'Already checked in today',
+        'new_checkins': checkedInCount,
+      };
+    } catch (e) {
+      if (kDebugMode) print('❌ Error in buddy workout check-in: $e');
+      return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+
+  /// Safely check in a specific user to a specific team
+  /// Returns true if a NEW check-in was created, false if already existed
+  Future<bool> _checkInUserToTeamSafe(
+    String userId,
+    String streakId,
+    String teamId,
+    String today,
+  ) async {
+    try {
+      // Check if this user already checked in to THIS team today
+      final existing = await _supabase
+          .from('daily_team_checkins')
+          .select('id')
+          .eq('team_streak_id', streakId)
+          .eq('user_id', userId)
+          .eq('check_in_date', today)
+          .maybeSingle();
+
+      if (existing != null) {
+        if (kDebugMode) print('   ℹ️ User $userId already checked in to this team today');
+        return false; // Already checked in, no new check-in created
+      }
+
+      // Create the check-in
+      final now = DateTime.now().toUtc();
+      await _supabase.from('daily_team_checkins').insert({
+        'team_streak_id': streakId,
+        'user_id': userId,
+        'check_in_date': today,
+        'check_in_time': now.toIso8601String(),
+      });
+
+      if (kDebugMode) print('   ✅ Created check-in for user $userId');
+      return true; // New check-in created
+    } catch (e) {
+      if (kDebugMode) print('   ❌ Error checking in user $userId: $e');
+      return false;
+    }
+  }
+
+  /// Find the team that contains both the current user and their buddy
+  /// Returns the team ID or null if not found
+  Future<String?> findTeamWithBuddy(String userId, String buddyId) async {
+    try {
+      // Get all teams the current user is in (excluding Coach Max teams)
+      final userTeams = await _supabase
+          .from('team_members')
+          .select('team_id, buddy_teams!inner(is_coach_max_team)')
+          .eq('user_id', userId);
+
+      for (final teamData in userTeams) {
+        // Skip Coach Max teams
+        if (teamData['buddy_teams']['is_coach_max_team'] == true) continue;
+
+        final teamId = teamData['team_id'] as String;
+
+        // Check if buddy is also in this team
+        final buddyInTeam = await _supabase
+            .from('team_members')
+            .select('id')
+            .eq('team_id', teamId)
+            .eq('user_id', buddyId)
+            .maybeSingle();
+
+        if (buddyInTeam != null) {
+          if (kDebugMode) print('🎯 Found shared team: $teamId');
+          return teamId;
+        }
+      }
+
+      if (kDebugMode) print('⚠️ No shared team found between $userId and $buddyId');
+      return null;
+    } catch (e) {
+      if (kDebugMode) print('❌ Error finding team with buddy: $e');
+      return null;
+    }
+  }
+
 }

@@ -55,7 +55,7 @@ class WorkoutInviteService {
           .from('workout_invites')
           .select('''
             *,
-            sender:sender_id(id, display_name, username, avatar_id)
+            sender:sender_id(id, display_name, avatar_id)
           ''')
           .eq('recipient_id', currentUserId)
           .eq('status', 'pending')
@@ -81,7 +81,7 @@ class WorkoutInviteService {
           .from('workout_invites')
           .select('''
             *,
-            recipient:recipient_id(id, display_name, username, avatar_id)
+            recipient:recipient_id(id, display_name, avatar_id)
           ''')
           .eq('sender_id', currentUserId)
           .order('scheduled_for', ascending: true);
@@ -99,6 +99,44 @@ class WorkoutInviteService {
     try {
       print('✅ Accepting workout invite: $inviteId');
 
+      final currentUserId = _supabase.auth.currentUser?.id;
+      if (currentUserId == null) {
+        print('❌ No authenticated user');
+        return false;
+      }
+
+      // First, get the invite details
+      final invite = await _supabase
+          .from('workout_invites')
+          .select('sender_id, recipient_id, scheduled_for, message')
+          .eq('id', inviteId)
+          .single();
+
+      final senderId = invite['sender_id'] as String;
+      final scheduledFor = DateTime.parse(invite['scheduled_for']);
+      final message = invite['message'] as String?;
+
+      // Create the actual workout entry
+      // IMPORTANT: user_id must be the current user (recipient who is accepting)
+      // buddy_id is the sender who invited them
+      final workoutDate = scheduledFor.toIso8601String().split('T')[0];
+      final workoutTime = '${scheduledFor.hour.toString().padLeft(2, '0')}:${scheduledFor.minute.toString().padLeft(2, '0')}';
+
+      await _supabase.from('workouts').insert({
+        'user_id': currentUserId, // Current user (recipient) creates the workout
+        'buddy_id': senderId, // Sender becomes the buddy
+        'workout_type': 'Buddy Workout',
+        'workout_date': workoutDate,
+        'workout_time': workoutTime,
+        'planned_duration_minutes': 60, // Default 1 hour
+        'status': 'scheduled',
+        'buddy_status': 'accepted', // Already accepted since they initiated
+        'notes': message,
+      });
+
+      print('✅ Created workout entry for accepted invite');
+
+      // Update the invite status
       await _supabase
           .from('workout_invites')
           .update({
@@ -107,7 +145,7 @@ class WorkoutInviteService {
           })
           .eq('id', inviteId);
 
-      print('✅ Workout invite accepted!');
+      print('✅ Workout invite accepted and workout created!');
       return true;
     } catch (e) {
       print('❌ Error accepting invite: $e');
@@ -154,7 +192,7 @@ class WorkoutInviteService {
     }
   }
 
-  /// Get upcoming accepted workouts
+  /// Get upcoming accepted workouts from invites
   Future<List<Map<String, dynamic>>> getUpcomingWorkouts() async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
@@ -169,8 +207,8 @@ class WorkoutInviteService {
           .from('workout_invites')
           .select('''
             *,
-            sender:sender_id(id, display_name, username, avatar_id),
-            recipient:recipient_id(id, display_name, username, avatar_id)
+            sender:sender_id(id, display_name, avatar_id),
+            recipient:recipient_id(id, display_name, avatar_id)
           ''')
           .eq('status', 'accepted')
           .gte('scheduled_for', now)
