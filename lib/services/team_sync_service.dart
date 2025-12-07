@@ -41,16 +41,17 @@ class TeamSyncService {
       if (kDebugMode) print('✅ SYNC: User checked in today at ${userCheckIn['check_in_time']}');
 
       // Step 2: Get ALL user's team streak IDs
+      // ✅ FIXED: Correct relationship path through buddy_teams
       final allTeamsResponse = await _supabase
           .from('team_members')
           .select('''
             team_id,
             buddy_teams!inner(
               id,
-              team_name
-            ),
-            team_streaks!buddy_teams(
-              id
+              team_name,
+              team_streaks!inner(
+                id
+              )
             )
           ''')
           .eq('user_id', currentUserId);
@@ -76,9 +77,16 @@ class TeamSyncService {
 
       for (final teamData in allTeamsResponse) {
         final team = teamData['buddy_teams'];
-        final streaks = teamData['team_streaks'];
         
-        if (team == null || streaks == null || (streaks as List).isEmpty) {
+        if (team == null) {
+          continue;
+        }
+
+        // ✅ FIXED: Access team_streaks from within buddy_teams
+        final streaks = team['team_streaks'];
+        
+        if (streaks == null || (streaks as List).isEmpty) {
+          if (kDebugMode) print('⏭️ SYNC: No active streak for team: ${team['team_name']}');
           continue;
         }
 

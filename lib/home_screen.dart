@@ -3077,26 +3077,13 @@ class _SchedulePageState extends State<SchedulePage> {
         try {
           final teamStreakService = TeamStreakService();
           
-          // Find the team that contains both users
-          final teamId = await teamStreakService.findTeamWithBuddy(
-            currentUserId!,
-            buddyId,
-          );
+          // 1. Check in current user to ALL their teams
+          final userResult = await teamStreakService.checkInAllTeams();
+          print('✅ Current user check-in: ${userResult['message']}');
           
-          if (teamId != null) {
-            // Check in both users to that specific team
-            final result = await teamStreakService.checkInBothBuddiesForWorkout(
-              userId: currentUserId,
-              buddyId: buddyId,
-              teamId: teamId,
-            );
-            print('✅ Buddy check-in result: ${result['message']}');
-          }
-          
-          // Also check in to Coach Max team (current user only)
-          // This ensures Coach Max streak also gets updated
-          await teamStreakService.checkInAllTeams();
-          print('✅ Also checked in to Coach Max team');
+          // 2. Check in buddy to ALL their teams
+          final buddyResult = await teamStreakService.checkInAllTeamsForUser(buddyId);
+          print('✅ Buddy check-in: Checked in to $buddyResult teams');
           
         } catch (e) {
           print('❌ Auto check-in error: $e');

@@ -411,7 +411,6 @@ class TeamStreakService {
     }
   }
 
-  /// Helper method to check in Coach Max
   Future<void> _checkInCoachMax(String streakId, String today) async {
     try {
       // Check if Coach Max already checked in
@@ -944,6 +943,222 @@ class TeamStreakService {
     } catch (e) {
       if (kDebugMode) print('   ❌ Error checking in user $userId: $e');
       return false;
+    }
+  }
+
+  Future<int> checkInAllTeamsForUser(String userId) async {
+    print('🔄 Checking in user $userId to all their teams...');
+    
+    int checkedInCount = 0;
+    int skippedNoStreak = 0;
+    int skippedAlreadyCheckedIn = 0;
+    
+    try {
+      // Use database function to get ALL team IDs for this user (bypasses RLS)
+      final teamIdsResponse = await _supabase
+          .rpc('get_user_team_ids', params: {'target_user_id': userId});
+      
+      final List<dynamic> teamIds = teamIdsResponse as List<dynamic>;
+      print('   📊 Found ${teamIds.length} teams for user (via RPC)');
+      
+      if (teamIds.isEmpty) {
+        print('   ⚠️ No teams found for user');
+        return 0;
+      }
+      
+      // Get today's date
+      final now = DateTime.now();
+      final todayStr = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
+      
+      // Process each team
+      for (final teamData in teamIds) {
+        final teamId = teamData['team_id'] as String;
+        
+        try {
+          // Get team info
+          final teamResponse = await _supabase
+              .from('buddy_teams')
+              .select('team_name')
+              .eq('id', teamId)
+              .maybeSingle();
+          
+          final teamName = teamResponse?['team_name'] ?? 'Unknown Team';
+          print('   🔍 Processing team: $teamName ($teamId)');
+          
+          // Get the active streak for this team
+          final streakResponse = await _supabase
+              .from('team_streaks')
+              .select('id, current_streak')
+              .eq('team_id', teamId)
+              .eq('is_active', true)
+              .maybeSingle();
+          
+          if (streakResponse == null) {
+            print('      ⏭️ Skipped (no active streak)');
+            skippedNoStreak++;
+            continue;
+          }
+          
+          final streakId = streakResponse['id'] as String;
+          
+          // Check if user already checked in today
+          // ✅ FIX: Use 'team_streak_id' not 'streak_id'
+          final existingCheckin = await _supabase
+              .from('daily_team_checkins')
+              .select('id')
+              .eq('team_streak_id', streakId)  // ← FIXED
+              .eq('user_id', userId)
+              .eq('check_in_date', todayStr)
+              .maybeSingle();
+          
+          if (existingCheckin != null) {
+            print('      ⏭️ Skipped (already checked in)');
+            skippedAlreadyCheckedIn++;
+            continue;
+          }
+          
+          // Create the check-in
+          // ✅ FIX: Use 'team_streak_id' and add 'check_in_time'
+          await _supabase.from('daily_team_checkins').insert({
+            'team_streak_id': streakId,  // ← FIXED
+            'user_id': userId,
+            'check_in_date': todayStr,
+            'check_in_time': DateTime.now().toUtc().toIso8601String(),  // ← ADDED
+          });
+          
+          print('      ✅ Checked in to $teamName');
+          checkedInCount++;
+          
+          // Check if all team members have checked in and increment streak
+          await _checkTeamStreakAfterBuddyCheckin(teamId, streakId, todayStr);
+          
+        } catch (e) {
+          print('      ❌ Error processing team $teamId: $e');
+        }
+      }
+      
+    } catch (e) {
+      print('   ❌ Error getting teams: $e');
+    }
+    
+    print('✅ User $userId check-in summary:');
+    print('   - Checked in: $checkedInCount');
+    print('   - Skipped (no streak): $skippedNoStreak');
+    print('   - Skipped (already checked in): $skippedAlreadyCheckedIn');
+    
+    return checkedInCount;
+  }
+
+  Future<void> _checkTeamStreakAfterBuddyCheckin(String teamId, String streakId, String todayStr) async {
+    try {
+      // Get team info to check if it's a Coach Max team
+      final teamInfo = await _supabase
+          .from('buddy_teams')
+          .select('is_coach_max_team')
+          .eq('id', teamId)
+          .single();
+      final isCoachMaxTeam = teamInfo['is_coach_max_team'] == true;
+      
+      // Get team members
+      final membersResponse = await _supabase
+          .from('team_members')
+          .select('user_id')
+          .eq('team_id', teamId);
+      
+      final members = membersResponse as List<dynamic>;
+      final allMemberIds = members.map((m) => m['user_id'] as String).toList();
+      
+      // For Coach Max teams, we only count the human member (not Coach Max)
+      // Coach Max teams have exactly 2 members: the user and Coach Max
+      // We just need 1 human to check in
+      final humanMemberCount = isCoachMaxTeam ? 1 : allMemberIds.length;
+      
+      print('      📊 Team has $humanMemberCount human members (isCoachMaxTeam: $isCoachMaxTeam)');
+      
+      // Get today's check-ins for this streak (excluding Coach Max check-ins for count)
+      final checkinsResponse = await _supabase
+          .from('daily_team_checkins')
+          .select('user_id')
+          .eq('team_streak_id', streakId)
+          .eq('check_in_date', todayStr);
+      
+      final checkins = checkinsResponse as List<dynamic>;
+      final checkedInUserIds = checkins.map((c) => c['user_id'] as String).toSet();
+      
+      // For regular teams: all members must check in
+      // For Coach Max teams: just the human needs to check in (Coach Max auto-checks in after)
+      final humanCheckIns = isCoachMaxTeam 
+          ? checkedInUserIds.where((id) => allMemberIds.contains(id)).length
+          : checkedInUserIds.length;
+      
+      print('      📊 Checked in: $humanCheckIns/$humanMemberCount');
+      
+      final allCheckedIn = humanCheckIns >= humanMemberCount;
+      
+      if (allCheckedIn && humanMemberCount > 0) {
+        // Check if streak was already incremented today
+        final streakData = await _supabase
+            .from('team_streaks')
+            .select('current_streak, last_workout_date')
+            .eq('id', streakId)
+            .single();
+        
+        final lastWorkoutDate = streakData['last_workout_date'] as String?;
+        
+        if (lastWorkoutDate == todayStr) {
+          print('      ℹ️ Streak already incremented today');
+          return;
+        }
+        
+        final currentStreak = streakData['current_streak'] as int? ?? 0;
+        
+        await _supabase
+            .from('team_streaks')
+            .update({
+              'current_streak': currentStreak + 1,
+              'last_workout_date': todayStr,
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            })
+            .eq('id', streakId);
+        
+        print('      🎉 All members checked in! Streak: ${currentStreak + 1}');
+        
+        // Auto check-in Coach Max if this is a Coach Max team
+        if (isCoachMaxTeam) {
+          await _checkInCoachMaxForBuddy(streakId, todayStr);
+        }
+      }
+    } catch (e) {
+      print('      ⚠️ Error checking streak: $e');
+    }
+  }
+
+  /// Helper: Check in Coach Max
+  Future<void> _checkInCoachMaxForBuddy(String streakId, String todayStr) async {
+    try {
+      // Use the static coachMaxId constant
+      // ✅ FIX: Use 'team_streak_id' not 'streak_id'
+      final existing = await _supabase
+          .from('daily_team_checkins')
+          .select('id')
+          .eq('team_streak_id', streakId)  // ← FIXED
+          .eq('user_id', coachMaxId)
+          .eq('check_in_date', todayStr)
+          .maybeSingle();
+      
+      if (existing != null) return;
+      
+      // Create check-in
+      await _supabase.from('daily_team_checkins').insert({
+        'team_streak_id': streakId,  // ← FIXED
+        'user_id': coachMaxId,
+        'check_in_date': todayStr,
+        'check_in_time': DateTime.now().toUtc().toIso8601String(),  // ← ADDED
+      });
+      
+      print('      🤖 Coach Max checked in');
+    } catch (e) {
+      print('      ⚠️ Error checking in Coach Max: $e');
     }
   }
 
