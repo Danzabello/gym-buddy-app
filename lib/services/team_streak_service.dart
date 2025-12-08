@@ -556,20 +556,25 @@ class TeamStreakService {
       int newStreak = currentStreak;
       int newLongest = longestStreak;
 
-      if (lastWorkoutDate == null) {
-        // First workout
+      if (lastWorkoutDate == null || lastWorkoutDate == today) {
+        // ✅ CASE 1: First workout ever OR already updated today
+        if (lastWorkoutDate == today && currentStreak > 0) {
+          // Already incremented today, don't double-increment
+          // BUT: if currentStreak is 0, we should still increment (fresh start)
+          if (kDebugMode) print('ℹ️ Streak already incremented today');
+          return;
+        }
+        // First workout ever OR restarting from 0
         newStreak = 1;
-        newLongest = 1;
-      } else {
+        newLongest = currentStreak > 0 ? longestStreak : 1;
+        if (kDebugMode) print('🎉 ${currentStreak == 0 ? "Starting fresh from 0" : "First workout"} - Streak: 1');
+      }else {
         final lastDate = DateTime.parse(lastWorkoutDate);
         final todayDate = DateTime.parse(today);
         final daysDifference = todayDate.difference(lastDate).inDays;
 
-        if (daysDifference == 0) {
-          // Already counted today
-          return;
-        } else if (daysDifference == 1) {
-          // ✅ CONSECUTIVE DAY - CHECK BREAK DAY LOGIC
+        if (daysDifference == 1) {
+          // ✅ CASE 2: CONSECUTIVE DAY - CHECK BREAK DAY LOGIC
           // Get today's check-ins
           final checkInsResponse = await _supabase
               .from('daily_team_checkins')
@@ -612,42 +617,56 @@ class TeamStreakService {
             if (kDebugMode) print('😴 Everyone on break - streak stays at $currentStreak');
           }
         } else if (daysDifference > 1) {
-          // ❌ MORE THAN 1 DAY GAP - CHECK IF YESTERDAY WAS ALL BREAK DAYS
-          // We need to check if the gap is acceptable due to break days
-          bool gapIsValid = true;
+          // ✅ CASE 3: MORE THAN 1 DAY GAP - CHECK IF GAP IS FILLED WITH BREAK DAYS
+          if (kDebugMode) print('⏰ Gap detected: $daysDifference days since last workout');
           
-          // Check each day in the gap
-          for (int i = 1; i < daysDifference; i++) {
-            final checkDate = lastDate.add(Duration(days: i));
-            final checkDateStr = DateTime(checkDate.year, checkDate.month, checkDate.day)
-                .toIso8601String()
-                .split('T')[0];
-            
-            // Get break day status for that day
-            final breakStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, checkDateStr);
-            
-            // If everyone was on break that day, the gap is valid
-            final everyoneOnBreak = memberIds.every((userId) => breakStatus[userId] ?? false);
-            
-            if (!everyoneOnBreak) {
-              // Someone wasn't on break but didn't check in - streak broken
-              gapIsValid = false;
-              break;
-            }
-          }
-          
-          if (gapIsValid) {
-            // Gap was all break days - treat as consecutive
-            newStreak = currentStreak + 1;
-            if (newStreak > longestStreak) {
-              newLongest = newStreak;
-            }
-            if (kDebugMode) print('🔥 Gap filled by break days - streak continues!');
-          } else {
-            // Streak broken - reset to 1
+          // ✅ FIX: If current streak is already 0, don't bother checking the gap
+          // Just start fresh at 1
+          if (currentStreak == 0) {
             newStreak = 1;
-            if (kDebugMode) print('💔 Streak broken - resetting to 1');
+            newLongest = longestStreak > 0 ? longestStreak : 1;
+            if (kDebugMode) print('🆕 Starting fresh from 0 - Streak: 1');
+          } else {
+            // Check if the gap is filled with break days
+            bool gapIsValid = true;
+            
+            // Check each day in the gap
+            for (int i = 1; i < daysDifference; i++) {
+              final checkDate = lastDate.add(Duration(days: i));
+              final checkDateStr = DateTime(checkDate.year, checkDate.month, checkDate.day)
+                  .toIso8601String()
+                  .split('T')[0];
+              
+              // Get break day status for that day
+              final breakStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, checkDateStr);
+              
+              // If everyone was on break that day, the gap is valid
+              final everyoneOnBreak = memberIds.every((userId) => breakStatus[userId] ?? false);
+              
+              if (!everyoneOnBreak) {
+                // Someone wasn't on break but didn't check in - streak broken
+                gapIsValid = false;
+                break;
+              }
+            }
+            
+            if (gapIsValid) {
+              // Gap was all break days - treat as consecutive
+              newStreak = currentStreak + 1;
+              if (newStreak > longestStreak) {
+                newLongest = newStreak;
+              }
+              if (kDebugMode) print('🔥 Gap filled by break days - streak continues!');
+            } else {
+              // Streak broken - reset to 1
+              newStreak = 1;
+              if (kDebugMode) print('💔 Streak broken - resetting to 1');
+            }
           }
+        } else if (daysDifference == 0) {
+          // Same day as last workout - should not happen, but handle it
+          if (kDebugMode) print('ℹ️ Already counted today, skipping');
+          return;
         }
       }
 
@@ -665,7 +684,7 @@ class TeamStreakService {
     } catch (e) {
       if (kDebugMode) print('❌ Error incrementing streak: $e');
     }
-  }
+  }  
 
   // ============================================
   // CHECK IF USER HAS CHECKED IN TODAY

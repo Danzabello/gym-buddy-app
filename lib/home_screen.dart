@@ -2973,6 +2973,8 @@ class _SchedulePageState extends State<SchedulePage> {
   }
 
   Future<void> loadData() async {
+    if (!mounted) return; // ✅ CHECK MOUNTED at start
+    
     setState(() {
       _isLoading = true;
     });
@@ -2980,6 +2982,8 @@ class _SchedulePageState extends State<SchedulePage> {
     final workouts = await _workoutService.getUpcomingWorkouts();
     final friends = await _friendService.getFriends();
 
+    if (!mounted) return; // ✅ CHECK MOUNTED before setState
+    
     setState(() {
       // ✅ Extra safety filter - remove completed/cancelled on client side too
       _upcomingWorkouts = workouts.where((w) => 
@@ -3003,6 +3007,7 @@ class _SchedulePageState extends State<SchedulePage> {
   Future<void> _startWorkout(String workoutId) async {
     final success = await _workoutService.startWorkout(workoutId);
     if (success) {
+      if (!mounted) return; // ✅ CHECK MOUNTED
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Workout started! Timer is running.'),
@@ -3019,6 +3024,7 @@ class _SchedulePageState extends State<SchedulePage> {
     
     // Check if this workout has a buddy and if they've accepted
     if (workout['buddy_id'] != null && workout['buddy_status'] != 'accepted') {
+      if (!mounted) return; // ✅ CHECK MOUNTED
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Your buddy needs to accept the workout invitation first!'),
@@ -3059,10 +3065,16 @@ class _SchedulePageState extends State<SchedulePage> {
         }
       }
       
+      // ✅ CHECK MOUNTED before setState
+      if (!mounted) return;
+      
       // ✅ Immediately remove from local list for instant UI feedback
       setState(() {
         _upcomingWorkouts.removeWhere((w) => w['id'] == workoutId);
       });
+      
+      // ✅ CHECK MOUNTED before showing celebration
+      if (!mounted) return;
       
       // 🎉 Show celebration overlay!
       WorkoutCelebration.show(
@@ -3090,13 +3102,22 @@ class _SchedulePageState extends State<SchedulePage> {
         }
       }
       
+      // ✅ CHECK MOUNTED before refreshing
+      if (!mounted) return;
+      
       // ✅ Then refresh from database to sync
       await Future.delayed(const Duration(milliseconds: 300));
+      
+      // ✅ CHECK MOUNTED one more time before loadData
+      if (!mounted) return;
+      
       loadData();
     }
   }
 
   Future<void> _cancelWorkout(String workoutId) async {
+    if (!mounted) return; // ✅ CHECK MOUNTED
+    
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -3119,6 +3140,7 @@ class _SchedulePageState extends State<SchedulePage> {
     if (confirmed == true) {
       final success = await _workoutService.cancelWorkout(workoutId);
       if (success) {
+        if (!mounted) return; // ✅ CHECK MOUNTED
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Workout cancelled'),
@@ -3133,6 +3155,7 @@ class _SchedulePageState extends State<SchedulePage> {
   Future<void> _acceptInvitation(String workoutId) async {
     final success = await _workoutService.acceptWorkoutInvitation(workoutId);
     if (success) {
+      if (!mounted) return; // ✅ CHECK MOUNTED
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Workout invitation accepted!'),
@@ -3146,6 +3169,7 @@ class _SchedulePageState extends State<SchedulePage> {
   Future<void> _declineInvitation(String workoutId) async {
     final success = await _workoutService.declineWorkoutInvitation(workoutId);
     if (success) {
+      if (!mounted) return; // ✅ CHECK MOUNTED
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Workout invitation declined'),
