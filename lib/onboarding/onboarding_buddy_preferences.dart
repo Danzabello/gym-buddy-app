@@ -41,18 +41,19 @@ class _OnboardingBuddyPreferencesState extends State<OnboardingBuddyPreferences>
         throw Exception('No user logged in');
       }
 
-      // Save all user data to Supabase
+      // ✅ CRITICAL: Save all user data + mark onboarding as complete
       await Supabase.instance.client.from('user_profiles').upsert({
         'id': user.id,
         'display_name': widget.userData['display_name'],
         'age': widget.userData['age'],
         'gender': widget.userData['gender'],
-        'avatar_id': widget.userData['avatar_id'],  // ← ADD THIS LINE
+        'avatar_id': widget.userData['avatar_id'],
         'fitness_goals': widget.userData['fitness_goals'],
         'workout_days_per_week': widget.userData['workout_days_per_week'],
         'preferred_workout_time': widget.userData['preferred_workout_time'],
         'fitness_level': widget.userData['fitness_level'],
         'looking_for_buddy': _lookingForBuddy,
+        'onboarding_completed': true,  // ✅ THIS IS THE KEY LINE
         'updated_at': DateTime.now().toIso8601String(),
       });
 

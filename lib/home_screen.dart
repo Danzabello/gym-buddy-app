@@ -140,6 +140,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   int _achievementCount = 0;
 
   late ConfettiController _confettiController;
+  late ConfettiController _confettiControllerRight;
   int _lastCelebratedStreak = 0;
   
   // NEW: For streak navigation
@@ -164,7 +165,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     
     // ✅ Create controller ONCE
     _carouselController = PageController(
-      viewportFraction: 0.35,
+      viewportFraction: 0.40,
       initialPage: 1,
     );
     
@@ -183,6 +184,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _updateCountdown();
     Future.delayed(const Duration(minutes: 1), _updateCountdown);
     _confettiController = ConfettiController(duration: const Duration(seconds: 3));
+    _confettiControllerRight = ConfettiController(duration: const Duration(seconds: 3));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupAppLifecycleListener();
     });
@@ -208,6 +210,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   void dispose() {
     _carouselController.dispose();
     _confettiController.dispose();
+    _confettiControllerRight.dispose();
     _carouselEntranceController.dispose();
     _appLifecycleListener?.dispose();
     super.dispose();
@@ -283,7 +286,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             
             // ✅ INFINITE CAROUSEL - Wraps around in a circle
             SizedBox(
-              height: 200,
+              height: 220,
               child: AnimatedBuilder(
                 animation: _carouselEntranceAnimation,
                 builder: (context, child) {
@@ -409,8 +412,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
-        width: isFocused ? 140 : 75,
-        height: isFocused ? 140 : 75,
+        width: isFocused ? 120 : 65,
+        height: isFocused ? 120 : 65,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: LinearGradient(
@@ -437,7 +440,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           children: [
             Icon(
               Icons.person_add_rounded,
-              size: isFocused ? 50 : 30,
+              size: isFocused ? 40 : 25,
               color: Colors.blue[600],
             ),
             if (isFocused) ...[
@@ -542,8 +545,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     if (isCoachMax) {
       return AnimatedContainer(
         duration: const Duration(milliseconds: 300),
-        width: isFocused ? 140 : 75,
-        height: isFocused ? 140 : 75,
+        width: isFocused ? 120 : 65,
+        height: isFocused ? 120 : 65,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: LinearGradient(
@@ -568,7 +571,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         child: Center(
           child: Text(
             '🤖',
-            style: TextStyle(fontSize: isFocused ? 60 : 35),
+            style: TextStyle(fontSize: isFocused ? 50 : 30),
           ),
         ),
       );
@@ -583,8 +586,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      width: isFocused ? 140 : 75,
-      height: isFocused ? 140 : 75,
+      width: isFocused ? 120 : 65,
+      height: isFocused ? 120 : 65,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
@@ -609,10 +612,315 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       child: ClipOval(
         child: UserAvatar(
           avatarId: friendMember.avatarId,
-          size: isFocused ? 140 : 75,
+          size: isFocused ? 120 : 65,
         ),
       ),
     );
+  }
+  
+  Widget _buildActionButtons() {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),  // ← Max width, centered
+        child: Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                // ✅ TOP: CHECK IN BUTTON
+                _buildCheckInButton(),
+                
+                const SizedBox(height: 16),
+                
+                // ✅ BOTTOM: TAKE A BREAK BUTTON
+                _buildTakeBreakButton(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCheckInButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _hasCheckedInToday || _isCheckingIn ? null : _checkIn,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _hasCheckedInToday 
+              ? Colors.green[600]  // ← Green when checked in
+              : Colors.orange[600],
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 4,
+          disabledBackgroundColor: _hasCheckedInToday 
+              ? Colors.green[600]  // ← Stay green when disabled
+              : Colors.grey[400],
+        ),
+        child: _isCheckingIn
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: Colors.white,
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    _hasCheckedInToday ? Icons.check_circle : Icons.local_fire_department,
+                    size: 28,
+                    color: Colors.white,  // ← Always white icon
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    _hasCheckedInToday ? 'Checked In! ✓' : 'Check In',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,  // ← Always white text
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildTakeBreakButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: _hasCheckedInToday  // ✅ Disable if already checked in
+            ? null 
+            : () => _showTakeBreakDialog(),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          side: BorderSide(
+            color: _hasCheckedInToday ? Colors.grey[300]! : Colors.blue[600]!,
+            width: 2,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.bedtime,
+              size: 24,
+              color: _hasCheckedInToday ? Colors.grey[400] : Colors.blue[700],
+            ),
+            const SizedBox(width: 12),
+            Text(
+              _hasCheckedInToday ? 'Already Checked In' : 'Take a Break',  // ✅ Change text
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: _hasCheckedInToday ? Colors.grey[400] : Colors.blue[700],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showTakeBreakDialog() async {
+    // ✅ NEW: Can't take break if already checked in
+    if (_hasCheckedInToday) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You already checked in today! Can\'t use a break day.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    if (currentUserId == null) return;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
+
+    // Check if already took break today
+    final existingBreak = await Supabase.instance.client
+        .from('break_day_usage')  // ✅ FIXED: Changed from 'break_days'
+        .select()
+        .eq('user_id', currentUserId)
+        .eq('break_date', today)
+        .maybeSingle();
+
+    if (existingBreak != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You already took a break today!'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Get weekly plan and count breaks used this week
+    final userProfile = await Supabase.instance.client
+        .from('user_profiles')
+        .select('current_weekly_goal')
+        .eq('id', currentUserId)
+        .single();
+
+    final weeklyBreakGoal = userProfile['current_weekly_goal'] ?? 2;
+
+
+
+    // Count breaks taken this week
+    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+    final startOfWeekStr = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day)
+        .toIso8601String()
+        .split('T')[0];
+
+    final breaksThisWeek = await Supabase.instance.client
+        .from('break_day_usage')  // ✅ FIXED: Changed from 'break_days'
+        .select()
+        .eq('user_id', currentUserId)
+        .gte('break_date', startOfWeekStr);
+
+    final breakDaysLeft = weeklyBreakGoal - breaksThisWeek.length;
+
+    if (!mounted) return;
+
+    // Show dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue[100],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.bedtime,
+                color: Colors.blue[700],
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text('Take a Break Day?'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: breakDaysLeft > 0 ? Colors.blue[50] : Colors.red[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: breakDaysLeft > 0 ? Colors.blue[200]! : Colors.red[200]!,
+                  width: 2,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    '$breakDaysLeft',
+                    style: TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.bold,
+                      color: breakDaysLeft > 0 ? Colors.blue[700] : Colors.red[700],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      'break day${breakDaysLeft == 1 ? '' : 's'} left\nuntil next week',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: breakDaysLeft > 0 ? Colors.blue[900] : Colors.red[900],
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              breakDaysLeft > 0
+                  ? 'Taking a break counts as your workout for today without breaking your streak.'
+                  : 'You\'ve used all your break days this week. Check back Monday!',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[700],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: breakDaysLeft > 0 
+                ? () => Navigator.pop(context, true)
+                : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue[700],
+              disabledBackgroundColor: Colors.grey[300],
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: const Text('Yes, Take Break'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      // Take the break day
+      await Supabase.instance.client.from('break_day_usage').insert({  // ✅ FIXED: Changed from 'break_days'
+        'user_id': currentUserId,
+        'break_date': today,
+      });
+      
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.bedtime, color: Colors.white),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text('Break day taken! Your streak is safe 💤'),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.blue[700],
+        ),
+      );
+      
+      _loadStreakData();
+    }
   }
 
   Widget _buildStreakInfo(TeamStreak streak) {
@@ -692,181 +1000,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildThreeCardLayout() {
-    final currentStreak = _allStreaks.isNotEmpty 
-        ? _allStreaks[_currentCarouselIndex.clamp(0, _allStreaks.length - 1)] 
-        : null;
-    
-    return Row(
-      children: [
-        // CARD 1: Coach Max Quote
-        Expanded(
-          child: _buildCoachMaxCard(currentStreak),
-        ),
-        const SizedBox(width: 12),
-        
-        // CARD 2: Check In Button
-        Expanded(
-          child: _buildCheckInCard(),
-        ),
-        const SizedBox(width: 12),
-        
-        // CARD 3: Stats
-        Expanded(
-          child: _buildStatsCard(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCoachMaxCard(TeamStreak? streak) {
-    String quote = "Let's crush today! 💪";
-    
-    if (streak != null) {
-      if (streak.isCompleteToday) {
-        quote = "Both checked in!\nYou're unstoppable! 🔥";
-      } else if (streak.currentStreak >= 7) {
-        quote = "${streak.currentStreak} days!\nKeep it going! 🚀";
-      }
-    }
-    
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.blue[50]!, Colors.purple[50]!],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              '🤖',
-              style: TextStyle(fontSize: 32),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              quote,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[800],
-                height: 1.3,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCheckInCard() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: _hasCheckedInToday 
-                ? [Colors.green[100]!, Colors.green[200]!]
-                : [Colors.orange[100]!, Colors.orange[200]!],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              _hasCheckedInToday ? Icons.check_circle : Icons.local_fire_department,
-              size: 40,
-              color: _hasCheckedInToday ? Colors.green[700] : Colors.orange[700],
-            ),
-            const SizedBox(height: 8),
-            ElevatedButton(
-              onPressed: _hasCheckedInToday || _isCheckingIn ? null : _checkIn,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _hasCheckedInToday ? Colors.green : Colors.orange[700],
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: _isCheckingIn
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Text(
-                      _hasCheckedInToday ? 'Done! ✓' : 'Check In',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatsCard() {
-    final checkedInStreaks = _allStreaks.where((s) => s.isCompleteToday).length;
-    
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.white, Colors.blue[50]!],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              '$checkedInStreaks/${_allStreaks.length}',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue[700],
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Complete',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1396,16 +1529,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                         
                         const SizedBox(height: 24),
 
-                        BreakDaySection(
-                          onBreakTaken: () {
-                            _loadStreakData();
-                          },
-                        ),
-
-                        const SizedBox(height: 24),
-                        
-                        // THREE CARD LAYOUT
-                        _buildThreeCardLayout(),
+                        _buildActionButtons(),
                         
                         const SizedBox(height: 24),
                         
@@ -1419,12 +1543,34 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 ),
         ),
         Align(
-          alignment: Alignment.topCenter,
+          alignment: Alignment.centerLeft,
           child: ConfettiWidget(
             confettiController: _confettiController,
-            blastDirection: 3.14 / 2,
+            blastDirection: 0,  // ← Shoots to the right
             emissionFrequency: 0.05,
-            numberOfParticles: 50,
+            numberOfParticles: 30,
+            maxBlastForce: 100,
+            minBlastForce: 80,
+            gravity: 0.3,
+            colors: const [
+              Colors.green,
+              Colors.blue,
+              Colors.pink,
+              Colors.orange,
+              Colors.purple,
+              Colors.yellow,
+            ],
+          ),
+        ),
+
+        // ✅ RIGHT SIDE CONFETTI
+        Align(
+          alignment: Alignment.centerRight,
+          child: ConfettiWidget(
+            confettiController: _confettiControllerRight,
+            blastDirection: 3.14,  // ← Shoots to the left
+            emissionFrequency: 0.05,
+            numberOfParticles: 30,
             maxBlastForce: 100,
             minBlastForce: 80,
             gravity: 0.3,
@@ -2511,6 +2657,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     if (milestones.contains(currentStreak) && currentStreak > _lastCelebratedStreak) {
       _lastCelebratedStreak = currentStreak;
       _confettiController.play();
+      _confettiControllerRight.play();
       _showMilestoneDialog(currentStreak);
     }
   }

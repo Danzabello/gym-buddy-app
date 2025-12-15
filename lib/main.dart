@@ -44,24 +44,49 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final CoachMaxService _coachMaxService = CoachMaxService();
   bool _isInitializing = true;
+  bool _hasCompletedOnboarding = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeCoachMax();
+    _initializeApp();
   }
 
-  Future<void> _initializeCoachMax() async {
+  Future<void> _initializeApp() async {
     final user = Supabase.instance.client.auth.currentUser;
     
     if (user != null) {
-      // User is logged in - schedule Coach Max check-in if needed
+      // ✅ CHECK ONBOARDING STATUS
+      final onboardingStatus = await _checkOnboardingStatus(user.id);
+      
+      // Schedule Coach Max check-in if needed
       await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
+      
+      setState(() {
+        _hasCompletedOnboarding = onboardingStatus;
+        _isInitializing = false;
+      });
+    } else {
+      setState(() {
+        _isInitializing = false;
+      });
     }
-    
-    setState(() {
-      _isInitializing = false;
-    });
+  }
+
+  // ✅ NEW METHOD: Check if user completed onboarding
+  Future<bool> _checkOnboardingStatus(String userId) async {
+    try {
+      final response = await Supabase.instance.client
+          .from('user_profiles')
+          .select('onboarding_completed')
+          .eq('id', userId)
+          .single();
+      
+      return response['onboarding_completed'] == true;
+    } catch (e) {
+      print('❌ Error checking onboarding: $e');
+      return false; // If error, assume not completed
+    }
   }
 
   @override
@@ -74,13 +99,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
 
-    // Check if user is logged in
     final user = Supabase.instance.client.auth.currentUser;
     
-    if (user != null) {
-      return const HomeScreen();
-    } else {
+    // ✅ ROUTING LOGIC:
+    if (user == null) {
+      // Not logged in → Login screen
       return const LoginScreen();
+    } else if (!_hasCompletedOnboarding) {
+      // Logged in but onboarding incomplete → Force back to signup/onboarding
+      return const SignUpScreen(); // This will detect existing user and resume onboarding
+    } else {
+      // Logged in and onboarding complete → Home screen
+      return const HomeScreen();
     }
   }
 }
@@ -96,7 +126,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final AuthService _authService = AuthService();
-  final CoachMaxService _coachMaxService = CoachMaxService(); // NEW
+  final CoachMaxService _coachMaxService = CoachMaxService();
   bool _isPasswordVisible = false;
   bool _isLoading = false;
 
@@ -113,14 +143,12 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 60),
-                // Logo/Icon
                 Icon(
                   Icons.fitness_center,
                   size: 80,
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 16),
-                // App Name
                 const Text(
                   'GYM BUDDY',
                   textAlign: TextAlign.center,
@@ -140,7 +168,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 48),
-                // Email Field
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -156,7 +183,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Password Field
                 TextField(
                   controller: _passwordController,
                   obscureText: !_isPasswordVisible,
@@ -184,7 +210,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                // Login Button
                 ElevatedButton(
                   onPressed: _isLoading ? null : () async {
                     setState(() {
@@ -196,25 +221,44 @@ class _LoginScreenState extends State<LoginScreen> {
                       password: _passwordController.text,
                     );
                     
-                    setState(() {
-                      _isLoading = false;
-                    });
-                    
                     if (error == null) {
-                      // Success! Schedule Coach Max check-in
                       final user = Supabase.instance.client.auth.currentUser;
                       if (user != null) {
+                        // ✅ CHECK ONBOARDING STATUS
+                        final onboardingComplete = await _checkOnboardingStatus(user.id);
+                        
+                        // Schedule Coach Max
                         await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
+                        
+                        if (!mounted) return;
+                        
+                        setState(() {
+                          _isLoading = false;
+                        });
+                        
+                        // ✅ NAVIGATE BASED ON ONBOARDING STATUS
+                        if (onboardingComplete) {
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(
+                              builder: (context) => const HomeScreen(),
+                            ),
+                          );
+                        } else {
+                          // Resume onboarding
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(
+                              builder: (context) => const SignUpScreen(),
+                            ),
+                          );
+                        }
                       }
-                      
-                      // Navigate to home screen
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(
-                          builder: (context) => const HomeScreen(),
-                        ),
-                      );
                     } else {
-                      // Show error message
+                      setState(() {
+                        _isLoading = false;
+                      });
+                      
+                      if (!mounted) return;
+                      
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Login failed: $error'),
@@ -250,7 +294,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                 ),
                 const SizedBox(height: 16),
-                // Sign Up Link
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -278,5 +321,28 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+
+  // ✅ HELPER METHOD
+  Future<bool> _checkOnboardingStatus(String userId) async {
+    try {
+      final response = await Supabase.instance.client
+          .from('user_profiles')
+          .select('onboarding_completed')
+          .eq('id', userId)
+          .single();
+      
+      return response['onboarding_completed'] == true;
+    } catch (e) {
+      print('❌ Error checking onboarding: $e');
+      return false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 }

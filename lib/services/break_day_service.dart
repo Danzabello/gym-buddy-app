@@ -16,11 +16,17 @@ class BreakDayService {
     
     print('🗓️ Setting weekly break plan: $maxBreakDays break days for week starting ${weekStart.toIso8601String()}');
 
+    // ✅ Write to weekly_break_plans table
     await _supabase.from('weekly_break_plans').upsert({
       'user_id': userId,
       'week_start_date': weekStart.toIso8601String().split('T')[0],
       'max_break_days': maxBreakDays,
     });
+
+    // ✅ ALSO write to user_profiles (for the dialog to read)
+    await _supabase.from('user_profiles').update({
+      'current_weekly_goal': maxBreakDays,
+    }).eq('id', userId);
 
     print('✅ Weekly break plan set successfully');
   }
