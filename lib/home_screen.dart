@@ -117,6 +117,70 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
+enum StreakSortMode {
+  highestCurrent,    // ⚡ Highest active streak (default)
+  mostWorkouts,      // 💪 Most workouts together
+  bestAllTime,       // 🏆 Longest streak ever
+  mostRecent,        // 🕐 Most recent workout
+  alphabetical,      // 📝 A-Z by name
+  favorites,         // ⭐ User favorites (future)
+  custom,  // ✅ NEW!
+}
+
+// ✅ ADD EXTENSION HERE - OUTSIDE THE CLASS!
+extension StreakSortModeExtension on StreakSortMode {
+  String get displayName {
+    switch (this) {
+      case StreakSortMode.highestCurrent:
+        return 'Highest Streak';
+      case StreakSortMode.mostWorkouts:
+        return 'Most Workouts';
+      case StreakSortMode.bestAllTime:
+        return 'Best All-Time';
+      case StreakSortMode.mostRecent:
+        return 'Most Recent';
+      case StreakSortMode.alphabetical:
+        return 'Alphabetical';
+      case StreakSortMode.favorites:
+        return 'Favorites';
+      case StreakSortMode.custom: 
+        return 'Custom';  // ✅ NEW!
+    }
+  }
+  
+  String get emoji {
+    switch (this) {
+      case StreakSortMode.highestCurrent:
+        return '⚡';
+      case StreakSortMode.mostWorkouts:
+        return '💪';
+      case StreakSortMode.bestAllTime:
+        return '🏆';
+      case StreakSortMode.mostRecent:
+        return '🕐';
+      case StreakSortMode.alphabetical:
+        return '📝';
+      case StreakSortMode.favorites:
+        return '⭐';
+      case StreakSortMode.custom: 
+        return '👤';  // ✅ NEW!
+
+    }
+  }
+  
+  String get description {
+    switch (this) {
+      case StreakSortMode.highestCurrent: return 'View by current streak';
+      case StreakSortMode.mostWorkouts: return 'Most active teammates';
+      case StreakSortMode.bestAllTime: return 'All-time champions';
+      case StreakSortMode.mostRecent: return 'Recently active';
+      case StreakSortMode.alphabetical: return 'A to Z';
+      case StreakSortMode.favorites: return 'Your favorites';
+      case StreakSortMode.custom: return 'Manual selection';  // ✅ NEW!
+    }
+  }
+}
+
 class _DashboardPageState extends State<DashboardPage> with TickerProviderStateMixin {
   final SupabaseClient _supabase = Supabase.instance.client;
   final TeamStreakService _teamStreakService = TeamStreakService();
@@ -155,6 +219,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   bool _hasAnimatedEntrance = false;
 
   AppLifecycleListener? _appLifecycleListener;
+  StreakSortMode _streakSortMode = StreakSortMode.highestCurrent;
+
 
   @override
   void initState() {
@@ -222,47 +288,95 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       return _buildNoStreaksCard();
     }
 
-    // ✅ INFINITE CAROUSEL: Always shows exactly 3 slots that wrap around
-    final displayItems = <dynamic>[null, null, null]; // 3 slots: [0, 1, 2]
+  // ✅ INFINITE CAROUSEL: Always shows exactly 3 slots that wrap around
+  final displayItems = <dynamic>[null, null, null]; // 3 slots: [0, 1, 2]
+
+  // Find Coach Max and friends
+  final coachMaxStreak = _allStreaks.firstWhere(
+    (s) => s.isCoachMaxTeam,
+    orElse: () => _allStreaks.first,
+  );
+
+  // Get friends and sort them by selected mode
+  final friendStreaks = _sortStreaks(_allStreaks, _streakSortMode);
+
+  // ✅ BUILD CAROUSEL ITEMS (in display order)
+  if (friendStreaks.isEmpty) {
+    // NO FRIENDS: [Add] [Coach Max] [Add]
+    displayItems[0] = null;
+    displayItems[1] = coachMaxStreak;
+    displayItems[2] = null;
     
-    // Find Coach Max and friends
-    final coachMaxStreak = _allStreaks.firstWhere(
-      (s) => s.isCoachMaxTeam,
-      orElse: () => _allStreaks.first,
-    );
+  } else if (friendStreaks.length == 1) {
+    // 1 FRIEND: Compare friend vs Coach Max for center
+    final friend = friendStreaks[0];
     
-    // Get friends and sort by HIGHEST streak first
-    final friendStreaks = _allStreaks
-        .where((s) => !s.isCoachMaxTeam)
-        .toList()
-        ..sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
+    bool friendIsHigher;
+    if (_streakSortMode == StreakSortMode.alphabetical) {
+      friendIsHigher = friend.teamName.toLowerCase().compareTo('coach max') < 0;
+    } else {
+      friendIsHigher = friend.currentStreak > coachMaxStreak.currentStreak;
+    }
     
-    // ✅ BUILD CAROUSEL ITEMS (in display order)
-    if (friendStreaks.isEmpty) {
-      // NO FRIENDS: [Add] [Coach Max] [Add]
+    if (friendIsHigher) {
+      displayItems[0] = null;
+      displayItems[1] = friend;
+      displayItems[2] = coachMaxStreak;
+    } else {
       displayItems[0] = null;
       displayItems[1] = coachMaxStreak;
-      displayItems[2] = null;
-      
-    } else if (friendStreaks.length == 1) {
-      // 1 FRIEND: [Add] [Friend] [Coach Max]
-      // This way: Friend in center by default, scrollable to Coach Max or Add Friend
-      displayItems[0] = null; // Add Friend
-      displayItems[1] = friendStreaks[0]; // Highest friend in center
-      displayItems[2] = coachMaxStreak;
-      
-    } else {
-      // 2+ FRIENDS: [Coach Max] [Highest Friend] [2nd Highest Friend]
-      displayItems[0] = coachMaxStreak;
-      displayItems[1] = friendStreaks[0]; // Highest friend in center
-      displayItems[2] = friendStreaks.length > 1 ? friendStreaks[1] : null;
+      displayItems[2] = friend;
     }
+    
+  } else {
+    // 2+ FRIENDS: Use sorted list directly!
+    // friendStreaks is ALREADY in correct order from _sortStreaks
+    
+    // Check if first friend beats Coach Max for #1 spot
+    bool friendIsHigher;
+    if (_streakSortMode == StreakSortMode.alphabetical) {
+      friendIsHigher = friendStreaks[0].teamName.toLowerCase().compareTo('coach max') < 0;
+    } else {
+      // For numeric modes, use > for comparison
+      final friendValue = friendStreaks[0].currentStreak;
+      final coachValue = coachMaxStreak.currentStreak;
+      
+      if (friendValue == coachValue) {
+        // ✅ TIE! Use alphabetical as tiebreaker
+        friendIsHigher = friendStreaks[0].teamName.toLowerCase().compareTo('coach max') < 0;
+        print('🤝 TIE at $friendValue! Tiebreaker: ${friendStreaks[0].teamName} vs Coach Max → ${friendIsHigher ? "Friend wins" : "Coach Max wins"}');
+      } else {
+        friendIsHigher = friendValue > coachValue;
+      }
+    }
+    
+    if (friendIsHigher) {
+      // Friend #1 in center
+      displayItems[0] = friendStreaks.length > 2 ? friendStreaks[2] : coachMaxStreak;
+      displayItems[1] = friendStreaks[0];  // #1 friend
+      displayItems[2] = friendStreaks.length > 1 ? friendStreaks[1] : coachMaxStreak;
+    } else {
+      // Coach Max #1 in center
+      displayItems[0] = friendStreaks.length > 1 ? friendStreaks[1] : null;
+      displayItems[1] = coachMaxStreak;
+      displayItems[2] = friendStreaks[0];  // Top friend on right
+    }
+  }
 
+  // ✅ Debug output
+  print('📊 DISPLAY ITEMS:');
+  print('  [0] Left: ${displayItems[0] is TeamStreak ? (displayItems[0] as TeamStreak).teamName : 'Add Buddy'}');
+  print('  [1] Center: ${displayItems[1] is TeamStreak ? (displayItems[1] as TeamStreak).teamName : 'Add Buddy'}');
+  print('  [2] Right: ${displayItems[2] is TeamStreak ? (displayItems[2] as TeamStreak).teamName : 'Add Buddy'}');
+  print('  Current index: $_currentCarouselIndex');
+  print('  Showing: ${displayItems[_currentCarouselIndex] is TeamStreak ? (displayItems[_currentCarouselIndex] as TeamStreak).teamName : 'Add Buddy'}');
+
+    // ✅ MERGED CARD: Carousel + Action Buttons in one!
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [Colors.white, Colors.blue[50]!],
@@ -273,20 +387,63 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         ),
         child: Column(
           children: [
-            Text(
-              'Your Active Streaks (${_allStreaks.length})',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-              ),
+            // ✅ PERFECTLY CENTERED: Equal width on both sides
+            Row(
+              children: [
+                // Left: Three-dot menu (fixed width)
+                SizedBox(
+                  width: 60,  // Fixed width for left side
+                  child: GestureDetector(
+                    onTap: _showSortBottomSheet,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.more_vert,
+                        size: 20,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                ),
+                
+                // Center: Title (takes remaining space)
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      'Your Active Streaks (${_allStreaks.length})',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ),
+                ),
+                
+                // Right: Check-in badge (fixed width)
+                SizedBox(
+                  width: 60,  // Same width as left side
+                  child: displayItems[_currentCarouselIndex] != null
+                      ? Align(
+                          alignment: Alignment.centerRight,
+                          child: _buildCompactCheckInBadge(
+                            displayItems[_currentCarouselIndex] as TeamStreak,
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
             ),
             
             const SizedBox(height: 24),
             
             // ✅ INFINITE CAROUSEL - Wraps around in a circle
             SizedBox(
-              height: 220,
+              height: 200,
               child: AnimatedBuilder(
                 animation: _carouselEntranceAnimation,
                 builder: (context, child) {
@@ -304,15 +461,23 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 child: PageView.builder(
                   controller: _carouselController,
                   onPageChanged: (index) {
-                    setState(() {
-                      _currentCarouselIndex = index % 3; // ✅ Wrap around using modulo
-                    });
-                    HapticFeedback.selectionClick();
+                    final newIndex = index % 3;
+                    
+                    // ✅ If user scrolls away from center, switch to Custom
+                    if (newIndex != 1 && _streakSortMode != StreakSortMode.custom) {
+                      setState(() {
+                        _currentCarouselIndex = newIndex;
+                        _streakSortMode = StreakSortMode.custom;
+                        print('👤 User scrolled away from #1 - switching to Custom mode');
+                      });
+                    } else {
+                      setState(() {
+                        _currentCarouselIndex = newIndex;
+                      });
+                    }
                   },
-                  // ✅ INFINITE SCROLLING: itemCount = null allows infinite scrolling
                   itemCount: null,
                   itemBuilder: (context, index) {
-                    // ✅ Map infinite index to our 3-item array using modulo
                     final displayIndex = index % 3;
                     final item = displayItems[displayIndex];
                     final isFocused = displayIndex == _currentCarouselIndex;
@@ -338,7 +503,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                           child: Center(
                             child: GestureDetector(
                               onTap: () {
-                                // ✅ Scroll to this item's position
                                 _carouselController.animateToPage(
                                   index,
                                   duration: const Duration(milliseconds: 300),
@@ -358,26 +522,139 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ),
             ),
             
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             
-            // NAME DISPLAY
-            Text(
-              _getDisplayName(displayItems[_currentCarouselIndex]),
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: displayItems[_currentCarouselIndex] != null 
-                    ? Colors.black
-                    : Colors.grey[600],
-              ),
+            // ✅ NAME & STREAK COUNT (simplified, no progress bar)
+            Column(
+              children: [
+                Text(
+                  _getDisplayName(displayItems[_currentCarouselIndex]),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: displayItems[_currentCarouselIndex] != null 
+                        ? Colors.black
+                        : Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Just show streak count - removed progress bar
+                if (displayItems[_currentCarouselIndex] != null)
+                  Text(
+                    '${(displayItems[_currentCarouselIndex] as TeamStreak).currentStreak} Day Streak',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                    ),
+                  )
+                else
+                  Text(
+                    '— Day Streak',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[400],
+                    ),
+                  ),
+              ],
             ),
             
-            const SizedBox(height: 12),
+            const SizedBox(height: 24),
             
-            // STREAK INFO
-            displayItems[_currentCarouselIndex] != null
-                ? _buildStreakInfo(displayItems[_currentCarouselIndex] as TeamStreak)
-                : _buildAddFriendInfo(),
+            // ✅ MERGED: Action buttons now part of same card!
+            Column(
+              children: [
+                // CHECK IN BUTTON
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _hasCheckedInToday || _isCheckingIn ? null : _checkIn,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _hasCheckedInToday 
+                          ? Colors.green[600]
+                          : Colors.orange[600],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 4,
+                      disabledBackgroundColor: _hasCheckedInToday 
+                          ? Colors.green[600]
+                          : Colors.grey[400],
+                    ),
+                    child: _isCheckingIn
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                _hasCheckedInToday ? Icons.check_circle : Icons.local_fire_department,
+                                size: 28,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                _hasCheckedInToday ? 'Checked In! ✓' : 'Check In',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // TAKE A BREAK BUTTON
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _hasCheckedInToday ? null : () => _showTakeBreakDialog(),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      side: BorderSide(
+                        color: _hasCheckedInToday ? Colors.grey[300]! : Colors.blue[600]!,
+                        width: 2,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.bedtime,
+                          size: 24,
+                          color: _hasCheckedInToday ? Colors.grey[400] : Colors.blue[700],
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          _hasCheckedInToday ? 'Already Checked In' : 'Take a Break',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: _hasCheckedInToday ? Colors.grey[400] : Colors.blue[700],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -613,32 +890,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         child: UserAvatar(
           avatarId: friendMember.avatarId,
           size: isFocused ? 120 : 65,
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildActionButtons() {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 500),  // ← Max width, centered
-        child: Card(
-          elevation: 4,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                // ✅ TOP: CHECK IN BUTTON
-                _buildCheckInButton(),
-                
-                const SizedBox(height: 16),
-                
-                // ✅ BOTTOM: TAKE A BREAK BUTTON
-                _buildTakeBreakButton(),
-              ],
-            ),
-          ),
         ),
       ),
     );
@@ -1003,6 +1254,50 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
+  Widget _buildCompactCheckInBadge(TeamStreak streak) {
+    final checkedInCount = streak.todayCheckIns.length;
+    final totalMembers = streak.members.length;
+    final isComplete = _streakCompletionStatus[streak.id] ?? false;
+    
+    Color badgeColor;
+    IconData badgeIcon;
+    
+    if (isComplete) {
+      badgeColor = Colors.green;
+      badgeIcon = Icons.check_circle;
+    } else if (checkedInCount == 0) {
+      badgeColor = Colors.orange;
+      badgeIcon = Icons.warning_amber_rounded;
+    } else {
+      badgeColor = Colors.blue;
+      badgeIcon = Icons.pending;
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),  // ✅ Reduced padding
+      decoration: BoxDecoration(
+        color: badgeColor.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(16),  // ✅ Slightly smaller radius
+        border: Border.all(color: badgeColor, width: 1.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(badgeIcon, color: badgeColor, size: 12),  // ✅ Smaller icon
+          const SizedBox(width: 4),  // ✅ Less spacing
+          Text(
+            '$checkedInCount/$totalMembers',
+            style: TextStyle(
+              color: badgeColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 11,  // ✅ Smaller font
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _updateCountdown() {
     if (!mounted) return;
     
@@ -1127,6 +1422,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _isLoading = false;
     });
 
+    if (_allStreaks.isNotEmpty && mounted) {
+      // ✅ Just ensure index is set to center (no jump needed on initial load)
+      _currentCarouselIndex = 1;
+    }
+
     if (!_hasAnimatedEntrance && _allStreaks.isNotEmpty) {
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) {
@@ -1135,6 +1435,67 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         }
       });
     }
+  }
+
+  List<TeamStreak> _sortStreaks(List<TeamStreak> streaks, StreakSortMode mode) {
+    print('🔄 SORT: Mode = ${mode.displayName}');
+    print('🔄 SORT: Input streaks count = ${streaks.length}');
+    
+    // Filter out Coach Max
+    final friendStreaks = streaks.where((s) => !s.isCoachMaxTeam).toList();
+    print('🔄 SORT: After filtering Coach Max = ${friendStreaks.length}');
+    
+    // Sort based on mode
+    switch (mode) {
+      case StreakSortMode.highestCurrent:
+        friendStreaks.sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
+        print('⚡ SORT: Highest Current - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.currentStreak})').join(', ')}');
+        break;
+        
+      case StreakSortMode.mostWorkouts:
+        // Fallback to current streak
+        friendStreaks.sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
+        print('💪 SORT: Most Workouts (fallback to current) - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.currentStreak})').join(', ')}');
+        break;
+        
+      case StreakSortMode.bestAllTime:
+        // Fallback to current streak
+        friendStreaks.sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
+        print('🏆 SORT: Best All-Time (fallback to current) - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.currentStreak})').join(', ')}');
+        break;
+        
+      case StreakSortMode.mostRecent:
+        // Sort by check-in count
+        friendStreaks.sort((a, b) {
+          final aChecked = a.todayCheckIns.length;
+          final bChecked = b.todayCheckIns.length;
+          if (aChecked != bChecked) {
+            return bChecked.compareTo(aChecked);
+          }
+          return a.teamName.toLowerCase().compareTo(b.teamName.toLowerCase());
+        });
+        print('🕐 SORT: Most Recent (by check-in count) - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.todayCheckIns.length} today)').join(', ')}');
+        break;
+        
+      case StreakSortMode.alphabetical:
+        friendStreaks.sort((a, b) => a.teamName.toLowerCase().compareTo(b.teamName.toLowerCase()));
+        print('📝 SORT: Alphabetical - Order: ${friendStreaks.map((s) => s.teamName).join(', ')}');
+        break;
+        
+      case StreakSortMode.favorites:
+        // Fallback to highest
+        friendStreaks.sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
+        print('⭐ SORT: Favorites (fallback to highest) - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.currentStreak})').join(', ')}');
+        break;
+        
+      case StreakSortMode.custom:
+        // ✅ NEW: Don't sort - keep current order
+        print('👤 SORT: Custom - keeping user\'s manual order');
+        break;
+    }
+    
+    print('✅ SORT: Returning ${friendStreaks.length} sorted streaks');
+    return friendStreaks;
   }
 
   Future<void> _checkWeeklyPlan() async {
@@ -1526,10 +1887,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       children: [
                         // NEW CAROUSEL SECTION
                         _buildStreakCarousel(),
-                        
-                        const SizedBox(height: 24),
-
-                        _buildActionButtons(),
                         
                         const SizedBox(height: 24),
                         
@@ -2960,6 +3317,126 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
   }
 
+  void _showSortBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,  // ✅ Allow custom height
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.5,  // Start at 50% screen height
+        minChildSize: 0.3,       // Can collapse to 30%
+        maxChildSize: 0.8,       // Can expand to 80%
+        expand: false,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(24),
+          child: ListView(
+            controller: scrollController,
+            children: [
+              // Handle bar
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              // Title
+              const Text(
+                '📊 Sort Your Streaks',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              
+              // Grid of options - NO MORE SIZEDBOX!
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 2.2,  // ✅ Slightly shorter cards
+                physics: const NeverScrollableScrollPhysics(),
+                children: StreakSortMode.values.map((mode) {
+                  final isSelected = mode == _streakSortMode;
+                  
+                  return GestureDetector(
+                    onTap: () {
+                      print('🎯 USER TAPPED: ${mode.displayName}');
+                      print('🎯 Old mode: ${_streakSortMode.displayName}');
+                      
+                      HapticFeedback.selectionClick();
+                      
+                      setState(() {
+                        _streakSortMode = mode;
+                        _currentCarouselIndex = 1;  // ✅ Reset to center
+                      });
+                      
+                      Navigator.pop(context);
+                      
+                      // ✅ Force carousel to jump to center page after rebuild
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (_carouselController.hasClients && mounted) {
+                          _carouselController.jumpToPage(1000);  // Jump to center
+                          print('🎯 Jumped to center after preset change');
+                        }
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isSelected
+                              ? [Colors.blue[50]!, Colors.blue[100]!]
+                              : [Colors.grey[50]!, Colors.grey[100]!],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? Colors.blue[400]! : Colors.grey[300]!,
+                          width: isSelected ? 3 : 2,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            mode.emoji,
+                            style: const TextStyle(fontSize: 20),  // ✅ Smaller emoji
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            mode.displayName,
+                            style: TextStyle(
+                              fontSize: 12,  // ✅ Smaller text
+                              fontWeight: FontWeight.bold,
+                              color: isSelected ? Colors.blue[700] : Colors.grey[700],
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // All Streaks Dialog
