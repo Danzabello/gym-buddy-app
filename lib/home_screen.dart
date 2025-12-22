@@ -122,7 +122,6 @@ enum StreakSortMode {
   mostWorkouts,      // 💪 Most workouts together
   bestAllTime,       // 🏆 Longest streak ever
   mostRecent,        // 🕐 Most recent workout
-  alphabetical,      // 📝 A-Z by name
   favorites,         // ⭐ User favorites (future)
   custom,  // ✅ NEW!
 }
@@ -139,8 +138,6 @@ extension StreakSortModeExtension on StreakSortMode {
         return 'Best All-Time';
       case StreakSortMode.mostRecent:
         return 'Most Recent';
-      case StreakSortMode.alphabetical:
-        return 'Alphabetical';
       case StreakSortMode.favorites:
         return 'Favorites';
       case StreakSortMode.custom: 
@@ -158,8 +155,6 @@ extension StreakSortModeExtension on StreakSortMode {
         return '🏆';
       case StreakSortMode.mostRecent:
         return '🕐';
-      case StreakSortMode.alphabetical:
-        return '📝';
       case StreakSortMode.favorites:
         return '⭐';
       case StreakSortMode.custom: 
@@ -174,7 +169,6 @@ extension StreakSortModeExtension on StreakSortMode {
       case StreakSortMode.mostWorkouts: return 'Most active teammates';
       case StreakSortMode.bestAllTime: return 'All-time champions';
       case StreakSortMode.mostRecent: return 'Recently active';
-      case StreakSortMode.alphabetical: return 'A to Z';
       case StreakSortMode.favorites: return 'Your favorites';
       case StreakSortMode.custom: return 'Manual selection';  // ✅ NEW!
     }
@@ -311,11 +305,17 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     // 1 FRIEND: Compare friend vs Coach Max for center
     final friend = friendStreaks[0];
     
+    // For numeric modes, use > for comparison
+    final friendValue = friend.currentStreak;
+    final coachValue = coachMaxStreak.currentStreak;
+    
     bool friendIsHigher;
-    if (_streakSortMode == StreakSortMode.alphabetical) {
+    if (friendValue == coachValue) {
+      // ✅ TIE! Use alphabetical as tiebreaker
       friendIsHigher = friend.teamName.toLowerCase().compareTo('coach max') < 0;
+      print('🤝 TIE at $friendValue! Tiebreaker: ${friend.teamName} vs Coach Max → ${friendIsHigher ? "Friend wins" : "Coach Max wins"}');
     } else {
-      friendIsHigher = friend.currentStreak > coachMaxStreak.currentStreak;
+      friendIsHigher = friendValue > coachValue;
     }
     
     if (friendIsHigher) {
@@ -334,20 +334,15 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     
     // Check if first friend beats Coach Max for #1 spot
     bool friendIsHigher;
-    if (_streakSortMode == StreakSortMode.alphabetical) {
+    final friendValue = friendStreaks[0].currentStreak;
+    final coachValue = coachMaxStreak.currentStreak;
+
+    if (friendValue == coachValue) {
+      // ✅ TIE! Use alphabetical as tiebreaker
       friendIsHigher = friendStreaks[0].teamName.toLowerCase().compareTo('coach max') < 0;
+      print('🤝 TIE at $friendValue! Tiebreaker: ${friendStreaks[0].teamName} vs Coach Max → ${friendIsHigher ? "Friend wins" : "Coach Max wins"}');
     } else {
-      // For numeric modes, use > for comparison
-      final friendValue = friendStreaks[0].currentStreak;
-      final coachValue = coachMaxStreak.currentStreak;
-      
-      if (friendValue == coachValue) {
-        // ✅ TIE! Use alphabetical as tiebreaker
-        friendIsHigher = friendStreaks[0].teamName.toLowerCase().compareTo('coach max') < 0;
-        print('🤝 TIE at $friendValue! Tiebreaker: ${friendStreaks[0].teamName} vs Coach Max → ${friendIsHigher ? "Friend wins" : "Coach Max wins"}');
-      } else {
-        friendIsHigher = friendValue > coachValue;
-      }
+      friendIsHigher = friendValue > coachValue;
     }
     
     if (friendIsHigher) {
@@ -1360,6 +1355,29 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _isLoading = true;
     });
 
+    // ✅ LOAD SAVED PREFERENCE FIRST
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId != null) {
+      try {
+        final prefs = await Supabase.instance.client
+          .from('user_profiles')
+          .select('preferred_streak_sort')
+          .eq('id', userId)
+          .single();
+        
+        if (prefs['preferred_streak_sort'] != null) {
+          _streakSortMode = StreakSortMode.values.firstWhere(
+            (e) => e.name == prefs['preferred_streak_sort'],
+            orElse: () => StreakSortMode.highestCurrent,
+          );
+          print('📥 Loaded preference: ${_streakSortMode.displayName}');
+        }
+      } catch (e) {
+        print('⚠️ Could not load preference: $e');
+        // No problem, use default
+      }
+    }
+
     await _syncTeamCheckIns();
 
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
@@ -1453,33 +1471,22 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         break;
         
       case StreakSortMode.mostWorkouts:
-        // Fallback to current streak
-        friendStreaks.sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
-        print('💪 SORT: Most Workouts (fallback to current) - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.currentStreak})').join(', ')}');
+        friendStreaks.sort((a, b) => b.totalWorkouts.compareTo(a.totalWorkouts)); 
+        print('💪 SORT: Most Workouts - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.totalWorkouts})').join(', ')}');
         break;
         
       case StreakSortMode.bestAllTime:
-        // Fallback to current streak
-        friendStreaks.sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
-        print('🏆 SORT: Best All-Time (fallback to current) - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.currentStreak})').join(', ')}');
+        friendStreaks.sort((a, b) => b.bestStreak.compareTo(a.bestStreak));  // ✅ Use real data!
+        print('🏆 SORT: Best All-Time - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.bestStreak})').join(', ')}');
         break;
         
       case StreakSortMode.mostRecent:
-        // Sort by check-in count
         friendStreaks.sort((a, b) {
-          final aChecked = a.todayCheckIns.length;
-          final bChecked = b.todayCheckIns.length;
-          if (aChecked != bChecked) {
-            return bChecked.compareTo(aChecked);
-          }
-          return a.teamName.toLowerCase().compareTo(b.teamName.toLowerCase());
+          if (a.lastInteractionAt == null) return 1;  // ✅ Use real timestamps!
+          if (b.lastInteractionAt == null) return -1;
+          return b.lastInteractionAt!.compareTo(a.lastInteractionAt!);  // Most recent first
         });
-        print('🕐 SORT: Most Recent (by check-in count) - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.todayCheckIns.length} today)').join(', ')}');
-        break;
-        
-      case StreakSortMode.alphabetical:
-        friendStreaks.sort((a, b) => a.teamName.toLowerCase().compareTo(b.teamName.toLowerCase()));
-        print('📝 SORT: Alphabetical - Order: ${friendStreaks.map((s) => s.teamName).join(', ')}');
+        print('🕐 SORT: Most Recent - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.lastInteractionAt})').join(', ')}');
         break;
         
       case StreakSortMode.favorites:
@@ -3370,7 +3377,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   final isSelected = mode == _streakSortMode;
                   
                   return GestureDetector(
-                    onTap: () {
+                    onTap: () async {  // ✅ Make it async
                       print('🎯 USER TAPPED: ${mode.displayName}');
                       print('🎯 Old mode: ${_streakSortMode.displayName}');
                       
@@ -3378,15 +3385,23 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       
                       setState(() {
                         _streakSortMode = mode;
-                        _currentCarouselIndex = 1;  // ✅ Reset to center
+                        _currentCarouselIndex = 1;
                       });
                       
                       Navigator.pop(context);
                       
-                      // ✅ Force carousel to jump to center page after rebuild
+                      // ✅ SAVE PREFERENCE TO DATABASE
+                      final userId = Supabase.instance.client.auth.currentUser?.id;
+                      if (userId != null) {
+                        await Supabase.instance.client.from('user_profiles').update({
+                          'preferred_streak_sort': mode.name,
+                        }).eq('id', userId);
+                        print('💾 Saved preference: ${mode.name}');
+                      }
+                      
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (_carouselController.hasClients && mounted) {
-                          _carouselController.jumpToPage(1000);  // Jump to center
+                          _carouselController.jumpToPage(1000);
                           print('🎯 Jumped to center after preset change');
                         }
                       });
