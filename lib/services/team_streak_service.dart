@@ -45,7 +45,10 @@ class TeamStreak {
   final String teamEmoji;
   final int currentStreak;
   final int longestStreak;
+  final int totalWorkouts;
+  final int bestStreak;
   final DateTime? lastWorkoutDate;
+  final DateTime? lastInteractionAt;  
   final bool isCoachMaxTeam;
   final List<TeamMember> members;
   final List<CheckInStatus> todayCheckIns;
@@ -57,7 +60,10 @@ class TeamStreak {
     required this.teamEmoji,
     required this.currentStreak,
     required this.longestStreak,
+    this.totalWorkouts = 0,
+    this.bestStreak = 0,  
     required this.lastWorkoutDate,
+    this.lastInteractionAt,        
     required this.isCoachMaxTeam,
     required this.members,
     required this.todayCheckIns,
@@ -230,8 +236,13 @@ class TeamStreakService {
         teamEmoji: teamResponse['team_emoji'] ?? '🔥',
         currentStreak: streakResponse['current_streak'] ?? 0,
         longestStreak: streakResponse['longest_streak'] ?? 0,
+        totalWorkouts: streakResponse['total_workouts'] ?? 0, 
+        bestStreak: streakResponse['best_streak'] ?? 0, 
         lastWorkoutDate: streakResponse['last_workout_date'] != null
             ? DateTime.parse(streakResponse['last_workout_date'])
+            : null,
+        lastInteractionAt: streakResponse['last_interaction_at'] != null
+            ? DateTime.parse(streakResponse['last_interaction_at'])
             : null,
         isCoachMaxTeam: teamResponse['is_coach_max_team'] ?? false,
         members: members,
@@ -542,6 +553,8 @@ class TeamStreakService {
 
       final currentStreak = (streakData['current_streak'] as int?) ?? 0;
       final longestStreak = (streakData['longest_streak'] as int?) ?? 0;
+      final totalWorkouts = (streakData['total_workouts'] as int?) ?? 0; 
+      final bestStreak = (streakData['best_streak'] as int?) ?? 0;
       final lastWorkoutDate = streakData['last_workout_date'] as String?;
 
       // Get all team members (excluding Coach Max)
@@ -674,7 +687,10 @@ class TeamStreakService {
       await _supabase.from('team_streaks').update({
         'current_streak': newStreak,
         'longest_streak': newLongest,
+        'total_workouts': totalWorkouts + 1,
+        'best_streak': newStreak > bestStreak ? newStreak : bestStreak, 
         'last_workout_date': today,
+        'last_interaction_at': DateTime.now().toUtc().toIso8601String(), 
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', streakId);
 
