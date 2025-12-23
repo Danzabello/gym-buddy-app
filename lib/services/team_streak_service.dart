@@ -52,6 +52,7 @@ class TeamStreak {
   final bool isCoachMaxTeam;
   final List<TeamMember> members;
   final List<CheckInStatus> todayCheckIns;
+  final bool isFavorite; 
   
   TeamStreak({
     required this.id,
@@ -67,7 +68,10 @@ class TeamStreak {
     required this.isCoachMaxTeam,
     required this.members,
     required this.todayCheckIns,
+    this.isFavorite = false, 
   });
+  
+  // ✅ PRESERVE ALL EXISTING HELPER METHODS
   
   /// Calculate completion percentage for today
   double get completionPercentage {
@@ -190,7 +194,7 @@ class TeamStreakService {
       // Get active streak
       final streakResponse = await _supabase
           .from('team_streaks')
-          .select()
+          .select('*, is_favorite')
           .eq('team_id', teamId)
           .eq('is_active', true)
           .maybeSingle();
@@ -247,6 +251,7 @@ class TeamStreakService {
         isCoachMaxTeam: teamResponse['is_coach_max_team'] ?? false,
         members: members,
         todayCheckIns: todayCheckIns,
+        isFavorite: streakResponse['is_favorite'] == true,  // ⭐ ADD THIS LINE
       );
     } catch (e) {
       if (kDebugMode) print('  ❌ Error getting team streak data: $e');
@@ -754,13 +759,18 @@ class TeamStreakService {
       final response = await _supabase
           .from('team_streaks')
           .select('''
-            *,
-            buddy_teams!inner(team_name, team_emoji)
+            id,
+            team_name,
+            team_emoji,
+            current_streak,
+            best_streak,
+            total_workouts,
+            members,
+            is_coach_max_team,
+            last_interaction_at,
+            is_favorite
           ''')
-          .inFilter('team_id', teamIds)
-          .eq('is_active', false)
-          .order('end_date', ascending: false)
-          .limit(limit);
+          .order('current_streak', ascending: false);
 
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
@@ -1232,6 +1242,26 @@ class TeamStreakService {
     } catch (e) {
       if (kDebugMode) print('❌ Error finding team with buddy: $e');
       return null;
+    }
+  }
+
+  Future<List<TeamStreak>> getFavoriteStreaks() async {
+    final allStreaks = await getAllUserStreaks();
+    return allStreaks.where((streak) => streak.isFavorite).toList();
+  }
+
+  // Toggle favorite status
+  Future<void> toggleFavorite(String teamId, bool isFavorite) async {
+    try {
+      await _supabase
+          .from('team_streaks')
+          .update({'is_favorite': isFavorite})
+          .eq('id', teamId);
+
+      if (kDebugMode) print('⭐ Toggled favorite for team $teamId to $isFavorite');
+    } catch (e) {
+      if (kDebugMode) print('❌ Error toggling favorite: $e');
+      rethrow;
     }
   }
 
