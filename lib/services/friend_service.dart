@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class FriendService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  // Search for users by name
+  // Search for users by USERNAME (not display name)
   Future<List<Map<String, dynamic>>> searchUsers(String query) async {
     try {
       if (kDebugMode) print('🔎 searchUsers called with: "$query"');
@@ -19,12 +19,16 @@ class FriendService {
         return [];
       }
 
-      // Search in user_profiles for display names
+      // Remove @ symbol if user typed it
+      final cleanQuery = query.startsWith('@') ? query.substring(1) : query;
+
+      // Search by USERNAME (unique identifier for finding friends)
       final response = await _supabase
           .from('user_profiles')
-          .select('id, display_name, age, fitness_level, avatar_id')
-          .ilike('display_name', '%$query%')
+          .select('id, username, display_name, age, fitness_level, avatar_id')
+          .ilike('username', '%$cleanQuery%')
           .neq('id', currentUserId)
+          .not('username', 'is', null)  // Only return users with usernames set
           .limit(20);
 
       if (kDebugMode) {
@@ -353,6 +357,7 @@ class FriendService {
             user_profiles!friendships_user_id_fkey (
               id,
               display_name,
+              username,
               avatar_id,
               fitness_level
             )
@@ -364,7 +369,7 @@ class FriendService {
       if (kDebugMode) {
         print('✅ Found ${response.length} pending requests');
         for (var req in response) {
-          print('  - From: ${req['user_profiles']?['display_name']} (${req['user_id']})');
+          print('  - From: ${req['user_profiles']?['display_name']} (@${req['user_profiles']?['username']})');
         }
       }
 
@@ -406,7 +411,7 @@ class FriendService {
 
       if (friendIds.isEmpty) return [];
 
-      // Get friend profiles
+      // Get friend profiles (now including username)
       final profiles = await _supabase
           .from('user_profiles')
           .select('*')

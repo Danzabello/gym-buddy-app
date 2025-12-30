@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'onboarding_avatar_selection.dart';  // ← Only need this import now
+import 'onboarding_username.dart';
 
 class OnboardingBasicInfo extends StatefulWidget {
   const OnboardingBasicInfo({super.key});
@@ -47,10 +47,10 @@ class _OnboardingBasicInfoState extends State<OnboardingBasicInfo> {
         'gender': _selectedGender,
       };
 
-      // Navigate to AVATAR selection screen
+      // Navigate to USERNAME selection screen (NEW!)
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => OnboardingAvatarSelection(userData: userData),
+          builder: (_) => OnboardingUsername(userData: userData),
         ),
       );
     }
@@ -68,7 +68,7 @@ class _OnboardingBasicInfoState extends State<OnboardingBasicInfo> {
             children: [
               // Progress indicator
               LinearProgressIndicator(
-                value: 0.2, // 20% (step 1 of 5)
+                value: 0.15, // Adjusted for 6 steps now
                 backgroundColor: Colors.grey[300],
                 valueColor: AlwaysStoppedAnimation<Color>(
                   Theme.of(context).colorScheme.primary,

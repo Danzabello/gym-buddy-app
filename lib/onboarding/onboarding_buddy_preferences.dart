@@ -42,9 +42,11 @@ class _OnboardingBuddyPreferencesState extends State<OnboardingBuddyPreferences>
       }
 
       // ✅ CRITICAL: Save all user data + mark onboarding as complete
+      // Now includes username!
       await Supabase.instance.client.from('user_profiles').upsert({
         'id': user.id,
         'display_name': widget.userData['display_name'],
+        'username': widget.userData['username'],  // ✅ NEW: Save username
         'age': widget.userData['age'],
         'gender': widget.userData['gender'],
         'avatar_id': widget.userData['avatar_id'],
@@ -53,7 +55,7 @@ class _OnboardingBuddyPreferencesState extends State<OnboardingBuddyPreferences>
         'preferred_workout_time': widget.userData['preferred_workout_time'],
         'fitness_level': widget.userData['fitness_level'],
         'looking_for_buddy': _lookingForBuddy,
-        'onboarding_completed': true,  // ✅ THIS IS THE KEY LINE
+        'onboarding_completed': true,
         'updated_at': DateTime.now().toIso8601String(),
       });
 

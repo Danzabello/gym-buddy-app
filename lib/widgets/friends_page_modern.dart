@@ -511,8 +511,10 @@ class _FriendsPageModernState extends State<FriendsPageModern> with SingleTicker
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadFriends,
-              child: _searchResults.isNotEmpty
-                  ? _buildSearchResults()
+              child: _searchController.text.isNotEmpty
+                  ? (_searchResults.isNotEmpty 
+                      ? _buildSearchResults() 
+                      : _buildNoResultsFound())
                   : TabBarView(
                       controller: _tabController,
                       children: [
@@ -556,6 +558,16 @@ class _FriendsPageModernState extends State<FriendsPageModern> with SingleTicker
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 4),
+                // Show @username
+                Text(
+                  '@${user['username'] ?? 'unknown'}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.blue[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
                 Row(
                   children: [
                     Icon(Icons.fitness_center, size: 14, color: Colors.grey[600]),
@@ -593,6 +605,50 @@ class _FriendsPageModernState extends State<FriendsPageModern> with SingleTicker
           ),
         );
       },
+    );
+  }
+
+  Widget _buildNoResultsFound() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search_off,
+              size: 72,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No user found',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '"${_searchController.text}" doesn\'t exist',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Make sure you\'re searching by username',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[500],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
