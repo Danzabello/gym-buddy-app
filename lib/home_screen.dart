@@ -423,12 +423,33 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 // Center: Title (takes remaining space)
                 Expanded(
                   child: Center(
-                    child: Text(
-                      'Your Active Streaks (${_allStreaks.length})',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[700],
+                    child: GestureDetector(
+                      onTap: _showAllStreaks,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Your Active Streaks (${_allStreaks.length})',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.chevron_right,
+                              size: 20,
+                              color: Colors.grey[600],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -3891,78 +3912,402 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
 }
 
-// All Streaks Dialog
-class _AllStreaksDialog extends StatelessWidget {
+class _AllStreaksDialog extends StatefulWidget {
   final List<TeamStreak> streaks;
-
   const _AllStreaksDialog({required this.streaks});
 
   @override
+  State<_AllStreaksDialog> createState() => _AllStreaksDialogState();
+}
+
+class _AllStreaksDialogState extends State<_AllStreaksDialog> {
+  late List<TeamStreak> _streaks;
+
+  @override
+  void initState() {
+    super.initState();
+    _streaks = List.from(widget.streaks);
+  }
+
+  Future<void> _showRenameDialog(TeamStreak streak) async {
+    final controller = TextEditingController(text: streak.teamName);
+    
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.edit, color: Colors.blue[600], size: 24),
+            const SizedBox(width: 12),
+            const Text('Rename Team'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Give your workout partnership a custom name!',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: 'Team Name',
+                hintText: 'e.g., Gym Bros, Morning Crew',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                prefixIcon: const Icon(Icons.group),
+              ),
+              onSubmitted: (value) => Navigator.pop(context, value),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue[600],
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (newName != null && newName.trim().isNotEmpty && newName != streak.teamName) {
+      await _updateTeamName(streak, newName.trim());
+    }
+  }
+
+  Future<void> _updateTeamName(TeamStreak streak, String newName) async {
+    try {
+      await Supabase.instance.client
+          .from('buddy_teams')
+          .update({'team_name': newName})
+          .eq('id', streak.teamId);
+
+      // Reload streaks and cast properly
+      final teamStreakService = TeamStreakService();
+      final updatedStreaks = await teamStreakService.getAllUserStreaks();
+
+      if (mounted) {
+        setState(() {
+          _streaks = List<TeamStreak>.from(updatedStreaks);
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Text('Renamed to "$newName"'),
+              ],
+            ),
+            backgroundColor: Colors.green[600],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Error renaming team: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to rename team'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  String _getBuddyName(TeamStreak streak) {
+    if (streak.isCoachMaxTeam) return 'Coach Max';
+    
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final buddy = streak.members.firstWhere(
+      (m) => m.userId != currentUserId,
+      orElse: () => streak.members.first,
+    );
+    return buddy.displayName;
+  }
+
+  String _getBuddyAvatar(TeamStreak streak) {
+    if (streak.isCoachMaxTeam) return 'coach_max';
+    
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final buddy = streak.members.firstWhere(
+      (m) => m.userId != currentUserId,
+      orElse: () => streak.members.first,
+    );
+    return buddy.avatarId ?? 'avatar_1';
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('All Your Streaks'),
-      content: SizedBox(
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
         width: double.maxFinite,
-        height: 400,
-        child: streaks.isEmpty
-            ? const Center(
-                child: Text('No active streaks yet!'),
-              )
-            : ListView.builder(
-                itemCount: streaks.length,
-                itemBuilder: (context, index) {
-                  final streak = streaks[index];
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: ListTile(
-                      leading: Text(
-                        streak.teamEmoji,
-                        style: const TextStyle(fontSize: 32),
-                      ),
-                      title: Text(
-                        streak.teamName,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 4),
-                          Text(
-                            '${streak.currentStreak} day streak',
-                            style: const TextStyle(
-                              color: Colors.orange,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          if (streak.members.length > 1)
-                            Text(
-                              '${streak.todayCheckIns.length}/${streak.members.length} checked in today',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                        ],
-                      ),
-                      trailing: Icon(
-                        streak.isCompleteToday 
-                            ? Icons.check_circle 
-                            : Icons.pending,
-                        color: streak.isCompleteToday 
-                            ? Colors.green 
-                            : Colors.orange,
+        constraints: const BoxConstraints(maxHeight: 500, maxWidth: 400),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.orange[400]!, Colors.deepOrange[400]!],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.local_fire_department, color: Colors.white, size: 28),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'All Your Streaks',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                     ),
-                  );
-                },
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${_streaks.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
+            ),
+
+            // Tip text
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.lightbulb_outline, size: 16, color: Colors.grey[500]),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Tap a streak to rename it',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[500],
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Streaks list
+            Flexible(
+              child: _streaks.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.sentiment_neutral, size: 48, color: Colors.grey[400]),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No active streaks yet!',
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      shrinkWrap: true,
+                      itemCount: _streaks.length,
+                      itemBuilder: (context, index) {
+                        final streak = _streaks[index];
+                        return _buildStreakCard(streak);
+                      },
+                    ),
+            ),
+
+            // Close button
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: Colors.grey[300]!),
+                    ),
+                  ),
+                  child: const Text('Close'),
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
+  Widget _buildStreakCard(TeamStreak streak) {
+    final buddyName = _getBuddyName(streak);
+    final isComplete = streak.isCompleteToday;
+
+    return GestureDetector(
+      onTap: () => _showRenameDialog(streak),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isComplete ? Colors.green[50] : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isComplete ? Colors.green[200]! : Colors.grey[200]!,
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Avatar
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: streak.isCoachMaxTeam
+                      ? [Colors.blue[400]!, Colors.purple[400]!]
+                      : [Colors.orange[300]!, Colors.deepOrange[300]!],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: streak.isCoachMaxTeam
+                  ? const Center(child: Text('🤖', style: TextStyle(fontSize: 22)))
+                  : ClipOval(
+                      child: UserAvatar(
+                        avatarId: _getBuddyAvatar(streak),
+                        size: 44,
+                      ),
+                    ),
+            ),
+            
+            const SizedBox(width: 12),
+            
+            // Info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Team name (or buddy name if not renamed)
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          streak.teamName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.edit_outlined,
+                        size: 14,
+                        color: Colors.grey[400],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  // Streak count
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.local_fire_department,
+                        size: 14,
+                        color: Colors.orange[600],
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${streak.currentStreak} day streak',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.orange[700],
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            // Status
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: isComplete ? Colors.green[100] : Colors.grey[100],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isComplete ? Icons.check : Icons.access_time,
+                size: 18,
+                color: isComplete ? Colors.green[700] : Colors.grey[500],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 
@@ -5325,6 +5670,34 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  List<dynamic> _allStreaks = [];
+  bool _isLoadingStreaks = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStreaks();
+  }
+
+  Future<void> _loadStreaks() async {
+    try {
+      final teamStreakService = TeamStreakService();
+      final streaks = await teamStreakService.getAllUserStreaks();
+      
+      if (mounted) {
+        setState(() {
+          _allStreaks = streaks;
+          _isLoadingStreaks = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading streaks: $e');
+      if (mounted) {
+        setState(() => _isLoadingStreaks = false);
+      }
+    }
+  }
+
   Future<Map<String, dynamic>?> _loadProfileData() async {
     try {
       final currentUserId = Supabase.instance.client.auth.currentUser?.id;
@@ -5350,6 +5723,13 @@ class _ProfilePageState extends State<ProfilePage> {
     } catch (e) {
       return '2024';
     }
+  }
+
+  void _showAllStreaksDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => _AllStreaksDialog(streaks: _allStreaks.cast<TeamStreak>()),
+    );
   }
 
   @override
@@ -5414,8 +5794,14 @@ class _ProfilePageState extends State<ProfilePage> {
             ],
           ),
           const SizedBox(height: 30),
-          
+
           // Menu Items
+          ListTile(
+            leading: Icon(Icons.local_fire_department, color: Colors.orange[700]),
+            title: const Text('All Streaks'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: _showAllStreaksDialog,
+          ),
           ListTile(
             leading: const Icon(Icons.emoji_events),
             title: const Text('Achievements'),
@@ -5443,10 +5829,7 @@ class _ProfilePageState extends State<ProfilePage> {
           const SizedBox(height: 20),
           ElevatedButton(
             onPressed: () async {
-              // Sign out from Supabase
               await Supabase.instance.client.auth.signOut();
-    
-              // Navigate to login and remove all previous routes
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const LoginScreen()),
                 (route) => false,
@@ -5457,6 +5840,187 @@ class _ProfilePageState extends State<ProfilePage> {
               foregroundColor: Colors.white,
             ),
             child: const Text('Log Out'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ NEW: All Streaks Section Widget
+  Widget _buildAllStreaksSection() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.local_fire_department, color: Colors.orange[700], size: 24),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'All Streaks',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                if (!_isLoadingStreaks)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${_allStreaks.length}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange[800],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Streaks list or loading
+            if (_isLoadingStreaks)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (_allStreaks.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      Icon(Icons.sentiment_neutral, size: 48, color: Colors.grey[400]),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No active streaks yet',
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              // Show first 3 streaks as preview
+              Column(
+                children: [
+                  ..._allStreaks.take(3).map((streak) => _buildStreakTile(streak)).toList(),
+                  
+                  // "See All" button if more than 3
+                  if (_allStreaks.length > 3)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: TextButton(
+                        onPressed: _showAllStreaksDialog,
+                        child: Text(
+                          'See all ${_allStreaks.length} streaks →',
+                          style: TextStyle(
+                            color: Colors.blue[700],
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStreakTile(dynamic streak) {
+    final teamStreak = streak as TeamStreak;
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    
+    // Get friend's name for display
+    String displayName;
+    if (teamStreak.isCoachMaxTeam) {
+      displayName = 'Coach Max';
+    } else {
+      final friendMember = teamStreak.members.firstWhere(
+        (m) => m.userId != currentUserId,
+        orElse: () => teamStreak.members.first,
+      );
+      displayName = friendMember.displayName;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: teamStreak.isCompleteToday ? Colors.green[50] : Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: teamStreak.isCompleteToday ? Colors.green[200]! : Colors.grey[200]!,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Avatar/Emoji
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: teamStreak.isCoachMaxTeam ? Colors.blue[100] : Colors.orange[100],
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                teamStreak.isCoachMaxTeam ? '🤖' : '💪',
+                style: const TextStyle(fontSize: 20),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          
+          // Name and streak
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  displayName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  '${teamStreak.currentStreak} day streak',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.orange[700],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Status indicator
+          Icon(
+            teamStreak.isCompleteToday ? Icons.check_circle : Icons.radio_button_unchecked,
+            color: teamStreak.isCompleteToday ? Colors.green : Colors.grey[400],
+            size: 20,
           ),
         ],
       ),

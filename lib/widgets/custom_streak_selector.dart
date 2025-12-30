@@ -414,14 +414,15 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
   
   Widget _buildCardContent(TeamStreak streak) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 8),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         leading: ClipOval(
           child: UserAvatar(
             avatarId: _getFriendAvatar(streak),
-            size: 50,
+            size: 40,
           ),
         ),
         title: Text(
