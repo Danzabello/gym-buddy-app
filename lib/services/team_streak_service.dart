@@ -11,12 +11,14 @@ import 'break_day_service.dart';
 class TeamMember {
   final String userId;
   final String displayName;
+  final String? username;
   final bool isCoachMax;
   final String? avatarId;
 
   TeamMember({
     required this.userId,
     required this.displayName,
+    this.username,
     required this.isCoachMax,
     this.avatarId,
   });
@@ -209,7 +211,7 @@ class TeamStreakService {
       // Get team members
       final membersResponse = await _supabase
       .from('team_members')
-      .select('user_id, user_profiles!inner(display_name, avatar_id)')
+      .select('user_id, user_profiles!inner(display_name, avatar_id, username)')
       .eq('team_id', teamId);
 
       if (kDebugMode) print('  ✅ Found ${membersResponse.length} team members');
@@ -220,6 +222,7 @@ class TeamStreakService {
         members.add(TeamMember(
           userId: member['user_id'],
           displayName: profile['display_name'] ?? 'Unknown',
+          username: profile['username'],  // ← ADD THIS
           isCoachMax: member['user_id'] == coachMaxId,
           avatarId: profile?['avatar_id'],
         ));

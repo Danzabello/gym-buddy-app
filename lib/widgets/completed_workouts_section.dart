@@ -131,121 +131,200 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
     final completedAt = workout['workout_completed_at'];
     final buddy = workout['buddy'];
     final creator = workout['creator'];
+    
+    // Get workout-specific color and icon
+    final color = _getWorkoutColor(workoutType);
+    final icon = _getWorkoutIcon(workoutType);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.green.withOpacity(0.3)),
+        border: Border.all(color: color.withOpacity(0.3)),
         boxShadow: [
           BoxShadow(
-            color: Colors.green.withOpacity(0.1),
+            color: color.withOpacity(0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            // Checkmark icon
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.green[400]!, Colors.green[600]!],
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.check_circle,
-                color: Colors.white,
-                size: 24,
+      child: Row(
+        children: [
+          // Color bar on left
+          Container(
+            width: 6,
+            height: 90,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                bottomLeft: Radius.circular(16),
               ),
             ),
-            const SizedBox(width: 16),
-
-            // Details
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          ),
+          
+          // Main content
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
                 children: [
-                  Text(
-                    workoutType,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF2C3E50),
+                  // Workout type icon (color-coded)
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      icon,
+                      color: color,
+                      size: 26,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.timer, size: 14, color: Colors.grey[600]),
-                      const SizedBox(width: 4),
-                      Text(
-                        _formatDuration(duration),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
-                      const SizedBox(width: 4),
-                      Text(
-                        _formatCompletedDate(completedAt),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (buddy != null || creator != null) ...[
-                    const SizedBox(height: 4),
-                    Row(
+                  const SizedBox(width: 14),
+
+                  // Details
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.people, size: 14, color: Colors.blue[600]),
-                        const SizedBox(width: 4),
                         Text(
-                          'with ${buddy?['display_name'] ?? creator?['display_name'] ?? 'buddy'}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.blue[600],
-                            fontWeight: FontWeight.w500,
+                          workoutType,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2C3E50),
                           ),
                         ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            _buildDetailChip(
+                              icon: Icons.timer,
+                              text: _formatDuration(duration),
+                            ),
+                            const SizedBox(width: 10),
+                            _buildDetailChip(
+                              icon: Icons.calendar_today,
+                              text: _formatCompletedDate(completedAt),
+                            ),
+                          ],
+                        ),
+                        if (buddy != null || creator != null) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Icon(Icons.people, size: 14, color: color),
+                              const SizedBox(width: 4),
+                              Text(
+                                'with ${buddy?['display_name'] ?? creator?['display_name'] ?? 'buddy'}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: color,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
-                  ],
+                  ),
+
+                  // Checkmark or trophy
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: duration >= 60 ? Colors.amber[50] : Colors.green[50],
+                      shape: BoxShape.circle,
+                    ),
+                    child: duration >= 90
+                        ? const Text('🏆', style: TextStyle(fontSize: 18))
+                        : duration >= 60
+                            ? const Text('⭐', style: TextStyle(fontSize: 18))
+                            : Icon(Icons.check, color: Colors.green[600], size: 20),
+                  ),
                 ],
               ),
             ),
-
-            // Trophy/badge for longer workouts
-            if (duration >= 60)
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.amber[50],
-                  shape: BoxShape.circle,
-                ),
-                child: Text(
-                  duration >= 90 ? '🏆' : '⭐',
-                  style: const TextStyle(fontSize: 20),
-                ),
-              ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
+  Widget _buildDetailChip({required IconData icon, required String text}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: Colors.grey[600]),
+        const SizedBox(width: 3),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Color _getWorkoutColor(String? type) {
+    switch (type?.toLowerCase()) {
+      case 'cardio':
+        return Colors.red[600]!;
+      case 'strength':
+      case 'weights':
+        return Colors.blue[600]!;
+      case 'legs':
+      case 'leg day':
+      case 'lower body':
+        return Colors.orange[600]!;
+      case 'upper body':
+        return Colors.purple[600]!;
+      case 'full body':
+        return Colors.indigo[600]!;
+      case 'hiit':
+        return Colors.deepOrange[600]!;
+      case 'yoga':
+        return Colors.teal[600]!;
+      default:
+        return Colors.green[600]!;
+    }
+  }
+
+  IconData _getWorkoutIcon(String? type) {
+    switch (type?.toLowerCase()) {
+      case 'cardio':
+        return Icons.directions_run;
+      case 'strength':
+      case 'weights':
+        return Icons.fitness_center;
+      case 'upper body':
+        return Icons.accessibility_new;
+      case 'lower body':
+      case 'legs':
+      case 'leg day':
+        return Icons.directions_walk;
+      case 'full body':
+        return Icons.sports_gymnastics;
+      case 'hiit':
+        return Icons.flash_on;
+      case 'yoga':
+        return Icons.self_improvement;
+      default:
+        return Icons.sports;
+    }
+  }
+
   String _formatDuration(int minutes) {
+    if (minutes == 0) return '—';
     if (minutes < 60) return '${minutes}m';
     final hours = minutes ~/ 60;
     final mins = minutes % 60;
@@ -262,7 +341,7 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
       if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
       if (diff.inHours < 24) return '${diff.inHours}h ago';
       if (diff.inDays == 1) return 'Yesterday';
-      if (diff.inDays < 7) return '${diff.inDays} days ago';
+      if (diff.inDays < 7) return '${diff.inDays}d ago';
       
       return '${date.month}/${date.day}';
     } catch (e) {

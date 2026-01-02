@@ -17,6 +17,12 @@ import 'widgets/workout_invites_card.dart';
 import 'widgets/completed_workouts_section.dart';
 import 'widgets/workout_celebration.dart';
 import 'widgets/custom_streak_selector.dart';
+import 'widgets/buddy_profile_sheet.dart';
+import 'widgets/buddy_profile_sheet.dart';
+import 'services/nickname_service.dart';
+import 'widgets/workout_card.dart';
+import 'widgets/schedule_workout_sheet.dart';
+
 
 
 
@@ -182,6 +188,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   final TeamSyncService _teamSyncService = TeamSyncService();
   final BreakDayService _breakDayService = BreakDayService();
   Map<String, bool> _streakCompletionStatus = {};
+  Map<String, String> _nicknames = {};
 
   
   TeamStreak? _highestStreak;
@@ -692,10 +699,23 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     
     final streak = item as TeamStreak;
     if (streak.isCoachMaxTeam) {
-      return streak.teamName;
+      return streak.teamName;  // "Coach Max"
     }
     
-    return _getFriendName(streak);
+    // Get friend info
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final friendMember = streak.members.firstWhere(
+      (m) => m.userId != currentUserId,
+      orElse: () => streak.members.first,
+    );
+    
+    // Check for nickname first!
+    final nickname = _nicknames[friendMember.userId];
+    if (nickname != null && nickname.isNotEmpty) {
+      return nickname;  // Show nickname
+    }
+    
+    return friendMember.displayName;  // Fall back to display name
   }
 
   Widget _buildAddFriendPlaceholder(bool isFocused) {
@@ -829,6 +849,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       (member) => member.userId != currentUserId,
       orElse: () => streak.members.first,
     );
+    
+    // Check for nickname first!
+    final nickname = _nicknames[friendMember.userId];
+    if (nickname != null && nickname.isNotEmpty) {
+      return nickname;
+    }
+    
     return friendMember.displayName;
   }
 
@@ -841,112 +868,116 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   Widget _buildCarouselAvatar(TeamStreak streak, bool isFocused) {
     final size = isFocused ? 140.0 : 110.0;
     
-    // ✅ Get the friend's avatar ID
+    // Get the friend's info
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
     final friendMember = streak.isCoachMaxTeam
-        ? null  // Coach Max doesn't have a friend
+        ? null
         : streak.members.firstWhere(
             (m) => m.userId != currentUserId,
             orElse: () => streak.members.first,
           );
     
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              colors: streak.isCoachMaxTeam
-                  ? [Colors.blue[400]!, Colors.purple[400]!]
-                  : streak.isCompleteToday
-                      ? [Colors.green[400]!, Colors.teal[400]!]
-                      : [Colors.orange[400]!, Colors.deepOrange[400]!],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            border: Border.all(color: Colors.white, width: 4),
-            boxShadow: [
-              BoxShadow(
-                color: streak.isCompleteToday 
-                    ? Colors.green.withOpacity(0.4)
-                    : Colors.orange.withOpacity(0.4),
-                blurRadius: 20,
-                spreadRadius: 2,
+    return GestureDetector(
+      onTap: isFocused && !streak.isCoachMaxTeam && friendMember != null
+          ? () => _showBuddyProfile(streak, friendMember)
+          : null,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: streak.isCoachMaxTeam
+                    ? [Colors.blue[400]!, Colors.purple[400]!]
+                    : streak.isCompleteToday
+                        ? [Colors.green[400]!, Colors.teal[400]!]
+                        : [Colors.orange[400]!, Colors.deepOrange[400]!],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-            ],
-          ),
-          // ✅ FIXED: Use UserAvatar widget or emoji
-          child: Center(
-            child: streak.isCoachMaxTeam
-                ? Text(
-                    '🤖',  // Coach Max emoji
-                    style: TextStyle(fontSize: size * 0.5),
-                  )
-                : ClipOval(  // ✅ NEW: Show actual user avatar
-                    child: UserAvatar(
-                      avatarId: friendMember?.avatarId ?? 'avatar_1',
-                      size: size * 0.85,  // Slightly smaller to fit inside circle
+              border: Border.all(color: Colors.white, width: 4),
+              boxShadow: [
+                BoxShadow(
+                  color: streak.isCompleteToday 
+                      ? Colors.green.withOpacity(0.4)
+                      : Colors.orange.withOpacity(0.4),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Center(
+              child: streak.isCoachMaxTeam
+                  ? Text(
+                      '🤖',
+                      style: TextStyle(fontSize: size * 0.5),
+                    )
+                  : ClipOval(
+                      child: UserAvatar(
+                        avatarId: friendMember?.avatarId ?? 'avatar_1',
+                        size: size * 0.85,
+                      ),
                     ),
-                  ),
+            ),
           ),
-        ),
-        
-        // ⭐ Favorite star button (only for non-Coach Max when focused)
-        if (!streak.isCoachMaxTeam && isFocused)
-          Positioned(
-            top: -5,
-            right: -5,
-            child: GestureDetector(
-              onTap: () => _toggleFavorite(streak),
+          
+          // ⭐ Favorite star button (only for non-Coach Max when focused)
+          if (!streak.isCoachMaxTeam && isFocused)
+            Positioned(
+              top: -5,
+              right: -5,
+              child: GestureDetector(
+                onTap: () => _toggleFavorite(streak),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: streak.isFavorite ? Colors.orange[400] : Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: streak.isFavorite ? Colors.orange[600]! : Colors.grey[300]!,
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 4,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    streak.isFavorite ? Icons.star : Icons.star_border,
+                    color: streak.isFavorite ? Colors.white : Colors.grey[600],
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
+          
+          // Checkmark badge
+          if (streak.isCompleteToday)
+            Positioned(
+              bottom: 0,
+              right: 0,
               child: Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: streak.isFavorite ? Colors.orange[400] : Colors.white,
+                  color: Colors.green,
                   shape: BoxShape.circle,
-                  border: Border.all(
-                    color: streak.isFavorite ? Colors.orange[600]! : Colors.grey[300]!,
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 4,
-                      spreadRadius: 1,
-                    ),
-                  ],
+                  border: Border.all(color: Colors.white, width: 3),
                 ),
-                child: Icon(
-                  streak.isFavorite ? Icons.star : Icons.star_border,
-                  color: streak.isFavorite ? Colors.white : Colors.grey[600],
+                child: const Icon(
+                  Icons.check,
+                  color: Colors.white,
                   size: 20,
                 ),
               ),
             ),
-          ),
-        
-        // Checkmark badge (existing code)
-        if (streak.isCompleteToday)
-          Positioned(
-            bottom: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.green,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
-              ),
-              child: const Icon(
-                Icons.check,
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1542,6 +1573,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
     final allStreaks = await _teamStreakService.getAllUserStreaks();
+    final nicknames = await nicknameService.getAllNicknames();
     
     // 🔍 DEBUG: See what we're getting
     print('🔥 Raw streaks count: ${allStreaks.length}');
@@ -1613,6 +1645,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
     setState(() {
       _allStreaks = uniqueStreaks;  // ✅ Use deduplicated (and optionally ordered) list
+      _nicknames = nicknames;
       _streakCompletionStatus = completionStatus;
       _highestStreak = highestStreak;
       _hasCheckedInToday = hasCheckedIn;
@@ -2906,18 +2939,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
-  void _showQuickCreateWorkoutDialog() async {
-    final friendService = FriendService();
-    final friends = await friendService.getFriends();
-    
-    if (!mounted) return;
-    
-    showDialog(
-      context: context,
-      builder: (context) => _CreateWorkoutDialog(
-        friends: friends,
-        onWorkoutCreated: _loadStreakData,
-      ),
+  void _showQuickCreateWorkoutDialog() {
+    ScheduleWorkoutSheet.show(
+      context,
+      onWorkoutScheduled: _loadStreakData,
     );
   }
 
@@ -3909,6 +3934,27 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
   }
 
+  void _showBuddyProfile(TeamStreak streak, TeamMember buddy) {
+    final nickname = _nicknames[buddy.userId];
+    
+    BuddyProfileSheet.show(
+      context,
+      buddyDisplayName: buddy.displayName,
+      buddyUsername: buddy.username ?? buddy.displayName.toLowerCase().replaceAll(' ', ''),
+      buddyAvatarId: buddy.avatarId ?? 'avatar_1',
+      buddyUserId: buddy.userId,
+      currentStreak: streak.currentStreak,
+      bestStreak: streak.longestStreak,
+      totalWorkouts: streak.totalWorkouts,
+      nickname: nickname,  // 🆕 Pass the nickname
+      onNicknameChanged: () {
+        // Refresh nicknames and reload
+        nicknameService.refreshCache();
+        _loadStreakData();
+      },
+    );
+  }
+
 
 }
 
@@ -4416,12 +4462,9 @@ class _SchedulePageState extends State<SchedulePage> {
   }
 
   void _showCreateWorkoutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => _CreateWorkoutDialog(
-        friends: _friends,
-        onWorkoutCreated: loadData,
-      ),
+    ScheduleWorkoutSheet.show(
+      context,
+      onWorkoutScheduled: loadData,
     );
   }
 
@@ -4686,385 +4729,25 @@ class _SchedulePageState extends State<SchedulePage> {
           final workoutStatus = workout['status'];
 
           // Get partner name
-          String partnerName = 'Solo Workout';
+          String partnerName = 'Solo';
           if (buddy != null && isCreator) {
             partnerName = buddy['display_name'] ?? 'Unknown';
           } else if (creator != null && isBuddy) {
             partnerName = creator['display_name'] ?? 'Unknown';
           }
 
-          return Container(
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: _getWorkoutColor(workout['workout_type']).withOpacity(0.2),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.white,
-                      _getWorkoutColor(workout['workout_type']).withOpacity(0.05),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    // ===== TOP GRADIENT BAR =====
-                    Container(
-                      height: 6,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            _getWorkoutColor(workout['workout_type']),
-                            _getWorkoutColor(workout['workout_type']).withOpacity(0.6),
-                          ],
-                        ),
-                      ),
-                    ),
-                    
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // ===== HEADER ROW =====
-                          Row(
-                            children: [
-                              // Workout Icon
-                              Container(
-                                width: 56,
-                                height: 56,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      _getWorkoutColor(workout['workout_type']),
-                                      _getWorkoutColor(workout['workout_type']).withOpacity(0.7),
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: _getWorkoutColor(workout['workout_type']).withOpacity(0.3),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Icon(
-                                  _getWorkoutIcon(workout['workout_type']),
-                                  color: Colors.white,
-                                  size: 28,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              
-                              // Title & Partner
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      workout['workout_type'] ?? 'Workout',
-                                      style: const TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF2C3E50),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.person,
-                                          size: 16,
-                                          color: Colors.blue[600],
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'with $partnerName',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.blue[600],
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              
-                              // Status Badge
-                              _buildEnhancedStatusBadge(workoutStatus),
-                            ],
-                          ),
-                          
-                          const SizedBox(height: 20),
-                          
-                          // ===== INFO CHIPS ROW =====
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 8,
-                            children: [
-                              // Date Chip
-                              _buildInfoChip(
-                                icon: Icons.calendar_today,
-                                label: _formatDate(workout['workout_date']),
-                                color: Colors.blue[700]!,
-                              ),
-                              // Time Chip
-                              _buildInfoChip(
-                                icon: Icons.access_time,
-                                label: workout['workout_time'] ?? '',
-                                color: Colors.purple[700]!,
-                              ),
-                              // Duration Chip
-                              if (workout['planned_duration_minutes'] != null)
-                                _buildInfoChip(
-                                  icon: Icons.timer,
-                                  label: _formatDuration(workout['planned_duration_minutes']),
-                                  color: Colors.orange[700]!,
-                                ),
-                            ],
-                          ),
-                          
-                          // ===== IN PROGRESS TIMER =====
-                          if (workoutStatus == 'in_progress') ...[
-                            const SizedBox(height: 16),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [Colors.orange[50]!, Colors.orange[100]!],
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.orange[300]!),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.orange[400],
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.play_arrow,
-                                      color: Colors.white,
-                                      size: 16,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'Started ${_timeAgo(workout['workout_started_at'])}',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.orange[900],
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  Text(
-                                    '🔥 In Progress',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.orange[800],
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                          
-                          // ===== INVITE PENDING BANNER =====
-                          if (isBuddy && buddyStatus == 'pending') ...[
-                            const SizedBox(height: 16),
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [Colors.blue[50]!, Colors.purple[50]!],
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.blue[200]!),
-                              ),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(10),
-                                        decoration: BoxDecoration(
-                                          gradient: LinearGradient(
-                                            colors: [Colors.blue[400]!, Colors.purple[400]!],
-                                          ),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: const Icon(
-                                          Icons.mail,
-                                          color: Colors.white,
-                                          size: 20,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              '${creator?['display_name']} wants to workout with you!',
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.grey[800],
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              'Accept to join this workout session',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[600],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: ElevatedButton.icon(
-                                          onPressed: () {
-                                            HapticFeedback.lightImpact();
-                                            _acceptInvitation(workout['id']);
-                                          },
-                                          icon: const Icon(Icons.check_circle, size: 20),
-                                          label: const Text('Accept'),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.green[600],
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(vertical: 14),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            elevation: 2,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: OutlinedButton.icon(
-                                          onPressed: () {
-                                            HapticFeedback.lightImpact();
-                                            _declineInvitation(workout['id']);
-                                          },
-                                          icon: Icon(Icons.close, size: 20, color: Colors.red[600]),
-                                          label: Text(
-                                            'Decline',
-                                            style: TextStyle(color: Colors.red[600]),
-                                          ),
-                                          style: OutlinedButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(vertical: 14),
-                                            side: BorderSide(color: Colors.red[300]!, width: 2),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                          
-                          // ===== ACTION BUTTONS (for non-pending) =====
-                          if (!(isBuddy && buddyStatus == 'pending')) ...[
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                if (workoutStatus == 'scheduled')
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () {
-                                        HapticFeedback.lightImpact();
-                                        _startWorkout(workout['id']);
-                                      },
-                                      icon: const Icon(Icons.play_arrow, size: 22),
-                                      label: const Text('Start Workout'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: _getWorkoutColor(workout['workout_type']),
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(vertical: 14),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        elevation: 2,
-                                      ),
-                                    ),
-                                  ),
-                                if (workoutStatus == 'in_progress')
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () {
-                                        HapticFeedback.lightImpact();
-                                        _completeWorkout(workout['id']);
-                                      },
-                                      icon: const Icon(Icons.check_circle, size: 22),
-                                      label: const Text('Complete'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green[600],
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(vertical: 14),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        elevation: 2,
-                                      ),
-                                    ),
-                                  ),
-                                if (isCreator && workoutStatus == 'scheduled') ...[
-                                  const SizedBox(width: 12),
-                                  IconButton(
-                                    onPressed: () {
-                                      HapticFeedback.lightImpact();
-                                      _cancelWorkout(workout['id']);
-                                    },
-                                    icon: Icon(Icons.delete_outline, color: Colors.red[400]),
-                                    style: IconButton.styleFrom(
-                                      backgroundColor: Colors.red[50],
-                                      padding: const EdgeInsets.all(12),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          return WorkoutCard(
+            workout: workout,
+            partnerName: partnerName,
+            isCreator: isCreator,
+            isBuddy: isBuddy,
+            buddyStatus: buddyStatus,
+            workoutStatus: workoutStatus,
+            onStart: () => _startWorkout(workout['id']),
+            onComplete: () => _completeWorkout(workout['id']),
+            onCancel: () => _cancelWorkout(workout['id']),
+            onAccept: () => _acceptInvitation(workout['id']),
+            onDecline: () => _declineInvitation(workout['id']),
           );
         }).toList(),
         const CompletedWorkoutsSection(),
@@ -5361,305 +5044,8 @@ class _SchedulePageState extends State<SchedulePage> {
       ),
     );
   }
-  
-
 }
 
-// Create Workout Dialog
-class _CreateWorkoutDialog extends StatefulWidget {
-  final List<Map<String, dynamic>> friends;
-  final VoidCallback onWorkoutCreated;
-
-  const _CreateWorkoutDialog({
-    required this.friends,
-    required this.onWorkoutCreated,
-  });
-
-  @override
-  State<_CreateWorkoutDialog> createState() => _CreateWorkoutDialogState();
-}
-
-class _CreateWorkoutDialogState extends State<_CreateWorkoutDialog> {
-  final WorkoutService _workoutService = WorkoutService();
-  final _formKey = GlobalKey<FormState>();
-  
-  String _workoutType = 'Cardio';
-  DateTime _selectedDate = DateTime.now();
-  TimeOfDay _selectedTime = TimeOfDay.now();
-  int _plannedDuration = 60;
-  String? _selectedBuddyId;
-  final TextEditingController _notesController = TextEditingController();
-  bool _isCreating = false;
-
-  final List<String> _workoutTypes = [
-    'Cardio',
-    'Strength',
-    'Weights',
-    'Upper Body',
-    'Lower Body',
-    'Leg Day',
-    'Full Body',
-    'HIIT',
-    'Yoga',
-    'Other',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    print('📋 Friends in dialog: ${widget.friends.length}');
-    widget.friends.forEach((friend) {
-      print('  - ${friend['display_name']} (${friend['id']})');
-    });
-  }
-
-  Future<void> _createWorkout() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() {
-      _isCreating = true;
-    });
-
-    final timeString = '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}:00';
-
-    final error = await _workoutService.createWorkout(
-      workoutType: _workoutType,
-      date: _selectedDate,
-      time: timeString,
-      plannedDurationMinutes: _plannedDuration,
-      buddyId: _selectedBuddyId,
-      notes: _notesController.text.isEmpty ? null : _notesController.text,
-    );
-
-    setState(() {
-      _isCreating = false;
-    });
-
-    if (error == null) {
-      widget.onWorkoutCreated();
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _selectedBuddyId != null 
-                ? 'Workout invitation sent! 🎉'
-                : 'Workout scheduled! 💪',
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $error'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Schedule Workout'),
-      content: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Workout Type
-              DropdownButtonFormField<String>(
-                value: _workoutType,
-                decoration: const InputDecoration(
-                  labelText: 'Workout Type',
-                  border: OutlineInputBorder(),
-                ),
-                items: _workoutTypes.map((type) {
-                  return DropdownMenuItem(value: type, child: Text(type));
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _workoutType = value!;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              
-              // Duration Selector
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Planned Duration: ${_formatDuration(_plannedDuration)}',
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed: _plannedDuration > 15
-                            ? () => setState(() => _plannedDuration -= 15)
-                            : null,
-                        icon: const Icon(Icons.remove),
-                      ),
-                      IconButton(
-                        onPressed: _plannedDuration < 240
-                            ? () => setState(() => _plannedDuration += 15)
-                            : null,
-                        icon: const Icon(Icons.add),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              
-              // Date Picker
-              ListTile(
-                title: const Text('Date'),
-                subtitle: Text(_formatDate(_selectedDate)),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: () async {
-                  final date = await showDatePicker(
-                    context: context,
-                    initialDate: _selectedDate,
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime.now().add(const Duration(days: 365)),
-                  );
-                  if (date != null) {
-                    setState(() {
-                      _selectedDate = date;
-                    });
-                  }
-                },
-              ),
-              
-              // Time Picker
-              ListTile(
-                title: const Text('Time'),
-                subtitle: Text(_selectedTime.format(context)),
-                trailing: const Icon(Icons.access_time),
-                onTap: () async {
-                  final time = await showTimePicker(
-                    context: context,
-                    initialTime: _selectedTime,
-                  );
-                  if (time != null) {
-                    setState(() {
-                      _selectedTime = time;
-                    });
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              
-              // Buddy Selection - FIXED WITHOUT EXPANDED
-              DropdownButtonFormField<String?>(
-                value: _selectedBuddyId,
-                decoration: InputDecoration(
-                  labelText: 'Workout Buddy (Optional)',
-                  border: const OutlineInputBorder(),
-                  helperText: widget.friends.isEmpty 
-                      ? 'Add friends to invite them!' 
-                      : '${widget.friends.length} friend${widget.friends.length == 1 ? '' : 's'} available',
-                  helperStyle: TextStyle(
-                    color: widget.friends.isEmpty ? Colors.orange : Colors.grey,
-                  ),
-                ),
-                items: [
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('👤 Solo Workout'),
-                  ),
-                  ...widget.friends.map<DropdownMenuItem<String?>>((friend) {
-                    final name = friend['display_name'] ?? 'Unknown';
-                    final initial = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?';
-                    
-                    return DropdownMenuItem<String?>(
-                      value: friend['id'] as String?,
-                      child: Text('🟢 $name'),  // Simple text, no complex Row widget
-                    );
-                  }),
-                ],
-                onChanged: (String? value) {
-                  setState(() {
-                    _selectedBuddyId = value;
-                  });
-                  if (value != null) {
-                    final friendName = widget.friends
-                        .firstWhere((f) => f['id'] == value)['display_name'];
-                    print('🎯 Selected buddy: $friendName ($value)');
-                  } else {
-                    print('🎯 Selected: Solo workout');
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              
-              // Notes
-              TextFormField(
-                controller: _notesController,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (Optional)',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 2,
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _isCreating ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _isCreating ? null : _createWorkout,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue[700],
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-          child: _isCreating
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : const Text('Schedule'),
-        ),
-      ],
-    );
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.month}/${date.day}/${date.year}';
-  }
-
-  String _formatDuration(int minutes) {
-    final hours = minutes ~/ 60;
-    final mins = minutes % 60;
-    if (hours > 0) {
-      return mins > 0 ? '${hours}h ${mins}m' : '${hours}h';
-    }
-    return '${mins}m';
-  }
-
-  @override
-  void dispose() {
-    _notesController.dispose();
-    super.dispose();
-  }
-}
 
 // Profile Page
 class ProfilePage extends StatefulWidget {
