@@ -22,6 +22,7 @@ import 'widgets/buddy_profile_sheet.dart';
 import 'services/nickname_service.dart';
 import 'widgets/workout_card.dart';
 import 'widgets/schedule_workout_sheet.dart';
+import 'widgets/workout_checkin_sheet.dart';
 
 
 
@@ -266,6 +267,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
     // Check if user needs to set weekly plan
     await _checkWeeklyPlan();
+
+    // Check for active workout session
+  await _checkForActiveWorkout();
     
     // Then load streaks normally
     await _loadStreakData();
@@ -1937,7 +1941,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   Future<void> _checkIn() async {
     if (_hasCheckedInToday) {
-      HapticFeedback.mediumImpact();  // ✅ HAPTIC FEEDBACK!
+      HapticFeedback.mediumImpact();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('You\'ve already checked in today! 💪'),
@@ -1948,75 +1952,65 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       return;
     }
 
-    HapticFeedback.lightImpact();  // ✅ HAPTIC FEEDBACK ON PRESS!
-    
-    setState(() {
-      _isCheckingIn = true;
-    });
-
-    final result = await _teamStreakService.checkInAllTeams();
-
-    setState(() {
-      _isCheckingIn = false;
-    });
-
-    if (result['success'] == true) {
-      HapticFeedback.heavyImpact();  // ✅ SUCCESS HAPTIC!
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(result['message'] ?? 'Check-in successful!'),
+    // Open the workout timer sheet
+    final completed = await WorkoutCheckInSheet.show(
+      context,
+      onCheckInComplete: () async {
+        // This runs when user completes the 15-minute workout
+        final result = await _teamStreakService.checkInAllTeams();
+        
+        if (result['success'] == true) {
+          HapticFeedback.heavyImpact();
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.white),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(result['message'] ?? 'Check-in successful!'),
+                    ),
+                  ],
+                ),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 3),
               ),
-            ],
-          ),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: 'VIEW',
-            textColor: Colors.white,
-            onPressed: () {
-              HapticFeedback.selectionClick();  // ✅ HAPTIC FEEDBACK!
-              _showAllStreaks();
-            },
-          ),
-        ),
-      );
+            );
+          }
+          
+          // Reload data and check for milestones
+          await _loadStreakData();
+          _checkForMilestone();
+        }
+      },
+    );
 
-      // ✅ Wait a moment for database to process, then refresh
-      await Future.delayed(const Duration(milliseconds: 500));
+    // Reload data regardless of outcome
+    if (completed != null) {
       await _loadStreakData();
-      _checkForMilestone();
-    }else {
-      HapticFeedback.mediumImpact();  // ✅ ERROR HAPTIC!
+    }
+  }
+
+  Future<void> _checkForActiveWorkout() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    
+    try {
+      final existing = await Supabase.instance.client
+          .from('active_checkin_sessions')
+          .select()
+          .eq('user_id', userId)
+          .maybeSingle();
       
-      final message = result['message'] ?? 'Check-in failed';
-      final isDuplicate = message.toLowerCase().contains('already');
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(
-                isDuplicate ? Icons.info : Icons.error,
-                color: Colors.white,
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Text(message)),
-            ],
-          ),
-          backgroundColor: isDuplicate ? Colors.orange : Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-      
-      if (isDuplicate) {
-        _loadStreakData();
+      if (existing != null && mounted) {
+        // Active workout exists - just open the timer sheet directly
+        // It will automatically show the correct elapsed time
+        _checkIn();
       }
+    } catch (e) {
+      print('Error checking for active workout: $e');
     }
   }
 
