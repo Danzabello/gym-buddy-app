@@ -1942,21 +1942,71 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   
 
   Future<void> _checkIn() async {
-    if (_hasCheckedInToday) {
-      HapticFeedback.mediumImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('You\'ve already checked in today! 💪'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
+      if (_hasCheckedInToday) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You already checked in today! 💪'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
 
-    // ✅ NEW FLOW: Workout selection FIRST, then timer
-    await _handleCheckIn();
-  }
+      // ✅ NEW: Check if there's an active workout session first
+      final activeSession = await WorkoutCheckInSheet.getActiveSession();
+      
+      if (activeSession != null && activeSession['started_at'] != null) {
+        // ✅ Active workout exists - go directly to timer with saved details
+        if (!mounted) return;
+        
+        final completed = await WorkoutCheckInSheet.show(
+          context,
+          workoutType: activeSession['workout_type'] ?? 'Workout',
+          workoutEmoji: activeSession['workout_emoji'] ?? '💪',
+          plannedDuration: activeSession['planned_duration'] ?? 30,
+          onCheckInComplete: () async {
+            // Use the saved workout details for check-in
+            final result = await _teamStreakService.checkInAllTeams(
+              workoutName: activeSession['workout_type'] ?? 'Workout',
+              workoutEmoji: activeSession['workout_emoji'] ?? '💪',
+              durationMinutes: activeSession['planned_duration'] ?? 30,
+            );
+
+            if (result['success'] == true) {
+              HapticFeedback.heavyImpact();
+
+              if (!mounted) return;
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: Colors.white),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(result['message'] ?? 'Check-in successful!'),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              );
+            }
+          },
+        );
+
+        if (completed == true && mounted) {
+          _loadStreakData();
+        }
+        return; // ← Important: Don't show selection modal
+      }
+
+      // ✅ No active workout - show selection modal (existing flow)
+      await _handleCheckIn();
+    }
 
   Future<void> _checkForActiveWorkout() async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
@@ -3931,8 +3981,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           selectedTemplate = template;
           selectedDuration = duration;
           selectedNotes = notes;
-          // Close the selection modal
-          Navigator.pop(modalContext);
         },
       ),
     );

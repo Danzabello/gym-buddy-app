@@ -42,6 +42,26 @@ class WorkoutCheckInSheet extends StatefulWidget {
     );
   }
 
+  /// Static method to check if there's an active workout session
+  /// Returns the session data if exists, null otherwise
+  static Future<Map<String, dynamic>?> getActiveSession() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return null;
+
+    try {
+      final existing = await Supabase.instance.client
+          .from('active_checkin_sessions')
+          .select()
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      return existing;
+    } catch (e) {
+      print('❌ Error checking active session: $e');
+      return null;
+    }
+  }
+
   @override
   State<WorkoutCheckInSheet> createState() => _WorkoutCheckInSheetState();
 }
@@ -162,9 +182,13 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
     _workoutStartTime = DateTime.now();
 
     try {
+      // Save workout session WITH workout details for resume functionality
       await Supabase.instance.client.from('active_checkin_sessions').upsert({
         'user_id': userId,
         'started_at': _workoutStartTime!.toIso8601String(),
+        'workout_type': widget.workoutType,
+        'workout_emoji': widget.workoutEmoji,
+        'planned_duration': widget.plannedDuration,
       });
     } catch (e) {
       print('❌ Error saving workout session: $e');
@@ -320,296 +344,273 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
             .clamp(0.0, 1.0);
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
+    // FIX: Use intrinsic height - only as tall as content needs
     return Container(
-      // FIX: Reduced max height slightly
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.80,
-      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SafeArea(
         top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 8),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(24, 0, 24, bottomPadding > 0 ? bottomPadding : 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min, // KEY: Only as tall as needed
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
 
-            // FIX: Scrollable content to prevent overflow
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-                child: Column(
+              // Header with workout type
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: _hasReachedGoal
+                        ? [Colors.green[400]!, Colors.green[600]!]
+                        : [Colors.orange[400]!, Colors.orange[600]!],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (_hasReachedGoal ? Colors.green : Colors.orange)
+                          .withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Header with workout type
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: _hasReachedGoal
-                              ? [Colors.green[400]!, Colors.green[600]!]
-                              : [Colors.orange[400]!, Colors.orange[600]!],
+                    Text(
+                      widget.workoutEmoji ?? '💪',
+                      style: const TextStyle(fontSize: 28),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.workoutType ?? 'Workout',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: (_hasReachedGoal ? Colors.green : Colors.orange)
-                                .withOpacity(0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
+                        Text(
+                          _hasReachedGoal
+                              ? '✓ Goal reached!'
+                              : 'Goal: $_goalMinutes min',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withOpacity(0.9),
+                            fontWeight: FontWeight.w500,
                           ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            widget.workoutEmoji ?? '💪',
-                            style: const TextStyle(fontSize: 28),
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.workoutType ?? 'Workout',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              Text(
-                                _hasReachedGoal
-                                    ? '✓ Goal reached!'
-                                    : 'Goal: $_goalMinutes min',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.white.withOpacity(0.9),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Timer display
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 32),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: _hasReachedGoal
+                        ? Colors.green.withOpacity(0.3)
+                        : Colors.grey.withOpacity(0.2),
+                    width: 2,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      _formatDuration(_elapsed),
+                      style: TextStyle(
+                        fontSize: 56, // Slightly smaller
+                        fontWeight: FontWeight.w700,
+                        color: _hasReachedGoal ? Colors.green[700] : Colors.grey[800],
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                        letterSpacing: 2,
                       ),
                     ),
+                    const SizedBox(height: 12),
 
-                    const SizedBox(height: 32),
-
-                    // Timer display
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 32),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[50],
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: _hasReachedGoal
-                              ? Colors.green.withOpacity(0.3)
-                              : Colors.grey.withOpacity(0.2),
-                          width: 2,
+                    // Progress bar
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 8,
+                        backgroundColor: Colors.grey[200],
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          _hasReachedGoal ? Colors.green[500]! : Colors.orange[500]!,
                         ),
                       ),
-                      child: Column(
-                        children: [
-                          Text(
-                            _formatDuration(_elapsed),
-                            style: TextStyle(
-                              fontSize: 64,
-                              fontWeight: FontWeight.w700,
-                              color: _hasReachedGoal ? Colors.green[700] : Colors.grey[800],
-                              fontFeatures: const [FontFeature.tabularFigures()],
-                              letterSpacing: 2,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Progress bar
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: LinearProgressIndicator(
-                              value: progress,
-                              minHeight: 10,
-                              backgroundColor: Colors.grey[200],
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                _hasReachedGoal ? Colors.green[500]! : Colors.orange[500]!,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            _hasReachedGoal
-                                ? '🎉 Goal reached! Ready to check in!'
-                                : '${_formatRemainingTime()} until goal',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: _hasReachedGoal ? Colors.green[700] : Colors.grey[600],
-                            ),
-                          ),
-                        ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _hasReachedGoal
+                          ? '🎉 Goal reached! Ready to check in!'
+                          : '${_formatRemainingTime()} until goal',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: _hasReachedGoal ? Colors.green[700] : Colors.grey[600],
                       ),
                     ),
+                  ],
+                ),
+              ),
 
-                    const SizedBox(height: 24),
+              const SizedBox(height: 16),
 
-                    // Motivational message
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 500),
-                      child: Container(
-                        key: ValueKey<int>(_hasReachedGoal ? -1 : _currentMessageIndex),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: _hasReachedGoal ? Colors.green[50] : Colors.blue[50],
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
+              // Motivational message
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                child: Container(
+                  key: ValueKey<int>(_hasReachedGoal ? -1 : _currentMessageIndex),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _hasReachedGoal ? Colors.green[50] : Colors.blue[50],
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: _hasReachedGoal
+                          ? Colors.green.withOpacity(0.2)
+                          : Colors.blue.withOpacity(0.2),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        _hasReachedGoal
+                            ? _completedMessages[_currentMessageIndex %
+                                _completedMessages.length]['emoji']!
+                            : _motivationalMessages[_currentMessageIndex]['emoji']!,
+                        style: const TextStyle(fontSize: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _hasReachedGoal
+                              ? _completedMessages[_currentMessageIndex %
+                                  _completedMessages.length]['text']!
+                              : _motivationalMessages[_currentMessageIndex]['text']!,
+                          style: TextStyle(
+                            fontSize: 13,
                             color: _hasReachedGoal
-                                ? Colors.green.withOpacity(0.2)
-                                : Colors.blue.withOpacity(0.2),
+                                ? Colors.green[900]
+                                : Colors.blue[900],
+                            height: 1.3,
                           ),
                         ),
-                        child: Row(
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Info message - more compact
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.info_outline, color: Colors.grey[500], size: 16),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Timer runs in background. Close this and continue using the app!',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              // Complete button - LOCKED until goal reached!
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: (_hasReachedGoal && !_isCompleting) ? _completeCheckIn : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _hasReachedGoal ? Colors.green[600] : Colors.grey[400],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: _hasReachedGoal ? 2 : 0,
+                    shadowColor: Colors.green.withOpacity(0.4),
+                    disabledBackgroundColor: Colors.grey[300],
+                    disabledForegroundColor: Colors.grey[600],
+                  ),
+                  child: _isCompleting
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
-                              _hasReachedGoal
-                                  ? _completedMessages[_currentMessageIndex %
-                                      _completedMessages.length]['emoji']!
-                                  : _motivationalMessages[_currentMessageIndex]['emoji']!,
-                              style: const TextStyle(fontSize: 28),
+                            Icon(
+                              _hasReachedGoal ? Icons.check_circle : Icons.lock,
+                              size: 20,
                             ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Text(
-                                _hasReachedGoal
-                                    ? _completedMessages[_currentMessageIndex %
-                                        _completedMessages.length]['text']!
-                                    : _motivationalMessages[_currentMessageIndex]['text']!,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: _hasReachedGoal
-                                      ? Colors.green[900]
-                                      : Colors.blue[900],
-                                  height: 1.3,
-                                ),
+                            const SizedBox(width: 10),
+                            Text(
+                              _hasReachedGoal 
+                                  ? 'Complete Check-In' 
+                                  : 'Complete Goal to Check In',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ],
                         ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Info message
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.info_outline, color: Colors.grey[600], size: 18),
-                          const SizedBox(width: 10),
-                          Flexible(
-                            child: Text(
-                              'Timer runs in background. Close this and continue using the app!',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[700],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Complete button - LOCKED until goal reached!
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        // ✅ Only enabled when goal is reached AND not currently completing
-                        onPressed: (_hasReachedGoal && !_isCompleting) ? _completeCheckIn : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _hasReachedGoal ? Colors.green[600] : Colors.grey[400],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: _hasReachedGoal ? 2 : 0,
-                          shadowColor: Colors.green.withOpacity(0.4),
-                          disabledBackgroundColor: Colors.grey[300],
-                          disabledForegroundColor: Colors.grey[600],
-                        ),
-                        child: _isCompleting
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    _hasReachedGoal ? Icons.check_circle : Icons.lock,
-                                    size: 22,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    _hasReachedGoal 
-                                        ? 'Complete Check-In' 
-                                        : 'Complete Goal to Check In',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    // Cancel button
-                    TextButton(
-                      onPressed: _cancelWorkout,
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
-                      child: Text(
-                        'Cancel Workout',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[500],
-                        ),
-                      ),
-                    ),
-
-                    SizedBox(height: bottomPadding > 0 ? bottomPadding : 16),
-                  ],
                 ),
               ),
-            ),
-          ],
+
+              const SizedBox(height: 4),
+
+              // Cancel button - tighter spacing
+              TextButton(
+                onPressed: _cancelWorkout,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+                child: Text(
+                  'Cancel Workout',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[500],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
