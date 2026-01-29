@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'quick_schedule_sheet.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Shows the workout history between you and a specific buddy
@@ -291,7 +292,12 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
             ElevatedButton.icon(
               onPressed: () {
                 Navigator.pop(context);
-                // Could navigate to schedule page here
+                // Open the schedule sheet with the buddy pre-selected
+                QuickScheduleSheet.show(
+                  context,
+                  buddyUserId: widget.buddyUserId,
+                  buddyDisplayName: widget.buddyDisplayName,
+                );
               },
               icon: const Icon(Icons.add),
               label: const Text('Schedule Workout'),

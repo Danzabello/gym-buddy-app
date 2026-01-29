@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 
-/// Clean, modern workout card for the Schedule page
-/// Use this to replace the workout cards in _buildWorkoutList()
-class WorkoutCard extends StatelessWidget {
+/// Redesigned workout card with embedded timer for in_progress workouts
+/// Shows timer progress directly in the card - no need to open a separate sheet
+class WorkoutCard extends StatefulWidget {
   final Map<String, dynamic> workout;
   final String partnerName;
   final bool isCreator;
@@ -15,6 +16,7 @@ class WorkoutCard extends StatelessWidget {
   final VoidCallback? onCancel;
   final VoidCallback? onAccept;
   final VoidCallback? onDecline;
+  final VoidCallback? onOpenTimer; // New: Open the full timer sheet
 
   const WorkoutCard({
     super.key,
@@ -29,12 +31,72 @@ class WorkoutCard extends StatelessWidget {
     this.onCancel,
     this.onAccept,
     this.onDecline,
+    this.onOpenTimer,
   });
 
   @override
+  State<WorkoutCard> createState() => _WorkoutCardState();
+}
+
+class _WorkoutCardState extends State<WorkoutCard> {
+  Timer? _timer;
+  Duration _elapsed = Duration.zero;
+  DateTime? _startTime;
+
+  @override
+  void initState() {
+    super.initState();
+    _initTimer();
+  }
+
+  @override
+  void didUpdateWidget(WorkoutCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reinitialize timer if workout changed
+    if (oldWidget.workout['id'] != widget.workout['id'] ||
+        oldWidget.workoutStatus != widget.workoutStatus) {
+      _timer?.cancel();
+      _initTimer();
+    }
+  }
+
+  void _initTimer() {
+    if (widget.workoutStatus == 'in_progress') {
+      final startedAt = widget.workout['workout_started_at'];
+      if (startedAt != null) {
+        _startTime = DateTime.parse(startedAt);
+        _updateElapsed();
+        _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+          if (mounted) _updateElapsed();
+        });
+      }
+    }
+  }
+
+  void _updateElapsed() {
+    if (_startTime != null) {
+      setState(() {
+        _elapsed = DateTime.now().difference(_startTime!);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  int get _goalMinutes => widget.workout['planned_duration_minutes'] ?? 30;
+  bool get _hasReachedGoal => _elapsed.inMinutes >= _goalMinutes;
+  double get _progress => (_elapsed.inSeconds / (_goalMinutes * 60)).clamp(0.0, 1.0);
+
+  @override
   Widget build(BuildContext context) {
-    final isIncomingInvite = isBuddy && buddyStatus == 'pending';
-    final creator = workout['creator'];
+    final isInProgress = widget.workoutStatus == 'in_progress';
+    final isIncomingInvite = widget.isBuddy && widget.buddyStatus == 'pending';
+    final cancelRequestedBy = widget.workout['cancel_requested_by'];
+    final hasCancelRequest = cancelRequestedBy != null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -43,66 +105,52 @@ class WorkoutCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: isIncomingInvite
-                ? Colors.blue.withOpacity(0.15)
-                : Colors.black.withOpacity(0.06),
+            color: isInProgress
+                ? Colors.orange.withOpacity(0.2)
+                : isIncomingInvite
+                    ? Colors.blue.withOpacity(0.15)
+                    : Colors.black.withOpacity(0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
-        border: isIncomingInvite
-            ? Border.all(color: Colors.blue[300]!, width: 2)
-            : null,
+        border: isInProgress
+            ? Border.all(color: Colors.orange[300]!, width: 2)
+            : isIncomingInvite
+                ? Border.all(color: Colors.blue[300]!, width: 2)
+                : null,
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Main content
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Workout type icon
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        _getWorkoutColor(workout['workout_type']),
-                        _getWorkoutColor(workout['workout_type']).withOpacity(0.7),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    _getWorkoutIcon(workout['workout_type']),
-                    color: Colors.white,
-                    size: 28,
-                  ),
-                ),
+                _buildWorkoutIcon(),
+                const SizedBox(width: 14),
 
-                const SizedBox(width: 16),
-
-                // Info section
+                // Details
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Title row with status
+                      // Title row
                       Row(
                         children: [
                           Expanded(
                             child: Text(
-                              workout['workout_type'] ?? 'Workout',
+                              widget.workout['workout_type'] ?? 'Workout',
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                           ),
-                          _buildStatusChip(workoutStatus),
+                          _buildStatusChip(),
                         ],
                       ),
 
@@ -114,7 +162,7 @@ class WorkoutCard extends StatelessWidget {
                           Icon(Icons.person, size: 14, color: Colors.blue[600]),
                           const SizedBox(width: 4),
                           Text(
-                            'with $partnerName',
+                            'with ${widget.partnerName}',
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.blue[600],
@@ -133,16 +181,16 @@ class WorkoutCard extends StatelessWidget {
                         children: [
                           _buildInfoTag(
                             icon: Icons.calendar_today,
-                            text: _formatDate(workout['workout_date']),
+                            text: _formatDate(widget.workout['workout_date']),
                           ),
                           _buildInfoTag(
                             icon: Icons.access_time,
-                            text: _formatTime(workout['workout_time']),
+                            text: _formatTime(widget.workout['workout_time']),
                           ),
-                          if (workout['planned_duration_minutes'] != null)
+                          if (widget.workout['planned_duration_minutes'] != null)
                             _buildInfoTag(
                               icon: Icons.timer,
-                              text: _formatDuration(workout['planned_duration_minutes']),
+                              text: _formatDuration(widget.workout['planned_duration_minutes']),
                             ),
                         ],
                       ),
@@ -153,24 +201,48 @@ class WorkoutCard extends StatelessWidget {
             ),
           ),
 
-          // Invite actions (if incoming invite)
-          if (isIncomingInvite)
-            _buildInviteActions(creator),
+          // Cancel request banner (if someone requested cancel)
+          if (hasCancelRequest) _buildCancelRequestBanner(cancelRequestedBy),
 
-          // Regular actions (if not an invite)
-          if (!isIncomingInvite && (workoutStatus == 'scheduled' || workoutStatus == 'in_progress'))
-            _buildWorkoutActions(),
+          // Timer section for in_progress workouts
+          if (isInProgress) _buildTimerSection(),
+
+          // Invite actions (if incoming invite)
+          if (isIncomingInvite) _buildInviteActions(),
+
+          // Regular actions
+          if (!isIncomingInvite) _buildWorkoutActions(),
         ],
       ),
     );
   }
 
-  Widget _buildStatusChip(String? status) {
+  Widget _buildWorkoutIcon() {
+    final workoutType = widget.workout['workout_type'] ?? 'Workout';
+    final color = _getWorkoutColor(workoutType);
+    final icon = _getWorkoutIcon(workoutType);
+    final isInProgress = widget.workoutStatus == 'in_progress';
+
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(16),
+        border: isInProgress
+            ? Border.all(color: color.withOpacity(0.5), width: 2)
+            : null,
+      ),
+      child: Icon(icon, color: color, size: 28),
+    );
+  }
+
+  Widget _buildStatusChip() {
     Color bgColor;
     Color textColor;
     String label;
 
-    switch (status?.toLowerCase()) {
+    switch (widget.workoutStatus?.toLowerCase()) {
       case 'in_progress':
         bgColor = Colors.orange[100]!;
         textColor = Colors.orange[800]!;
@@ -184,7 +256,7 @@ class WorkoutCard extends StatelessWidget {
       default:
         bgColor = Colors.blue[50]!;
         textColor = Colors.blue[700]!;
-        label = 'Scheduled';
+        label = '📅 Scheduled';
     }
 
     return Container(
@@ -196,8 +268,8 @@ class WorkoutCard extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
           color: textColor,
         ),
       ),
@@ -218,10 +290,37 @@ class WorkoutCard extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             text,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.grey[700],
-              fontWeight: FontWeight.w500,
+            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCancelRequestBanner(String? requestedBy) {
+    final currentUserId = widget.workout['user_id'] == requestedBy
+        ? widget.workout['user_id']
+        : widget.workout['buddy_id'];
+    final isMyRequest = requestedBy == currentUserId;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red[200]!),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.red[600], size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              isMyRequest
+                  ? 'You requested to cancel. Waiting for your buddy to confirm.'
+                  : 'Your buddy requested to cancel this workout.',
+              style: TextStyle(fontSize: 13, color: Colors.red[800]),
             ),
           ),
         ],
@@ -229,36 +328,144 @@ class WorkoutCard extends StatelessWidget {
     );
   }
 
-  Widget _buildInviteActions(Map<String, dynamic>? creator) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Column(
-        children: [
-          const Divider(),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(Icons.mail_outline, size: 18, color: Colors.blue[600]),
-              const SizedBox(width: 8),
-              Text(
-                '${creator?['display_name'] ?? 'Someone'} invited you!',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey[700],
-                  fontWeight: FontWeight.w500,
+  Widget _buildTimerSection() {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        widget.onOpenTimer?.call();
+      },
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: _hasReachedGoal
+                ? [Colors.green[50]!, Colors.green[100]!]
+                : [Colors.orange[50]!, Colors.orange[100]!],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _hasReachedGoal ? Colors.green[300]! : Colors.orange[300]!,
+          ),
+        ),
+        child: Column(
+          children: [
+            // Timer display
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  _hasReachedGoal ? Icons.check_circle : Icons.timer,
+                  color: _hasReachedGoal ? Colors.green[600] : Colors.orange[600],
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  _formatElapsed(_elapsed),
+                  style: TextStyle(
+                    fontSize: 36,
+                    fontWeight: FontWeight.bold,
+                    color: _hasReachedGoal ? Colors.green[700] : Colors.orange[800],
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _hasReachedGoal
+                        ? Colors.green[200]
+                        : Colors.orange[200],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Goal: ${_goalMinutes}m',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _hasReachedGoal
+                          ? Colors.green[800]
+                          : Colors.orange[900],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Progress bar
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: _progress,
+                minHeight: 8,
+                backgroundColor: Colors.white.withOpacity(0.5),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  _hasReachedGoal ? Colors.green[500]! : Colors.orange[500]!,
                 ),
               ),
-            ],
+            ),
+            const SizedBox(height: 8),
+
+            // Status text
+            Text(
+              _hasReachedGoal
+                  ? '🎉 Goal reached! Ready to complete!'
+                  : '${_formatRemaining()} remaining',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: _hasReachedGoal ? Colors.green[700] : Colors.grey[600],
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // Tap hint
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.touch_app, size: 14, color: Colors.grey[500]),
+                const SizedBox(width: 4),
+                Text(
+                  'Tap to open full timer',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInviteActions() {
+    final creator = widget.workout['creator'];
+    final creatorName = creator?['display_name'] ?? 'Someone';
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Column(
+        children: [
+          Text(
+            '$creatorName invited you to work out together!',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey[600],
+              fontStyle: FontStyle.italic,
+            ),
           ),
           const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
-                child: ElevatedButton(
+                child: ElevatedButton.icon(
                   onPressed: () {
                     HapticFeedback.lightImpact();
-                    onAccept?.call();
+                    widget.onAccept?.call();
                   },
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('Accept'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green[500],
                     foregroundColor: Colors.white,
@@ -268,30 +475,23 @@ class WorkoutCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: const Text(
-                    'Accept',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: OutlinedButton(
+                child: OutlinedButton.icon(
                   onPressed: () {
                     HapticFeedback.lightImpact();
-                    onDecline?.call();
+                    widget.onDecline?.call();
                   },
+                  icon: Icon(Icons.close, size: 18, color: Colors.red[400]),
+                  label: Text('Decline', style: TextStyle(color: Colors.red[400])),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.grey[600],
+                    side: BorderSide(color: Colors.red[300]!),
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    side: BorderSide(color: Colors.grey[300]!),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                  ),
-                  child: const Text(
-                    'Decline',
-                    style: TextStyle(fontWeight: FontWeight.w500),
                   ),
                 ),
               ),
@@ -303,76 +503,87 @@ class WorkoutCard extends StatelessWidget {
   }
 
   Widget _buildWorkoutActions() {
+    final isInProgress = widget.workoutStatus == 'in_progress';
+    final isScheduled = widget.workoutStatus == 'scheduled';
+    final cancelRequestedBy = widget.workout['cancel_requested_by'];
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Row(
         children: [
-          if (workoutStatus == 'scheduled')
+          // Start button (for scheduled workouts)
+          if (isScheduled)
             Expanded(
-              child: ElevatedButton(
+              child: ElevatedButton.icon(
                 onPressed: () {
                   HapticFeedback.lightImpact();
-                  onStart?.call();
+                  widget.onStart?.call();
                 },
+                icon: const Icon(Icons.play_arrow, size: 20),
+                label: const Text('Start Workout'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _getWorkoutColor(workout['workout_type']),
+                  backgroundColor: _getWorkoutColor(widget.workout['workout_type']),
                   foregroundColor: Colors.white,
                   elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.play_arrow, size: 20),
-                    SizedBox(width: 4),
-                    Text('Start', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ],
                 ),
               ),
             ),
-          if (workoutStatus == 'in_progress')
+
+          // Complete button (for in_progress workouts - LOCKED until goal)
+          if (isInProgress)
             Expanded(
-              child: ElevatedButton(
-                onPressed: () {
-                  HapticFeedback.lightImpact();
-                  onComplete?.call();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green[500],
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+              child: ElevatedButton.icon(
+                onPressed: _hasReachedGoal
+                    ? () {
+                        HapticFeedback.heavyImpact();
+                        widget.onComplete?.call();
+                      }
+                    : null,
+                icon: Icon(
+                  _hasReachedGoal ? Icons.check_circle : Icons.lock,
+                  size: 20,
                 ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.check_circle, size: 20),
-                    SizedBox(width: 4),
-                    Text('Complete', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ],
+                label: Text(_hasReachedGoal ? 'Complete' : 'Complete Goal First'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _hasReachedGoal ? Colors.green[500] : Colors.grey[300],
+                  foregroundColor: _hasReachedGoal ? Colors.white : Colors.grey[600],
+                  disabledBackgroundColor: Colors.grey[300],
+                  disabledForegroundColor: Colors.grey[600],
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
               ),
             ),
-          if (isCreator && workoutStatus == 'scheduled') ...[
+
+          // Cancel button
+          if (isScheduled || isInProgress) ...[
             const SizedBox(width: 12),
             Container(
               decoration: BoxDecoration(
-                color: Colors.red[50],
-                borderRadius: BorderRadius.circular(12),
+                color: cancelRequestedBy != null ? Colors.red[100] : Colors.red[50],
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: cancelRequestedBy != null ? Colors.red[400]! : Colors.red[200]!,
+                ),
               ),
               child: IconButton(
                 onPressed: () {
                   HapticFeedback.lightImpact();
-                  onCancel?.call();
+                  widget.onCancel?.call();
                 },
-                icon: Icon(Icons.delete_outline, color: Colors.red[400], size: 22),
-                tooltip: 'Cancel',
+                icon: Icon(
+                  cancelRequestedBy != null ? Icons.cancel : Icons.close,
+                  color: Colors.red[600],
+                  size: 22,
+                ),
+                tooltip: cancelRequestedBy != null ? 'Confirm Cancel' : 'Request Cancel',
               ),
             ),
           ],
@@ -449,28 +660,39 @@ class WorkoutCard extends StatelessWidget {
     }
   }
 
-  String _formatTime(String? time) {
-    if (time == null) return '';
+  String _formatTime(String? timeStr) {
+    if (timeStr == null) return '';
     try {
-      final parts = time.split(':');
-      int hour = int.parse(parts[0]);
-      final minute = parts[1];
+      final parts = timeStr.split(':');
+      final hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
       final period = hour >= 12 ? 'PM' : 'AM';
-      if (hour > 12) hour -= 12;
-      if (hour == 0) hour = 12;
-      return '$hour:$minute $period';
+      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+      return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
     } catch (e) {
-      return time;
+      return timeStr;
     }
   }
 
   String _formatDuration(int? minutes) {
     if (minutes == null) return '';
+    if (minutes < 60) return '${minutes}m';
     final hours = minutes ~/ 60;
     final mins = minutes % 60;
-    if (hours > 0) {
-      return mins > 0 ? '${hours}h ${mins}m' : '${hours}h';
-    }
-    return '${mins}m';
+    return mins > 0 ? '${hours}h ${mins}m' : '${hours}h';
+  }
+
+  String _formatElapsed(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  String _formatRemaining() {
+    final remaining = Duration(minutes: _goalMinutes) - _elapsed;
+    if (remaining.isNegative) return '0:00';
+    final minutes = remaining.inMinutes;
+    final seconds = remaining.inSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 }

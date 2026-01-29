@@ -4555,16 +4555,139 @@ class _SchedulePageState extends State<SchedulePage> {
   }
 
   Future<void> _startWorkout(String workoutId) async {
-    final success = await _workoutService.startWorkout(workoutId);
-    if (success) {
-      if (!mounted) return; // ✅ CHECK MOUNTED
+    // Get the workout details first
+    final workout = _upcomingWorkouts.firstWhere(
+      (w) => w['id'] == workoutId,
+      orElse: () => {},
+    );
+    
+    if (workout.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Workout started! Timer is running.'),
-          backgroundColor: Colors.blue,
+          content: Text('Workout not found'),
+          backgroundColor: Colors.red,
         ),
       );
+      return;
+    }
+
+    // Check if buddy has accepted (if this is a buddy workout)
+    if (workout['buddy_id'] != null && workout['buddy_status'] != 'accepted') {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Your buddy needs to accept the workout invitation first!'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Mark workout as in_progress in the database
+    final started = await _workoutService.startWorkout(workoutId);
+    if (!started) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to start workout'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Get workout details for the timer
+    final workoutType = workout['workout_type'] ?? 'Workout';
+    final plannedDuration = workout['planned_duration_minutes'] ?? 30;
+    
+    // Map workout type to emoji
+    String workoutEmoji = '💪';
+    switch (workoutType.toLowerCase()) {
+      case 'cardio':
+        workoutEmoji = '🏃';
+        break;
+      case 'strength':
+        workoutEmoji = '💪';
+        break;
+      case 'hiit':
+        workoutEmoji = '⚡';
+        break;
+      case 'leg day':
+      case 'lower body':
+        workoutEmoji = '🦵';
+        break;
+      case 'upper body':
+        workoutEmoji = '💪';
+        break;
+      case 'full body':
+        workoutEmoji = '🏋️';
+        break;
+      case 'yoga':
+        workoutEmoji = '🧘';
+        break;
+      default:
+        workoutEmoji = '🏋️';
+    }
+
+    // Get buddy name for display
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final isCreator = workout['user_id'] == currentUserId;
+    String? buddyName;
+    if (isCreator && workout['buddy'] != null) {
+      buddyName = workout['buddy']['display_name'];
+    } else if (!isCreator && workout['creator'] != null) {
+      buddyName = workout['creator']['display_name'];
+    }
+
+    if (!mounted) return;
+
+    // ✅ Open the WorkoutCheckInSheet timer!
+    final completed = await WorkoutCheckInSheet.show(
+      context,
+      workoutType: buddyName != null ? '$workoutType with $buddyName' : workoutType,
+      workoutEmoji: workoutEmoji,
+      plannedDuration: plannedDuration,
+      onCheckInComplete: () async {
+        // Complete the scheduled workout
+        await _workoutService.completeWorkoutWithDuration(workoutId);
+        
+        // Also check in to all team streaks (this makes the buddy workout count!)
+        final teamStreakService = TeamStreakService();
+        final result = await teamStreakService.checkInAllTeams(
+          workoutName: workoutType,
+          workoutEmoji: workoutEmoji,
+          durationMinutes: plannedDuration,
+        );
+
+        if (result['success'] == true) {
+          HapticFeedback.heavyImpact();
+        }
+      },
+    );
+
+    // Refresh the list regardless of completion
+    if (mounted) {
       loadData();
+      
+      if (completed == true) {
+        // Show celebration for buddy workouts!
+        final buddy = workout['buddy'];
+        final creator = workout['creator'];
+        String? celebrationBuddyName;
+        
+        if (isCreator && buddy != null) {
+          celebrationBuddyName = buddy['display_name'];
+        } else if (!isCreator && creator != null) {
+          celebrationBuddyName = creator['display_name'];
+        }
+        
+        WorkoutCelebration.show(
+          context,
+          workoutType: workoutType,
+          duration: plannedDuration,
+          buddyName: celebrationBuddyName,
+        );
+      }
     }
   }
 
@@ -4574,7 +4697,7 @@ class _SchedulePageState extends State<SchedulePage> {
     
     // Check if this workout has a buddy and if they've accepted
     if (workout['buddy_id'] != null && workout['buddy_status'] != 'accepted') {
-      if (!mounted) return; // ✅ CHECK MOUNTED
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Your buddy needs to accept the workout invitation first!'),
@@ -4584,83 +4707,31 @@ class _SchedulePageState extends State<SchedulePage> {
       return;
     }
     
+    // If workout is still scheduled (not started), use the timer flow
+    if (workout['status'] == 'scheduled') {
+      await _startWorkout(workoutId);
+      return;
+    }
+    
+    // If workout is in_progress, open the timer to continue
+    if (workout['status'] == 'in_progress') {
+      final workoutType = workout['workout_type'] ?? 'Workout';
+      final plannedDuration = workout['planned_duration_minutes'] ?? 30;
+      
+      // Calculate elapsed time from when workout started
+      final startedAt = workout['workout_started_at'];
+      if (startedAt != null) {
+        // The WorkoutCheckInSheet will automatically resume based on active_checkin_sessions
+        // But for scheduled workouts, we should open with the workout details
+        await _startWorkout(workoutId); // This will reuse the timer
+        return;
+      }
+    }
+    
+    // Fallback: just complete it directly (shouldn't normally reach here)
     final success = await _workoutService.completeWorkoutWithDuration(workoutId);
     if (success) {
-      // Get workout details for celebration
-      final workoutType = workout['workout_type'] ?? 'Workout';
-      final startedAt = workout['workout_started_at'];
-      int duration = 0;
-      if (startedAt != null) {
-        duration = DateTime.now().difference(DateTime.parse(startedAt)).inMinutes;
-      }
-      
-      // Get buddy info - figure out who the OTHER person is
-      String? buddyName;
-      String? buddyId;
-      final buddy = workout['buddy'];
-      final creator = workout['creator'];
-      final isCreator = workout['user_id'] == currentUserId;
-      
-      if (isCreator) {
-        // Current user created the workout, buddy is the invited person
-        buddyId = workout['buddy_id'];
-        if (buddy != null) {
-          buddyName = buddy['display_name'];
-        }
-      } else {
-        // Current user is the buddy, "buddy" for check-in is the creator
-        buddyId = workout['user_id'];
-        if (creator != null) {
-          buddyName = creator['display_name'];
-        }
-      }
-      
-      // ✅ CHECK MOUNTED before setState
       if (!mounted) return;
-      
-      // ✅ Immediately remove from local list for instant UI feedback
-      setState(() {
-        _upcomingWorkouts.removeWhere((w) => w['id'] == workoutId);
-      });
-      
-      // ✅ CHECK MOUNTED before showing celebration
-      if (!mounted) return;
-      
-      // 🎉 Show celebration overlay!
-      WorkoutCelebration.show(
-        context,
-        workoutType: workoutType,
-        duration: duration,
-        buddyName: buddyName,
-      );
-      
-      // ✅ AUTO CHECK-IN: If buddy workout, check in BOTH users safely!
-      if (buddyId != null && workout['buddy_status'] == 'accepted') {
-        try {
-          final teamStreakService = TeamStreakService();
-          
-          // 1. Check in current user to ALL their teams
-          final userResult = await teamStreakService.checkInAllTeams();
-          print('✅ Current user check-in: ${userResult['message']}');
-          
-          // 2. Check in buddy to ALL their teams
-          final buddyResult = await teamStreakService.checkInAllTeamsForUser(buddyId);
-          print('✅ Buddy check-in: Checked in to $buddyResult teams');
-          
-        } catch (e) {
-          print('❌ Auto check-in error: $e');
-        }
-      }
-      
-      // ✅ CHECK MOUNTED before refreshing
-      if (!mounted) return;
-      
-      // ✅ Then refresh from database to sync
-      await Future.delayed(const Duration(milliseconds: 300));
-      
-      // ✅ CHECK MOUNTED one more time before loadData
-      if (!mounted) return;
-      
       loadData();
     }
   }

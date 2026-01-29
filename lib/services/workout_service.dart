@@ -256,18 +256,188 @@ class WorkoutService {
   // Accept workout invitation (for buddy)
   Future<bool> acceptWorkoutInvitation(String workoutId) async {
     try {
-      await _supabase
+      // Get the workout details first
+      final workout = await _supabase
           .from('workouts')
-          .update({
-            'buddy_status': 'accepted',
-            'updated_at': DateTime.now().toIso8601String()
-          })
-          .eq('id', workoutId);
+          .select('user_id, buddy_id, workout_type, planned_duration_minutes')
+          .eq('id', workoutId)
+          .single();
 
-      if (kDebugMode) print('✅ Workout invitation accepted');
+      final creatorId = workout['user_id'];
+      final buddyId = workout['buddy_id'];
+      final workoutType = workout['workout_type'] ?? 'Workout';
+      final plannedDuration = workout['planned_duration_minutes'] ?? 30;
+
+      final startTime = DateTime.now();
+
+      // Update the workout status - mark as in_progress with start time
+      await _supabase.from('workouts').update({
+        'buddy_status': 'accepted',
+        'status': 'in_progress',
+        'workout_started_at': startTime.toIso8601String(),
+        'updated_at': startTime.toIso8601String(),
+      }).eq('id', workoutId);
+
+      // Get emoji for workout type
+      final emoji = _getWorkoutEmoji(workoutType);
+
+      // Use the database function to create sessions for BOTH users
+      // This bypasses RLS restrictions
+      await _supabase.rpc('create_buddy_workout_sessions', params: {
+        'p_creator_id': creatorId,
+        'p_buddy_id': buddyId,
+        'p_workout_id': workoutId,
+        'p_started_at': startTime.toIso8601String(),
+        'p_workout_type': workoutType,
+        'p_workout_emoji': emoji,
+        'p_planned_duration': plannedDuration,
+      });
+
+      if (kDebugMode) {
+        print('✅ Workout accepted - timers started for both users');
+        print('   Creator: $creatorId');
+        print('   Buddy: $buddyId');
+        print('   Workout: $workoutType for $plannedDuration min');
+      }
+
       return true;
     } catch (e) {
       if (kDebugMode) print('❌ Error accepting invitation: $e');
+      return false;
+    }
+  }
+
+  // Helper to get emoji for workout type
+  String _getWorkoutEmoji(String? workoutType) {
+    switch (workoutType?.toLowerCase()) {
+      case 'cardio':
+        return '🏃';
+      case 'strength':
+        return '💪';
+      case 'hiit':
+        return '⚡';
+      case 'leg day':
+      case 'lower body':
+        return '🦵';
+      case 'upper body':
+        return '💪';
+      case 'full body':
+        return '🏋️';
+      case 'yoga':
+        return '🧘';
+      default:
+        return '🏋️';
+    }
+  }
+
+  Future<Map<String, dynamic>> requestCancelWorkout(String workoutId) async {
+    try {
+      final currentUserId = _supabase.auth.currentUser?.id;
+      if (currentUserId == null) {
+        return {'success': false, 'message': 'Not logged in'};
+      }
+
+      // Get workout to check current state
+      final workout = await _supabase
+          .from('workouts')
+          .select('cancel_requested_by, user_id, buddy_id, status')
+          .eq('id', workoutId)
+          .single();
+
+      final existingRequest = workout['cancel_requested_by'];
+      final creatorId = workout['user_id'];
+      final buddyId = workout['buddy_id'];
+
+      // If it's a solo workout (no buddy), just cancel it directly
+      if (buddyId == null) {
+        await cancelWorkout(workoutId);
+        return {
+          'success': true,
+          'cancelled': true,
+          'message': 'Workout cancelled'
+        };
+      }
+
+      // If the OTHER person already requested cancel, then both agree - cancel it
+      if (existingRequest != null && existingRequest != currentUserId) {
+        // Both parties agree - cancel the workout
+        await _supabase.from('workouts').update({
+          'status': 'cancelled',
+          'cancel_requested_by': null,
+          'cancel_requested_at': null,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', workoutId);
+
+        // Clear active sessions for both users
+        await _supabase
+            .from('active_checkin_sessions')
+            .delete()
+            .eq('linked_workout_id', workoutId);
+
+        if (kDebugMode) print('✅ Workout cancelled by mutual agreement');
+
+        return {
+          'success': true,
+          'cancelled': true,
+          'message': 'Workout cancelled by mutual agreement'
+        };
+      }
+
+      // If I already requested, show message
+      if (existingRequest == currentUserId) {
+        return {
+          'success': true,
+          'cancelled': false,
+          'message': 'Cancel request already sent. Waiting for your buddy.'
+        };
+      }
+
+      // First cancel request - just mark it
+      await _supabase.from('workouts').update({
+        'cancel_requested_by': currentUserId,
+        'cancel_requested_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', workoutId);
+
+      if (kDebugMode) print('✅ Cancel request sent');
+
+      return {
+        'success': true,
+        'cancelled': false,
+        'message': 'Cancel request sent. Your buddy needs to confirm.'
+      };
+    } catch (e) {
+      if (kDebugMode) print('❌ Error requesting cancel: $e');
+      return {'success': false, 'message': 'Failed to request cancel'};
+    }
+  }
+
+  Future<bool> withdrawCancelRequest(String workoutId) async {
+    try {
+      final currentUserId = _supabase.auth.currentUser?.id;
+      if (currentUserId == null) return false;
+
+      // Only allow withdrawing your own request
+      final workout = await _supabase
+          .from('workouts')
+          .select('cancel_requested_by')
+          .eq('id', workoutId)
+          .single();
+
+      if (workout['cancel_requested_by'] != currentUserId) {
+        return false; // Can't withdraw someone else's request
+      }
+
+      await _supabase.from('workouts').update({
+        'cancel_requested_by': null,
+        'cancel_requested_at': null,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', workoutId);
+
+      if (kDebugMode) print('✅ Cancel request withdrawn');
+      return true;
+    } catch (e) {
+      if (kDebugMode) print('❌ Error withdrawing cancel request: $e');
       return false;
     }
   }
@@ -327,33 +497,31 @@ class WorkoutService {
       // Get workout to calculate duration
       final workout = await _supabase
           .from('workouts')
-          .select('workout_started_at')
+          .select('workout_started_at, user_id, buddy_id')
           .eq('id', workoutId)
           .single();
 
       int? actualDuration;
       if (workout['workout_started_at'] != null) {
         final startTime = DateTime.parse(workout['workout_started_at']);
-        final endTime = DateTime.now();
-        actualDuration = endTime.difference(startTime).inMinutes;
-        
-        // Cap at 3 hours if somehow it's longer
-        if (actualDuration > 180) {
-          actualDuration = 180;
-        }
+        actualDuration = DateTime.now().difference(startTime).inMinutes;
       }
 
-      await _supabase
-          .from('workouts')
-          .update({
-            'status': 'completed',
-            'workout_completed_at': DateTime.now().toIso8601String(),
-            'actual_duration_minutes': actualDuration,
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('id', workoutId);
+      // Update the workout as completed
+      await _supabase.from('workouts').update({
+        'status': 'completed',
+        'actual_duration_minutes': actualDuration,
+        'workout_completed_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', workoutId);
 
-      if (kDebugMode) print('✅ Workout completed with duration: $actualDuration minutes');
+      // Clear active sessions linked to this workout (for BOTH users)
+      await _supabase
+          .from('active_checkin_sessions')
+          .delete()
+          .eq('linked_workout_id', workoutId);
+
+      if (kDebugMode) print('✅ Workout completed - sessions cleared');
       return true;
     } catch (e) {
       if (kDebugMode) print('❌ Error completing workout: $e');
