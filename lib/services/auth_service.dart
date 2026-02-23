@@ -67,4 +67,14 @@ class AuthService {
       return e.toString();
     }
   }
+
+  // Safe way to get current user ID - throws if not authenticated
+  // Use this instead of accessing currentUser directly in sensitive operations
+  String requireAuthenticatedUserId() {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) {
+      throw Exception('User not authenticated');
+    }
+    return userId;
+  }
 }
