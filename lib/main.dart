@@ -60,9 +60,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
     if (user != null) {
       final onboardingStatus = await _checkOnboardingStatus(user.id);
-
       await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
-
       setState(() {
         _hasCompletedOnboarding = onboardingStatus;
         _isInitializing = false;
@@ -81,7 +79,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
           .select('onboarding_completed')
           .eq('id', userId)
           .single();
-
       return response['onboarding_completed'] == true;
     } catch (e) {
       return false;
@@ -92,9 +89,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Widget build(BuildContext context) {
     if (_isInitializing) {
       return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -124,6 +119,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final CoachMaxService _coachMaxService = CoachMaxService();
   bool _isPasswordVisible = false;
   bool _isLoading = false;
+  int _failedAttempts = 0;
+  bool _isLockedOut = false;
 
   @override
   Widget build(BuildContext context) {
@@ -157,15 +154,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 const Text(
                   'Train Together, Grow Together',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey,
-                  ),
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
                 ),
                 const SizedBox(height: 48),
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
+                  maxLength: 100,
+                  buildCounter: (context,
+                          {required currentLength,
+                          required isFocused,
+                          maxLength}) =>
+                      null,
                   decoration: InputDecoration(
                     labelText: 'Email',
                     hintText: 'Enter your email',
@@ -181,6 +181,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 TextField(
                   controller: _passwordController,
                   obscureText: !_isPasswordVisible,
+                  maxLength: 128,
+                  buildCounter: (context,
+                          {required currentLength,
+                          required isFocused,
+                          maxLength}) =>
+                      null,
                   decoration: InputDecoration(
                     labelText: 'Password',
                     hintText: 'Enter your password',
@@ -205,13 +211,31 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
+                if (_isLockedOut)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red),
+                    ),
+                    child: const Text(
+                      '🔒 Too many failed attempts. Please restart the app to try again.',
+                      style: TextStyle(color: Colors.red),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
                 ElevatedButton(
-                  onPressed: _isLoading
+                  onPressed: _isLoading || _isLockedOut
                       ? null
                       : () async {
-                          setState(() {
-                            _isLoading = true;
-                          });
+                          if (_failedAttempts >= 5) {
+                            setState(() => _isLockedOut = true);
+                            return;
+                          }
+
+                          setState(() => _isLoading = true);
 
                           final error = await _authService.signIn(
                             email: _emailController.text.trim(),
@@ -219,21 +243,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           );
 
                           if (error == null) {
+                            _failedAttempts = 0;
                             final user =
                                 Supabase.instance.client.auth.currentUser;
                             if (user != null) {
                               final onboardingComplete =
                                   await _checkOnboardingStatus(user.id);
-
                               await _coachMaxService
                                   .scheduleCoachMaxCheckIn(user.id);
-
                               if (!mounted) return;
-
-                              setState(() {
-                                _isLoading = false;
-                              });
-
+                              setState(() => _isLoading = false);
                               if (onboardingComplete) {
                                 Navigator.of(context).pushReplacement(
                                   MaterialPageRoute(
@@ -250,14 +269,20 @@ class _LoginScreenState extends State<LoginScreen> {
                             }
                           } else {
                             setState(() {
+                              _failedAttempts++;
                               _isLoading = false;
+                              if (_failedAttempts >= 5) _isLockedOut = true;
                             });
 
                             if (!mounted) return;
 
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('Login failed: $error'),
+                                content: Text(
+                                  _failedAttempts >= 4
+                                      ? 'Login failed: 1 attempt remaining before lockout'
+                                      : 'Login failed: $error',
+                                ),
                                 backgroundColor: Colors.red,
                               ),
                             );
@@ -304,9 +329,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       },
                       child: const Text(
                         'Sign Up',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
                   ],
@@ -326,7 +349,6 @@ class _LoginScreenState extends State<LoginScreen> {
           .select('onboarding_completed')
           .eq('id', userId)
           .single();
-
       return response['onboarding_completed'] == true;
     } catch (e) {
       return false;
