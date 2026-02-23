@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
-import 'config/supabase.dart';
 import 'services/auth_service.dart';
 import 'signup_screen.dart';
 import 'services/coach_max_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
+  // Load environment variables from .env file
+  await dotenv.load(fileName: '.env');
+
   await Supabase.initialize(
-    url: supabaseUrl,
-    anonKey: supabaseAnonKey,
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
-  
+
   runApp(const GymBuddyApp());
 }
 
@@ -54,14 +57,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<void> _initializeApp() async {
     final user = Supabase.instance.client.auth.currentUser;
-    
+
     if (user != null) {
-      // ✅ CHECK ONBOARDING STATUS
       final onboardingStatus = await _checkOnboardingStatus(user.id);
-      
-      // Schedule Coach Max check-in if needed
+
       await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
-      
+
       setState(() {
         _hasCompletedOnboarding = onboardingStatus;
         _isInitializing = false;
@@ -73,7 +74,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
   }
 
-  // ✅ NEW METHOD: Check if user completed onboarding
   Future<bool> _checkOnboardingStatus(String userId) async {
     try {
       final response = await Supabase.instance.client
@@ -81,11 +81,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
           .select('onboarding_completed')
           .eq('id', userId)
           .single();
-      
+
       return response['onboarding_completed'] == true;
     } catch (e) {
-      print('❌ Error checking onboarding: $e');
-      return false; // If error, assume not completed
+      return false;
     }
   }
 
@@ -100,16 +99,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
 
     final user = Supabase.instance.client.auth.currentUser;
-    
-    // ✅ ROUTING LOGIC:
+
     if (user == null) {
-      // Not logged in → Login screen
       return const LoginScreen();
     } else if (!_hasCompletedOnboarding) {
-      // Logged in but onboarding incomplete → Force back to signup/onboarding
-      return const SignUpScreen(); // This will detect existing user and resume onboarding
+      return const SignUpScreen();
     } else {
-      // Logged in and onboarding complete → Home screen
       return const HomeScreen();
     }
   }
@@ -211,62 +206,63 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: _isLoading ? null : () async {
-                    setState(() {
-                      _isLoading = true;
-                    });
-                    
-                    final error = await _authService.signIn(
-                      email: _emailController.text.trim(),
-                      password: _passwordController.text,
-                    );
-                    
-                    if (error == null) {
-                      final user = Supabase.instance.client.auth.currentUser;
-                      if (user != null) {
-                        // ✅ CHECK ONBOARDING STATUS
-                        final onboardingComplete = await _checkOnboardingStatus(user.id);
-                        
-                        // Schedule Coach Max
-                        await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
-                        
-                        if (!mounted) return;
-                        
-                        setState(() {
-                          _isLoading = false;
-                        });
-                        
-                        // ✅ NAVIGATE BASED ON ONBOARDING STATUS
-                        if (onboardingComplete) {
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(
-                              builder: (context) => const HomeScreen(),
-                            ),
+                  onPressed: _isLoading
+                      ? null
+                      : () async {
+                          setState(() {
+                            _isLoading = true;
+                          });
+
+                          final error = await _authService.signIn(
+                            email: _emailController.text.trim(),
+                            password: _passwordController.text,
                           );
-                        } else {
-                          // Resume onboarding
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(
-                              builder: (context) => const SignUpScreen(),
-                            ),
-                          );
-                        }
-                      }
-                    } else {
-                      setState(() {
-                        _isLoading = false;
-                      });
-                      
-                      if (!mounted) return;
-                      
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Login failed: $error'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  },
+
+                          if (error == null) {
+                            final user =
+                                Supabase.instance.client.auth.currentUser;
+                            if (user != null) {
+                              final onboardingComplete =
+                                  await _checkOnboardingStatus(user.id);
+
+                              await _coachMaxService
+                                  .scheduleCoachMaxCheckIn(user.id);
+
+                              if (!mounted) return;
+
+                              setState(() {
+                                _isLoading = false;
+                              });
+
+                              if (onboardingComplete) {
+                                Navigator.of(context).pushReplacement(
+                                  MaterialPageRoute(
+                                    builder: (context) => const HomeScreen(),
+                                  ),
+                                );
+                              } else {
+                                Navigator.of(context).pushReplacement(
+                                  MaterialPageRoute(
+                                    builder: (context) => const SignUpScreen(),
+                                  ),
+                                );
+                              }
+                            }
+                          } else {
+                            setState(() {
+                              _isLoading = false;
+                            });
+
+                            if (!mounted) return;
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Login failed: $error'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
@@ -275,23 +271,23 @@ class _LoginScreenState extends State<LoginScreen> {
                     backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
                   ),
-                  child: _isLoading 
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white, 
-                          strokeWidth: 2,
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text(
+                          'LOGIN',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
                         ),
-                      )
-                    : const Text(
-                        'LOGIN',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
-                      ),
                 ),
                 const SizedBox(height: 16),
                 Row(
@@ -323,7 +319,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // ✅ HELPER METHOD
   Future<bool> _checkOnboardingStatus(String userId) async {
     try {
       final response = await Supabase.instance.client
@@ -331,10 +326,9 @@ class _LoginScreenState extends State<LoginScreen> {
           .select('onboarding_completed')
           .eq('id', userId)
           .single();
-      
+
       return response['onboarding_completed'] == true;
     } catch (e) {
-      print('❌ Error checking onboarding: $e');
       return false;
     }
   }
