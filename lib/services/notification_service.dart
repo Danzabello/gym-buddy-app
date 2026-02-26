@@ -1,0 +1,212 @@
+import 'dart:io';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+// Handle background messages (must be top-level function)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  if (kDebugMode) print('🔔 Background message: ${message.notification?.title}');
+}
+
+class NotificationService {
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
+  FirebaseMessaging? _fcm;
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
+  final SupabaseClient _supabase = Supabase.instance.client;
+
+  static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
+    'gym_buddy_high_importance',
+    'Gym Buddy Notifications',
+    description: 'Streak alerts, buddy check-ins, and workout reminders',
+    importance: Importance.high,
+  );
+
+  Future<void> initialize() async {
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      if (kDebugMode) print('⏭️ Skipping notifications on non-mobile platform');
+      return;
+    }
+
+    _fcm = FirebaseMessaging.instance;
+
+    try {
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+      final settings = await _fcm?.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+
+      if (kDebugMode) {
+        print('🔔 Notification permission: ${settings?.authorizationStatus}');
+      }
+
+      if (settings?.authorizationStatus == AuthorizationStatus.denied) {
+        if (kDebugMode) print('❌ Notifications denied by user');
+        return;
+      }
+
+      await _setupLocalNotifications();
+      await _saveTokenToSupabase();
+
+      _fcm?.onTokenRefresh.listen((newToken) {
+        _saveTokenToSupabase();
+      });
+
+      FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+
+      if (kDebugMode) print('✅ NotificationService initialized!');
+    } catch (e) {
+      if (kDebugMode) print('❌ NotificationService error: $e');
+    }
+  }
+
+  Future<void> _setupLocalNotifications() async {
+    final androidPlugin = _localNotifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    await androidPlugin?.createNotificationChannel(_channel);
+
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const initSettings = InitializationSettings(android: androidSettings);
+
+    await _localNotifications.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (details) {
+        if (kDebugMode) print('🔔 Notification tapped: ${details.payload}');
+      },
+    );
+
+    await _fcm?.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+  }
+
+  Future<void> _saveTokenToSupabase() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+
+      final token = await _fcm?.getToken();
+      if (token == null) return;
+
+      if (kDebugMode) print('📱 FCM Token: ${token.substring(0, 20)}...');
+
+      await _supabase.from('device_tokens').upsert({
+        'user_id': userId,
+        'token': token,
+        'platform': 'android',
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'user_id, token');
+
+      if (kDebugMode) print('✅ FCM token saved to Supabase');
+    } catch (e) {
+      if (kDebugMode) print('❌ Error saving token: $e');
+    }
+  }
+
+  Future<void> removeToken() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+
+      final token = await _fcm?.getToken();
+      if (token == null) return;
+
+      await _supabase
+          .from('device_tokens')
+          .delete()
+          .eq('user_id', userId)
+          .eq('token', token);
+
+      await _fcm?.deleteToken();
+      if (kDebugMode) print('✅ FCM token removed');
+    } catch (e) {
+      if (kDebugMode) print('❌ Error removing token: $e');
+    }
+  }
+
+  Future<void> _handleForegroundMessage(RemoteMessage message) async {
+    if (kDebugMode) print('🔔 Foreground message: ${message.notification?.title}');
+
+    final notification = message.notification;
+    if (notification == null) return;
+
+    await _localNotifications.show(
+      notification.hashCode,
+      notification.title,
+      notification.body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channel.id,
+          _channel.name,
+          channelDescription: _channel.description,
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+      ),
+      payload: message.data['type'],
+    );
+  }
+
+  void _handleNotificationTap(RemoteMessage message) {
+    if (kDebugMode) print('🔔 Notification tapped: ${message.data['type']}');
+  }
+
+  Future<Map<String, dynamic>> getSettings() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return _defaultSettings();
+
+      final result = await _supabase
+          .from('notification_settings')
+          .select()
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      return result ?? _defaultSettings();
+    } catch (e) {
+      return _defaultSettings();
+    }
+  }
+
+  Future<void> updateSettings(Map<String, dynamic> settings) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+
+      await _supabase.from('notification_settings').upsert({
+        'user_id': userId,
+        ...settings,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+
+      if (kDebugMode) print('✅ Notification settings updated');
+    } catch (e) {
+      if (kDebugMode) print('❌ Error updating settings: $e');
+    }
+  }
+
+  Map<String, dynamic> _defaultSettings() => {
+        'notif_social': true,
+        'notif_workouts': true,
+        'notif_streaks': true,
+        'notif_coach_max': true,
+        'quiet_hours_enabled': true,
+        'quiet_hours_start': 23,
+        'quiet_hours_end': 7,
+      };
+}

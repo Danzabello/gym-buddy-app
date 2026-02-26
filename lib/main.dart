@@ -5,12 +5,22 @@ import 'home_screen.dart';
 import 'services/auth_service.dart';
 import 'signup_screen.dart';
 import 'services/coach_max_service.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'services/notification_service.dart';
+import 'dart:io';
+
+
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables from .env file
   await dotenv.load(fileName: '.env');
+
+  // Only initialize Firebase on Android/iOS
+  if (Platform.isAndroid || Platform.isIOS) {
+    await Firebase.initializeApp();
+  }
 
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
@@ -59,6 +69,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final user = Supabase.instance.client.auth.currentUser;
 
     if (user != null) {
+      // Initialize notifications for logged in user
+      await NotificationService().initialize();
+      
       final onboardingStatus = await _checkOnboardingStatus(user.id);
       await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
       setState(() {
@@ -247,10 +260,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             final user =
                                 Supabase.instance.client.auth.currentUser;
                             if (user != null) {
-                              final onboardingComplete =
-                                  await _checkOnboardingStatus(user.id);
-                              await _coachMaxService
-                                  .scheduleCoachMaxCheckIn(user.id);
+                              await NotificationService().initialize();
+                              final onboardingComplete = await _checkOnboardingStatus(user.id);
+                              await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
                               if (!mounted) return;
                               setState(() => _isLoading = false);
                               if (onboardingComplete) {
