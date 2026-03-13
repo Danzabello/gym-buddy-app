@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../services/notification_service.dart';
+import 'package:app_settings/app_settings.dart';
+
 
 class NotificationSettingsPage extends StatefulWidget {
   const NotificationSettingsPage({super.key});
@@ -20,6 +22,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
   bool _notifWorkouts = true;
   bool _notifStreaks = true;
   bool _notifCoachMax = true;
+  
 
   bool _quietHoursEnabled = true;
   int _quietHoursStart = 23;
@@ -31,21 +34,23 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
     _loadSettings();
   }
 
-  Future<void> _loadSettings() async {
-    final settings = await _notificationService.getSettings();
-    if (mounted) {
-      setState(() {
-        _notifSocial = settings['notif_social'] ?? true;
-        _notifWorkouts = settings['notif_workouts'] ?? true;
-        _notifStreaks = settings['notif_streaks'] ?? true;
-        _notifCoachMax = settings['notif_coach_max'] ?? true;
-        _quietHoursEnabled = settings['quiet_hours_enabled'] ?? true;
-        _quietHoursStart = settings['quiet_hours_start'] ?? 23;
-        _quietHoursEnd = settings['quiet_hours_end'] ?? 7;
-        _isLoading = false;
-      });
+    Future<void> _loadSettings() async {
+      final granted = await _notificationService.checkOsPermission();
+      final settings = await _notificationService.getSettings();
+      if (mounted) {
+        setState(() {
+          _osPermissionGranted = granted;
+          _notifSocial = settings['notif_social'] ?? true;
+          _notifWorkouts = settings['notif_workouts'] ?? true;
+          _notifStreaks = settings['notif_streaks'] ?? true;
+          _notifCoachMax = settings['notif_coach_max'] ?? true;
+          _quietHoursEnabled = settings['quiet_hours_enabled'] ?? true;
+          _quietHoursStart = settings['quiet_hours_start'] ?? 23;
+          _quietHoursEnd = settings['quiet_hours_end'] ?? 7;
+          _isLoading = false;
+        });
+      }
     }
-  }
 
   Future<void> _saveSettings() async {
     setState(() => _isSaving = true);
@@ -405,6 +410,58 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
         color: Color(0xFF2C3E50),
         fontSize: 16,
         fontWeight: FontWeight.bold,
+      ),
+    );
+  }
+
+  Widget _buildOsPermissionBanner() {
+    if (_osPermissionGranted) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red[50],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.red[300]!),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.notifications_off, color: Colors.red[700], size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Notifications Blocked',
+                  style: TextStyle(
+                    color: Colors.red[800],
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'You\'ve blocked notifications at the system level. These settings won\'t take effect until you allow them.',
+                  style: TextStyle(color: Colors.red[700], fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap: () => AppSettings.openAppSettings(type: AppSettingsType.notification),
+                  child: Text(
+                    'Open Settings →',
+                    style: TextStyle(
+                      color: Colors.red[800],
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

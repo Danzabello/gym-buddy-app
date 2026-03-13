@@ -200,6 +200,14 @@ class NotificationService {
     }
   }
 
+  Future<bool> checkOsPermission() async {
+    if (!Platform.isAndroid && !Platform.isIOS) return true;
+    final fcm = FirebaseMessaging.instance;
+    final settings = await fcm.getNotificationSettings();
+    return settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional;
+  }
+
   Map<String, dynamic> _defaultSettings() => {
         'notif_social': true,
         'notif_workouts': true,

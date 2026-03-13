@@ -240,7 +240,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     
     // ✅ Create controller ONCE
     _carouselController = PageController(
-      viewportFraction: 0.40,
+      viewportFraction: 0.35,
       initialPage: 1,
     );
     
@@ -405,12 +405,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   print('  Current index: $_currentCarouselIndex');
   print('  Showing: ${displayItems[_currentCarouselIndex] is TeamStreak ? (displayItems[_currentCarouselIndex] as TeamStreak).teamName : 'Add Buddy'}');
 
-    // ✅ MERGED CARD: Carousel + Action Buttons in one!
+    // ✅ MERGED CARD: Carousel + Action Buttons in one! (PIXEL 7A OPTIMIZED)
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
-        padding: const EdgeInsets.all(20),
+        // ✅ FIX: Reduced padding from all(20) to give more horizontal room
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [Colors.white, Colors.blue[50]!],
@@ -421,12 +422,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         ),
         child: Column(
           children: [
-            // ✅ PERFECTLY CENTERED: Equal width on both sides
+            // ✅ HEADER ROW - Fixed overflow issue
             Row(
               children: [
                 // Left: Three-dot menu (fixed width)
                 SizedBox(
-                  width: 60,  // Fixed width for left side
+                  width: 48,  // ✅ Was 60, slimmed down
                   child: GestureDetector(
                     onTap: _showSortBottomSheet,
                     child: Container(
@@ -450,7 +451,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     child: GestureDetector(
                       onTap: _showAllStreaks,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
                           color: Colors.grey[100],
                           borderRadius: BorderRadius.circular(20),
@@ -458,18 +459,22 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              'Your Active Streaks (${_allStreaks.length})',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey[700],
+                            // ✅ FIX: Use Flexible to prevent text overflow
+                            Flexible(
+                              child: Text(
+                                'Your Active Streaks (${_allStreaks.length})',
+                                style: TextStyle(
+                                  fontSize: 14,  // ✅ Was 16
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey[700],
+                                ),
+                                overflow: TextOverflow.ellipsis,  // ✅ Safety net
                               ),
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 4),
                             Icon(
                               Icons.chevron_right,
-                              size: 20,
+                              size: 18,  // ✅ Was 20
                               color: Colors.grey[600],
                             ),
                           ],
@@ -481,7 +486,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 
                 // Right: Check-in badge (fixed width)
                 SizedBox(
-                  width: 60,  // Same width as left side
+                  width: 48,  // ✅ Was 60, matches left side
                   child: displayItems[_currentCarouselIndex] != null
                       ? Align(
                           alignment: Alignment.centerRight,
@@ -494,11 +499,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ],
             ),
             
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),  // ✅ Was 24
             
             // ✅ INFINITE CAROUSEL - Wraps around in a circle
             SizedBox(
-              height: 200,
+              height: 160,  // ✅ Was 200 - major space saver
               child: AnimatedBuilder(
                 animation: _carouselEntranceAnimation,
                 builder: (context, child) {
@@ -533,7 +538,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       animation: _carouselController,
                       builder: (context, child) {
                         double scale = 1.0;
-
+ 
                         if (_carouselController.position.haveDimensions && 
                             _carouselEntranceAnimation.value >= 1.0) {
                           final page = _carouselController.page ?? index.toDouble();
@@ -569,28 +574,28 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ),
             ),
             
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),  // ✅ Was 16
             
-            // ✅ NAME & STREAK COUNT (simplified, no progress bar)
+            // ✅ NAME & STREAK COUNT
             Column(
               children: [
                 Text(
                   _getDisplayName(displayItems[_currentCarouselIndex]),
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,  // ✅ Was 18
                     fontWeight: FontWeight.bold,
                     color: displayItems[_currentCarouselIndex] != null 
                         ? Colors.black
                         : Colors.grey[600],
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),  // ✅ Was 8
                 // Just show streak count - removed progress bar
                 if (displayItems[_currentCarouselIndex] != null)
                   Text(
                     '${(displayItems[_currentCarouselIndex] as TeamStreak).currentStreak} Day Streak',
                     style: TextStyle(
-                      fontSize: 28,
+                      fontSize: 24,  // ✅ Was 28
                       fontWeight: FontWeight.bold,
                       color: Colors.grey[800],
                     ),
@@ -599,7 +604,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   Text(
                     '— Day Streak',
                     style: TextStyle(
-                      fontSize: 28,
+                      fontSize: 24,  // ✅ Was 28
                       fontWeight: FontWeight.bold,
                       color: Colors.grey[400],
                     ),
@@ -607,100 +612,98 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ],
             ),
             
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),  // ✅ Was 24
             
-            // ✅ MERGED: Action buttons now part of same card!
-            Column(
-              children: [
-                // CHECK IN BUTTON
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _hasCheckedInToday || _isCheckingIn ? null : _checkIn,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _hasCheckedInToday 
-                          ? Colors.green[600]
-                          : Colors.orange[600],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 4,
-                      disabledBackgroundColor: _hasCheckedInToday 
-                          ? Colors.green[600]
-                          : Colors.grey[400],
-                    ),
-                    child: _isCheckingIn
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 3,
+            // ✅ ACTION BUTTONS
+            // Check In button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _hasCheckedInToday || _isCheckingIn ? null : _checkIn,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _hasCheckedInToday 
+                      ? Colors.green[600]
+                      : Colors.orange[600],
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),  // ✅ Was 18
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  elevation: 4,
+                  disabledBackgroundColor: _hasCheckedInToday 
+                      ? Colors.green[600]
+                      : Colors.grey[400],
+                ),
+                child: _isCheckingIn
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _hasCheckedInToday ? Icons.check_circle : Icons.local_fire_department,
+                            size: 24,  // ✅ Was 28
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            _hasCheckedInToday ? 'Checked In! ✓' : 'Check In',
+                            style: const TextStyle(
+                              fontSize: 18,  // ✅ Was 20
+                              fontWeight: FontWeight.bold,
                               color: Colors.white,
                             ),
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                _hasCheckedInToday ? Icons.check_circle : Icons.local_fire_department,
-                                size: 28,
-                                color: Colors.white,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                _hasCheckedInToday ? 'Checked In! ✓' : 'Check In',
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
                           ),
+                        ],
+                      ),
+              ),
+            ),
+            
+            const SizedBox(height: 10),  // ✅ Was 12
+            
+            // Take a Break button
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: _hasCheckedInToday
+                    ? null 
+                    : () => _showTakeBreakDialog(),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),  // ✅ Was 18
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  side: BorderSide(
+                    color: _hasCheckedInToday ? Colors.grey[300]! : Colors.blue[600]!,
+                    width: 2,
                   ),
                 ),
-                
-                const SizedBox(height: 12),
-                
-                // TAKE A BREAK BUTTON
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: _hasCheckedInToday ? null : () => _showTakeBreakDialog(),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      side: BorderSide(
-                        color: _hasCheckedInToday ? Colors.grey[300]! : Colors.blue[600]!,
-                        width: 2,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.bedtime,
+                      size: 22,  // ✅ Was 24
+                      color: _hasCheckedInToday ? Colors.grey[400] : Colors.blue[700],
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      _hasCheckedInToday ? 'Already Checked In' : 'Take a Break',
+                      style: TextStyle(
+                        fontSize: 16,  // ✅ Was 18
+                        fontWeight: FontWeight.bold,
+                        color: _hasCheckedInToday ? Colors.grey[400] : Colors.blue[700],
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.bedtime,
-                          size: 24,
-                          color: _hasCheckedInToday ? Colors.grey[400] : Colors.blue[700],
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          _hasCheckedInToday ? 'Already Checked In' : 'Take a Break',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: _hasCheckedInToday ? Colors.grey[400] : Colors.blue[700],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ],
         ),
@@ -883,7 +886,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   Widget _buildCarouselAvatar(TeamStreak streak, bool isFocused) {
-    final size = isFocused ? 140.0 : 110.0;
+    final size = isFocused ? 120.0 : 90.0;  // ✅ Was 140/110
     
     // Get the friend's info
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
@@ -949,7 +952,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               child: GestureDetector(
                 onTap: () => _toggleFavorite(streak),
                 child: Container(
-                  padding: const EdgeInsets.all(6),
+                  padding: const EdgeInsets.all(5),  // ✅ Was 6
                   decoration: BoxDecoration(
                     color: streak.isFavorite ? Colors.orange[400] : Colors.white,
                     shape: BoxShape.circle,
@@ -967,29 +970,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   ),
                   child: Icon(
                     streak.isFavorite ? Icons.star : Icons.star_border,
-                    color: streak.isFavorite ? Colors.white : Colors.grey[600],
-                    size: 20,
+                    color: streak.isFavorite ? Colors.white : Colors.grey[400],
+                    size: 16,  // ✅ Was likely 18-20
                   ),
-                ),
-              ),
-            ),
-          
-          // Checkmark badge
-          if (streak.isCompleteToday)
-            Positioned(
-              bottom: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.green,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3),
-                ),
-                child: const Icon(
-                  Icons.check,
-                  color: Colors.white,
-                  size: 20,
                 ),
               ),
             ),
@@ -1377,7 +1360,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
     
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),  // ✅ Reduced padding
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),  // ✅ Reduced padding
       decoration: BoxDecoration(
         color: badgeColor.withOpacity(0.15),
         borderRadius: BorderRadius.circular(16),  // ✅ Slightly smaller radius
