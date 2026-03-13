@@ -26,6 +26,8 @@ import 'widgets/workout_checkin_sheet.dart';
 import 'services/workout_history_service.dart';
 import 'widgets/workout_selection_modal.dart';
 import 'widgets/workout_join_checker.dart';
+import 'pages/notification_settings_page.dart';
+
 
 
 
@@ -2109,11 +2111,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 child: IconButton(
                   icon: const Icon(Icons.settings, color: Colors.white),
                   onPressed: () {
-                    // Navigate to settings
-                    final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-                    homeState?.setState(() {
-                      homeState._selectedIndex = 3; // Profile page
-                    });
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const NotificationSettingsPage(),
+                      ),
+                    );
                   },
                 ),
               ),
@@ -5498,7 +5501,14 @@ class _ProfilePageState extends State<ProfilePage> {
             leading: const Icon(Icons.notifications),
             title: const Text('Notifications'),
             trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: () {},
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const NotificationSettingsPage(),
+                ),
+              );
+            },
           ),
           ListTile(
             leading: const Icon(Icons.help),
