@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'services/auth_service.dart';
 import 'onboarding/onboarding_basic_info.dart';
+import 'main.dart';
+
+
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -296,7 +299,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   children: [
                     const Text("Already have an account? "),
                     TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () {
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (_) => const LoginScreen()),
+                          (route) => false,
+                        );
+                      },
                       child: const Text('Log In', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ],
