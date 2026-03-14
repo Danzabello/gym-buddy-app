@@ -73,7 +73,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
       await NotificationService().initialize();
       
       final onboardingStatus = await _checkOnboardingStatus(user.id);
-      await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
+      if (onboardingStatus) {
+        await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
+      }
       setState(() {
         _hasCompletedOnboarding = onboardingStatus;
         _isInitializing = false;
@@ -262,7 +264,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             if (user != null) {
                               await NotificationService().initialize();
                               final onboardingComplete = await _checkOnboardingStatus(user.id);
-                              await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
+                              if (onboardingComplete) {
+                                await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
+                              }
                               if (!mounted) return;
                               setState(() => _isLoading = false);
                               if (onboardingComplete) {
