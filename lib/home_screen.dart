@@ -365,10 +365,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     
     // ✅ CUSTOM MODE: Use exact order, no comparison with Coach Max
     if (_streakSortMode == StreakSortMode.custom) {
-      // Use the saved order exactly as provided
       displayItems[0] = friendStreaks[0];  // Left = first selection
       displayItems[1] = friendStreaks[1];  // Center = second selection
-      displayItems[2] = friendStreaks[2];  // Right = third selection
+      displayItems[2] = friendStreaks.length > 2 ? friendStreaks[2] : coachMaxStreak;  // Right = third or Coach Max
       print('👤 CUSTOM: Using exact order from selection');
     } else {
       // ✅ OTHER MODES: Compare with Coach Max to find center

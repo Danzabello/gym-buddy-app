@@ -3,7 +3,6 @@ import 'package:flutter/cupertino.dart';
 import '../services/notification_service.dart';
 import 'package:app_settings/app_settings.dart';
 
-
 class NotificationSettingsPage extends StatefulWidget {
   const NotificationSettingsPage({super.key});
 
@@ -17,12 +16,12 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
 
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _osPermissionGranted = true; // ← NEW
 
   bool _notifSocial = true;
   bool _notifWorkouts = true;
   bool _notifStreaks = true;
   bool _notifCoachMax = true;
-  
 
   bool _quietHoursEnabled = true;
   int _quietHoursStart = 23;
@@ -34,23 +33,23 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
     _loadSettings();
   }
 
-    Future<void> _loadSettings() async {
-      final granted = await _notificationService.checkOsPermission();
-      final settings = await _notificationService.getSettings();
-      if (mounted) {
-        setState(() {
-          _osPermissionGranted = granted;
-          _notifSocial = settings['notif_social'] ?? true;
-          _notifWorkouts = settings['notif_workouts'] ?? true;
-          _notifStreaks = settings['notif_streaks'] ?? true;
-          _notifCoachMax = settings['notif_coach_max'] ?? true;
-          _quietHoursEnabled = settings['quiet_hours_enabled'] ?? true;
-          _quietHoursStart = settings['quiet_hours_start'] ?? 23;
-          _quietHoursEnd = settings['quiet_hours_end'] ?? 7;
-          _isLoading = false;
-        });
-      }
+  Future<void> _loadSettings() async {
+    final granted = await _notificationService.checkOsPermission(); // ← NEW
+    final settings = await _notificationService.getSettings();
+    if (mounted) {
+      setState(() {
+        _osPermissionGranted = granted; // ← NEW
+        _notifSocial = settings['notif_social'] ?? true;
+        _notifWorkouts = settings['notif_workouts'] ?? true;
+        _notifStreaks = settings['notif_streaks'] ?? true;
+        _notifCoachMax = settings['notif_coach_max'] ?? true;
+        _quietHoursEnabled = settings['quiet_hours_enabled'] ?? true;
+        _quietHoursStart = settings['quiet_hours_start'] ?? 23;
+        _quietHoursEnd = settings['quiet_hours_end'] ?? 7;
+        _isLoading = false;
+      });
     }
+  }
 
   Future<void> _saveSettings() async {
     setState(() => _isSaving = true);
@@ -76,7 +75,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
           ),
           backgroundColor: Colors.green[600],
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -104,17 +104,20 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.grey[50],
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
+                    child: Text('Cancel',
+                        style: TextStyle(color: Colors.grey[600])),
                   ),
                   Text(
                     isStart ? 'Start Time' : 'End Time',
@@ -153,7 +156,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                   (i) => Center(
                     child: Text(
                       _formatHour(i),
-                      style: const TextStyle(color: Colors.black87, fontSize: 18),
+                      style: const TextStyle(
+                          color: Colors.black87, fontSize: 18),
                     ),
                   ),
                 ),
@@ -222,7 +226,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // Header banner
+                // Orange header banner
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -259,8 +263,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                             ),
                             Text(
                               'Choose what notifications you receive',
-                              style: TextStyle(
-                                  color: Colors.white70, fontSize: 13),
+                              style:
+                                  TextStyle(color: Colors.white70, fontSize: 13),
                             ),
                           ],
                         ),
@@ -269,7 +273,12 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                   ),
                 ),
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+
+                // ← NEW: OS permission warning banner
+                _buildOsPermissionBanner(),
+
+                const SizedBox(height: 8),
 
                 _buildSectionHeader('📬 Notification Categories'),
                 const SizedBox(height: 8),
@@ -279,7 +288,10 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                     title: 'Social',
                     subtitle: 'Friend requests & acceptances',
                     value: _notifSocial,
-                    onChanged: (v) => setState(() => _notifSocial = v),
+                    // ← UPDATED: disabled when OS permission denied
+                    onChanged: _osPermissionGranted
+                        ? (v) => setState(() => _notifSocial = v)
+                        : null,
                   ),
                   _buildDivider(),
                   _buildToggleTile(
@@ -287,7 +299,9 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                     title: 'Workouts',
                     subtitle: 'Invites, reminders & updates',
                     value: _notifWorkouts,
-                    onChanged: (v) => setState(() => _notifWorkouts = v),
+                    onChanged: _osPermissionGranted
+                        ? (v) => setState(() => _notifWorkouts = v)
+                        : null,
                   ),
                   _buildDivider(),
                   _buildToggleTile(
@@ -295,7 +309,9 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                     title: 'Streaks',
                     subtitle: 'Check-ins, milestones & warnings',
                     value: _notifStreaks,
-                    onChanged: (v) => setState(() => _notifStreaks = v),
+                    onChanged: _osPermissionGranted
+                        ? (v) => setState(() => _notifStreaks = v)
+                        : null,
                   ),
                   _buildDivider(),
                   _buildToggleTile(
@@ -303,7 +319,9 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                     title: 'Coach Max',
                     subtitle: 'Motivational messages & check-ins',
                     value: _notifCoachMax,
-                    onChanged: (v) => setState(() => _notifCoachMax = v),
+                    onChanged: _osPermissionGranted
+                        ? (v) => setState(() => _notifCoachMax = v)
+                        : null,
                   ),
                 ]),
 
@@ -317,8 +335,9 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                     title: 'Enable Quiet Hours',
                     subtitle: 'Pause notifications during set hours',
                     value: _quietHoursEnabled,
-                    onChanged: (v) =>
-                        setState(() => _quietHoursEnabled = v),
+                    onChanged: _osPermissionGranted
+                        ? (v) => setState(() => _quietHoursEnabled = v)
+                        : null,
                   ),
                   if (_quietHoursEnabled) ...[
                     _buildDivider(),
@@ -358,8 +377,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                         Expanded(
                           child: Text(
                             'Quiet hours: ${_formatHour(_quietHoursStart)} → ${_formatHour(_quietHoursEnd)}',
-                            style: TextStyle(
-                                color: Colors.blue[700], fontSize: 13),
+                            style:
+                                TextStyle(color: Colors.blue[700], fontSize: 13),
                           ),
                         ),
                       ],
@@ -403,21 +422,11 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
     );
   }
 
-  Widget _buildSectionHeader(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        color: Color(0xFF2C3E50),
-        fontSize: 16,
-        fontWeight: FontWeight.bold,
-      ),
-    );
-  }
-
+  // ← NEW: Red warning banner shown when OS permission is denied
   Widget _buildOsPermissionBanner() {
     if (_osPermissionGranted) return const SizedBox.shrink();
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.red[50],
@@ -425,6 +434,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
         border: Border.all(color: Colors.red[300]!),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(Icons.notifications_off, color: Colors.red[700], size: 28),
           const SizedBox(width: 12),
@@ -447,9 +457,10 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                 ),
                 const SizedBox(height: 8),
                 GestureDetector(
-                  onTap: () => AppSettings.openAppSettings(type: AppSettingsType.notification),
+                  onTap: () => AppSettings.openAppSettings(
+                      type: AppSettingsType.notification),
                   child: Text(
-                    'Open Settings →',
+                    'Open Phone Settings →',
                     style: TextStyle(
                       color: Colors.red[800],
                       fontWeight: FontWeight.bold,
@@ -462,6 +473,17 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        color: Color(0xFF2C3E50),
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
       ),
     );
   }
@@ -488,31 +510,41 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
     required String title,
     required String subtitle,
     required bool value,
-    required ValueChanged<bool> onChanged,
+    required ValueChanged<bool>? onChanged, // ← nullable now
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          Text(icon, style: const TextStyle(fontSize: 24)),
+          Text(icon,
+              style: TextStyle(
+                  fontSize: 24,
+                  // Dim the emoji when disabled
+                  color: onChanged == null ? Colors.grey[400] : null)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title,
-                    style: const TextStyle(
-                        color: Color(0xFF2C3E50),
+                    style: TextStyle(
+                        color: onChanged == null
+                            ? Colors.grey[400]
+                            : const Color(0xFF2C3E50),
                         fontSize: 15,
                         fontWeight: FontWeight.w600)),
                 Text(subtitle,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                    style: TextStyle(
+                        color: onChanged == null
+                            ? Colors.grey[300]
+                            : Colors.grey[600],
+                        fontSize: 12)),
               ],
             ),
           ),
           CupertinoSwitch(
             value: value,
-            onChanged: onChanged,
+            onChanged: onChanged, // null = greyed out automatically
             activeColor: Colors.orange[600],
           ),
         ],
@@ -545,12 +577,14 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage> {
                           fontSize: 15,
                           fontWeight: FontWeight.w600)),
                   Text(subtitle,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      style:
+                          TextStyle(color: Colors.grey[600], fontSize: 12)),
                 ],
               ),
             ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: Colors.orange[50],
                 borderRadius: BorderRadius.circular(8),

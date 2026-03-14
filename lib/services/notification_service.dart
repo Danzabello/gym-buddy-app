@@ -53,6 +53,8 @@ class NotificationService {
 
       if (settings?.authorizationStatus == AuthorizationStatus.denied) {
         if (kDebugMode) print('❌ Notifications denied by user');
+        // Still try to save existing token even if denied
+        await _saveTokenToSupabase();
         return;
       }
 
