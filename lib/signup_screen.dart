@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'services/auth_service.dart';
-import 'main.dart';
 import 'onboarding/onboarding_basic_info.dart';
-
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -16,7 +14,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
   final AuthService _authService = AuthService();
-  
+
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isLoading = false;
@@ -25,9 +23,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String? _emailError;
   String? _passwordError;
   String? _confirmPasswordError;
+  String? _signUpError;
+
+  String _friendlyError(String error) {
+    if (error.contains('user_already_exists') || error.contains('User already registered')) {
+      return 'An account with this email already exists. Try logging in instead.';
+    }
+    if (error.contains('invalid_email') || error.contains('Invalid email')) {
+      return 'Please enter a valid email address.';
+    }
+    if (error.contains('weak_password')) {
+      return 'Password is too weak. Please use at least 6 characters.';
+    }
+    return 'Something went wrong. Please try again.';
+  }
 
   void _validateEmail(String value) {
     setState(() {
+      _signUpError = null;
       if (value.isEmpty) {
         _emailError = 'Email is required';
       } else if (!value.contains('@') || !value.contains('.')) {
@@ -40,6 +53,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   void _validatePassword(String value) {
     setState(() {
+      _signUpError = null;
       if (value.isEmpty) {
         _passwordError = 'Password is required';
       } else if (value.length < 6) {
@@ -52,6 +66,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   void _validateConfirmPassword(String value) {
     setState(() {
+      _signUpError = null;
       if (value.isEmpty) {
         _confirmPasswordError = 'Please confirm your password';
       } else if (value != _passwordController.text) {
@@ -63,29 +78,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Future<void> _signUp() async {
-    // Validate all fields
     _validateEmail(_emailController.text);
     _validatePassword(_passwordController.text);
     _validateConfirmPassword(_confirmPasswordController.text);
 
-    // Check if terms are accepted
     if (!_acceptTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please accept the terms and conditions'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+      setState(() {
+        _signUpError = 'Please accept the Terms and Conditions to continue.';
+      });
       return;
     }
 
-    // Check for errors
     if (_emailError != null || _passwordError != null || _confirmPasswordError != null) {
       return;
     }
 
     setState(() {
       _isLoading = true;
+      _signUpError = null;
     });
 
     final error = await _authService.signUp(
@@ -98,20 +108,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
     });
 
     if (error == null) {
-      // Success! Navigate directly to onboarding
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => const OnboardingBasicInfo(),
         ),
       );
     } else {
-      // Show error
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Sign up failed: $error'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      setState(() {
+        _signUpError = _friendlyError(error);
+      });
     }
   }
 
@@ -133,9 +138,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   alignment: Alignment.centerLeft,
                   child: IconButton(
                     icon: const Icon(Icons.arrow_back),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
+                    onPressed: () => Navigator.of(context).pop(),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -146,26 +149,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 16),
-                // Title
                 const Text(
                   'Create Account',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 const Text(
                   'Join the Gym Buddy community',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey,
-                  ),
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
                 ),
                 const SizedBox(height: 32),
-                
+
                 // Email Field
                 TextField(
                   controller: _emailController,
@@ -176,15 +172,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     hintText: 'Enter your email',
                     prefixIcon: const Icon(Icons.email_outlined),
                     errorText: _emailError,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     filled: true,
                     fillColor: Colors.grey[50],
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Password Field
                 TextField(
                   controller: _passwordController,
@@ -196,26 +190,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     prefixIcon: const Icon(Icons.lock_outline),
                     errorText: _passwordError,
                     suffixIcon: IconButton(
-                      icon: Icon(
-                        _isPasswordVisible
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _isPasswordVisible = !_isPasswordVisible;
-                        });
-                      },
+                      icon: Icon(_isPasswordVisible ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     filled: true,
                     fillColor: Colors.grey[50],
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Confirm Password Field
                 TextField(
                   controller: _confirmPasswordController,
@@ -227,26 +211,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     prefixIcon: const Icon(Icons.lock_outline),
                     errorText: _confirmPasswordError,
                     suffixIcon: IconButton(
-                      icon: Icon(
-                        _isConfirmPasswordVisible
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _isConfirmPasswordVisible = !_isConfirmPasswordVisible;
-                        });
-                      },
+                      icon: Icon(_isConfirmPasswordVisible ? Icons.visibility_off : Icons.visibility),
+                      onPressed: () => setState(() => _isConfirmPasswordVisible = !_isConfirmPasswordVisible),
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                     filled: true,
                     fillColor: Colors.grey[50],
                   ),
                 ),
                 const SizedBox(height: 20),
-                
+
                 // Terms and Conditions
                 Row(
                   children: [
@@ -255,6 +229,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       onChanged: (value) {
                         setState(() {
                           _acceptTerms = value ?? false;
+                          _signUpError = null;
                         });
                       },
                     ),
@@ -266,16 +241,39 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                
+                const SizedBox(height: 16),
+
+                // Inline error message
+                if (_signUpError != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red[300]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline, color: Colors.red[700], size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _signUpError!,
+                            style: TextStyle(color: Colors.red[700], fontSize: 14),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // Sign Up Button
                 ElevatedButton(
                   onPressed: _isLoading ? null : _signUp,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
                   ),
@@ -283,37 +281,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                         )
                       : const Text(
                           'SIGN UP',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
-                          ),
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1),
                         ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Already have account
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Text("Already have an account? "),
                     TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
-                      child: const Text(
-                        'Log In',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Log In', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),

@@ -12,42 +12,49 @@ class _OnboardingBasicInfoState extends State<OnboardingBasicInfo> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _ageController = TextEditingController();
   String? _selectedGender;
-  
+
+  String? _nameError;
+  String? _ageError;
+
   final List<String> _genderOptions = ['Male', 'Female', 'Other', 'Prefer not to say'];
 
   bool _validateInputs() {
+    String? nameError;
+    String? ageError;
+
     if (_nameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your name')),
-      );
-      return false;
+      nameError = 'Please enter your display name';
     }
+
     if (_ageController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your age')),
-      );
-      return false;
+      ageError = 'Please enter your age';
+    } else {
+      final age = int.tryParse(_ageController.text);
+      if (age == null) {
+        ageError = 'Please enter a valid number';
+      } else if (age < 16) {
+        ageError = 'You must be at least 16 years old to use Gym Buddy';
+      } else if (age > 120) {
+        ageError = 'Please enter a valid age';
+      }
     }
-    final age = int.tryParse(_ageController.text);
-    if (age == null || age < 13 || age > 120) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid age')),
-      );
-      return false;
-    }
-    return true;
+
+    setState(() {
+      _nameError = nameError;
+      _ageError = ageError;
+    });
+
+    return nameError == null && ageError == null;
   }
 
   void _nextPage() {
     if (_validateInputs()) {
-      // Collect user data
       final userData = {
         'display_name': _nameController.text,
         'age': int.parse(_ageController.text),
         'gender': _selectedGender,
       };
 
-      // Navigate to USERNAME selection screen (NEW!)
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => OnboardingUsername(userData: userData),
@@ -68,14 +75,14 @@ class _OnboardingBasicInfoState extends State<OnboardingBasicInfo> {
             children: [
               // Progress indicator
               LinearProgressIndicator(
-                value: 0.15, // Adjusted for 6 steps now
+                value: 0.15,
                 backgroundColor: Colors.grey[300],
                 valueColor: AlwaysStoppedAnimation<Color>(
                   Theme.of(context).colorScheme.primary,
                 ),
               ),
               const SizedBox(height: 32),
-              
+
               // Title
               const Text(
                 'Let\'s get to know you',
@@ -93,14 +100,18 @@ class _OnboardingBasicInfoState extends State<OnboardingBasicInfo> {
                 ),
               ),
               const SizedBox(height: 40),
-              
+
               // Name field
               TextField(
                 controller: _nameController,
+                onChanged: (_) {
+                  if (_nameError != null) setState(() => _nameError = null);
+                },
                 decoration: InputDecoration(
                   labelText: 'Display Name',
                   hintText: 'What should we call you?',
                   prefixIcon: const Icon(Icons.person_outline),
+                  errorText: _nameError,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -109,15 +120,19 @@ class _OnboardingBasicInfoState extends State<OnboardingBasicInfo> {
                 ),
               ),
               const SizedBox(height: 20),
-              
+
               // Age field
               TextField(
                 controller: _ageController,
                 keyboardType: TextInputType.number,
+                onChanged: (_) {
+                  if (_ageError != null) setState(() => _ageError = null);
+                },
                 decoration: InputDecoration(
                   labelText: 'Age',
                   hintText: 'Your age',
                   prefixIcon: const Icon(Icons.cake_outlined),
+                  errorText: _ageError,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -126,7 +141,7 @@ class _OnboardingBasicInfoState extends State<OnboardingBasicInfo> {
                 ),
               ),
               const SizedBox(height: 20),
-              
+
               // Gender dropdown
               DropdownButtonFormField<String>(
                 value: _selectedGender,
@@ -151,20 +166,12 @@ class _OnboardingBasicInfoState extends State<OnboardingBasicInfo> {
                   });
                 },
               ),
-              
+
               const Spacer(),
-              
+
               // Navigation buttons
               Row(
                 children: [
-                  TextButton(
-                    onPressed: () {
-                      // Skip onboarding
-                      Navigator.of(context).pushReplacementNamed('/home');
-                    },
-                    child: const Text('Skip'),
-                  ),
-                  const Spacer(),
                   ElevatedButton(
                     onPressed: _nextPage,
                     style: ElevatedButton.styleFrom(

@@ -1452,7 +1452,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   children: [
                     const Icon(Icons.check_circle, color: Colors.white),
                     const SizedBox(width: 12),
-                    Text('Custom order saved: ${result[0].teamName}, ${result[1].teamName}, ${result[2].teamName}'),
+                    Expanded(
+                      child: Text(
+                        'Custom order saved!',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                 ),
                 backgroundColor: Colors.green[600],
