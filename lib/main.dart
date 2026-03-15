@@ -8,6 +8,8 @@ import 'services/coach_max_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'services/notification_service.dart';
 import 'dart:io';
+import 'onboarding/splash_screen.dart';
+
 
 
 
@@ -111,7 +113,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final user = Supabase.instance.client.auth.currentUser;
 
     if (user == null) {
-      return const LoginScreen();
+      return const SplashScreen();
     } else if (!_hasCompletedOnboarding) {
       return const SignUpScreen();
     } else {

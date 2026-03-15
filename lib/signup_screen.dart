@@ -1,319 +1,403 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/auth_service.dart';
-import 'onboarding/onboarding_basic_info.dart';
+import 'onboarding/onboarding_theme.dart';
+import 'onboarding/onboarding_basic_info_new.dart';
 import 'main.dart';
 
-
-
 class SignUpScreen extends StatefulWidget {
-  const SignUpScreen({super.key});
+  final List<Map<String, dynamic>> pendingInvites;
+  const SignUpScreen({super.key, this.pendingInvites = const []});
 
   @override
   State<SignUpScreen> createState() => _SignUpScreenState();
 }
 
 class _SignUpScreenState extends State<SignUpScreen> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
-  final AuthService _authService = AuthService();
+  final _emailCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  final _confirmCtrl = TextEditingController();
+  final _authService = AuthService();
 
-  bool _isPasswordVisible = false;
-  bool _isConfirmPasswordVisible = false;
+  bool _showPassword = false;
+  bool _showConfirm = false;
   bool _isLoading = false;
   bool _acceptTerms = false;
 
   String? _emailError;
   String? _passwordError;
-  String? _confirmPasswordError;
-  String? _signUpError;
+  String? _confirmError;
+  String? _generalError;
 
-  String _friendlyError(String error) {
-    if (error.contains('user_already_exists') || error.contains('User already registered')) {
-      return 'An account with this email already exists. Try logging in instead.';
-    }
-    if (error.contains('invalid_email') || error.contains('Invalid email')) {
-      return 'Please enter a valid email address.';
-    }
-    if (error.contains('weak_password')) {
-      return 'Password is too weak. Please use at least 6 characters.';
-    }
-    return 'Something went wrong. Please try again.';
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    _confirmCtrl.dispose();
+    super.dispose();
   }
 
-  void _validateEmail(String value) {
-    setState(() {
-      _signUpError = null;
-      if (value.isEmpty) {
-        _emailError = 'Email is required';
-      } else if (!value.contains('@') || !value.contains('.')) {
-        _emailError = 'Enter a valid email';
-      } else {
-        _emailError = null;
-      }
-    });
-  }
+  bool _validate() {
+    String? emailErr, passErr, confirmErr;
+    final email = _emailCtrl.text.trim();
+    final pass = _passwordCtrl.text;
 
-  void _validatePassword(String value) {
-    setState(() {
-      _signUpError = null;
-      if (value.isEmpty) {
-        _passwordError = 'Password is required';
-      } else if (value.length < 6) {
-        _passwordError = 'Password must be at least 6 characters';
-      } else {
-        _passwordError = null;
-      }
-    });
-  }
+    if (email.isEmpty || !email.contains('@') || !email.contains('.')) {
+      emailErr = 'Enter a valid email';
+    }
+    if (pass.isEmpty || pass.length < 6) {
+      passErr = 'At least 6 characters';
+    }
+    if (_confirmCtrl.text != pass) {
+      confirmErr = 'Passwords do not match';
+    }
 
-  void _validateConfirmPassword(String value) {
     setState(() {
-      _signUpError = null;
-      if (value.isEmpty) {
-        _confirmPasswordError = 'Please confirm your password';
-      } else if (value != _passwordController.text) {
-        _confirmPasswordError = 'Passwords do not match';
-      } else {
-        _confirmPasswordError = null;
-      }
+      _emailError = emailErr;
+      _passwordError = passErr;
+      _confirmError = confirmErr;
+      _generalError = null;
     });
+
+    return emailErr == null && passErr == null && confirmErr == null;
   }
 
   Future<void> _signUp() async {
-    _validateEmail(_emailController.text);
-    _validatePassword(_passwordController.text);
-    _validateConfirmPassword(_confirmPasswordController.text);
-
+    if (!_validate()) return;
     if (!_acceptTerms) {
-      setState(() {
-        _signUpError = 'Please accept the Terms and Conditions to continue.';
-      });
-      return;
-    }
-
-    if (_emailError != null || _passwordError != null || _confirmPasswordError != null) {
+      setState(() =>
+          _generalError = 'Please accept the Terms and Conditions.');
       return;
     }
 
     setState(() {
       _isLoading = true;
-      _signUpError = null;
+      _generalError = null;
     });
 
     final error = await _authService.signUp(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
+      email: _emailCtrl.text.trim(),
+      password: _passwordCtrl.text,
     );
 
-    setState(() {
-      _isLoading = false;
-    });
+    setState(() => _isLoading = false);
 
     if (error == null) {
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => const OnboardingBasicInfo(),
+          builder: (_) => OnboardingBasicInfoNew(
+            pendingInvites: widget.pendingInvites,
+          ),
         ),
       );
     } else {
-      setState(() {
-        _signUpError = _friendlyError(error);
-      });
+      setState(() => _generalError = _friendlyError(error));
     }
+  }
+
+  String _friendlyError(String error) {
+    if (error.contains('user_already_exists') ||
+        error.contains('User already registered')) {
+      return 'An account with this email already exists.';
+    }
+    if (error.contains('invalid_email')) {
+      return 'Please enter a valid email address.';
+    }
+    if (error.contains('weak_password')) {
+      return 'Password is too weak — use at least 6 characters.';
+    }
+    return 'Something went wrong. Please try again.';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 40),
-                // Back button
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Logo/Icon
-                Icon(
-                  Icons.fitness_center,
-                  size: 80,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Create Account',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Join the Gym Buddy community',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-                const SizedBox(height: 32),
-
-                // Email Field
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  onChanged: _validateEmail,
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    hintText: 'Enter your email',
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    errorText: _emailError,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Password Field
-                TextField(
-                  controller: _passwordController,
-                  obscureText: !_isPasswordVisible,
-                  onChanged: _validatePassword,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    hintText: 'At least 6 characters',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    errorText: _passwordError,
-                    suffixIcon: IconButton(
-                      icon: Icon(_isPasswordVisible ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
-                    ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Confirm Password Field
-                TextField(
-                  controller: _confirmPasswordController,
-                  obscureText: !_isConfirmPasswordVisible,
-                  onChanged: _validateConfirmPassword,
-                  decoration: InputDecoration(
-                    labelText: 'Confirm Password',
-                    hintText: 'Re-enter your password',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    errorText: _confirmPasswordError,
-                    suffixIcon: IconButton(
-                      icon: Icon(_isConfirmPasswordVisible ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _isConfirmPasswordVisible = !_isConfirmPasswordVisible),
-                    ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Terms and Conditions
-                Row(
+      body: Column(
+        children: [
+          // ── Gradient header — intrinsic height, adapts to any screen ──
+          Container(
+            decoration: const BoxDecoration(gradient: kGradientDiag),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Checkbox(
-                      value: _acceptTerms,
-                      onChanged: (value) {
-                        setState(() {
-                          _acceptTerms = value ?? false;
-                          _signUpError = null;
-                        });
-                      },
-                    ),
-                    const Expanded(
-                      child: Text(
-                        'I accept the Terms and Conditions',
-                        style: TextStyle(fontSize: 14),
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).maybePop(),
+                      child: Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.arrow_back,
+                            color: Colors.white, size: 17),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    const Text('Create your account',
+                        style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white)),
+                    const SizedBox(height: 4),
+                    Text('Join the Gym Buddy community',
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withOpacity(0.75))),
                   ],
                 ),
-                const SizedBox(height: 16),
+              ),
+            ),
+          ),
 
-                // Inline error message
-                if (_signUpError != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red[300]!),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.error_outline, color: Colors.red[700], size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _signUpError!,
-                            style: TextStyle(color: Colors.red[700], fontSize: 14),
-                          ),
-                        ),
-                      ],
+          // ── Form ──────────────────────────────────────────────────────
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ObTextField(
+                    label: 'Email',
+                    hint: 'Enter your email',
+                    icon: Icons.email_outlined,
+                    controller: _emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    errorText: _emailError,
+                    onChanged: (_) =>
+                        setState(() => _emailError = null),
+                  ),
+                  const SizedBox(height: 16),
+                  ObTextField(
+                    label: 'Password',
+                    hint: 'At least 6 characters',
+                    icon: Icons.lock_outline,
+                    controller: _passwordCtrl,
+                    obscureText: !_showPassword,
+                    errorText: _passwordError,
+                    onChanged: (_) =>
+                        setState(() => _passwordError = null),
+                    suffixIcon: IconButton(
+                      icon: Icon(_showPassword
+                          ? Icons.visibility_off
+                          : Icons.visibility, size: 20),
+                      onPressed: () => setState(
+                          () => _showPassword = !_showPassword),
                     ),
                   ),
                   const SizedBox(height: 16),
-                ],
-
-                // Sign Up Button
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _signUp,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.white,
+                  ObTextField(
+                    label: 'Confirm password',
+                    hint: 'Re-enter your password',
+                    icon: Icons.lock_outline,
+                    controller: _confirmCtrl,
+                    obscureText: !_showConfirm,
+                    errorText: _confirmError,
+                    onChanged: (_) =>
+                        setState(() => _confirmError = null),
+                    suffixIcon: IconButton(
+                      icon: Icon(_showConfirm
+                          ? Icons.visibility_off
+                          : Icons.visibility, size: 20),
+                      onPressed: () => setState(
+                          () => _showConfirm = !_showConfirm),
+                    ),
                   ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                        )
-                      : const Text(
-                          'SIGN UP',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1),
-                        ),
-                ),
-                const SizedBox(height: 16),
 
-                // Already have account
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text("Already have an account? "),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => const LoginScreen()),
-                          (route) => false,
-                        );
-                      },
-                      child: const Text('Log In', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _acceptTerms,
+                        activeColor: kObBlue,
+                        onChanged: (v) => setState(() {
+                          _acceptTerms = v ?? false;
+                          _generalError = null;
+                        }),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(
+                              () => _acceptTerms = !_acceptTerms),
+                          child: RichText(
+                            text: const TextSpan(
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF374151)),
+                              children: [
+                                TextSpan(text: 'I accept the '),
+                                TextSpan(
+                                  text: 'Terms of Service',
+                                  style: TextStyle(
+                                      color: kObBlue,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  if (_generalError != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red[50],
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.red[200]!),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.error_outline,
+                              color: Colors.red[700], size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(_generalError!,
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.red[700])),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
-                ),
-              ],
+
+                  const SizedBox(height: 24),
+
+                  ObGradientButton(
+                    label: 'Sign up',
+                    isLoading: _isLoading,
+                    onTap: _signUp,
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  Center(
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(
+                              builder: (_) => const LoginScreen()),
+                          (r) => false,
+                        );
+                      },
+                      child: RichText(
+                        text: TextSpan(
+                          style: TextStyle(
+                              fontSize: 14, color: Colors.grey[600]),
+                          children: const [
+                            TextSpan(text: 'Already have an account? '),
+                            TextSpan(
+                              text: 'Sign in',
+                              style: TextStyle(
+                                  color: kObBlue,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+                  const _Divider(),
+                  const SizedBox(height: 16),
+                  const _GoogleButton(),
+                ],
+              ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Divider extends StatelessWidget {
+  const _Divider();
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(child: Divider()),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text('or',
+              style: TextStyle(fontSize: 13, color: Colors.grey[400])),
+        ),
+        const Expanded(child: Divider()),
+      ],
+    );
+  }
+}
+
+class _GoogleButton extends StatelessWidget {
+  const _GoogleButton();
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: 0.5,
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: null,
+          icon: const _GoogleLogo(),
+          label: const Text('Continue with Google',
+              style: TextStyle(fontSize: 15, color: Color(0xFF374151))),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            side: const BorderSide(color: Color(0xFFE2E8F0)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14)),
           ),
         ),
       ),
     );
   }
+}
+
+class _GoogleLogo extends StatelessWidget {
+  const _GoogleLogo();
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+        size: const Size(20, 20), painter: _GooglePainter());
+  }
+}
+
+class _GooglePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()..style = PaintingStyle.fill;
+    final c = Offset(size.width / 2, size.height / 2);
+    final r = size.width / 2;
+    p.color = const Color(0xFFEA4335);
+    canvas.drawArc(
+        Rect.fromCircle(center: c, radius: r), -1.57, 3.14, true, p);
+    p.color = const Color(0xFF34A853);
+    canvas.drawArc(
+        Rect.fromCircle(center: c, radius: r), 1.57, 3.14, true, p);
+    p.color = const Color(0xFFFBBC05);
+    canvas.drawArc(
+        Rect.fromCircle(center: c, radius: r), 2.36, 1.57, true, p);
+    p.color = const Color(0xFF4285F4);
+    canvas.drawArc(
+        Rect.fromCircle(center: c, radius: r), -1.57, -1.57, true, p);
+    p.color = Colors.white;
+    canvas.drawCircle(c, r * 0.6, p);
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
 }

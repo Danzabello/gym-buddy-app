@@ -3,15 +3,30 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'user_avatar.dart';
 
-// Border styles available to the user
 enum AvatarBorderStyle { simple, bold, arc }
 
 class AvatarPickerScreen extends StatefulWidget {
-  /// Called when the user confirms their selection.
-  /// Pass this to navigate to the next onboarding step or home screen.
-  final VoidCallback onComplete;
+  /// Used inside the onboarding flow — receives avatarId + borderStyle name.
+  /// The parent handles saving to Supabase in one upsert.
+  final void Function(String avatarId, String borderStyle)? onCompleteWithData;
 
-  const AvatarPickerScreen({super.key, required this.onComplete});
+  /// Used standalone (e.g. profile settings) — no data passed back.
+  /// The widget saves to Supabase itself before calling this.
+  final VoidCallback? onComplete;
+
+  /// Set false when embedded inside the ObHeader onboarding wrapper.
+  /// The header is then rendered by the parent screen instead.
+  final bool showHeader;
+
+  const AvatarPickerScreen({
+    super.key,
+    this.onComplete,
+    this.onCompleteWithData,
+    this.showHeader = true,
+  }) : assert(
+          onComplete != null || onCompleteWithData != null,
+          'Provide either onComplete or onCompleteWithData',
+        );
 
   @override
   State<AvatarPickerScreen> createState() => _AvatarPickerScreenState();
@@ -19,7 +34,6 @@ class AvatarPickerScreen extends StatefulWidget {
 
 class _AvatarPickerScreenState extends State<AvatarPickerScreen>
     with SingleTickerProviderStateMixin {
-  // ── Starters shown during onboarding ──────────────────────────────────────
   static const _starters = [
     _AvatarOption(
       id: 'lion',
@@ -53,17 +67,16 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
     ),
   ];
 
-  // ── Locked avatars shown as a preview at the bottom ───────────────────────
   static const _locked = [
-    _LockedAvatar(id: 'eagle',        emoji: '🦅', name: 'Eagle',     req: '30-day streak'),
-    _LockedAvatar(id: 'shark',        emoji: '🦈', name: 'Shark',     req: '60-day streak'),
-    _LockedAvatar(id: 'gorilla',      emoji: '🦍', name: 'Gorilla',   req: '100-day streak'),
-    _LockedAvatar(id: 'tiger',        emoji: '🐯', name: 'Tiger',     req: '50 co-ops'),
-    _LockedAvatar(id: 'buffalo',      emoji: '🦬', name: 'Buffalo',   req: '200 coins'),
-    _LockedAvatar(id: 'robot',        emoji: '🤖', name: 'Robot',     req: '500 coins'),
-    _LockedAvatar(id: 'flexed',       emoji: '💪', name: 'Flex',      req: '90-day streak'),
-    _LockedAvatar(id: 'weightlifter', emoji: '🏋️', name: 'Lifter',   req: '100 co-ops'),
-    _LockedAvatar(id: 'runner',       emoji: '🏃', name: 'Runner',    req: '150 co-ops'),
+    _LockedAvatar(id: 'eagle',        emoji: '🦅', name: 'Eagle',   req: '30-day streak'),
+    _LockedAvatar(id: 'shark',        emoji: '🦈', name: 'Shark',   req: '60-day streak'),
+    _LockedAvatar(id: 'gorilla',      emoji: '🦍', name: 'Gorilla', req: '100-day streak'),
+    _LockedAvatar(id: 'tiger',        emoji: '🐯', name: 'Tiger',   req: '50 co-ops'),
+    _LockedAvatar(id: 'buffalo',      emoji: '🦬', name: 'Buffalo', req: '200 coins'),
+    _LockedAvatar(id: 'robot',        emoji: '🤖', name: 'Robot',   req: '500 coins'),
+    _LockedAvatar(id: 'flexed',       emoji: '💪', name: 'Flex',    req: '90-day streak'),
+    _LockedAvatar(id: 'weightlifter', emoji: '🏋️', name: 'Lifter', req: '100 co-ops'),
+    _LockedAvatar(id: 'runner',       emoji: '🏃', name: 'Runner',  req: '150 co-ops'),
   ];
 
   int _selectedAvatarIndex = 0;
@@ -117,13 +130,18 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) throw Exception('Not authenticated');
 
-      await Supabase.instance.client.from('user_profiles').update({
-        'avatar_id': _selected.id,
-        'avatar_border': _selectedBorder.name, // 'simple' | 'bold' | 'arc'
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', userId);
-
-      widget.onComplete();
+      // Only write to DB when used standalone.
+      // In the onboarding flow the parent saves everything in one upsert.
+      if (widget.onCompleteWithData == null) {
+        await Supabase.instance.client.from('user_profiles').update({
+          'avatar_id': _selected.id,
+          'avatar_border': _selectedBorder.name,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        }).eq('id', userId);
+        widget.onComplete!();
+      } else {
+        widget.onCompleteWithData!(_selected.id, _selectedBorder.name);
+      }
     } catch (e) {
       debugPrint('❌ Avatar save failed: $e');
       if (mounted) {
@@ -138,50 +156,47 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 28),
-              _buildStarterRow(),
-              const SizedBox(height: 24),
-              _buildDetailCard(),
-              const SizedBox(height: 28),
-              _buildLockedSection(),
-              const SizedBox(height: 32),
-            ],
-          ),
-        ),
+    // When showHeader is false the parent already shows the gradient ObHeader,
+    // so we just return the scrollable content without wrapping in a Scaffold.
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(24, widget.showHeader ? 20 : 8, 24, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.showHeader) ...[
+            _buildHeader(),
+            const SizedBox(height: 28),
+          ],
+          _buildStarterRow(),
+          const SizedBox(height: 24),
+          _buildDetailCard(),
+          const SizedBox(height: 28),
+          _buildLockedSection(),
+        ],
       ),
     );
   }
 
-  // ── Header ─────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Choose your companion',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+          'Your profile icon',
+          style: Theme.of(context)
+              .textTheme
+              .headlineSmall
+              ?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 6),
         Text(
-          'Pick who represents you — unlock more as you level up',
+          'Pick your icon — unlock more as you level up',
           style: TextStyle(fontSize: 14, color: Colors.grey[600]),
         ),
       ],
     );
   }
 
-  // ── 3 starter cards ────────────────────────────────────────────────────────
   Widget _buildStarterRow() {
     return Row(
       children: List.generate(_starters.length, (i) {
@@ -207,9 +222,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                   children: [
                     _AvatarWithBorder(
                       emoji: a.emoji,
-                      borderStyle: isSelected
-                          ? _selectedBorder
-                          : AvatarBorderStyle.simple,
+                      borderStyle: isSelected ? _selectedBorder : AvatarBorderStyle.simple,
                       borderColor: a.borderColor,
                       bgColor: a.bgColor,
                       size: 72,
@@ -233,7 +246,6 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
     );
   }
 
-  // ── Detail card with large preview + border picker ─────────────────────────
   Widget _buildDetailCard() {
     final a = _selected;
     return Container(
@@ -248,7 +260,6 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Large animated preview
               ScaleTransition(
                 scale: _bounceAnim,
                 child: _AvatarWithBorder(
@@ -264,31 +275,32 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      a.name,
-                      style: const TextStyle(
-                          fontSize: 22, fontWeight: FontWeight.w700),
-                    ),
+                    Text(a.name,
+                        style: const TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
                     Text(a.desc,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey[600])),
                     const SizedBox(height: 10),
                     Wrap(
                       spacing: 6,
                       runSpacing: 6,
-                      children: a.traits.map((t) => Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: a.bgColor,
-                          borderRadius: BorderRadius.circular(100),
-                        ),
-                        child: Text(t,
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: a.color)),
-                      )).toList(),
+                      children: a.traits
+                          .map((t) => Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: a.bgColor,
+                                  borderRadius: BorderRadius.circular(100),
+                                ),
+                                child: Text(t,
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: a.color)),
+                              ))
+                          .toList(),
                     ),
                   ],
                 ),
@@ -300,7 +312,6 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
           const Divider(height: 1),
           const SizedBox(height: 14),
 
-          // Border picker
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
@@ -316,7 +327,8 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
           Row(
             children: AvatarBorderStyle.values.map((style) {
               final isOn = _selectedBorder == style;
-              final label = style.name[0].toUpperCase() + style.name.substring(1);
+              final label =
+                  style.name[0].toUpperCase() + style.name.substring(1);
               return Expanded(
                 child: Padding(
                   padding: EdgeInsets.only(
@@ -341,17 +353,14 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                             borderStyle: style,
                             borderColor: a.borderColor,
                             bgColor: a.bgColor,
-                            size: 50,
+                            size: 72,
                           ),
                           const SizedBox(height: 5),
-                          Text(
-                            label,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: isOn ? a.color : Colors.grey[500],
-                            ),
-                          ),
+                          Text(label,
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: isOn ? a.color : Colors.grey[500])),
                         ],
                       ),
                     ),
@@ -363,7 +372,6 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
 
           const SizedBox(height: 16),
 
-          // CTA button
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -394,7 +402,6 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
     );
   }
 
-  // ── Locked avatars grid ────────────────────────────────────────────────────
   Widget _buildLockedSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -428,10 +435,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: Colors.grey[200]!,
-          style: BorderStyle.solid,
-        ),
+        border: Border.all(color: Colors.grey[200]!),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -446,9 +450,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
               Container(
                 padding: const EdgeInsets.all(2),
                 decoration: const BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
+                    color: Colors.white, shape: BoxShape.circle),
                 child: Icon(Icons.lock_rounded,
                     size: 14, color: Colors.grey[400]),
               ),
@@ -463,8 +465,8 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
           const SizedBox(height: 2),
           Text(l.req,
               textAlign: TextAlign.center,
-              style:
-                  TextStyle(fontSize: 8, color: Colors.grey[400], height: 1.3)),
+              style: TextStyle(
+                  fontSize: 8, color: Colors.grey[400], height: 1.3)),
         ],
       ),
     );
@@ -512,7 +514,7 @@ class _BorderPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final c = Offset(size.width / 2, size.height / 2);
-    final r = size.width / 2;
+    // Pull the radius inward so the stroke is never clipped
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -520,29 +522,40 @@ class _BorderPainter extends CustomPainter {
 
     switch (style) {
       case AvatarBorderStyle.simple:
-        paint.strokeWidth = size.width * 0.045;
-        canvas.drawCircle(c, r - paint.strokeWidth / 2, paint);
+        // Thin clean ring
+        paint.strokeWidth = size.width * 0.06;
+        final r = size.width / 2 - paint.strokeWidth / 2 - 1;
+        canvas.drawCircle(c, r, paint);
         break;
 
       case AvatarBorderStyle.bold:
-        paint.strokeWidth = size.width * 0.07;
-        canvas.drawCircle(c, r - paint.strokeWidth / 2, paint);
+        // Very thick ring — clearly "heavy"
+        paint.strokeWidth = size.width * 0.13;
+        final r = size.width / 2 - paint.strokeWidth / 2 - 1;
+        canvas.drawCircle(c, r, paint);
+        // Second inner ring for depth
         paint
-          ..strokeWidth = size.width * 0.018
+          ..strokeWidth = size.width * 0.03
           ..color = color.withOpacity(0.4);
-        canvas.drawCircle(c, r * 0.82, paint);
+        canvas.drawCircle(c, r - size.width * 0.10, paint);
         break;
 
       case AvatarBorderStyle.arc:
-        paint.strokeWidth = size.width * 0.05;
-        final rect = Rect.fromCircle(center: c, radius: r - paint.strokeWidth / 2);
-        // Top arc (270° = top, going 300°)
-        canvas.drawArc(rect, -2.7, 5.4, false, paint);
-        // Faint bottom arc
+        // Open-bottom arc — unmistakably not a full circle
+        paint.strokeWidth = size.width * 0.07;
+        final r = size.width / 2 - paint.strokeWidth / 2 - 1;
+        final rect = Rect.fromCircle(center: c, radius: r);
+        // Draw ~270° arc, leaving a visible gap at the bottom
+        canvas.drawArc(rect, -2.36, 4.71, false, paint);
+        // Two small end caps to look intentional
         paint
-          ..strokeWidth = size.width * 0.018
-          ..color = color.withOpacity(0.3);
-        canvas.drawArc(rect, 2.7, 3.14 * 2 - 5.4, false, paint);
+          ..style = PaintingStyle.fill
+          ..color = color.withOpacity(0.5);
+        final capR = paint.strokeWidth * 0.5;
+        canvas.drawCircle(
+          Offset(c.dx - r * 0.71, c.dy + r * 0.71), capR, paint);
+        canvas.drawCircle(
+          Offset(c.dx + r * 0.71, c.dy + r * 0.71), capR, paint);
         break;
     }
   }
@@ -580,9 +593,10 @@ class _LockedAvatar {
   final String emoji;
   final String name;
   final String req;
-  const _LockedAvatar(
-      {required this.id,
-      required this.emoji,
-      required this.name,
-      required this.req});
+  const _LockedAvatar({
+    required this.id,
+    required this.emoji,
+    required this.name,
+    required this.req,
+  });
 }
