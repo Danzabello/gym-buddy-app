@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../home_screen.dart';
 import '../services/coach_max_service.dart';
+import '../widgets/avatar_picker_screen.dart';
 import 'onboarding_basic_info.dart';
 
 class OnboardingBuddyPreferences extends StatefulWidget {
@@ -37,6 +38,7 @@ class _OnboardingBuddyPreferencesState extends State<OnboardingBuddyPreferences>
         'age': widget.userData['age'],
         'gender': widget.userData['gender'],
         'avatar_id': widget.userData['avatar_id'],
+        'avatar_border': 'simple', // ← ADD THIS (default, picker will update it)
         'fitness_goals': widget.userData['fitness_goals'],
         'fitness_level': widget.userData['fitness_level'],
         'looking_for_buddy': _lookingForBuddy,
@@ -49,24 +51,39 @@ class _OnboardingBuddyPreferencesState extends State<OnboardingBuddyPreferences>
       if (!coachMaxSuccess) throw Exception('Failed to initialize Coach Max');
 
       if (mounted) {
+        // ← CHANGED: go to avatar picker first, then home
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-          (route) => false,
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_coachMaxService.getMotivationalMessage(currentStreak: 0, hasCheckedInToday: false)),
-            backgroundColor: const Color(0xFF10B981),
-            duration: const Duration(seconds: 4),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          MaterialPageRoute(
+            builder: (_) => AvatarPickerScreen(
+              onComplete: () {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const HomeScreen()),
+                  (route) => false,
+                );
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(_coachMaxService.getMotivationalMessage(
+                        currentStreak: 0, hasCheckedInToday: false)),
+                    backgroundColor: const Color(0xFF10B981),
+                    duration: const Duration(seconds: 4),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                );
+              },
+            ),
           ),
+          (route) => false,
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving profile: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error saving profile: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -90,7 +107,10 @@ class _OnboardingBuddyPreferencesState extends State<OnboardingBuddyPreferences>
                   children: [
                     const SizedBox(height: 8),
                     const Text('Find your gym buddy',
-                        style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                        style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E293B))),
                     const SizedBox(height: 6),
                     Text('Tell us about your workout preferences',
                         style: TextStyle(fontSize: 15, color: Colors.grey[500])),
@@ -120,10 +140,14 @@ class _OnboardingBuddyPreferencesState extends State<OnboardingBuddyPreferences>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text('Looking for a gym buddy?',
-                                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
+                                    style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF1E293B))),
                                 SizedBox(height: 2),
                                 Text('We\'ll help you find workout partners',
-                                    style: TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+                                    style: TextStyle(
+                                        fontSize: 12, color: Color(0xFF6B7280))),
                               ],
                             ),
                           ),
@@ -153,30 +177,45 @@ class _OnboardingBuddyPreferencesState extends State<OnboardingBuddyPreferences>
                                 final isSelected = _workoutStyle == style['value'];
                                 return Expanded(
                                   child: Padding(
-                                    padding: EdgeInsets.only(right: style['value'] != 'both' ? 8 : 0),
+                                    padding: EdgeInsets.only(
+                                        right: style['value'] != 'both' ? 8 : 0),
                                     child: GestureDetector(
-                                      onTap: () => setState(() => _workoutStyle = style['value']!),
+                                      onTap: () => setState(
+                                          () => _workoutStyle = style['value']!),
                                       child: AnimatedContainer(
                                         duration: const Duration(milliseconds: 200),
-                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                        padding:
+                                            const EdgeInsets.symmetric(vertical: 14),
                                         decoration: BoxDecoration(
-                                          color: isSelected ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+                                          color: isSelected
+                                              ? const Color(0xFFEFF6FF)
+                                              : const Color(0xFFF8FAFC),
                                           borderRadius: BorderRadius.circular(12),
                                           border: Border.all(
-                                            color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFFE2E8F0),
+                                            color: isSelected
+                                                ? const Color(0xFF3B82F6)
+                                                : const Color(0xFFE2E8F0),
                                             width: isSelected ? 2 : 1,
                                           ),
                                         ),
                                         child: Column(
                                           children: [
-                                            Text(style['emoji']!, style: const TextStyle(fontSize: 22)),
+                                            Text(style['emoji']!,
+                                                style:
+                                                    const TextStyle(fontSize: 22)),
                                             const SizedBox(height: 4),
-                                            Text(style['label']!,
-                                                style: TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                                  color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF374151),
-                                                )),
+                                            Text(
+                                              style['label']!,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: isSelected
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w500,
+                                                color: isSelected
+                                                    ? const Color(0xFF1D4ED8)
+                                                    : const Color(0xFF374151),
+                                              ),
+                                            ),
                                           ],
                                         ),
                                       ),
@@ -219,11 +258,16 @@ class _OnboardingBuddyPreferencesState extends State<OnboardingBuddyPreferences>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('You\'re all set!',
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                                Text('Almost there!',  // ← updated copy
+                                    style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF1E293B))),
                                 SizedBox(height: 4),
-                                Text('Coach Max will be your training buddy from day one!',
-                                    style: TextStyle(fontSize: 13, color: Color(0xFF6B7280))),
+                                Text(
+                                    'One last step — pick your companion!', // ← updated copy
+                                    style: TextStyle(
+                                        fontSize: 13, color: Color(0xFF6B7280))),
                               ],
                             ),
                           ),
@@ -242,9 +286,13 @@ class _OnboardingBuddyPreferencesState extends State<OnboardingBuddyPreferences>
               nextChild: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Let\'s Go!', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                  Text('Choose my companion',  // ← updated copy
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600)),
                   SizedBox(width: 8),
-                  Icon(Icons.rocket_launch, color: Colors.white, size: 18),
+                  Icon(Icons.pets, color: Colors.white, size: 18), // ← updated icon
                 ],
               ),
             ),
