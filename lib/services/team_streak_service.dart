@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'break_day_service.dart';
 import 'workout_history_service.dart';
+import 'coin_service.dart';
 
 
 // ============================================
@@ -747,6 +748,26 @@ class TeamStreakService {
         'last_interaction_at': DateTime.now().toUtc().toIso8601String(), 
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', streakId);
+      
+      // Award coins after streak update
+      final coinService = CoinService();
+      final currentUserId = _supabase.auth.currentUser?.id;
+      if (currentUserId != null) {
+        final checkInsForCoins = await _supabase
+            .from('daily_team_checkins')
+            .select('user_id')
+            .eq('team_streak_id', streakId)
+            .eq('check_in_date', today)
+            .neq('user_id', coachMaxId);
+        
+        final partnerAlsoCheckedIn = checkInsForCoins.length >= 2;
+        
+        await coinService.awardDailyCheckIn(
+          streakId: streakId,
+          currentStreak: newStreak,
+          partnerAlsoCheckedIn: partnerAlsoCheckedIn,
+        );
+      }
 
       if (kDebugMode) {
         print('✅ Streak updated! Current: $newStreak, Longest: $newLongest');
@@ -754,6 +775,8 @@ class TeamStreakService {
     } catch (e) {
       if (kDebugMode) print('❌ Error incrementing streak: $e');
     }
+
+    
   }  
 
   // ============================================

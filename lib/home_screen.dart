@@ -27,6 +27,8 @@ import 'services/workout_history_service.dart';
 import 'widgets/workout_selection_modal.dart';
 import 'widgets/workout_join_checker.dart';
 import 'pages/notification_settings_page.dart';
+import 'pages/shop_page.dart';
+
 
 
 
@@ -60,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
       DashboardPage(key: _dashboardKey),  // Add the key here
       const FriendsPageModern(),
       const SchedulePage(),
+      const ShopPage(),
       const ProfilePage(),
     ];
   }
@@ -78,9 +81,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (index == 2) {
-      // Force entire page to rebuild, which will reload WorkoutInvitesCard
       setState(() {
-        // Recreate the pages list to force rebuild
         _pages[2] = SchedulePage(key: ValueKey('schedule_${DateTime.now().millisecondsSinceEpoch}'));
       });
     }
@@ -108,6 +109,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.calendar_today_outlined),
             selectedIcon: Icon(Icons.calendar_today),
             label: 'Schedule',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.storefront_outlined),
+            selectedIcon: Icon(Icons.storefront),
+            label: 'Shop',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
