@@ -493,7 +493,7 @@ class _AvatarWithBorder extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size(size, size),
-      painter: _BorderPainter(borderStyle, borderColor),
+      foregroundPainter: _BorderPainter(borderStyle, borderColor),
       child: Container(
         width: size,
         height: size,

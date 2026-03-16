@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'services/auth_service.dart';
 import 'onboarding/onboarding_theme.dart';
 import 'onboarding/onboarding_basic_info_new.dart';
+import 'onboarding/splash_screen.dart';
 import 'main.dart';
 
 class SignUpScreen extends StatefulWidget {
@@ -17,7 +17,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
-  final _authService = AuthService();
 
   bool _showPassword = false;
   bool _showConfirm = false;
@@ -62,52 +61,58 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return emailErr == null && passErr == null && confirmErr == null;
   }
 
-  Future<void> _signUp() async {
+  Future<void> _next() async {
     if (!_validate()) return;
     if (!_acceptTerms) {
-      setState(() =>
-          _generalError = 'Please accept the Terms and Conditions.');
+      setState(() => _generalError = 'Please accept the Terms of Service.');
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _generalError = null;
-    });
+    // Check if email is already registered before entering the long onboarding flow
+    setState(() => _isLoading = true);
 
-    final error = await _authService.signUp(
-      email: _emailCtrl.text.trim(),
-      password: _passwordCtrl.text,
-    );
+    try {
+      // Attempt signup just to check — we'll delete the session immediately
+      final response = await Supabase.instance.client.auth.signUp(
+        email: _emailCtrl.text.trim(),
+        password: _passwordCtrl.text,
+      );
+
+      if (response.user != null) {
+        // Email was free — sign back out immediately, account creation
+        // happens properly at the end of onboarding (step 5)
+        await Supabase.instance.client.auth.signOut();
+      }
+    } on AuthException catch (e) {
+      setState(() => _isLoading = false);
+      if (e.message.contains('User already registered') ||
+          e.code == 'user_already_exists') {
+        setState(() => _emailError = 'This email is already registered. Please sign in.');
+      } else {
+        setState(() => _generalError = 'Something went wrong. Please try again.');
+      }
+      return;
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _generalError = 'Something went wrong. Please try again.';
+      });
+      return;
+    }
 
     setState(() => _isLoading = false);
+    if (!mounted) return;
 
-    if (error == null) {
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => OnboardingBasicInfoNew(
-            pendingInvites: widget.pendingInvites,
-          ),
+    // Email is free — proceed to onboarding
+    Navigator.of(context).pushReplacement(
+      FadeSlideRoute(
+        page: OnboardingBasicInfoNew(
+          pendingInvites: widget.pendingInvites,
+          email: _emailCtrl.text.trim(),
+          password: _passwordCtrl.text,
         ),
-      );
-    } else {
-      setState(() => _generalError = _friendlyError(error));
-    }
-  }
-
-  String _friendlyError(String error) {
-    if (error.contains('user_already_exists') ||
-        error.contains('User already registered')) {
-      return 'An account with this email already exists.';
-    }
-    if (error.contains('invalid_email')) {
-      return 'Please enter a valid email address.';
-    }
-    if (error.contains('weak_password')) {
-      return 'Password is too weak — use at least 6 characters.';
-    }
-    return 'Something went wrong. Please try again.';
+      ),
+    );
   }
 
   @override
@@ -116,48 +121,57 @@ class _SignUpScreenState extends State<SignUpScreen> {
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // ── Gradient header — intrinsic height, adapts to any screen ──
+          // ── Gradient header ──────────────────────────────────────────
           Container(
-            decoration: const BoxDecoration(gradient: kGradientDiag),
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).maybePop(),
-                      child: Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.arrow_back,
-                            color: Colors.white, size: 17),
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: kGradientDiag,
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(24),
+                bottomRight: Radius.circular(24),
+              ),
+            ),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                  20, MediaQuery.of(context).padding.top + 12, 20, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).pushReplacement(
+                        FadeSlideRoute(page: const SplashScreen()),
+                      );
+                    },
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
                       ),
+                      child: const Icon(Icons.arrow_back,
+                          color: Colors.white, size: 17),
                     ),
-                    const SizedBox(height: 12),
-                    const Text('Create your account',
-                        style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white)),
-                    const SizedBox(height: 4),
-                    Text('Join the Gym Buddy community',
-                        style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.white.withOpacity(0.75))),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Create your account',
+                      style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white)),
+                  const SizedBox(height: 6),
+                  Text('Join the Gym Buddy community',
+                      style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.8))),
+                ],
               ),
             ),
           ),
 
-          // ── Form ──────────────────────────────────────────────────────
+          // ── Form ────────────────────────────────────────────────────
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
@@ -171,8 +185,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
                     errorText: _emailError,
-                    onChanged: (_) =>
-                        setState(() => _emailError = null),
+                    onChanged: (_) => setState(() => _emailError = null),
                   ),
                   const SizedBox(height: 16),
                   ObTextField(
@@ -182,14 +195,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     controller: _passwordCtrl,
                     obscureText: !_showPassword,
                     errorText: _passwordError,
-                    onChanged: (_) =>
-                        setState(() => _passwordError = null),
+                    onChanged: (_) => setState(() => _passwordError = null),
                     suffixIcon: IconButton(
                       icon: Icon(_showPassword
                           ? Icons.visibility_off
-                          : Icons.visibility, size: 20),
-                      onPressed: () => setState(
-                          () => _showPassword = !_showPassword),
+                          : Icons.visibility,
+                          size: 20),
+                      onPressed: () =>
+                          setState(() => _showPassword = !_showPassword),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -200,19 +213,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     controller: _confirmCtrl,
                     obscureText: !_showConfirm,
                     errorText: _confirmError,
-                    onChanged: (_) =>
-                        setState(() => _confirmError = null),
+                    onChanged: (_) => setState(() => _confirmError = null),
                     suffixIcon: IconButton(
                       icon: Icon(_showConfirm
                           ? Icons.visibility_off
-                          : Icons.visibility, size: 20),
-                      onPressed: () => setState(
-                          () => _showConfirm = !_showConfirm),
+                          : Icons.visibility,
+                          size: 20),
+                      onPressed: () =>
+                          setState(() => _showConfirm = !_showConfirm),
                     ),
                   ),
-
                   const SizedBox(height: 16),
-
                   Row(
                     children: [
                       Checkbox(
@@ -225,13 +236,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       Expanded(
                         child: GestureDetector(
-                          onTap: () => setState(
-                              () => _acceptTerms = !_acceptTerms),
+                          onTap: () =>
+                              setState(() => _acceptTerms = !_acceptTerms),
                           child: RichText(
                             text: const TextSpan(
                               style: TextStyle(
-                                  fontSize: 13,
-                                  color: Color(0xFF374151)),
+                                  fontSize: 13, color: Color(0xFF374151)),
                               children: [
                                 TextSpan(text: 'I accept the '),
                                 TextSpan(
@@ -247,7 +257,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                     ],
                   ),
-
                   if (_generalError != null) ...[
                     const SizedBox(height: 12),
                     Container(
@@ -265,30 +274,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           Expanded(
                             child: Text(_generalError!,
                                 style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.red[700])),
+                                    fontSize: 13, color: Colors.red[700])),
                           ),
                         ],
                       ),
                     ),
                   ],
-
                   const SizedBox(height: 24),
-
                   ObGradientButton(
                     label: 'Sign up',
                     isLoading: _isLoading,
-                    onTap: _signUp,
+                    onTap: _next,
                   ),
-
                   const SizedBox(height: 14),
-
                   Center(
                     child: GestureDetector(
                       onTap: () {
                         Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(
-                              builder: (_) => const LoginScreen()),
+                          FadeSlideRoute(page: const LoginScreen()),
                           (r) => false,
                         );
                       },
@@ -309,7 +312,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 16),
                   const _Divider(),
                   const SizedBox(height: 16),

@@ -377,3 +377,33 @@ class _GradButton extends StatelessWidget {
     );
   }
 }
+
+// ── Fade+slide page route — use instead of MaterialPageRoute ──────────────
+class FadeSlideRoute<T> extends PageRouteBuilder<T> {
+  final Widget page;
+  FadeSlideRoute({required this.page})
+      : super(
+          pageBuilder: (_, __, ___) => page,
+          transitionDuration: const Duration(milliseconds: 400),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
+          transitionsBuilder: (_, animation, secondaryAnimation, child) {
+            final fade = CurvedAnimation(
+                parent: animation, curve: Curves.easeOut);
+            final slide = Tween<Offset>(
+              begin: const Offset(0.04, 0),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(
+                parent: animation, curve: Curves.easeOutCubic));
+            final fadeOut = Tween<double>(begin: 1.0, end: 0.0)
+                .animate(CurvedAnimation(
+                    parent: secondaryAnimation, curve: Curves.easeIn));
+            return FadeTransition(
+              opacity: fadeOut,
+              child: SlideTransition(
+                position: slide,
+                child: FadeTransition(opacity: fade, child: child),
+              ),
+            );
+          },
+        );
+}

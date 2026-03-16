@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'onboarding_theme.dart';
 import 'onboarding_value_props.dart';
 import '../signup_screen.dart';
+import '../main.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -38,13 +39,22 @@ class _SplashScreenState extends State<SplashScreen>
   void _getStarted() {
     HapticFeedback.mediumImpact();
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const OnboardingValueProps()),
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const OnboardingValueProps(),
+        transitionDuration: const Duration(milliseconds: 500),
+        transitionsBuilder: (_, animation, __, child) {
+          return FadeTransition(
+            opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            child: child,
+          );
+        },
+      ),
     );
   }
 
   void _signIn() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SignUpScreen()),
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
     );
   }
 

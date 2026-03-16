@@ -9,6 +9,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'services/notification_service.dart';
 import 'dart:io';
 import 'onboarding/splash_screen.dart';
+import 'onboarding/onboarding_basic_info_new.dart';
 
 
 
@@ -69,11 +70,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<void> _initializeApp() async {
     final user = Supabase.instance.client.auth.currentUser;
-
     if (user != null) {
-      // Initialize notifications for logged in user
       await NotificationService().initialize();
-      
       final onboardingStatus = await _checkOnboardingStatus(user.id);
       if (onboardingStatus) {
         await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
@@ -83,9 +81,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         _isInitializing = false;
       });
     } else {
-      setState(() {
-        _isInitializing = false;
-      });
+      setState(() => _isInitializing = false);
     }
   }
 
@@ -115,7 +111,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (user == null) {
       return const SplashScreen();
     } else if (!_hasCompletedOnboarding) {
-      return const SignUpScreen();
+      Supabase.instance.client.auth.signOut();
+      return const SplashScreen();
     } else {
       return const HomeScreen();
     }

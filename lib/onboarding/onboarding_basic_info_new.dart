@@ -6,14 +6,22 @@ import '../widgets/avatar_picker_screen.dart';
 import '../home_screen.dart';
 import '../services/coach_max_service.dart';
 import '../services/friend_service.dart';
+import '../services/auth_service.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STEP 1 — Basic info
 // ═══════════════════════════════════════════════════════════════════════════
 class OnboardingBasicInfoNew extends StatefulWidget {
   final List<Map<String, dynamic>> pendingInvites;
-  const OnboardingBasicInfoNew(
-      {super.key, this.pendingInvites = const []});
+  final String email;
+  final String password;
+
+  const OnboardingBasicInfoNew({
+    super.key,
+    this.pendingInvites = const [],
+    required this.email,
+    required this.password,
+  });
 
   @override
   State<OnboardingBasicInfoNew> createState() =>
@@ -61,14 +69,15 @@ class _OnboardingBasicInfoNewState
 
   void _next() {
     if (!_validate()) return;
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => _OnboardingUsername(
+    Navigator.of(context).push(FadeSlideRoute(page: _OnboardingUsername(
         userData: {
           'display_name': _nameCtrl.text.trim(),
           'age': int.parse(_ageCtrl.text),
           'gender': _gender,
         },
         pendingInvites: widget.pendingInvites,
+        email: widget.email,
+        password: widget.password,
       ),
     ));
   }
@@ -189,8 +198,11 @@ class _OnboardingBasicInfoNewState
 class _OnboardingUsername extends StatefulWidget {
   final Map<String, dynamic> userData;
   final List<Map<String, dynamic>> pendingInvites;
+  final String email;
+  final String password;
   const _OnboardingUsername(
-      {required this.userData, required this.pendingInvites});
+      {required this.userData, required this.pendingInvites,
+       required this.email, required this.password});
 
   @override
   State<_OnboardingUsername> createState() =>
@@ -274,10 +286,11 @@ class _OnboardingUsernameState
       ...widget.userData,
       'username': _ctrl.text.toLowerCase(),
     };
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => _OnboardingAvatarPicker(
+    Navigator.of(context).push(FadeSlideRoute(page: _OnboardingAvatarPicker(
         userData: data,
         pendingInvites: widget.pendingInvites,
+        email: widget.email,
+        password: widget.password,
       ),
     ));
   }
@@ -460,8 +473,11 @@ class _OnboardingUsernameState
 class _OnboardingAvatarPicker extends StatelessWidget {
   final Map<String, dynamic> userData;
   final List<Map<String, dynamic>> pendingInvites;
+  final String email;
+  final String password;
   const _OnboardingAvatarPicker(
-      {required this.userData, required this.pendingInvites});
+      {required this.userData, required this.pendingInvites,
+       required this.email, required this.password});
 
   @override
   Widget build(BuildContext context) {
@@ -477,14 +493,15 @@ class _OnboardingAvatarPicker extends StatelessWidget {
             child: AvatarPickerScreen(
               showHeader: false,
               onCompleteWithData: (avatarId, borderStyle) {
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => _OnboardingGoals(
+                Navigator.of(context).push(FadeSlideRoute(page: _OnboardingGoals(
                     userData: {
                       ...userData,
                       'avatar_id': avatarId,
                       'avatar_border': borderStyle,
                     },
                     pendingInvites: pendingInvites,
+                    email: email,
+                    password: password,
                   ),
                 ));
               },
@@ -502,8 +519,11 @@ class _OnboardingAvatarPicker extends StatelessWidget {
 class _OnboardingGoals extends StatefulWidget {
   final Map<String, dynamic> userData;
   final List<Map<String, dynamic>> pendingInvites;
+  final String email;
+  final String password;
   const _OnboardingGoals(
-      {required this.userData, required this.pendingInvites});
+      {required this.userData, required this.pendingInvites,
+       required this.email, required this.password});
 
   @override
   State<_OnboardingGoals> createState() =>
@@ -545,14 +565,15 @@ class _OnboardingGoalsState extends State<_OnboardingGoals> {
           () => _goalsError = 'Select at least one goal');
       return;
     }
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => _OnboardingBuddyPrefs(
+    Navigator.of(context).push(FadeSlideRoute(page: _OnboardingBuddyPrefs(
         userData: {
           ...widget.userData,
           'fitness_goals': _selectedGoals,
           'fitness_level': _level,
         },
         pendingInvites: widget.pendingInvites,
+        email: widget.email,
+        password: widget.password,
       ),
     ));
   }
@@ -756,8 +777,11 @@ class _OnboardingGoalsState extends State<_OnboardingGoals> {
 class _OnboardingBuddyPrefs extends StatefulWidget {
   final Map<String, dynamic> userData;
   final List<Map<String, dynamic>> pendingInvites;
+  final String email;
+  final String password;
   const _OnboardingBuddyPrefs(
-      {required this.userData, required this.pendingInvites});
+      {required this.userData, required this.pendingInvites,
+       required this.email, required this.password});
 
   @override
   State<_OnboardingBuddyPrefs> createState() =>
@@ -780,9 +804,34 @@ class _OnboardingBuddyPrefsState
   Future<void> _finish() async {
     setState(() => _isLoading = true);
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) throw Exception('Not logged in');
+      // ── Step 1: Create the account NOW (first time we touch Supabase Auth) ──
+      final authService = AuthService();
+      final signUpError = await authService.signUp(
+        email: widget.email,
+        password: widget.password,
+      );
 
+      if (signUpError != null) {
+        // Handle duplicate email gracefully — try signing in instead
+        // (edge case: user somehow completed this screen twice)
+        if (signUpError.contains('user_already_exists') ||
+            signUpError.contains('User already registered')) {
+          final signInError = await authService.signIn(
+            email: widget.email,
+            password: widget.password,
+          );
+          if (signInError != null) {
+            throw Exception('Account already exists. Please sign in.');
+          }
+        } else {
+          throw Exception(signUpError);
+        }
+      }
+
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) throw Exception('Authentication failed');
+
+      // ── Step 2: Save complete profile in one go ────────────────────────
       await Supabase.instance.client
           .from('user_profiles')
           .upsert({
@@ -801,24 +850,22 @@ class _OnboardingBuddyPrefsState
         'updated_at': DateTime.now().toIso8601String(),
       });
 
-      await _coachMaxService
-          .initializeCoachMaxForUser(user.id);
+      // ── Step 3: Initialize Coach Max ───────────────────────────────────
+      await _coachMaxService.initializeCoachMaxForUser(user.id);
 
-      // Fire pending friend invites
+      // ── Step 4: Fire pending friend invites ────────────────────────────
       if (widget.pendingInvites.isNotEmpty) {
         final friendService = FriendService();
         for (final invite in widget.pendingInvites) {
           try {
-            await friendService
-                .sendFriendRequest(invite['id']);
+            await friendService.sendFriendRequest(invite['id']);
           } catch (_) {}
         }
       }
 
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(
-              builder: (_) => const _OnboardingConfirmation()),
+          FadeSlideRoute(page: const _OnboardingConfirmation()),
           (r) => false,
         );
       }

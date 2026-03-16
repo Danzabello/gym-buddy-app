@@ -41,9 +41,8 @@ class _OnboardingValuePropsState extends State<OnboardingValueProps> {
 
   void _goToSignUp() {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) =>
-            SignUpScreen(pendingInvites: List.from(_pendingInvites)),
+      FadeSlideRoute(
+        page: SignUpScreen(pendingInvites: List.from(_pendingInvites)),
       ),
     );
   }
@@ -285,16 +284,20 @@ class _Slide1State extends State<_Slide1> {
                         padding: const EdgeInsets.only(bottom: 20),
                         child: Column(
                           children: [
-                            Container(
-                              width: 72,
-                              height: 72,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Center(
-                                child: Icon(Icons.people_outline,
-                                    color: Colors.white, size: 38),
+                            _FloatingWidget(
+                              duration: const Duration(milliseconds: 2400),
+                              offset: 9,
+                              child: Container(
+                                width: 90,
+                                height: 90,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Center(
+                                  child: Icon(Icons.people_outline,
+                                      color: Colors.white, size: 48),
+                                ),
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -567,6 +570,88 @@ class _InvitedTile extends StatelessWidget {
 }
 
 // ── Slide 2 — Build your streak ────────────────────────────────────────────
+// ── Floating animation wrapper ─────────────────────────────────────────────
+class _FloatingWidget extends StatefulWidget {
+  final Widget child;
+  final Duration duration;
+  final double offset;
+
+  const _FloatingWidget({
+    required this.child,
+    this.duration = const Duration(milliseconds: 2000),
+    this.offset = 10.0,
+  });
+
+  @override
+  State<_FloatingWidget> createState() => _FloatingWidgetState();
+}
+
+class _FloatingWidgetState extends State<_FloatingWidget>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: widget.duration)
+      ..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0, end: widget.offset).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, child) => Transform.translate(
+        offset: Offset(0, -_anim.value),
+        child: child,
+      ),
+      child: widget.child,
+    );
+  }
+}
+
+// ── Fade+slide page route ──────────────────────────────────────────────────
+class FadeSlideRoute<T> extends PageRouteBuilder<T> {
+  final Widget page;
+  FadeSlideRoute({required this.page})
+      : super(
+          pageBuilder: (_, __, ___) => page,
+          transitionDuration: const Duration(milliseconds: 400),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
+          transitionsBuilder: (_, animation, secondaryAnimation, child) {
+            final fade = CurvedAnimation(
+                parent: animation, curve: Curves.easeOut);
+            final slide = Tween<Offset>(
+              begin: const Offset(0.04, 0),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(
+                parent: animation, curve: Curves.easeOutCubic));
+            final fadeOut = Tween<double>(begin: 1.0, end: 0.0)
+                .animate(CurvedAnimation(
+                    parent: secondaryAnimation,
+                    curve: Curves.easeIn));
+            return FadeTransition(
+              opacity: fadeOut,
+              child: SlideTransition(
+                position: slide,
+                child: FadeTransition(opacity: fade, child: child),
+              ),
+            );
+          },
+        );
+}
+
+// ── Slide 2 — Build your streak ────────────────────────────────────────────
 class _Slide2 extends StatelessWidget {
   final VoidCallback onNext;
   final VoidCallback onSkip;
@@ -577,16 +662,19 @@ class _Slide2 extends StatelessWidget {
     return _ValuePropLayout(
       dot: 1,
       onSkip: onSkip,
-      illustration: Container(
-        width: 72,
-        height: 72,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.2),
-          shape: BoxShape.circle,
-        ),
-        child: const Center(
-          child: Icon(Icons.local_fire_department,
-              color: Colors.white, size: 38),
+      illustration: _FloatingWidget(
+        duration: const Duration(milliseconds: 2200),
+        child: Container(
+          width: 90,
+          height: 90,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.2),
+            shape: BoxShape.circle,
+          ),
+          child: const Center(
+            child: Icon(Icons.local_fire_department,
+                color: Colors.white, size: 48),
+          ),
         ),
       ),
       title: 'Build your streak',
@@ -608,15 +696,19 @@ class _Slide3 extends StatelessWidget {
     return _ValuePropLayout(
       dot: 2,
       onSkip: onSkip,
-      illustration: Container(
-        width: 72,
-        height: 72,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.2),
-          shape: BoxShape.circle,
-        ),
-        child: const Center(
-          child: Text('🤖', style: TextStyle(fontSize: 38)),
+      illustration: _FloatingWidget(
+        duration: const Duration(milliseconds: 1800),
+        offset: 8,
+        child: Container(
+          width: 90,
+          height: 90,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.2),
+            shape: BoxShape.circle,
+          ),
+          child: const Center(
+            child: Text('🤖', style: TextStyle(fontSize: 48)),
+          ),
         ),
       ),
       title: 'Meet Coach Max',
