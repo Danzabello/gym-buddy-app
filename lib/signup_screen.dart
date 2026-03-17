@@ -1,3 +1,4 @@
+import 'package:gym_buddy_app/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'onboarding/onboarding_theme.dart';
@@ -291,7 +292,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     child: GestureDetector(
                       onTap: () {
                         Navigator.of(context).pushAndRemoveUntil(
-                          FadeSlideRoute(page: const LoginScreen()),
+                          FadeSlideRoute(page: LoginScreen()),
                           (r) => false,
                         );
                       },

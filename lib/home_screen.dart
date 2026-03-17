@@ -1,3 +1,4 @@
+import 'package:gym_buddy_app/login_screen.dart';
 import 'main.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -5514,7 +5515,7 @@ class _ProfilePageState extends State<ProfilePage> {
             onPressed: () async {
               await Supabase.instance.client.auth.signOut();
               Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                MaterialPageRoute(builder: (_) => LoginScreen()),
                 (route) => false,
               );
             },

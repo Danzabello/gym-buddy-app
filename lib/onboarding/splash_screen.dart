@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'onboarding_theme.dart';
 import 'onboarding_value_props.dart';
 import '../signup_screen.dart';
+import '../login_screen.dart';
 import '../main.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -54,7 +55,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   void _signIn() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(builder: (_) => LoginScreen()),
     );
   }
 
