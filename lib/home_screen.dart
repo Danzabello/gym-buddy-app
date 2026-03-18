@@ -1971,7 +1971,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           workoutEmoji: activeSession['workout_emoji'] ?? '💪',
           plannedDuration: activeSession['planned_duration'] ?? 30,
           onCheckInComplete: () async {
-            // Use the saved workout details for check-in
             final result = await _teamStreakService.checkInAllTeams(
               workoutName: activeSession['workout_type'] ?? 'Workout',
               workoutEmoji: activeSession['workout_emoji'] ?? '💪',
@@ -1980,26 +1979,23 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
             if (result['success'] == true) {
               HapticFeedback.heavyImpact();
-
-              if (!mounted) return;
-
+              if (!mounted) return false;
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Row(
-                    children: [
-                      const Icon(Icons.check_circle, color: Colors.white),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(result['message'] ?? 'Check-in successful!'),
-                      ),
-                    ],
-                  ),
+                  content: Row(children: [
+                    const Icon(Icons.check_circle, color: Colors.white),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(result['message'] ?? 'Check-in successful!')),
+                  ]),
                   backgroundColor: Colors.green,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  duration: const Duration(seconds: 3),
                 ),
               );
+              await _loadStreakData();
+              _checkForMilestone();
+              return result['partner_bonus_earned'] == true;
             }
+            return false;
           },
         );
 
@@ -4001,7 +3997,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       workoutEmoji: selectedTemplate!.emoji,
       plannedDuration: selectedDuration!,
       onCheckInComplete: () async {
-        // This runs when user completes the workout
         final result = await _teamStreakService.checkInAllTeams(
           selectedTemplateId: selectedTemplate!.id,
           workoutName: selectedTemplate!.name,
@@ -4013,31 +4008,23 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
         if (result['success'] == true) {
           HapticFeedback.heavyImpact();
-
-          if (!mounted) return;
-
+          if (!mounted) return false;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.white),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(result['message'] ?? 'Check-in successful!'),
-                  ),
-                ],
-              ),
+              content: Row(children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text(result['message'] ?? 'Check-in successful!')),
+              ]),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 3),
             ),
           );
-
-          if (!mounted) return;
-
-          // Reload data and check for milestones
           await _loadStreakData();
           _checkForMilestone();
+          return result['partner_bonus_earned'] == true;
         }
+        return false;
       },
     );
 
@@ -4668,6 +4655,7 @@ class _SchedulePageState extends State<SchedulePage> {
         if (result['success'] == true) {
           HapticFeedback.heavyImpact();
         }
+        return result['partner_bonus_earned'] == true;
       },
     );
 

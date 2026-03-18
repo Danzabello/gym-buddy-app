@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/workout_service.dart';
 import 'dart:async';
+import 'streak_complete_sheet.dart';
+
 
 /// Workout timer sheet for check-ins
 /// Tracks workout duration based on user's selected goal
 class WorkoutCheckInSheet extends StatefulWidget {
-  final VoidCallback onCheckInComplete;
+  final Future<bool> Function() onCheckInComplete;
   final String? workoutType;
   final String? workoutEmoji;
   final int? plannedDuration;
@@ -23,7 +25,7 @@ class WorkoutCheckInSheet extends StatefulWidget {
   /// Show as a bottom sheet
   static Future<bool?> show(
     BuildContext context, {
-    required Future<void> Function() onCheckInComplete,
+    required Future<bool> Function() onCheckInComplete,
     String? workoutType,
     String? workoutEmoji,
     int? plannedDuration,
@@ -240,23 +242,20 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
           .eq('user_id', userId);
 
       // Call the check-in callback - this triggers the streak update
-      widget.onCheckInComplete();
+      final partnerBonusEarned = await widget.onCheckInComplete();
 
       if (mounted) {
         Navigator.pop(context, true);
+        if (partnerBonusEarned) {
+          await Future.delayed(const Duration(milliseconds: 400));
+          if (mounted) {
+            await StreakCompleteSheet.show(context);
+          }
+        }
       }
     } catch (e) {
       print('❌ Error completing check-in: $e');
       setState(() => _isCompleting = false);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error completing check-in: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     }
   }
 

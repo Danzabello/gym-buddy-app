@@ -469,12 +469,21 @@ class TeamStreakService {
         print('✅ Checked in to $successCount/${streaks.length} teams');
       }
 
+      final partnerBonusTransaction = await _supabase 
+          .from('coin_transactions')
+          .select('id')
+          .eq('user_id', currentUserId)
+          .eq('transaction_type', 'partner_bonus')
+          .gte('created_at', '${today}T00:00:00Z')
+          .maybeSingle();
+
       return {
         'success': true,
         'message': 'Checked in to $successCount team${successCount == 1 ? '' : 's'}!',
         'teams_updated': successCount,
         'break_cancelled': onBreak,
         'level_up': levelUpResult,
+        'partner_bonus_earned': partnerBonusTransaction != null,
       };
     } catch (e) {
       if (kDebugMode) print('❌ Error checking in: $e');
