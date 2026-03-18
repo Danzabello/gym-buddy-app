@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'break_day_service.dart';
 import 'workout_history_service.dart';
 import 'coin_service.dart';
+import 'level_service.dart';
+
 
 
 // ============================================
@@ -444,20 +446,22 @@ class TeamStreakService {
       }
 
       int successCount = 0;
-      
-      // Check in to each team
+      LevelUpResult? levelUpResult;
+
       for (final streak in streaks) {
         if (kDebugMode) print('🔄 Checking in to team: ${streak.teamName}');
         
-        final success = await _checkInToTeam(streak.id, streak.teamId, today);
-        if (success) {
+        try {
+          final result = await _checkInToTeam(streak.id, streak.teamId, today);
           successCount++;
+          levelUpResult ??= result;
           
-          // ✅ If this is a Coach Max team, make Coach Max check in too
           if (streak.isCoachMaxTeam) {
             if (kDebugMode) print('🤖 Auto-checking in Coach Max...');
             await _checkInCoachMax(streak.id, today);
           }
+        } catch (e) {
+          if (kDebugMode) print('❌ Failed check-in for ${streak.teamName}: $e');
         }
       }
 
@@ -470,6 +474,7 @@ class TeamStreakService {
         'message': 'Checked in to $successCount team${successCount == 1 ? '' : 's'}!',
         'teams_updated': successCount,
         'break_cancelled': onBreak,
+        'level_up': levelUpResult,
       };
     } catch (e) {
       if (kDebugMode) print('❌ Error checking in: $e');
@@ -508,14 +513,13 @@ class TeamStreakService {
   }
 
   /// Check in to a specific team
-  Future<bool> _checkInToTeam(String streakId, String teamId, String today) async {
+  Future<LevelUpResult?> _checkInToTeam(String streakId, String teamId, String today) async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
-      if (currentUserId == null) return false;
+      if (currentUserId == null) return null;
 
       final now = DateTime.now().toUtc();
 
-      // Insert check-in
       await _supabase.from('daily_team_checkins').insert({
         'team_streak_id': streakId,
         'user_id': currentUserId,
@@ -523,18 +527,15 @@ class TeamStreakService {
         'check_in_time': now.toIso8601String(),
       });
 
-      // Update streak if all members have checked in
-      await _updateTeamStreak(streakId, teamId, today);
-
-      return true;
+      return await _updateTeamStreak(streakId, teamId, today);
     } catch (e) {
       if (kDebugMode) print('❌ Error checking in to team: $e');
-      return false;
+      return null;
     }
   }
 
   /// Update team streak after check-in
-  Future<void> _updateTeamStreak(String streakId, String teamId, String today) async {
+  Future<LevelUpResult?> _updateTeamStreak(String streakId, String teamId, String today) async {
     try {
       // Get total members (excluding Coach Max for counting)
       final membersResponse = await _supabase
@@ -587,17 +588,19 @@ class TeamStreakService {
       // ✅ If all members are participating (checked in or on break), increment streak
       if (participatingMembers >= totalMembers) {
         if (kDebugMode) print('🎉 All members participating! Incrementing streak...');
-        await _incrementStreak(streakId, teamId, today);
+        return await _incrementStreak(streakId, teamId, today);
       } else {
         if (kDebugMode) print('⏳ Waiting for more members... ($participatingMembers/$totalMembers participating)');
       }
+      return null;
     } catch (e) {
       if (kDebugMode) print('❌ Error updating team streak: $e');
+      return null;
     }
   }
 
   /// Increment streak when all members check in
-  Future<void> _incrementStreak(String streakId, String teamId, String today) async {
+  Future<LevelUpResult?> _incrementStreak(String streakId, String teamId, String today) async {
     try {
       // Get current streak data
       final streakData = await _supabase
@@ -630,7 +633,7 @@ class TeamStreakService {
           // Already incremented today, don't double-increment
           // BUT: if currentStreak is 0, we should still increment (fresh start)
           if (kDebugMode) print('ℹ️ Streak already incremented today');
-          return;
+          return null;
         }
         // First workout ever OR restarting from 0
         newStreak = 1;
@@ -734,7 +737,7 @@ class TeamStreakService {
         } else if (daysDifference == 0) {
           // Same day as last workout - should not happen, but handle it
           if (kDebugMode) print('ℹ️ Already counted today, skipping');
-          return;
+          return null;
         }
       }
 
@@ -759,21 +762,49 @@ class TeamStreakService {
             .eq('team_streak_id', streakId)
             .eq('check_in_date', today)
             .neq('user_id', coachMaxId);
-        
+
         final partnerAlsoCheckedIn = checkInsForCoins.length >= 2;
-        
+
+        // Award current user
         await coinService.awardDailyCheckIn(
           streakId: streakId,
           currentStreak: newStreak,
           partnerAlsoCheckedIn: partnerAlsoCheckedIn,
         );
+
+        // If partner just completed the team, retroactively award
+        // partner bonus to anyone who checked in earlier solo
+        if (partnerAlsoCheckedIn) {
+          for (final checkIn in checkInsForCoins) {
+            final uid = checkIn['user_id'] as String;
+            if (uid != currentUserId) {
+              await coinService.awardRetroactivePartnerBonus(
+                userId: uid,
+                streakId: streakId,
+              );
+            }
+          }
+        }
+
+        // Award XP alongside coins
+        final levelService = LevelService();
+        final levelResult = await levelService.awardCheckInXP(
+          streakId: streakId,
+          currentStreak: newStreak,
+          partnerAlsoCheckedIn: partnerAlsoCheckedIn,
+        );
+
+        return levelResult;
       }
 
       if (kDebugMode) {
         print('✅ Streak updated! Current: $newStreak, Longest: $newLongest');
       }
+
+      return null;
     } catch (e) {
       if (kDebugMode) print('❌ Error incrementing streak: $e');
+      return null;
     }
 
     

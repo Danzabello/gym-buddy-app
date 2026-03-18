@@ -49,16 +49,13 @@ class CoinService {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return 0;
 
-      // Get current balance
       final current = await getBalance();
       final newBalance = current + amount;
 
-      // Update balance
       await _supabase.from('user_profiles').update({
         'coin_balance': newBalance,
       }).eq('id', userId);
 
-      // Log transaction
       await _supabase.from('coin_transactions').insert({
         'user_id': userId,
         'amount': amount,
@@ -89,18 +86,17 @@ class CoinService {
 
       final today = DateTime.now().toIso8601String().split('T')[0];
 
-      // Check if already awarded today for this streak
+      // Check if already awarded daily check-in today (globally, not per-streak)
       final existing = await _supabase
           .from('coin_transactions')
           .select('id')
           .eq('user_id', userId)
           .eq('transaction_type', 'daily_checkin')
-          .eq('reference_id', streakId)
           .gte('created_at', '${today}T00:00:00Z')
           .maybeSingle();
 
       if (existing != null) {
-        if (kDebugMode) print('⏭️ Already awarded coins today for streak $streakId');
+        if (kDebugMode) print('⏭️ Already awarded daily check-in coins today');
         return null;
       }
 
@@ -117,16 +113,26 @@ class CoinService {
       totalAwarded += dailyCheckIn;
       reasons.add('+$dailyCheckIn daily check-in');
 
-      // Partner bonus
+      // Partner bonus — only once per day globally
       if (partnerAlsoCheckedIn) {
-        await awardCoins(
-          amount: partnerBonus,
-          transactionType: 'partner_bonus',
-          description: 'Partner checked in too! 🤝',
-          referenceId: streakId,
-        );
-        totalAwarded += partnerBonus;
-        reasons.add('+$partnerBonus partner bonus');
+        final existingPartnerBonus = await _supabase
+            .from('coin_transactions')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('transaction_type', 'partner_bonus')
+            .gte('created_at', '${today}T00:00:00Z')
+            .maybeSingle();
+
+        if (existingPartnerBonus == null) {
+          await awardCoins(
+            amount: partnerBonus,
+            transactionType: 'partner_bonus',
+            description: 'Partner checked in too! 🤝',
+            referenceId: streakId,
+          );
+          totalAwarded += partnerBonus;
+          reasons.add('+$partnerBonus partner bonus');
+        }
       }
 
       // Milestone bonuses
@@ -172,6 +178,69 @@ class CoinService {
   }
 
   // ============================================================
+  // RETROACTIVE PARTNER BONUS
+  // Awards partner bonus to a user who checked in solo earlier
+  // but whose partner has now also checked in
+  // ============================================================
+  Future<bool> awardRetroactivePartnerBonus({
+    required String userId,
+    required String streakId,
+  }) async {
+    try {
+      final today = DateTime.now().toIso8601String().split('T')[0];
+
+      // Check they got daily_checkin today
+      final checkin = await _supabase
+          .from('coin_transactions')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('transaction_type', 'daily_checkin')
+          .gte('created_at', '${today}T00:00:00Z')
+          .maybeSingle();
+
+      if (checkin == null) return false;
+
+      // Check they haven't already received partner_bonus today
+      final existing = await _supabase
+          .from('coin_transactions')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('transaction_type', 'partner_bonus')
+          .gte('created_at', '${today}T00:00:00Z')
+          .maybeSingle();
+
+      if (existing != null) return false;
+
+      final profile = await _supabase
+          .from('user_profiles')
+          .select('coin_balance')
+          .eq('id', userId)
+          .single();
+
+      final currentBalance = profile['coin_balance'] as int? ?? 0;
+      final newBalance = currentBalance + partnerBonus;
+
+      await _supabase.from('user_profiles').update({
+        'coin_balance': newBalance,
+      }).eq('id', userId);
+
+      await _supabase.from('coin_transactions').insert({
+        'user_id': userId,
+        'amount': partnerBonus,
+        'transaction_type': 'partner_bonus',
+        'description': 'Partner checked in too! 🤝',
+        'reference_id': streakId,
+      });
+
+      if (kDebugMode) print('🪙 Retroactive partner bonus +$partnerBonus → User: $userId | Balance: $newBalance');
+      return true;
+    } catch (e) {
+      if (kDebugMode) print('❌ Error awarding retroactive partner bonus: $e');
+      return false;
+    }
+  }
+
+  // ============================================================
   // SPEND COINS (SHOP PURCHASE)
   // ============================================================
   Future<bool> purchaseItem({
@@ -189,7 +258,6 @@ class CoinService {
         return false;
       }
 
-      // Check if already owned
       final existing = await _supabase
           .from('user_inventory')
           .select('id')
@@ -202,13 +270,11 @@ class CoinService {
         return false;
       }
 
-      // Deduct coins
       final newBalance = balance - cost;
       await _supabase.from('user_profiles').update({
         'coin_balance': newBalance,
       }).eq('id', userId);
 
-      // Log transaction
       await _supabase.from('coin_transactions').insert({
         'user_id': userId,
         'amount': -cost,
@@ -217,7 +283,6 @@ class CoinService {
         'reference_id': itemId,
       });
 
-      // Add to inventory
       await _supabase.from('user_inventory').insert({
         'user_id': userId,
         'shop_item_id': itemId,
@@ -288,7 +353,6 @@ class CoinService {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return false;
 
-      // Unequip all items in same category first
       final itemsInCategory = await _supabase
           .from('user_inventory')
           .select('shop_item_id, shop_items!inner(category)')
@@ -303,7 +367,6 @@ class CoinService {
             .eq('shop_item_id', item['shop_item_id']);
       }
 
-      // Equip the selected item
       await _supabase
           .from('user_inventory')
           .update({'equipped': true})
