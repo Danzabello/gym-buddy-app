@@ -574,11 +574,15 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
                 children: [
                   Icon(Icons.info_outline, color: Colors.grey[500], size: 16),
                   const SizedBox(width: 8),
-                  Text(
-                    'Timer runs in background. Close this and continue using the app!',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey[600],
+                  Flexible(
+                    child: Text(
+                      'Timer runs in background. Close this and continue using the app!',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
                     ),
                   ),
                 ],
