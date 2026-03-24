@@ -29,6 +29,8 @@ import 'widgets/workout_selection_modal.dart';
 import 'widgets/workout_join_checker.dart';
 import 'pages/notification_settings_page.dart';
 import 'pages/shop_page.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 
 
@@ -210,6 +212,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   bool _hasCheckedInToday = false;
   bool _isLoading = true;
   bool _isCheckingIn = false;
+  bool _isRefreshing = false;
 
   String _timeUntilMidnight = '';
   int _pendingRequests = 0;
@@ -278,21 +281,17 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   // Add this new method
   Future<void> _initializeHomePage() async {
-    // Clean up stale workouts first
-    await _workoutService.cleanupStaleWorkouts(); 
-    await _workoutService.cleanupOrphanedSessions();
-
-    // Check and reset any broken streaks FIRST
-    await _teamStreakService.checkAndResetBrokenStreaks();
-
-    // Check if user needs to set weekly plan
-    await _checkWeeklyPlan();
-
-    // Check for active workout session
-  await _checkForActiveWorkout();
-    
-    // Then load streaks normally
+    await Future.wait([
+      _workoutService.cleanupStaleWorkouts(),
+      _workoutService.cleanupOrphanedSessions(),
+      _checkWeeklyPlan(),
+      _checkForActiveWorkout(),
+    ]);
+  
     await _loadStreakData();
+  
+    // Reset broken streaks in background AFTER UI is shown
+    _teamStreakService.checkAndResetBrokenStreaks();
   }
 
   void _setupAppLifecycleListener() {
@@ -1533,148 +1532,175 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
   }
 
-  Future<void> _loadStreakData() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    // ✅ LOAD SAVED PREFERENCES (mode + custom order)
+  Future<void> _loadStreakData({bool showLoading = true}) async {
+    // ── STEP 1: Show cached data instantly ──────────────────
+    final cached = await _loadCachedDashboard();
+    if (cached != null && mounted) {
+      setState(() {
+        _allStreaks           = [];
+        _hasCheckedInToday   = cached['hasCheckedIn']   ?? false;
+        _pendingRequests     = cached['pendingRequests'] ?? 0;
+        _totalWorkouts       = cached['totalWorkouts']  ?? 0;
+        _buddyCount          = cached['buddyCount']     ?? 0;
+        _achievementCount    = cached['achievements']   ?? 0;
+        _isLoading           = _allStreaks.isEmpty;
+      });
+      // Trigger entrance animation on first cached load
+      if (!_hasAnimatedEntrance && _allStreaks.isNotEmpty) {
+        _currentCarouselIndex = 1;
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) {
+            _carouselEntranceController.forward();
+            _hasAnimatedEntrance = true;
+          }
+        });
+      }
+    } else if (showLoading && mounted) {
+      setState(() => _isLoading = true);
+    }
+  
+    // ── STEP 2: Load preferences (fast, single query) ───────
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId != null) {
       try {
         final prefs = await Supabase.instance.client
-          .from('user_profiles')
-          .select('preferred_streak_sort, custom_streak_order')  // ✅ Added custom_streak_order
-          .eq('id', userId)
-          .single();
-        
-        // Load sort mode preference
-        if (prefs['preferred_streak_sort'] != null) {
-          final savedMode = prefs['preferred_streak_sort'];
-          // ✅ Validate and default to highestCurrent if invalid or empty
-          if (savedMode == null || savedMode.toString().isEmpty) {
-            _streakSortMode = StreakSortMode.highestCurrent;
-          } else {
-            _streakSortMode = StreakSortMode.values.firstWhere(
-              (e) => e.name == savedMode,
-              orElse: () => StreakSortMode.highestCurrent,
-            );
-          }
-          print('📥 Loaded sort mode: ${_streakSortMode.displayName}');
+            .from('user_profiles')
+            .select('preferred_streak_sort, custom_streak_order')
+            .eq('id', userId)
+            .single();
+  
+        final savedMode = prefs['preferred_streak_sort'];
+        if (savedMode != null && savedMode.toString().isNotEmpty) {
+          _streakSortMode = StreakSortMode.values.firstWhere(
+            (e) => e.name == savedMode,
+            orElse: () => StreakSortMode.highestCurrent,
+          );
         } else {
-          // ✅ No preference saved - use default
           _streakSortMode = StreakSortMode.highestCurrent;
         }
-
-        // ✅ NEW: Load custom streak order if in custom mode
-        if (_streakSortMode == StreakSortMode.custom && prefs['custom_streak_order'] != null) {
+  
+        if (_streakSortMode == StreakSortMode.custom &&
+            prefs['custom_streak_order'] != null) {
           _customStreakOrder = List<String>.from(prefs['custom_streak_order']);
           print('📥 Loaded custom order: ${_customStreakOrder.length} team IDs');
         } else {
           _customStreakOrder = [];
         }
+        print('📥 Loaded sort mode: ${_streakSortMode.displayName}');
       } catch (e) {
         print('⚠️ Could not load preferences: $e');
         _customStreakOrder = [];
-        // No problem, use defaults
       }
     }
-
-    await _syncTeamCheckIns();
-
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+  
+    // ── STEP 3: Sync + fetch streaks ────────────────────────
+    _syncTeamCheckIns(); // fire and forget - don't await
     final allStreaks = await _teamStreakService.getAllUserStreaks();
-    final nicknames = await nicknameService.getAllNicknames();
-    
-    // 🔍 DEBUG: See what we're getting
+    final nicknames  = await nicknameService.getAllNicknames();
+  
     print('🔥 Raw streaks count: ${allStreaks.length}');
-    for (var streak in allStreaks) {
-      print('  - ${streak.teamName} (${streak.teamId}) - CoachMax: ${streak.isCoachMaxTeam}');
+    for (var s in allStreaks) {
+      print('  - ${s.teamName} (${s.teamId}) - CoachMax: ${s.isCoachMaxTeam}');
     }
-    
-    // ✅ BETTER FIX: Remove duplicate team IDs
+  
+    // Deduplicate
     final Map<String, TeamStreak> uniqueStreaksMap = {};
-    for (final streak in allStreaks) {
-      uniqueStreaksMap[streak.teamId] = streak;
+    for (final s in allStreaks) {
+      uniqueStreaksMap[s.teamId] = s;
     }
     final uniqueStreaks = uniqueStreaksMap.values.toList();
-
-    // ✅ NEW: Apply custom order if in custom mode and order exists
+  
+    // Apply custom order
     if (_streakSortMode == StreakSortMode.custom && _customStreakOrder.isNotEmpty) {
       print('🎯 Applying custom order to ${uniqueStreaks.length} streaks');
-      
-      // Create a map for quick lookup
       final streakMap = {for (var s in uniqueStreaks) s.teamId: s};
-      
-      // Build ordered list based on saved order
       final orderedStreaks = <TeamStreak>[];
       for (final teamId in _customStreakOrder) {
         if (streakMap.containsKey(teamId)) {
           orderedStreaks.add(streakMap[teamId]!);
-          streakMap.remove(teamId);  // Remove so we don't duplicate
+          streakMap.remove(teamId);
         }
       }
-      
-      // Add any remaining streaks that weren't in the custom order (new friends)
       orderedStreaks.addAll(streakMap.values);
-      
-      // Replace uniqueStreaks with the ordered version
       uniqueStreaks.clear();
       uniqueStreaks.addAll(orderedStreaks);
-      
       print('✅ Custom order applied: ${orderedStreaks.length} streaks ordered');
     }
-
+  
+    // ── STEP 4: ALL remaining calls IN PARALLEL ──────────────
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+  
+    final today = DateTime.now();
+    final todayStr = DateTime(today.year, today.month, today.day)
+        .toIso8601String()
+        .split('T')[0];
+  
+    final results = await Future.wait([
+      // [0] completion status for each streak
+      Future.wait(uniqueStreaks.map((s) => _isStreakCompleteToday(s))),
+      // [1] has checked in today
+      _teamStreakService.hasCheckedInToday(),
+      // [2] today's workouts
+      _workoutService.getTodaysWorkouts(),
+      // [3] pending friend requests
+      FriendService().getPendingRequests(),
+      // [4] friend list
+      FriendService().getFriends(),
+      // [5] all workouts (for completed count)
+      _workoutService.getAllWorkouts(),
+    ]);
+  
+    final completionList   = results[0] as List<bool>;
+    final hasCheckedIn     = results[1] as bool;
+    final todaysWorkouts   = results[2] as List<Map<String, dynamic>>;
+    final pendingFriends   = results[3] as List;
+    final friends          = results[4] as List;
+    final allWorkouts      = results[5] as List<Map<String, dynamic>>;
+  
     final completionStatus = <String, bool>{};
-    for (var streak in uniqueStreaks) {
-      completionStatus[streak.id] = await _isStreakCompleteToday(streak);
+    for (int i = 0; i < uniqueStreaks.length; i++) {
+      completionStatus[uniqueStreaks[i].id] = completionList[i];
     }
-    
-    final highestStreak = await _teamStreakService.getHighestStreak();
-    final hasCheckedIn = await _teamStreakService.hasCheckedInToday();
-    final todaysWorkouts = await _workoutService.getTodaysWorkouts();
-    
-    print('✅ After deduplication: ${uniqueStreaks.length} streaks');
-    
-    final friendService = FriendService();
-    final pendingFriends = await friendService.getPendingRequests();
-    final pendingWorkouts = todaysWorkouts.where((w) => 
-      w['buddy_id'] == currentUserId && w['buddy_status'] == 'pending'
-    ).length;
-
-    final friends = await friendService.getFriends();
-    final allWorkouts = await _workoutService.getAllWorkouts();
-    final completedWorkouts = allWorkouts.where((w) => w['status'] == 'completed').length;
-
+  
+    // Highest streak (already sorted, just pick first)
+    final highestStreak = uniqueStreaks.isEmpty
+        ? null
+        : uniqueStreaks.reduce((a, b) =>
+            a.currentStreak > b.currentStreak ? a : b);
+  
+    final pendingWorkouts = todaysWorkouts.where((w) =>
+        w['buddy_id'] == currentUserId &&
+        w['buddy_status'] == 'pending').length;
+  
+    final completedWorkouts =
+        allWorkouts.where((w) => w['status'] == 'completed').length;
+  
     int achievements = 0;
     if (hasCheckedIn) achievements++;
     if ((highestStreak?.currentStreak ?? 0) >= 7) achievements++;
     if ((highestStreak?.currentStreak ?? 0) >= 30) achievements++;
     if (friends.length >= 3) achievements++;
-
+  
     if (!mounted) return;
-
+  
     setState(() {
-      _allStreaks = uniqueStreaks;  // ✅ Use deduplicated (and optionally ordered) list
-      _nicknames = nicknames;
+      _allStreaks            = uniqueStreaks;
+      _nicknames             = nicknames;
       _streakCompletionStatus = completionStatus;
-      _highestStreak = highestStreak;
-      _hasCheckedInToday = hasCheckedIn;
-      _todaysWorkouts = todaysWorkouts;
-      _pendingRequests = pendingFriends.length + pendingWorkouts;
-
-      _totalWorkouts = completedWorkouts;
-      _buddyCount = friends.length;
-      _achievementCount = achievements;
-
-      _isLoading = false;
+      _highestStreak         = highestStreak;
+      _hasCheckedInToday     = hasCheckedIn;
+      _todaysWorkouts        = todaysWorkouts;
+      _pendingRequests       = pendingFriends.length + pendingWorkouts;
+      _totalWorkouts         = completedWorkouts;
+      _buddyCount            = friends.length;
+      _achievementCount      = achievements;
+      _isLoading             = false;
     });
-
+  
     if (_allStreaks.isNotEmpty && mounted) {
-      // ✅ Just ensure index is set to center (no jump needed on initial load)
       _currentCarouselIndex = 1;
     }
-
+  
     if (!_hasAnimatedEntrance && _allStreaks.isNotEmpty) {
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) {
@@ -1683,6 +1709,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         }
       });
     }
+  
+    // ── STEP 5: Save fresh data to cache ────────────────────
+    await _saveCachedDashboard(
+      streaks:         uniqueStreaks,
+      hasCheckedIn:    hasCheckedIn,
+      pendingRequests: pendingFriends.length + pendingWorkouts,
+      totalWorkouts:   completedWorkouts,
+      buddyCount:      friends.length,
+      achievements:    achievements,
+    );
   }
 
   List<TeamStreak> _sortStreaks(List<TeamStreak> streaks, StreakSortMode mode) {
@@ -1944,6 +1980,40 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       return null;
     }
   }
+
+  Future<Map<String, dynamic>?> _loadCachedDashboard() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString('dashboard_cache');
+      if (json == null) return null;
+      return Map<String, dynamic>.from(jsonDecode(json) as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+  
+  Future<void> _saveCachedDashboard({
+    required List<TeamStreak> streaks,
+    required bool hasCheckedIn,
+    required int pendingRequests,
+    required int totalWorkouts,
+    required int buddyCount,
+    required int achievements,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // We only cache simple stats, not full streak objects
+      // (streak objects are rebuilt fresh each load)
+      await prefs.setString('dashboard_cache', jsonEncode({
+        'hasCheckedIn':    hasCheckedIn,
+        'pendingRequests': pendingRequests,
+        'totalWorkouts':   totalWorkouts,
+        'buddyCount':      buddyCount,
+        'achievements':    achievements,
+        // Don't cache streaks — they're complex objects, just skip spinner
+      }));
+    } catch (_) {}
+  }
   
 
   Future<void> _checkIn() async {
@@ -2113,7 +2183,23 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             ],
           ),
           body: _isLoading
-              ? const Center(child: CircularProgressIndicator())
+              ? SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      _buildSkeletonCard(),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _skeletonBox(100, 80, radius: 16),
+                          _skeletonBox(100, 80, radius: 16),
+                          _skeletonBox(100, 80, radius: 16),
+                        ],
+                      ),
+                    ],
+                  ),
+                )
               : RefreshIndicator(
                   onRefresh: _loadStreakData,
                   child: SingleChildScrollView(
@@ -2122,14 +2208,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // NEW CAROUSEL SECTION
                         _buildStreakCarousel(),
-                        
                         const SizedBox(height: 24),
-                        
-                        // QUICK ACTIONS
                         _buildQuickActionsSection(),
-                        
                         const SizedBox(height: 20),
                       ],
                     ),
@@ -2588,6 +2669,86 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSkeletonCard() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        height: 420,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          children: [
+            // Header skeleton
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _skeletonBox(48, 32, radius: 8),
+                _skeletonBox(180, 32, radius: 16),
+                _skeletonBox(48, 32, radius: 8),
+              ],
+            ),
+            const SizedBox(height: 24),
+            // Three avatar circles
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _skeletonCircle(70),
+                _skeletonCircle(100),
+                _skeletonCircle(70),
+              ],
+            ),
+            const SizedBox(height: 20),
+            // Name + streak text
+            Center(child: _skeletonBox(120, 18, radius: 8)),
+            const SizedBox(height: 8),
+            Center(child: _skeletonBox(160, 28, radius: 8)),
+            const SizedBox(height: 20),
+            // Button skeleton
+            _skeletonBox(double.infinity, 50, radius: 14),
+            const SizedBox(height: 10),
+            _skeletonBox(double.infinity, 50, radius: 14),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _skeletonBox(double width, double height, {double radius = 8}) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.4, end: 0.9),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.easeInOut,
+      builder: (_, value, __) => Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: Colors.grey.withOpacity(value * 0.3),
+          borderRadius: BorderRadius.circular(radius),
+        ),
+      ),
+    );
+  }
+  
+  Widget _skeletonCircle(double size) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.4, end: 0.9),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.easeInOut,
+      builder: (_, value, __) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.grey.withOpacity(value * 0.3),
         ),
       ),
     );

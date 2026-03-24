@@ -122,47 +122,99 @@ class TeamStreakService {
 
       if (kDebugMode) print('🔍 Getting all streaks for user: $currentUserId');
 
-  
-      // Get all teams user is part of
-      final teamsResponse = await _supabase
-          .from('team_members')
-          .select('''
-            team_id,
-            buddy_teams!inner(
-              id,
-              team_name,
-              team_emoji,
-              is_coach_max_team
-            )
-          ''')
-          .eq('user_id', currentUserId);
+      // ✅ ONE round trip instead of 9+
+      final response = await _supabase
+          .rpc('get_user_streaks', params: {'p_user_id': currentUserId});
 
-      if (kDebugMode) {
-        print('📊 Teams response: $teamsResponse');
-        print('📊 Found ${teamsResponse.length} team memberships');
-      }
+      if (response == null) return [];
 
+      final List<dynamic> teamsData = response as List<dynamic>;
       final List<TeamStreak> streaks = [];
 
-      for (final teamData in teamsResponse) {
-        final team = teamData['buddy_teams'];
-        if (team == null) {
-          if (kDebugMode) print('⚠️ Skipping null team data');
-          continue;
-        }
-        
-        final teamId = team['id'] as String;
-        if (kDebugMode) print('🔄 Processing team: ${team['team_name']} ($teamId)');  // ← Debug line
-        
-        // Get active streak for this team
-        final streakData = await _getTeamStreakData(teamId);
-        if (streakData != null) {
-          if (kDebugMode) print('✅ Added streak: ${streakData.teamName}');
-          streaks.add(streakData);
+      for (final teamData in teamsData) {
+        try {
+          final teamId = teamData['team_id'] as String;
+          final streakId = teamData['streak_id'] as String? ?? '';
+
+          if (streakId.isEmpty) continue;
+
+          // Parse members
+          final membersRaw = teamData['members'] as List<dynamic>? ?? [];
+          final members = membersRaw.map((m) => TeamMember(
+            userId: m['user_id'] as String,
+            displayName: m['display_name'] ?? 'Unknown',
+            username: m['username'] as String?,
+            isCoachMax: m['user_id'] == coachMaxId,
+            avatarId: m['avatar_id'] as String?,
+          )).toList();
+
+          // Parse today's check-ins
+          final checkInsRaw = teamData['today_check_ins'] as List<dynamic>? ?? [];
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
+          int orderIndex = 0;
+          final checkIns = <CheckInStatus>[];
+
+          for (final c in checkInsRaw) {
+            try {
+              final checkInTime = DateTime.parse(c['checked_in_at'] as String);
+              checkIns.add(CheckInStatus(
+                userId: c['user_id'] as String,
+                displayName: members.firstWhere(
+                  (m) => m.userId == c['user_id'],
+                  orElse: () => TeamMember(
+                    userId: c['user_id'],
+                    displayName: 'Unknown',
+                    isCoachMax: false,
+                  ),
+                ).displayName,
+                checkInTime: checkInTime,
+                order: orderIndex + 1,
+              ));
+              orderIndex++;
+            } catch (_) {}
+          }
+
+          // Sort check-ins by time
+          checkIns.sort((a, b) => a.checkInTime.compareTo(b.checkInTime));
+          for (int i = 0; i < checkIns.length; i++) {
+            checkIns[i] = CheckInStatus(
+              userId: checkIns[i].userId,
+              displayName: checkIns[i].displayName,
+              checkInTime: checkIns[i].checkInTime,
+              order: i + 1,
+            );
+          }
+
+          final streak = TeamStreak(
+            id: streakId,
+            teamId: teamId,
+            teamName: teamData['team_name'] ?? 'Unnamed Team',
+            teamEmoji: teamData['team_emoji'] ?? '🔥',
+            currentStreak: teamData['current_streak'] ?? 0,
+            longestStreak: teamData['best_streak'] ?? 0,
+            totalWorkouts: teamData['total_workouts'] ?? 0,
+            bestStreak: teamData['best_streak'] ?? 0,
+            lastWorkoutDate: teamData['last_workout_date'] != null
+                ? DateTime.parse(teamData['last_workout_date'])
+                : null,
+            lastInteractionAt: teamData['last_interaction_at'] != null
+                ? DateTime.parse(teamData['last_interaction_at'])
+                : null,
+            isCoachMaxTeam: teamData['is_coach_max_team'] ?? false,
+            members: members,
+            todayCheckIns: checkIns,
+            isFavorite: teamData['is_favorite'] ?? false,
+          );
+
+          streaks.add(streak);
+          if (kDebugMode) print('✅ Added streak: ${streak.teamName}');
+        } catch (e) {
+          if (kDebugMode) print('❌ Error parsing team data: $e');
         }
       }
-      
-      // Sort: Coach Max team first, then by highest streak
+
+      // Sort: Coach Max first, then by highest streak
       streaks.sort((a, b) {
         if (a.isCoachMaxTeam && !b.isCoachMaxTeam) return -1;
         if (!a.isCoachMaxTeam && b.isCoachMaxTeam) return 1;

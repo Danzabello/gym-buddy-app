@@ -235,27 +235,32 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
     }
 
     try {
-      // Clear the active session
+      // Clear the active session immediately
       await Supabase.instance.client
           .from('active_checkin_sessions')
           .delete()
           .eq('user_id', userId);
+    } catch (e) {
+      print('❌ Error clearing session: $e');
+    }
 
-      // Call the check-in callback - this triggers the streak update
+    // ✅ Close the sheet IMMEDIATELY — don't wait for check-in to finish
+    if (mounted) {
+      Navigator.pop(context, true);
+    }
+
+    // ✅ Do the heavy check-in work in the background AFTER sheet is gone
+    try {
       final partnerBonusEarned = await widget.onCheckInComplete();
 
-      if (mounted) {
-        Navigator.pop(context, true);
-        if (partnerBonusEarned) {
-          await Future.delayed(const Duration(milliseconds: 400));
-          if (mounted) {
-            await StreakCompleteSheet.show(context);
-          }
+      if (partnerBonusEarned && mounted) {
+        await Future.delayed(const Duration(milliseconds: 400));
+        if (mounted) {
+          await StreakCompleteSheet.show(context);
         }
       }
     } catch (e) {
       print('❌ Error completing check-in: $e');
-      setState(() => _isCompleting = false);
     }
   }
 
