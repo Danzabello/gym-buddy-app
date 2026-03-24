@@ -965,7 +965,8 @@ class TeamStreakService {
   /// Check if a specific streak should be reset
   Future<void> _checkStreakStatus(TeamStreak streak) async {
     try {
-      if (streak.lastWorkoutDate == null) return; // New streak, nothing to check
+      if (streak.lastWorkoutDate == null) return;
+      if (streak.currentStreak == 0) return; // Already reset, nothing to do
 
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
@@ -976,54 +977,53 @@ class TeamStreakService {
         streak.lastWorkoutDate!.day,
       );
 
-      // If last workout was today or yesterday, streak is fine
-      if (lastWorkout.isAtSameMomentAs(today) || 
+      // ✅ If last workout was today or yesterday, streak is fine
+      if (lastWorkout.isAtSameMomentAs(today) ||
           lastWorkout.isAtSameMomentAs(yesterday)) {
         return;
       }
 
-      // Check if the gap is filled with break days
+      // ✅ NEW: If ANY member has checked in today, don't reset
+      // The streak just hasn't been incremented yet (waiting for partner)
+      final anyCheckedInToday = streak.todayCheckIns.isNotEmpty;
+      if (anyCheckedInToday) {
+        if (kDebugMode) print('⏳ ${streak.teamName}: partial check-in today, skipping reset');
+        return;
+      }
+
+      // Check if gap is filled with break days
       final daysSinceLastWorkout = today.difference(lastWorkout).inDays;
-      
-      if (daysSinceLastWorkout > 1) {
-        // Get all team members (excluding Coach Max)
-        final membersResponse = await _supabase
-            .from('team_members')
-            .select('user_id')
-            .eq('team_id', streak.teamId)
-            .neq('user_id', coachMaxId);
-        
-        final memberIds = membersResponse.map((m) => m['user_id'] as String).toList();
-        
-        // Check each day in the gap
-        bool gapIsValid = true;
-        
-        for (int i = 1; i < daysSinceLastWorkout; i++) {
-          final checkDate = lastWorkout.add(Duration(days: i));
-          final checkDateStr = DateTime(checkDate.year, checkDate.month, checkDate.day)
-              .toIso8601String()
-              .split('T')[0];
-          
-          // Get break day status for that day
-          final breakStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, checkDateStr);
-          
-          // If everyone was on break that day, the gap is valid
-          final everyoneOnBreak = memberIds.every((userId) => breakStatus[userId] ?? false);
-          
-          if (!everyoneOnBreak) {
-            // Someone wasn't on break but didn't check in - streak broken
-            gapIsValid = false;
-            break;
-          }
+
+      final membersResponse = await _supabase
+          .from('team_members')
+          .select('user_id')
+          .eq('team_id', streak.teamId)
+          .neq('user_id', coachMaxId);
+
+      final memberIds = membersResponse.map((m) => m['user_id'] as String).toList();
+
+      bool gapIsValid = true;
+
+      for (int i = 1; i < daysSinceLastWorkout; i++) {
+        final checkDate = lastWorkout.add(Duration(days: i));
+        final checkDateStr = DateTime(checkDate.year, checkDate.month, checkDate.day)
+            .toIso8601String()
+            .split('T')[0];
+
+        final breakStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, checkDateStr);
+        final everyoneOnBreak = memberIds.every((userId) => breakStatus[userId] ?? false);
+
+        if (!everyoneOnBreak) {
+          gapIsValid = false;
+          break;
         }
-        
-        if (!gapIsValid) {
-          // Streak is broken - reset it
-          if (kDebugMode) print('💔 Resetting broken streak: ${streak.teamName}');
-          await _resetStreak(streak.id);
-        } else {
-          if (kDebugMode) print('✅ Gap filled by break days: ${streak.teamName}');
-        }
+      }
+
+      if (!gapIsValid) {
+        if (kDebugMode) print('💔 Resetting broken streak: ${streak.teamName}');
+        await _resetStreak(streak.id);
+      } else {
+        if (kDebugMode) print('✅ Gap filled by break days: ${streak.teamName}');
       }
     } catch (e) {
       if (kDebugMode) print('❌ Error checking streak status: $e');
