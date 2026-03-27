@@ -2,20 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'user_avatar.dart';
+import '../services/level_service.dart';
+
 
 enum AvatarBorderStyle { simple, bold, arc }
 
 class AvatarPickerScreen extends StatefulWidget {
-  /// Used inside the onboarding flow — receives avatarId + borderStyle name.
-  /// The parent handles saving to Supabase in one upsert.
   final void Function(String avatarId, String borderStyle)? onCompleteWithData;
-
-  /// Used standalone (e.g. profile settings) — no data passed back.
-  /// The widget saves to Supabase itself before calling this.
   final VoidCallback? onComplete;
-
-  /// Set false when embedded inside the ObHeader onboarding wrapper.
-  /// The header is then rendered by the parent screen instead.
   final bool showHeader;
 
   const AvatarPickerScreen({
@@ -34,6 +28,8 @@ class AvatarPickerScreen extends StatefulWidget {
 
 class _AvatarPickerScreenState extends State<AvatarPickerScreen>
     with SingleTickerProviderStateMixin {
+
+  // ── Starter avatars (always available) ─────────────────────────────────
   static const _starters = [
     _AvatarOption(
       id: 'lion',
@@ -67,21 +63,28 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
     ),
   ];
 
-  static const _locked = [
-    _LockedAvatar(id: 'eagle',        emoji: '🦅', name: 'Eagle',   req: '30-day streak'),
-    _LockedAvatar(id: 'shark',        emoji: '🦈', name: 'Shark',   req: '60-day streak'),
-    _LockedAvatar(id: 'gorilla',      emoji: '🦍', name: 'Gorilla', req: '100-day streak'),
-    _LockedAvatar(id: 'tiger',        emoji: '🐯', name: 'Tiger',   req: '50 co-ops'),
-    _LockedAvatar(id: 'buffalo',      emoji: '🦬', name: 'Buffalo', req: '200 coins'),
-    _LockedAvatar(id: 'robot',        emoji: '🤖', name: 'Robot',   req: '500 coins'),
-    _LockedAvatar(id: 'flexed',       emoji: '💪', name: 'Flex',    req: '90-day streak'),
-    _LockedAvatar(id: 'weightlifter', emoji: '🏋️', name: 'Lifter', req: '100 co-ops'),
-    _LockedAvatar(id: 'runner',       emoji: '🏃', name: 'Runner',  req: '150 co-ops'),
+  // ── All earnable avatars — order matches the grid display ───────────────
+  static const _earnable = [
+    _EarnableAvatar(id: 'eagle',        emoji: '🦅', name: 'Eagle',       req: '30-day streak'),
+    _EarnableAvatar(id: 'shark',        emoji: '🦈', name: 'Shark',       req: '60-day streak'),
+    _EarnableAvatar(id: 'gorilla',      emoji: '🦍', name: 'Gorilla',     req: '100-day streak'),
+    _EarnableAvatar(id: 'tiger',        emoji: '🐯', name: 'Tiger',       req: '50 co-ops'),
+    _EarnableAvatar(id: 'buffalo',      emoji: '🦬', name: 'Buffalo',     req: 'Level 5'),
+    _EarnableAvatar(id: 'robot',        emoji: '🤖', name: 'Robot',       req: 'Level 10'),
+    _EarnableAvatar(id: 'flexed',       emoji: '💪', name: 'Flex',        req: '90-day streak'),
+    _EarnableAvatar(id: 'weightlifter', emoji: '🏋️', name: 'Lifter',     req: '100 co-ops'),
+    _EarnableAvatar(id: 'runner',       emoji: '🏃', name: 'Runner',      req: '150 co-ops'),
   ];
 
+  // ── State ───────────────────────────────────────────────────────────────
   int _selectedAvatarIndex = 0;
   AvatarBorderStyle _selectedBorder = AvatarBorderStyle.simple;
   bool _isSaving = false;
+
+  // Unlock data
+  Set<String> _unlockedAvatarIds = {};
+  Set<String> _unlockedBorderIds = {};
+  bool _loadingUnlocks = true;
 
   late final AnimationController _bounceController;
   late final Animation<double> _bounceAnim;
@@ -98,6 +101,31 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
     _bounceAnim = Tween<double>(begin: 1.0, end: 1.08).animate(
       CurvedAnimation(parent: _bounceController, curve: Curves.elasticOut),
     );
+    _loadUnlocks();
+  }
+
+  Future<void> _loadUnlocks() async {
+    try {
+      final unlocks = await LevelService().getUnlockedCosmetics();
+      if (mounted) {
+        setState(() {
+          _unlockedAvatarIds = unlocks
+              .where((u) => u['unlock_reason']?.toString().contains('streak') == true ||
+                            u['unlock_reason']?.toString().contains('coop') == true ||
+                            u['unlock_reason']?.toString().contains('level') == true)
+              .map((u) => u['shop_item_id'] as String)
+              .toSet();
+          // For borders, check by shop_item_id directly
+          _unlockedBorderIds = unlocks
+              .where((u) => u['shop_item_id'] == 'bold' || u['shop_item_id'] == 'arc')
+              .map((u) => u['shop_item_id'] as String)
+              .toSet();
+          _loadingUnlocks = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadingUnlocks = false);
+    }
   }
 
   @override
@@ -117,9 +145,37 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
   }
 
   void _selectBorder(AvatarBorderStyle border) {
+    // Only allow selecting border if it's unlocked (simple is always free)
+    if (border == AvatarBorderStyle.bold && !_unlockedBorderIds.contains('bold')) {
+      _showLockedToast('Bold border unlocks at Level 3');
+      return;
+    }
+    if (border == AvatarBorderStyle.arc && !_unlockedBorderIds.contains('arc')) {
+      _showLockedToast('Arc border unlocks at Level 7');
+      return;
+    }
     if (_selectedBorder == border) return;
     HapticFeedback.selectionClick();
     setState(() => _selectedBorder = border);
+  }
+
+  void _showLockedToast(String message) {
+    HapticFeedback.lightImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.lock_rounded, color: Colors.white, size: 16),
+            const SizedBox(width: 8),
+            Text(message),
+          ],
+        ),
+        backgroundColor: const Color(0xFF534AB7),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _confirm() async {
@@ -130,8 +186,6 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) throw Exception('Not authenticated');
 
-      // Only write to DB when used standalone.
-      // In the onboarding flow the parent saves everything in one upsert.
       if (widget.onCompleteWithData == null) {
         await Supabase.instance.client.from('user_profiles').update({
           'avatar_id': _selected.id,
@@ -154,10 +208,10 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
     }
   }
 
+  // ── Build ───────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    // When showHeader is false the parent already shows the gradient ObHeader,
-    // so we just return the scrollable content without wrapping in a Scaffold.
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(24, widget.showHeader ? 20 : 8, 24, 32),
       child: Column(
@@ -171,7 +225,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
           const SizedBox(height: 24),
           _buildDetailCard(),
           const SizedBox(height: 28),
-          _buildLockedSection(),
+          _buildEarnableSection(),
         ],
       ),
     );
@@ -280,8 +334,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                             fontSize: 22, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
                     Text(a.desc,
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.grey[600])),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                     const SizedBox(height: 10),
                     Wrap(
                       spacing: 6,
@@ -327,8 +380,8 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
           Row(
             children: AvatarBorderStyle.values.map((style) {
               final isOn = _selectedBorder == style;
-              final label =
-                  style.name[0].toUpperCase() + style.name.substring(1);
+              final label = style.name[0].toUpperCase() + style.name.substring(1);
+              final isLocked = _isBorderLocked(style);
               return Expanded(
                 child: Padding(
                   padding: EdgeInsets.only(
@@ -348,19 +401,40 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                       ),
                       child: Column(
                         children: [
-                          _AvatarWithBorder(
-                            emoji: a.emoji,
-                            borderStyle: style,
-                            borderColor: a.borderColor,
-                            bgColor: a.bgColor,
-                            size: 72,
+                          Stack(
+                            alignment: Alignment.topRight,
+                            children: [
+                              Opacity(
+                                opacity: isLocked ? 0.4 : 1.0,
+                                child: _AvatarWithBorder(
+                                  emoji: a.emoji,
+                                  borderStyle: style,
+                                  borderColor: a.borderColor,
+                                  bgColor: a.bgColor,
+                                  size: 72,
+                                ),
+                              ),
+                              if (isLocked)
+                                Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle),
+                                  child: Icon(Icons.lock_rounded,
+                                      size: 12, color: Colors.grey[400]),
+                                ),
+                            ],
                           ),
                           const SizedBox(height: 5),
                           Text(label,
                               style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
-                                  color: isOn ? a.color : Colors.grey[500])),
+                                  color: isLocked
+                                      ? Colors.grey[400]
+                                      : isOn
+                                          ? a.color
+                                          : Colors.grey[500])),
                         ],
                       ),
                     ),
@@ -402,40 +476,174 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
     );
   }
 
-  Widget _buildLockedSection() {
+  bool _isBorderLocked(AvatarBorderStyle style) {
+    if (_loadingUnlocks) return false; // show as unlocked while loading
+    return switch (style) {
+      AvatarBorderStyle.simple => false,
+      AvatarBorderStyle.bold   => !_unlockedBorderIds.contains('bold'),
+      AvatarBorderStyle.arc    => !_unlockedBorderIds.contains('arc'),
+    };
+  }
+
+  // ── Earnable section ────────────────────────────────────────────────────
+
+  Widget _buildEarnableSection() {
+    if (_loadingUnlocks) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionLabel('UNLOCK AS YOU LEVEL UP'),
+          const SizedBox(height: 12),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 0.9,
+            ),
+            itemCount: _earnable.length,
+            itemBuilder: (_, i) => _buildLockedCard(_earnable[i]),
+          ),
+        ],
+      );
+    }
+
+    final unlocked = _earnable
+        .where((e) => _unlockedAvatarIds.contains(e.id))
+        .toList();
+    final locked = _earnable
+        .where((e) => !_unlockedAvatarIds.contains(e.id))
+        .toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'UNLOCK AS YOU LEVEL UP',
-          style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[500],
-              letterSpacing: 0.8),
-        ),
-        const SizedBox(height: 12),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: 0.9,
+        // Unlocked earnable avatars (if any)
+        if (unlocked.isNotEmpty) ...[
+          _sectionLabel('UNLOCKED'),
+          const SizedBox(height: 12),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 0.9,
+            ),
+            itemCount: unlocked.length,
+            itemBuilder: (_, i) => _buildUnlockedEarnableCard(unlocked[i]),
           ),
-          itemCount: _locked.length,
-          itemBuilder: (_, i) => _buildLockedCard(_locked[i]),
-        ),
+          const SizedBox(height: 24),
+        ],
+
+        // Still locked
+        if (locked.isNotEmpty) ...[
+          _sectionLabel('UNLOCK AS YOU LEVEL UP'),
+          const SizedBox(height: 12),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 0.9,
+            ),
+            itemCount: locked.length,
+            itemBuilder: (_, i) => _buildLockedCard(locked[i]),
+          ),
+        ],
       ],
     );
   }
 
-  Widget _buildLockedCard(_LockedAvatar l) {
+  Widget _sectionLabel(String text) {
+    return Text(
+      text,
+      style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: Colors.grey[500],
+          letterSpacing: 0.8),
+    );
+  }
+
+  /// Card for an avatar the user has unlocked (earnable, not a starter).
+  /// Tapping it selects it as a starter-like option — we treat it as a
+  /// virtual "starter" so the full detail card renders correctly.
+  Widget _buildUnlockedEarnableCard(_EarnableAvatar e) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        // Save directly since earnable avatars don't go through the starter flow
+        if (widget.onCompleteWithData == null) {
+          _saveEarnableAvatar(e.id);
+        } else {
+          widget.onCompleteWithData!(e.id, _selectedBorder.name);
+        }
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF7F77DD).withOpacity(0.4)),
+          color: const Color(0xFFEEEDFE),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(e.emoji, style: const TextStyle(fontSize: 36)),
+            const SizedBox(height: 5),
+            Text(e.name,
+                style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF534AB7))),
+            const SizedBox(height: 2),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF7F77DD),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text('USE',
+                  style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveEarnableAvatar(String avatarId) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    try {
+      await Supabase.instance.client.from('user_profiles').update({
+        'avatar_id': avatarId,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', userId);
+      widget.onComplete?.call();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to save — please try again')),
+        );
+      }
+    }
+  }
+
+  Widget _buildLockedCard(_EarnableAvatar l) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.grey[200]!),
+        color: Colors.grey[50],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -473,7 +681,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
   }
 }
 
-// ── Avatar with border renderer ────────────────────────────────────────────
+// ── Avatar with border renderer ─────────────────────────────────────────────
 class _AvatarWithBorder extends StatelessWidget {
   final String emoji;
   final AvatarBorderStyle borderStyle;
@@ -514,7 +722,6 @@ class _BorderPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final c = Offset(size.width / 2, size.height / 2);
-    // Pull the radius inward so the stroke is never clipped
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -522,40 +729,32 @@ class _BorderPainter extends CustomPainter {
 
     switch (style) {
       case AvatarBorderStyle.simple:
-        // Thin clean ring
         paint.strokeWidth = size.width * 0.06;
         final r = size.width / 2 - paint.strokeWidth / 2 - 1;
         canvas.drawCircle(c, r, paint);
         break;
-
       case AvatarBorderStyle.bold:
-        // Very thick ring — clearly "heavy"
         paint.strokeWidth = size.width * 0.13;
         final r = size.width / 2 - paint.strokeWidth / 2 - 1;
         canvas.drawCircle(c, r, paint);
-        // Second inner ring for depth
         paint
           ..strokeWidth = size.width * 0.03
           ..color = color.withOpacity(0.4);
         canvas.drawCircle(c, r - size.width * 0.10, paint);
         break;
-
       case AvatarBorderStyle.arc:
-        // Open-bottom arc — unmistakably not a full circle
         paint.strokeWidth = size.width * 0.07;
         final r = size.width / 2 - paint.strokeWidth / 2 - 1;
         final rect = Rect.fromCircle(center: c, radius: r);
-        // Draw ~270° arc, leaving a visible gap at the bottom
         canvas.drawArc(rect, -2.36, 4.71, false, paint);
-        // Two small end caps to look intentional
         paint
           ..style = PaintingStyle.fill
           ..color = color.withOpacity(0.5);
         final capR = paint.strokeWidth * 0.5;
         canvas.drawCircle(
-          Offset(c.dx - r * 0.71, c.dy + r * 0.71), capR, paint);
+            Offset(c.dx - r * 0.71, c.dy + r * 0.71), capR, paint);
         canvas.drawCircle(
-          Offset(c.dx + r * 0.71, c.dy + r * 0.71), capR, paint);
+            Offset(c.dx + r * 0.71, c.dy + r * 0.71), capR, paint);
         break;
     }
   }
@@ -565,7 +764,7 @@ class _BorderPainter extends CustomPainter {
       old.style != style || old.color != color;
 }
 
-// ── Data models ────────────────────────────────────────────────────────────
+// ── Data models ─────────────────────────────────────────────────────────────
 class _AvatarOption {
   final String id;
   final String emoji;
@@ -588,12 +787,12 @@ class _AvatarOption {
   });
 }
 
-class _LockedAvatar {
+class _EarnableAvatar {
   final String id;
   final String emoji;
   final String name;
   final String req;
-  const _LockedAvatar({
+  const _EarnableAvatar({
     required this.id,
     required this.emoji,
     required this.name,

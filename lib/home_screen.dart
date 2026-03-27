@@ -31,6 +31,8 @@ import 'pages/notification_settings_page.dart';
 import 'pages/shop_page.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'widgets/xp_progress_bar.dart';
+
 
 
 
@@ -5531,7 +5533,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
       final response = await Supabase.instance.client
           .from('user_profiles')
-          .select('avatar_id, display_name, created_at')
+          .select('avatar_id, display_name, created_at, xp, level')
           .eq('id', currentUserId)
           .single();
 
@@ -5608,7 +5610,9 @@ class _ProfilePageState extends State<ProfilePage> {
               },
             ),
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 16),
+          const XpProgressBar(),     
+          const SizedBox(height: 16),
           
           // Stats Grid
           Row(

@@ -855,6 +855,18 @@ class TeamStreakService {
           partnerAlsoCheckedIn: partnerAlsoCheckedIn,
         );
 
+        // Grant milestone cosmetic unlocks
+        final milestoneKey = switch (newStreak) {
+          30  => 'streak_30',
+          60  => 'streak_60',
+          90  => 'streak_90',
+          100 => 'streak_100',
+          _   => null,
+        };
+        if (milestoneKey != null) {
+          levelService.grantMilestoneUnlock(milestoneKey: milestoneKey); // fire-and-forget
+        }
+
         return levelResult;
       }
 

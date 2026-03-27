@@ -167,6 +167,23 @@ class LevelService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getUnlockedCosmetics() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return [];
+
+      final rows = await _supabase
+          .from('user_unlocked_cosmetics')
+          .select('shop_item_id, unlock_reason, unlocked_at')
+          .eq('user_id', userId);
+
+      return List<Map<String, dynamic>>.from(rows);
+    } catch (e) {
+      if (kDebugMode) print('❌ LevelService.getUnlockedCosmetics: $e');
+      return [];
+    }
+  }
+
   // ============================================================
   // GET LEVEL INFO (for profile/progress bar UI)
   // ============================================================
@@ -200,9 +217,9 @@ class LevelService {
 
       final xpForThisLevel = currentDef['xp_required'] as int;
       final xpForNextLevel = nextDef?['xp_required'] as int? ?? xpForThisLevel;
+      if (kDebugMode) print('🔍 xpForThisLevel=$xpForThisLevel, xpForNextLevel=$xpForNextLevel, currentXp=$currentXp');
       final xpRange = (xpForNextLevel - xpForThisLevel).clamp(1, 999999);
       final xpInto = (currentXp - xpForThisLevel).clamp(0, xpRange);
-      final progress = currentLevel >= 99 ? 1.0 : xpInto / xpRange;
 
       return LevelInfo(
         level: currentLevel,
@@ -212,7 +229,7 @@ class LevelService {
         xpForNextLevel: xpForNextLevel,
         xpIntoCurrentLevel: xpInto,
         xpNeededForNext: currentLevel >= 99 ? 0 : (xpForNextLevel - currentXp).clamp(0, 999999),
-        progressPercent: progress.clamp(0.0, 1.0),
+        progressPercent: (xpInto / xpRange).clamp(0.0, 1.0),
       );
     } catch (e) {
       if (kDebugMode) print('❌ Error getting level info: $e');
