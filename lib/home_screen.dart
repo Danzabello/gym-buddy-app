@@ -32,6 +32,10 @@ import 'pages/shop_page.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'widgets/xp_progress_bar.dart';
+import 'widgets/avatar_picker_screen.dart';
+import 'services/level_service.dart';
+
+
 
 
 
@@ -5492,377 +5496,979 @@ class _SchedulePageState extends State<SchedulePage> {
 // Profile Page
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
-
+ 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
 }
-
-class _ProfilePageState extends State<ProfilePage> {
-  List<dynamic> _allStreaks = [];
-  bool _isLoadingStreaks = true;
-
+ 
+class _ProfilePageState extends State<ProfilePage>
+    with SingleTickerProviderStateMixin {
+  // ── data ──────────────────────────────────────────────────────
+  Map<String, dynamic>? _profile;
+  List<TeamStreak> _allStreaks = [];
+  LevelInfo? _levelInfo;
+  int _totalWorkouts = 0;
+  int _buddyCount = 0;
+  bool _isLoading = true;
+ 
+  // ── animation ─────────────────────────────────────────────────
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _xpAnimation;
+  late Animation<double> _ringAnimation;
+ 
   @override
   void initState() {
     super.initState();
-    _loadStreaks();
+ 
+    // Fade + slide up animation for content reveal
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+ 
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeOut,
+    );
+ 
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.06), // slides up from 6% below
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeOut,
+    ));
+
+    _xpAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _fadeController, curve: const Interval(0.3, 1.0, curve: Curves.easeOut)),
+    );
+    _ringAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _fadeController, curve: const Interval(0.2, 1.0, curve: Curves.easeOut)),
+    );
+ 
+    _loadAll();
   }
-
-  Future<void> _loadStreaks() async {
-    try {
-      final teamStreakService = TeamStreakService();
-      final streaks = await teamStreakService.getAllUserStreaks();
-      
-      if (mounted) {
-        setState(() {
-          _allStreaks = streaks;
-          _isLoadingStreaks = false;
-        });
-      }
-    } catch (e) {
-      print('Error loading streaks: $e');
-      if (mounted) {
-        setState(() => _isLoadingStreaks = false);
-      }
-    }
+ 
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    super.dispose();
   }
-
-  Future<Map<String, dynamic>?> _loadProfileData() async {
+ 
+  // ── data loading ──────────────────────────────────────────────
+  Future<void> _loadAll() async {
     try {
-      final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-      if (currentUserId == null) return null;
-
-      final response = await Supabase.instance.client
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) return;
+ 
+      // Fire all requests simultaneously
+      final profileFuture = Supabase.instance.client
           .from('user_profiles')
           .select('avatar_id, display_name, created_at, xp, level')
-          .eq('id', currentUserId)
+          .eq('id', uid)
           .single();
-
-      return response;
+ 
+      final streaksFuture = TeamStreakService().getAllUserStreaks();
+      final levelFuture = LevelService().getLevelInfo();
+ 
+      final workoutsFuture = Supabase.instance.client
+          .from('workouts')
+          .select('id')
+          .or('user_id.eq.$uid,buddy_id.eq.$uid')
+          .eq('status', 'completed');
+ 
+      final friendsFuture = FriendService().getFriends();
+ 
+      // Await all simultaneously
+      final profile  = await profileFuture;
+      final streaks  = await streaksFuture;
+      final level    = await levelFuture;
+      final workouts = await workoutsFuture;
+      final friends  = await friendsFuture;
+ 
+      if (!mounted) return;
+ 
+      setState(() {
+        _profile       = profile as Map<String, dynamic>;
+        _allStreaks     = streaks;
+        _levelInfo     = level;
+        _totalWorkouts = (workouts as List).length;
+        _buddyCount    = friends.length;
+        _isLoading     = false;
+      });
+ 
+      // Small delay then play the reveal animation
+      await Future.delayed(const Duration(milliseconds: 50));
+      if (mounted) _fadeController.forward();
+ 
     } catch (e) {
-      return null;
+      if (kDebugMode) print('❌ ProfilePage._loadAll: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
   }
-
-  String _formatDate(String? dateStr) {
-    if (dateStr == null) return '2024';
-    try {
-      final date = DateTime.parse(dateStr);
-      return '${date.year}';
-    } catch (e) {
-      return '2024';
-    }
+ 
+  // ── helpers ───────────────────────────────────────────────────
+  String _formatYear(String? dateStr) {
+    if (dateStr == null) return '2025';
+    try { return '${DateTime.parse(dateStr).year}'; } catch (_) { return '2025'; }
   }
-
-  void _showAllStreaksDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => _AllStreaksDialog(streaks: _allStreaks.cast<TeamStreak>()),
-    );
+ 
+  int get _bestStreak => _allStreaks.isEmpty
+      ? 0
+      : _allStreaks.map((s) => s.bestStreak).reduce((a, b) => a > b ? a : b);
+ 
+  String _avatarEmoji(String? id) {
+    const map = {
+      'lion': '🦁', 'wolf': '🐺', 'bear': '🐻',
+      'eagle': '🦅', 'shark': '🦈', 'gorilla': '🦍',
+      'tiger': '🐯', 'buffalo': '🦬', 'robot': '🤖',
+      'flexed': '💪', 'weightlifter': '🏋️', 'runner': '🏃',
+    };
+    return map[id] ?? '🦁';
   }
-
+ 
+  List<Color> _levelGradient(int level) {
+    if (level >= 91) return [const Color(0xFF7F77DD), const Color(0xFF534AB7)];
+    if (level >= 76) return [const Color(0xFFD85A30), const Color(0xFF993C1D)];
+    if (level >= 56) return [const Color(0xFFD4537E), const Color(0xFF993556)];
+    if (level >= 46) return [const Color(0xFFEF9F27), const Color(0xFFBA7517)];
+    if (level >= 26) return [const Color(0xFF1D9E75), const Color(0xFF0F6E56)];
+    if (level >= 11) return [const Color(0xFF378ADD), const Color(0xFF185FA5)];
+    return [const Color(0xFFFFB300), const Color(0xFFFF8F00)];
+  }
+ 
+  String _titleIcon(String title) {
+    const map = {
+      'Newcomer': '🌱', 'Beginner': '⚡', 'Rookie': '🔥',
+      'Athlete': '💪', 'Warrior': '⚔️', 'Iron': '🛡️',
+      'Beast': '🦁', 'Legend': '👑', 'Elite': '💎',
+      'Champion': '🏆', 'Gym Pro': '🌟',
+    };
+    return map[title] ?? '⭐';
+  }
+ 
+  // ══════════════════════════════════════════════════════════════
+  // BUILD
+  // ══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {},
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Profile Header
-          Center(
-            child: FutureBuilder<Map<String, dynamic>?>(
-              future: _loadProfileData(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const CircularProgressIndicator();
-                }
-                
-                final profile = snapshot.data!;
-                
-                return Column(
-                  children: [
-                    UserAvatar(
-                      avatarId: profile['avatar_id'],
-                      size: 100,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      profile['display_name'] ?? 'User',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      'Member since ${_formatDate(profile['created_at'])}',
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-          const XpProgressBar(),     
-          const SizedBox(height: 16),
-          
-          // Stats Grid
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _StatCard('Workouts', '42'),
-              _StatCard('Streak', '7 days'),
-              _StatCard('Buddies', '3'),
-            ],
-          ),
-          const SizedBox(height: 30),
-
-          // Menu Items
-          ListTile(
-            leading: Icon(Icons.local_fire_department, color: Colors.orange[700]),
-            title: const Text('All Streaks'),
-            trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: _showAllStreaksDialog,
-          ),
-          ListTile(
-            leading: const Icon(Icons.emoji_events),
-            title: const Text('Achievements'),
-            trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: () {},
-          ),
-          ListTile(
-            leading: const Icon(Icons.bar_chart),
-            title: const Text('Progress'),
-            trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: () {},
-          ),
-          ListTile(
-            leading: const Icon(Icons.notifications),
-            title: const Text('Notifications'),
-            trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const NotificationSettingsPage(),
+    // Show skeleton while loading
+    if (_isLoading) return _buildSkeleton();
+ 
+    final profile  = _profile ?? {};
+    final level    = _levelInfo?.level ?? 1;
+    final title    = _levelInfo?.title ?? 'Newcomer';
+    final avatarId = profile['avatar_id'] as String? ?? 'lion';
+    final name     = profile['display_name'] as String? ?? 'User';
+    final year     = _formatYear(profile['created_at'] as String?);
+ 
+    // Wrap entire page in fade + slide animation
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF0F2F7),
+          body: RefreshIndicator(
+            onRefresh: () async {
+              _fadeController.reset();
+              await _loadAll();
+            },
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: _buildHero(
+                    name: name,
+                    year: year,
+                    avatarId: avatarId,
+                    level: level,
+                    title: title,
+                  ),
                 ),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.help),
-            title: const Text('Help & Support'),
-            trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: () {},
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: () async {
-              await Supabase.instance.client.auth.signOut();
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => LoginScreen()),
-                (route) => false,
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 5, 16, 32),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      _buildXpCard(),
+                      const SizedBox(height: 14),
+                      _buildStatsRow(),
+                      const SizedBox(height: 22),
+                      _sectionLabel('Activity'),
+                      const SizedBox(height: 10),
+                      _buildMenuCard([
+                        _MenuItem(
+                          emoji: '🔥',
+                          color: const Color(0xFFFFF3E0),
+                          label: 'All Streaks',
+                          sub: '${_allStreaks.length} active streaks',
+                          onTap: () => showDialog(
+                            context: context,
+                            builder: (_) => _AllStreaksDialog(streaks: _allStreaks),
+                          ),
+                        ),
+                        _MenuItem(
+                          emoji: '🏆',
+                          color: const Color(0xFFE8F5E9),
+                          label: 'Achievements',
+                          sub: 'Coming soon',
+                          onTap: () {},
+                        ),
+                        _MenuItem(
+                          emoji: '📊',
+                          color: const Color(0xFFE3F2FD),
+                          label: 'Progress',
+                          sub: 'View your history',
+                          onTap: () {},
+                        ),
+                      ]),
+                      const SizedBox(height: 22),
+                      _sectionLabel('Settings'),
+                      const SizedBox(height: 10),
+                      _buildMenuCard([
+                        _MenuItem(
+                          emoji: '🔔',
+                          color: const Color(0xFFF3E5F5),
+                          label: 'Notifications',
+                          sub: 'Manage alerts',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const NotificationSettingsPage(),
+                            ),
+                          ),
+                        ),
+                        _MenuItem(
+                          emoji: '🎨',
+                          color: const Color(0xFFE0F7FA),
+                          label: 'Appearance',
+                          sub: 'Avatar & border',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => Scaffold(
+                                appBar: AppBar(
+                                  title: const Text('Choose Avatar'),
+                                  backgroundColor: const Color(0xFF4B6EF5),
+                                  foregroundColor: Colors.white,
+                                ),
+                                body: AvatarPickerScreen(
+                                  onComplete: () {
+                                    Navigator.pop(context);
+                                    _fadeController.reset();
+                                    _loadAll();
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        _MenuItem(
+                          emoji: '❓',
+                          color: const Color(0xFFFFF8E1),
+                          label: 'Help & Support',
+                          sub: 'FAQs & contact',
+                          onTap: () {},
+                        ),
+                      ]),
+                      const SizedBox(height: 22),
+                      _buildLogoutButton(),
+                    ]),
+                  ),
+                ),
+              ],
             ),
-            child: const Text('Log Out'),
           ),
-        ],
+        ),
       ),
     );
   }
-
-  // ✅ NEW: All Streaks Section Widget
-  Widget _buildAllStreaksSection() {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+ 
+  // ══════════════════════════════════════════════════════════════
+  // HERO
+  // ══════════════════════════════════════════════════════════════
+  Widget _buildHero({
+    required String name,
+    required String year,
+    required String avatarId,
+    required int level,
+    required String title,
+  }) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF4B6EF5), Color(0xFF7B4FD4), Color(0xFF9B3FB5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Stack(
           children: [
-            // Header row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.local_fire_department, color: Colors.orange[700], size: 24),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'All Streaks',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+            Positioned(
+              top: -30, right: -30,
+              child: Container(
+                width: 160, height: 160,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.06),
                 ),
-                if (!_isLoadingStreaks)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[100],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${_allStreaks.length}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.orange[800],
-                      ),
-                    ),
-                  ),
-              ],
+              ),
             ),
-            
-            const SizedBox(height: 16),
-            
-            // Streaks list or loading
-            if (_isLoadingStreaks)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: CircularProgressIndicator(),
+            Positioned(
+              bottom: 20, left: -20,
+              child: Container(
+                width: 120, height: 120,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.04),
                 ),
-              )
-            else if (_allStreaks.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Icon(Icons.sentiment_neutral, size: 48, color: Colors.grey[400]),
-                      const SizedBox(height: 8),
-                      Text(
-                        'No active streaks yet',
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              // Show first 3 streaks as preview
-              Column(
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 25),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ..._allStreaks.take(3).map((streak) => _buildStreakTile(streak)).toList(),
-                  
-                  // "See All" button if more than 3
-                  if (_allStreaks.length > 3)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: TextButton(
-                        onPressed: _showAllStreaksDialog,
-                        child: Text(
-                          'See all ${_allStreaks.length} streaks →',
-                          style: TextStyle(
-                            color: Colors.blue[700],
-                            fontWeight: FontWeight.w600,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Profile',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const NotificationSettingsPage(),
+                          ),
+                        ),
+                        child: Container(
+                          width: 36, height: 36,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withOpacity(0.15),
+                          ),
+                          child: const Icon(
+                            Icons.settings_outlined,
+                            color: Colors.white,
+                            size: 18,
                           ),
                         ),
                       ),
-                    ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // Avatar with XP ring
+                      Stack(
+                        clipBehavior: Clip.none,
+                        alignment: Alignment.center,
+                        children: [
+                        SizedBox(
+                          width: 98, height: 98,
+                          child: AnimatedBuilder(
+                            animation: _ringAnimation,
+                            builder: (context, _) => CircularProgressIndicator(
+                              value: (_levelInfo?.progressPercent ?? 0.0) * _ringAnimation.value,
+                              strokeWidth: 4,
+                              backgroundColor: Colors.white.withOpacity(0.2),
+                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          ),
+                        ),
+                          Container(
+                            width: 86, height: 86,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white.withOpacity(0.15),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.3),
+                                width: 2,
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                _avatarEmoji(avatarId),
+                                style: const TextStyle(fontSize: 46),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: -4, right: -4,
+                            child: Container(
+                              width: 30, height: 30,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                  colors: _levelGradient(level),
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                border: Border.all(color: Colors.white, width: 2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _levelGradient(level).last.withOpacity(0.5),
+                                    blurRadius: 8,
+                                  ),
+                                ],
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '$level',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text(
+                              name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Member since $year',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.65),
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(20),
+                                color: Colors.white.withOpacity(0.18),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                ),
+                              ),
+                              child: Text(
+                                '${_titleIcon(title)}  $title',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
+            ),
           ],
         ),
       ),
     );
   }
-
-  Widget _buildStreakTile(dynamic streak) {
-    final teamStreak = streak as TeamStreak;
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    
-    // Get friend's name for display
-    String displayName;
-    if (teamStreak.isCoachMaxTeam) {
-      displayName = 'Coach Max';
-    } else {
-      final friendMember = teamStreak.members.firstWhere(
-        (m) => m.userId != currentUserId,
-        orElse: () => teamStreak.members.first,
-      );
-      displayName = friendMember.displayName;
-    }
-
+ 
+  // ══════════════════════════════════════════════════════════════
+  // XP CARD
+  // ══════════════════════════════════════════════════════════════
+  Widget _buildXpCard() {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: teamStreak.isCompleteToday ? Colors.green[50] : Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: teamStreak.isCompleteToday ? Colors.green[200]! : Colors.grey[200]!,
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF4B6EF5).withOpacity(0.15),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: _levelInfo == null
+          ? const Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          : Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 40, height: 40,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF4B6EF5), Color(0xFF7B4FD4)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: const Center(
+                          child: Text('⭐', style: TextStyle(fontSize: 20)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Level ${_levelInfo!.level} — ${_levelInfo!.title}',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1A1A2E),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _levelInfo!.level >= 99
+                                  ? 'Max level reached 🏆'
+                                  : '${_levelInfo!.xpNeededForNext} XP to level ${_levelInfo!.level + 1}',
+                              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEEF0FF),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${_levelInfo!.currentXp} XP',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF4B6EF5),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(100),
+                    child: AnimatedBuilder(
+                      animation: _xpAnimation,
+                      builder: (context, _) => LinearProgressIndicator(
+                        value: _levelInfo!.progressPercent * _xpAnimation.value,
+                        minHeight: 8,
+                        backgroundColor: const Color(0xFFF0F2F7),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4B6EF5)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${_levelInfo!.xpIntoCurrentLevel} / ${_levelInfo!.xpForNextLevel - _levelInfo!.xpForThisLevel} XP',
+                        style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                      ),
+                      Text(
+                        '${(_levelInfo!.progressPercent * 100).toStringAsFixed(0)}%',
+                        style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+ 
+  // ══════════════════════════════════════════════════════════════
+  // STATS ROW
+  // ══════════════════════════════════════════════════════════════
+  Widget _buildStatsRow() {
+    return Row(
+      children: [
+        _buildStatCard('🔥', '$_bestStreak', 'Best streak'),
+        const SizedBox(width: 10),
+        _buildStatCard('💪', '$_totalWorkouts', 'Workouts'),
+        const SizedBox(width: 10),
+        _buildStatCard('👥', '$_buddyCount', 'Buddies'),
+        const SizedBox(width: 10),
+        _buildStatCard('⚡', '${_allStreaks.length}', 'Streaks'),
+      ],
+    );
+  }
+ 
+  Widget _buildStatCard(String emoji, String value, String label) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 20)),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF1A1A2E),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9,
+                color: Colors.grey[500],
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
-      child: Row(
-        children: [
-          // Avatar/Emoji
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: teamStreak.isCoachMaxTeam ? Colors.blue[100] : Colors.orange[100],
-              shape: BoxShape.circle,
+    );
+  }
+ 
+  // ══════════════════════════════════════════════════════════════
+  // MENU
+  // ══════════════════════════════════════════════════════════════
+  Widget _sectionLabel(String text) {
+    return Text(
+      text.toUpperCase(),
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: Colors.grey[500],
+        letterSpacing: 0.8,
+      ),
+    );
+  }
+ 
+  Widget _buildMenuCard(List<_MenuItem> items) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: items.asMap().entries.map((entry) {
+          final i = entry.key;
+          final item = entry.value;
+          return Column(
+            children: [
+              InkWell(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  item.onTap();
+                },
+                borderRadius: BorderRadius.vertical(
+                  top: i == 0 ? const Radius.circular(18) : Radius.zero,
+                  bottom: i == items.length - 1
+                      ? const Radius.circular(18)
+                      : Radius.zero,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          color: item.color,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Center(
+                          child: Text(item.emoji, style: const TextStyle(fontSize: 17)),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.label,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1A1A2E),
+                              ),
+                            ),
+                            if (item.sub != null) ...[
+                              const SizedBox(height: 1),
+                              Text(
+                                item.sub!,
+                                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right_rounded, color: Colors.grey[300], size: 20),
+                    ],
+                  ),
+                ),
+              ),
+              if (i < items.length - 1)
+                Divider(height: 1, indent: 66, color: Colors.grey[100]),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+ 
+  // ══════════════════════════════════════════════════════════════
+  // LOG OUT
+  // ══════════════════════════════════════════════════════════════
+  Widget _buildLogoutButton() {
+    return GestureDetector(
+      onTap: () async {
+        HapticFeedback.mediumImpact();
+        await Supabase.instance.client.auth.signOut();
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => LoginScreen()),
+          (route) => false,
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF0F0),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFFFD0D0), width: 1.5),
+        ),
+        child: const Center(
+          child: Text(
+            'Log Out',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFFE53935),
             ),
-            child: Center(
-              child: Text(
-                teamStreak.isCoachMaxTeam ? '🤖' : '💪',
-                style: const TextStyle(fontSize: 20),
+          ),
+        ),
+      ),
+    );
+  }
+ 
+  // ══════════════════════════════════════════════════════════════
+  // SKELETON — shown while data loads
+  // Shows a realistic shimmer layout matching the real page
+  // ══════════════════════════════════════════════════════════════
+  Widget _buildSkeleton() {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF0F2F7),
+      body: Column(
+        children: [
+          // Hero shimmer
+          Container(
+            height: 220,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF4B6EF5), Color(0xFF9B3FB5)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Top row
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _shimmerBox(60, 18, radius: 6),
+                        _shimmerCircle(36),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    // Avatar + name row
+                    Row(
+                      children: [
+                        _shimmerCircle(86),
+                        const SizedBox(width: 16),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _shimmerBox(120, 20, radius: 6),
+                            const SizedBox(height: 8),
+                            _shimmerBox(90, 14, radius: 6),
+                            const SizedBox(height: 10),
+                            _shimmerBox(100, 26, radius: 13),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          
-          // Name and streak
+ 
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  displayName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // XP card shimmer
+                  _shimmerCard(height: 110),
+                  const SizedBox(height: 14),
+ 
+                  // Stats row shimmer
+                  Row(
+                    children: [
+                      Expanded(child: _shimmerCard(height: 90)),
+                      const SizedBox(width: 10),
+                      Expanded(child: _shimmerCard(height: 90)),
+                      const SizedBox(width: 10),
+                      Expanded(child: _shimmerCard(height: 90)),
+                      const SizedBox(width: 10),
+                      Expanded(child: _shimmerCard(height: 90)),
+                    ],
                   ),
-                ),
-                Text(
-                  '${teamStreak.currentStreak} day streak',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.orange[700],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
+                  const SizedBox(height: 22),
+ 
+                  // Activity label
+                  _shimmerBox(70, 12, radius: 4),
+                  const SizedBox(height: 10),
+ 
+                  // Activity menu card shimmer
+                  _shimmerCard(height: 160),
+                  const SizedBox(height: 22),
+ 
+                  // Settings label
+                  _shimmerBox(70, 12, radius: 4),
+                  const SizedBox(height: 10),
+ 
+                  // Settings menu card shimmer
+                  _shimmerCard(height: 160),
+                ],
+              ),
             ),
-          ),
-          
-          // Status indicator
-          Icon(
-            teamStreak.isCompleteToday ? Icons.check_circle : Icons.radio_button_unchecked,
-            color: teamStreak.isCompleteToday ? Colors.green : Colors.grey[400],
-            size: 20,
           ),
         ],
       ),
     );
   }
+ 
+  // Animated shimmer box
+  Widget _shimmerBox(double width, double height, {double radius = 8}) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.3, end: 0.7),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.easeInOut,
+      builder: (_, value, __) => Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(value),
+          borderRadius: BorderRadius.circular(radius),
+        ),
+      ),
+    );
+  }
+ 
+  // Animated shimmer circle
+  Widget _shimmerCircle(double size) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.3, end: 0.7),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.easeInOut,
+      builder: (_, value, __) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white.withOpacity(value),
+        ),
+      ),
+    );
+  }
+ 
+  // Animated shimmer card (white background)
+  Widget _shimmerCard({required double height}) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.6, end: 1.0),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.easeInOut,
+      builder: (_, value, __) => Container(
+        height: height,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(value),
+          borderRadius: BorderRadius.circular(18),
+        ),
+      ),
+    );
+  }
+}
+ 
+// ── Simple data class for menu items ─────────────────────────────
+class _MenuItem {
+  final String emoji;
+  final Color color;
+  final String label;
+  final String? sub;
+  final VoidCallback onTap;
+ 
+  const _MenuItem({
+    required this.emoji,
+    required this.color,
+    required this.label,
+    this.sub,
+    required this.onTap,
+  });
 }
 
 // Helper Widgets

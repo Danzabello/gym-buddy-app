@@ -198,8 +198,11 @@ class LevelService {
           .eq('id', userId)
           .single();
 
-      final currentXp = profile['xp'] as int? ?? 0;
-      final currentLevel = (profile['level'] as int? ?? 1).clamp(1, 99);
+      final currentXp = profile['xp'] as int? ?? 1;
+      final rawLevel = profile['level'] as int? ?? 1;
+      final currentLevel = (rawLevel < 1 ? 1 : rawLevel).clamp(1, 99);
+      if (kDebugMode) print('🔍 DB profile: xp=${profile['xp']}, level=${profile['level']}, currentLevel=$currentLevel');
+
 
       final currentDef = await _supabase
           .from('level_definitions')
