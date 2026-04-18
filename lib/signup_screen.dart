@@ -5,6 +5,8 @@ import 'onboarding/onboarding_theme.dart';
 import 'onboarding/onboarding_basic_info_new.dart';
 import 'onboarding/splash_screen.dart';
 import 'main.dart';
+import 'utils/input_validators.dart';
+
 
 class SignUpScreen extends StatefulWidget {
   final List<Map<String, dynamic>> pendingInvites;
@@ -38,19 +40,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   bool _validate() {
-    String? emailErr, passErr, confirmErr;
-    final email = _emailCtrl.text.trim();
-    final pass = _passwordCtrl.text;
-
-    if (email.isEmpty || !email.contains('@') || !email.contains('.')) {
-      emailErr = 'Enter a valid email';
-    }
-    if (pass.isEmpty || pass.length < 6) {
-      passErr = 'At least 6 characters';
-    }
-    if (_confirmCtrl.text != pass) {
-      confirmErr = 'Passwords do not match';
-    }
+    final emailErr = InputValidators.email(_emailCtrl.text);
+    final passErr = InputValidators.password(_passwordCtrl.text);
+    final confirmErr = InputValidators.confirmPassword(
+      _confirmCtrl.text,
+      _passwordCtrl.text,
+    );
 
     setState(() {
       _emailError = emailErr;
@@ -185,25 +180,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     icon: Icons.email_outlined,
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
+                    inputFormatters: InputFormatters.email,    // 🔒 add this
                     errorText: _emailError,
                     onChanged: (_) => setState(() => _emailError = null),
                   ),
                   const SizedBox(height: 16),
                   ObTextField(
                     label: 'Password',
-                    hint: 'At least 6 characters',
+                    hint: 'At least 8 characters',            // 🔒 updated from 6
                     icon: Icons.lock_outline,
                     controller: _passwordCtrl,
                     obscureText: !_showPassword,
+                    inputFormatters: InputFormatters.password, // 🔒 add this
                     errorText: _passwordError,
                     onChanged: (_) => setState(() => _passwordError = null),
                     suffixIcon: IconButton(
-                      icon: Icon(_showPassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                          size: 20),
-                      onPressed: () =>
-                          setState(() => _showPassword = !_showPassword),
+                      icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility, size: 20),
+                      onPressed: () => setState(() => _showPassword = !_showPassword),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -213,15 +206,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     icon: Icons.lock_outline,
                     controller: _confirmCtrl,
                     obscureText: !_showConfirm,
+                    inputFormatters: InputFormatters.password, // 🔒 add this
                     errorText: _confirmError,
                     onChanged: (_) => setState(() => _confirmError = null),
                     suffixIcon: IconButton(
-                      icon: Icon(_showConfirm
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                          size: 20),
-                      onPressed: () =>
-                          setState(() => _showConfirm = !_showConfirm),
+                      icon: Icon(_showConfirm ? Icons.visibility_off : Icons.visibility, size: 20),
+                      onPressed: () => setState(() => _showConfirm = !_showConfirm),
                     ),
                   ),
                   const SizedBox(height: 16),

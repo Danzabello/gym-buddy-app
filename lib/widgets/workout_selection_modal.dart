@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/workout_history_service.dart';
+import '../utils/input_validators.dart';
 
 class WorkoutSelectionModal extends StatefulWidget {
   final Function(WorkoutTemplate, int, String?) onWorkoutSelected;
@@ -210,6 +211,9 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                 const SizedBox(height: 16),
                 TextField(
                   controller: notesController,
+                  inputFormatters: InputFormatters.workoutNotes,
+                  maxLines: 2,
+                  maxLength: InputLimits.notesMax,
                   decoration: InputDecoration(
                     hintText: 'Add notes (optional)',
                     hintStyle: TextStyle(color: Colors.grey[400]),
@@ -225,14 +229,12 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          BorderSide(color: Colors.orange[400]!, width: 2),
+                      borderSide: BorderSide(color: Colors.orange[400]!, width: 2),
                     ),
                     contentPadding: const EdgeInsets.all(14),
-                    prefixIcon:
-                        Icon(Icons.notes, color: Colors.grey[400]),
+                    prefixIcon: Icon(Icons.notes, color: Colors.grey[400]),
+                    counterStyle: TextStyle(color: Colors.grey[400], fontSize: 11),
                   ),
-                  maxLines: 2,
                 ),
               ],
             ),
@@ -245,14 +247,23 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
             ),
             ElevatedButton(
               onPressed: () {
+                final notesError = InputValidators.workoutNotes(notesController.text);
+                if (notesError != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(notesError),
+                      backgroundColor: Colors.red[600],
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  return;
+                }
                 Navigator.pop(dialogContext);
                 Navigator.pop(context);
-                final notes = notesController.text.trim();
-                widget.onWorkoutSelected(
-                  template,
-                  customDuration,
-                  notes.isEmpty ? null : notes,
+                final notes = InputValidators.truncate(
+                  notesController.text, InputLimits.notesMax,
                 );
+                widget.onWorkoutSelected(template, customDuration, notes);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange[600],
@@ -845,7 +856,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'hold to edit',
+                      'hold to customise',
                       style: TextStyle(
                         fontSize: 10,
                         color: Colors.grey[400],

@@ -12,6 +12,7 @@ import 'home_screen.dart';
 import 'signup_screen.dart';
 import 'onboarding/onboarding_theme.dart';
 import 'onboarding/splash_screen.dart';
+import 'utils/input_validators.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -59,9 +60,9 @@ class _LoginScreenState extends State<LoginScreen>
 
   Future<void> _forgotPassword() async {
     final email = _emailCtrl.text.trim();
-    if (email.isEmpty || !email.contains('@')) {
-      setState(() =>
-          _errorMessage = 'Enter your email above first, then tap Forgot password.');
+    final emailErr = InputValidators.email(email);
+    if (emailErr != null) {
+      setState(() => _errorMessage = 'Enter a valid email above first, then tap Forgot password.');
       return;
     }
     try {
@@ -72,8 +73,7 @@ class _LoginScreenState extends State<LoginScreen>
           content: Text('Password reset email sent to $email'),
           backgroundColor: const Color(0xFF10B981),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
     } catch (e) {
@@ -83,8 +83,12 @@ class _LoginScreenState extends State<LoginScreen>
 
   Future<void> _login() async {
     if (_isLockedOut) return;
-    if (_emailCtrl.text.trim().isEmpty || _passwordCtrl.text.isEmpty) {
-      setState(() => _errorMessage = 'Please enter your email and password.');
+
+    // 🔒 Validate before touching the auth service
+    final emailErr = InputValidators.email(_emailCtrl.text);
+    final passErr = InputValidators.password(_passwordCtrl.text);
+    if (emailErr != null || passErr != null) {
+      setState(() => _errorMessage = emailErr ?? passErr);
       return;
     }
 
@@ -242,20 +246,24 @@ class _LoginScreenState extends State<LoginScreen>
                         children: [
                           _Label('Email'),
                           const SizedBox(height: 8),
+                          // Email field
                           _Field(
                             controller: _emailCtrl,
                             hint: 'Enter your email',
                             icon: Icons.email_outlined,
                             keyboardType: TextInputType.emailAddress,
+                            inputFormatters: InputFormatters.email,   // 🔒 no spaces, max 254
                           ),
                           const SizedBox(height: 16),
                           _Label('Password'),
                           const SizedBox(height: 8),
+                          // Password field
                           _Field(
                             controller: _passwordCtrl,
                             hint: 'Enter your password',
                             icon: Icons.lock_outline,
                             obscureText: !_showPassword,
+                            inputFormatters: InputFormatters.password, // 🔒 max 128
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _showPassword ? Icons.visibility_off : Icons.visibility,
@@ -413,6 +421,7 @@ class _Field extends StatelessWidget {
   final TextInputType? keyboardType;
   final Widget? suffixIcon;
   final void Function(String)? onSubmitted;
+  final List<TextInputFormatter>? inputFormatters;
 
   const _Field({
     required this.controller,
@@ -422,6 +431,7 @@ class _Field extends StatelessWidget {
     this.keyboardType,
     this.suffixIcon,
     this.onSubmitted,
+    this.inputFormatters,
   });
 
   @override
@@ -431,7 +441,8 @@ class _Field extends StatelessWidget {
       obscureText: obscureText,
       keyboardType: keyboardType,
       onSubmitted: onSubmitted,
-      maxLength: 128,
+      // 🔒 Use per-field formatters if provided, else default email cap
+      inputFormatters: inputFormatters,
       buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
       decoration: InputDecoration(
         hintText: hint,

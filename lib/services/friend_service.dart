@@ -25,10 +25,10 @@ class FriendService {
       // Search by USERNAME (unique identifier for finding friends)
       final response = await _supabase
           .from('user_profiles')
-          .select('id, username, display_name, age, fitness_level, avatar_id')
+          .select('id, username, display_name, fitness_level, avatar_id') // 🔒 removed age
           .ilike('username', '%$cleanQuery%')
           .neq('id', currentUserId)
-          .not('username', 'is', null)  // Only return users with usernames set
+          .not('username', 'is', null)
           .limit(20);
 
       if (kDebugMode) {
@@ -414,7 +414,7 @@ class FriendService {
       // Get friend profiles (now including username)
       final profiles = await _supabase
           .from('user_profiles')
-          .select('*')
+          .select('id, username, display_name, avatar_id, avatar_border, fitness_level, looking_for_buddy') // 🔒 explicit, no age/gender
           .inFilter('id', friendIds);
 
       if (kDebugMode) print('✅ Loaded ${profiles.length} friend profiles');

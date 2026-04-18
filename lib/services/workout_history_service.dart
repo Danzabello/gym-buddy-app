@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/input_validators.dart';
+
 
 class WorkoutTemplate {
   final String id;
@@ -181,20 +183,25 @@ class WorkoutHistoryService {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
 
-      if (kDebugMode) print('📝 Logging workout: $workoutName');
+      // 🔒 Service-layer payload guard — truncate before DB insert
+      final safeNotes = InputValidators.truncate(notes, InputLimits.notesMax);
+      final safeWorkoutName = InputValidators.truncate(workoutName, InputLimits.workoutNameMax)
+          ?? workoutName.substring(0, workoutName.length.clamp(0, InputLimits.workoutNameMax));
+
+      if (kDebugMode) print('📝 Logging workout: $safeWorkoutName');
 
       await _supabase.from('workout_logs').insert({
         'user_id': userId,
         'workout_date': today.toIso8601String().split('T')[0],
         'workout_time': now.toUtc().toIso8601String(),
         'template_id': templateId,
-        'workout_name': workoutName,
+        'workout_name': safeWorkoutName,
         'workout_category': workoutCategory,
         'workout_emoji': workoutEmoji,
         'actual_duration_minutes': actualDurationMinutes,
         'buddy_id': buddyId,
         'team_id': teamId,
-        'notes': notes,
+        'notes': safeNotes,                         // 🔒 sanitised
         'intensity_rating': intensityRating,
       });
 

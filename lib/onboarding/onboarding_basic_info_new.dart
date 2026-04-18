@@ -7,6 +7,7 @@ import '../home_screen.dart';
 import '../services/coach_max_service.dart';
 import '../services/friend_service.dart';
 import '../services/auth_service.dart';
+import '../utils/input_validators.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STEP 1 — Basic info
@@ -44,22 +45,8 @@ class _OnboardingBasicInfoNewState
   ];
 
   bool _validate() {
-    String? nameErr, ageErr;
-    if (_nameCtrl.text.trim().isEmpty) {
-      nameErr = 'Please enter your display name';
-    }
-    if (_ageCtrl.text.isEmpty) {
-      ageErr = 'Please enter your age';
-    } else {
-      final age = int.tryParse(_ageCtrl.text);
-      if (age == null) {
-        ageErr = 'Enter a valid number';
-      } else if (age < 16) {
-        ageErr = 'You must be at least 16';
-      } else if (age > 120) {
-        ageErr = 'Enter a valid age';
-      }
-    }
+    final nameErr = InputValidators.displayName(_nameCtrl.text);
+    final ageErr = InputValidators.age(_ageCtrl.text);
     setState(() {
       _nameError = nameErr;
       _ageError = ageErr;
@@ -117,9 +104,9 @@ class _OnboardingBasicInfoNewState
                     hint: 'What should we call you?',
                     icon: Icons.person_outline,
                     controller: _nameCtrl,
+                    inputFormatters: InputFormatters.displayName,  // 🔒 max 40, no control chars
                     errorText: _nameError,
-                    onChanged: (_) =>
-                        setState(() => _nameError = null),
+                    onChanged: (_) => setState(() => _nameError = null),
                   ),
                   const SizedBox(height: 20),
                   ObTextField(
@@ -128,9 +115,9 @@ class _OnboardingBasicInfoNewState
                     icon: Icons.cake_outlined,
                     controller: _ageCtrl,
                     keyboardType: TextInputType.number,
+                    inputFormatters: InputFormatters.age,          // 🔒 digits only, max "120"
                     errorText: _ageError,
-                    onChanged: (_) =>
-                        setState(() => _ageError = null),
+                    onChanged: (_) => setState(() => _ageError = null),
                   ),
                   const SizedBox(height: 20),
                   const Text('Gender',
