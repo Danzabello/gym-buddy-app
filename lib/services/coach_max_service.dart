@@ -190,11 +190,10 @@ class CoachMaxService {
   /// Generate random check-in time between 3am and 9pm
   String _generateRandomCheckInTime() {
     final random = Random();
-    
-    // Random hour between 3 (3am) and 21 (9pm)
-    final hour = 3 + random.nextInt(19); // 3-21 inclusive
-    final minute = random.nextInt(60);   // 0-59
-    
+    // Generate in UTC — DB and cron both run in UTC
+    // 3am–9pm UTC = covers reasonable waking hours globally
+    final hour = 3 + random.nextInt(19);
+    final minute = random.nextInt(60);
     return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}:00';
   }
 
