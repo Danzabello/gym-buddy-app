@@ -30,8 +30,10 @@ class NotificationService {
   );
 
   Future<void> initialize() async {
+    print('🚀 NotificationService.initialize() STARTING');
+
     if (!Platform.isAndroid && !Platform.isIOS) {
-      if (kDebugMode) print('⏭️ Skipping notifications on non-mobile platform');
+      print('⏭️ Skipping notifications on non-mobile platform');
       return;
     }
 
@@ -52,7 +54,7 @@ class NotificationService {
       }
 
       if (settings?.authorizationStatus == AuthorizationStatus.denied) {
-        if (kDebugMode) print('❌ Notifications denied by user');
+        print('❌ Notifications denied by user');
         // Still try to save existing token even if denied
         await _saveTokenToSupabase();
         return;
@@ -68,9 +70,9 @@ class NotificationService {
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
       FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
 
-      if (kDebugMode) print('✅ NotificationService initialized!');
+      print('✅ NotificationService initialized!');
     } catch (e) {
-      if (kDebugMode) print('❌ NotificationService error: $e');
+      print('❌ NotificationService error: $e');
     }
   }
 
@@ -85,7 +87,7 @@ class NotificationService {
     await _localNotifications.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (details) {
-        if (kDebugMode) print('🔔 Notification tapped: ${details.payload}');
+        print('🔔 Notification tapped: ${details.payload}');
       },
     );
 
@@ -104,7 +106,7 @@ class NotificationService {
       final token = await _fcm?.getToken();
       if (token == null) return;
 
-      if (kDebugMode) print('📱 FCM Token: ${token.substring(0, 20)}...');
+      print('📱 FCM Token: ${token.substring(0, 20)}...');
 
       await _supabase.from('device_tokens').upsert({
         'user_id': userId,
@@ -113,9 +115,9 @@ class NotificationService {
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'user_id, token');
 
-      if (kDebugMode) print('✅ FCM token saved to Supabase');
+      print('✅ FCM token saved to Supabase');
     } catch (e) {
-      if (kDebugMode) print('❌ Error saving token: $e');
+      print('❌ Error saving token: $e');
     }
   }
 
@@ -134,14 +136,14 @@ class NotificationService {
           .eq('token', token);
 
       await _fcm?.deleteToken();
-      if (kDebugMode) print('✅ FCM token removed');
+      print('✅ FCM token removed');
     } catch (e) {
-      if (kDebugMode) print('❌ Error removing token: $e');
+      print('❌ Error removing token: $e');
     }
   }
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    if (kDebugMode) print('🔔 Foreground message: ${message.notification?.title}');
+    print('🔔 Foreground message: ${message.notification?.title}');
 
     final notification = message.notification;
     if (notification == null) return;
@@ -165,7 +167,7 @@ class NotificationService {
   }
 
   void _handleNotificationTap(RemoteMessage message) {
-    if (kDebugMode) print('🔔 Notification tapped: ${message.data['type']}');
+    print('🔔 Notification tapped: ${message.data['type']}');
   }
 
   Future<Map<String, dynamic>> getSettings() async {
@@ -196,9 +198,9 @@ class NotificationService {
         'updated_at': DateTime.now().toIso8601String(),
       });
 
-      if (kDebugMode) print('✅ Notification settings updated');
+      print('✅ Notification settings updated');
     } catch (e) {
-      if (kDebugMode) print('❌ Error updating settings: $e');
+      print('❌ Error updating settings: $e');
     }
   }
 
