@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/workout_history_service.dart';
 import '../utils/input_validators.dart';
+import 'dart:async' show unawaited;
+import '../services/achievement_service.dart';
 
 class WorkoutSelectionModal extends StatefulWidget {
   final Function(WorkoutTemplate, int, String?) onWorkoutSelected;
@@ -113,6 +115,8 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
   void _acceptRandom() {
     if (_randomTemplate == null) return;
     HapticFeedback.heavyImpact();
+    // 🏆 Feeling Lucky achievement — fire-and-forget
+    unawaited(AchievementService().checkFeelingLucky());
     Navigator.pop(context);
     widget.onWorkoutSelected(_randomTemplate!, _randomDuration, null);
   }

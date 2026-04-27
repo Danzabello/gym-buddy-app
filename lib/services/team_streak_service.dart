@@ -4,6 +4,8 @@ import 'break_day_service.dart';
 import 'workout_history_service.dart';
 import 'coin_service.dart';
 import 'level_service.dart';
+import 'dart:async' show unawaited;
+import 'achievement_service.dart';
 
 
 
@@ -104,6 +106,7 @@ class TeamStreak {
 class TeamStreakService {
   final SupabaseClient _supabase = Supabase.instance.client;
   final BreakDayService _breakDayService = BreakDayService();
+  final LevelService levelService = LevelService();
   
   static const String coachMaxId = '00000000-0000-0000-0000-000000000001';
 
@@ -661,7 +664,7 @@ class TeamStreakService {
   }
 
   /// Increment streak when all members check in
-  Future<LevelUpResult?> _incrementStreak(String streakId, String teamId, String today) async {
+  Future<LevelUpResult?> _incrementStreak(String streakId, String teamId, String today, {bool isCoachMaxTeam = false}) async {
     try {
       // Get current streak data
       final streakData = await _supabase
@@ -848,12 +851,54 @@ class TeamStreakService {
         }
 
         // Award XP alongside coins
-        final levelService = LevelService();
         final levelResult = await levelService.awardCheckInXP(
           streakId: streakId,
           currentStreak: newStreak,
           partnerAlsoCheckedIn: partnerAlsoCheckedIn,
         );
+
+        // 🏆 Achievement checks — fire-and-forget
+        unawaited(() async {
+          final achievementService = AchievementService();
+
+          // Streak achievements
+          await achievementService.checkStreakAchievements(
+            currentStreak: newStreak,
+            bestStreak: newStreak > bestStreak ? newStreak : bestStreak,
+            previousBest: bestStreak,
+            isRealBuddy: !isCoachMaxTeam,
+            teamStreakId: streakId,
+          );
+
+          // Level achievements (if levelled up)
+          if (levelResult != null && levelResult.didLevelUp) {
+            await achievementService.checkLevelAchievements(levelResult.newLevel);
+          }
+
+          // Coin achievements
+          await achievementService.checkCoinAchievements();
+
+          // Co-op achievements (only for real buddy teams, both checked in)
+          if (!isCoachMaxTeam && partnerAlsoCheckedIn) {
+            final checkins = await _supabase
+                .from('daily_team_checkins')
+                .select('user_id, check_in_time')
+                .eq('team_streak_id', streakId)
+                .eq('check_in_date', today);
+
+            if (checkins.length >= 2) {
+              final times = checkins
+                  .map((c) => DateTime.parse(c['check_in_time'] as String))
+                  .toList()
+                ..sort();
+              await achievementService.checkCoopAchievements(
+                teamStreakId: streakId,
+                myCheckInTime: times.last,
+                partnerCheckInTime: times.first,
+              );
+            }
+          }
+        }());
 
         // Grant milestone cosmetic unlocks
         final milestoneKey = switch (newStreak) {

@@ -1,5 +1,4 @@
 import 'package:gym_buddy_app/login_screen.dart';
-import 'main.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/friend_service.dart';
@@ -34,16 +33,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'widgets/xp_progress_bar.dart';
 import 'widgets/avatar_picker_screen.dart';
 import 'services/level_service.dart';
-
-
-
-
-
-
-
-
-
-
+import 'pages/achievements_page.dart' as achievements_page;
 
 
 // import 'services/streak_service.dart'; Not using it anymore
@@ -5712,8 +5702,13 @@ class _ProfilePageState extends State<ProfilePage>
                           emoji: '🏆',
                           color: const Color(0xFFE8F5E9),
                           label: 'Achievements',
-                          sub: 'Coming soon',
-                          onTap: () {},
+                          sub: 'View all achievements',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => achievements_page.AchievementsPage(),
+                            ),
+                          ),
                         ),
                         _MenuItem(
                           emoji: '📊',

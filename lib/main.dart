@@ -9,6 +9,8 @@ import 'services/notification_service.dart';
 import 'dart:io';
 import 'onboarding/splash_screen.dart';
 import 'login_screen.dart';
+import 'services/achievement_service.dart';
+import 'dart:async' show unawaited;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -65,6 +67,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final onboardingStatus = await _checkOnboardingStatus(user.id);
       if (onboardingStatus) {
         await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
+        // 🏆 Loyalty achievements — check passively on every login
+        unawaited(AchievementService().checkLoyaltyAchievements());
       }
       setState(() {
         _hasCompletedOnboarding = onboardingStatus;
