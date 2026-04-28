@@ -6,18 +6,59 @@ const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 const COACH_MAX_ID = '00000000-0000-0000-0000-000000000001'
 
+const DEFAULT_ACTIVE_START = 5
+const DEFAULT_ACTIVE_END = 15
+
 serve(async () => {
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
     const now = new Date()
     const todayStr = now.toISOString().split('T')[0]
-    // Current time as HH:MM:SS for comparison
     const currentTime = now.toTimeString().split(' ')[0]
+    const currentHour = now.getUTCHours()
 
     console.log(`⏰ Coach Max cron running at ${todayStr} ${currentTime}`)
 
-    // ── Find all pending check-ins where scheduled time has passed ──
+    // ── PART 1: Create today's schedules for users who don't have one yet ──
+    const { data: allUsers } = await supabase
+      .from('coach_max_schedule')
+      .select('user_id')
+      .eq('scheduled_date', todayStr)
+
+    const scheduledUserIds = new Set((allUsers ?? []).map((r: any) => r.user_id))
+
+    const { data: coachMaxTeamMembers } = await supabase
+      .from('team_members')
+      .select('user_id, buddy_teams!inner(is_coach_max_team)')
+      .eq('buddy_teams.is_coach_max_team', true)
+      .neq('user_id', COACH_MAX_ID)
+
+    if (coachMaxTeamMembers) {
+      for (const member of coachMaxTeamMembers) {
+        const userId = member.user_id
+        if (scheduledUserIds.has(userId)) continue
+
+        const { data: notifSettings } = await supabase
+          .from('notification_settings')
+          .select('quiet_hours_enabled, quiet_hours_start, quiet_hours_end')
+          .eq('user_id', userId)
+          .maybeSingle()
+
+        const scheduledTime = _generateActiveWindowTime(notifSettings)
+
+        await supabase.from('coach_max_schedule').insert({
+          user_id: userId,
+          scheduled_date: todayStr,
+          scheduled_time: scheduledTime,
+          has_checked_in: false,
+        })
+
+        console.log(`📅 Scheduled Coach Max for user ${userId} at ${scheduledTime}`)
+      }
+    }
+
+    // ── PART 2: Process pending check-ins where time has passed ──
     const { data: pendingSchedules, error: fetchError } = await supabase
       .from('coach_max_schedule')
       .select('id, user_id, scheduled_time')
@@ -30,127 +71,202 @@ serve(async () => {
       return new Response(JSON.stringify({ error: fetchError.message }), { status: 500 })
     }
 
-    if (!pendingSchedules || pendingSchedules.length === 0) {
-      console.log('✅ No pending Coach Max check-ins right now')
-      return new Response(JSON.stringify({ processed: 0 }), { status: 200 })
-    }
-
-    console.log(`📋 Found ${pendingSchedules.length} pending check-ins`)
-
     let processed = 0
     let failed = 0
 
-    for (const schedule of pendingSchedules) {
-      const { user_id, id: scheduleId } = schedule
+    if (pendingSchedules && pendingSchedules.length > 0) {
+      console.log(`📋 Found ${pendingSchedules.length} pending check-ins`)
 
-      try {
-        // ── Step 1: Get Coach Max team for this user ──
-        const { data: teamMember } = await supabase
-          .from('team_members')
-          .select('team_id, buddy_teams!inner(is_coach_max_team)')
-          .eq('user_id', user_id)
-          .eq('buddy_teams.is_coach_max_team', true)
-          .maybeSingle()
+      for (const schedule of pendingSchedules) {
+        const { user_id, id: scheduleId } = schedule
 
-        if (!teamMember) {
-          console.log(`⚠️ No Coach Max team for user ${user_id}`)
-          continue
-        }
+        try {
+          const { data: teamMember } = await supabase
+            .from('team_members')
+            .select('team_id, buddy_teams!inner(is_coach_max_team)')
+            .eq('user_id', user_id)
+            .eq('buddy_teams.is_coach_max_team', true)
+            .maybeSingle()
 
-        const teamId = teamMember.team_id
+          if (!teamMember) {
+            console.log(`⚠️ No Coach Max team for user ${user_id}`)
+            continue
+          }
 
-        // ── Step 2: Get active streak ──
-        const { data: streak } = await supabase
-          .from('team_streaks')
-          .select('id, current_streak')
-          .eq('team_id', teamId)
-          .eq('is_active', true)
-          .maybeSingle()
+          const teamId = teamMember.team_id
 
-        if (!streak) {
-          console.log(`⚠️ No active streak for team ${teamId}`)
-          continue
-        }
+          const { data: streak } = await supabase
+            .from('team_streaks')
+            .select('id, current_streak')
+            .eq('team_id', teamId)
+            .eq('is_active', true)
+            .maybeSingle()
 
-        const streakId = streak.id
-        const currentStreak = streak.current_streak ?? 0
+          if (!streak) {
+            console.log(`⚠️ No active streak for team ${teamId}`)
+            continue
+          }
 
-        // ── Step 3: Check Coach Max hasn't already checked in today ──
-        const { data: existingCheckIn } = await supabase
-          .from('daily_team_checkins')
-          .select('id')
-          .eq('team_streak_id', streakId)
-          .eq('user_id', COACH_MAX_ID)
-          .eq('check_in_date', todayStr)
-          .maybeSingle()
+          const streakId = streak.id
+          const currentStreak = streak.current_streak ?? 0
 
-        if (existingCheckIn) {
-          console.log(`✅ Coach Max already checked in for user ${user_id}`)
-          // Mark as done so we don't keep processing it
+          const { data: existingCheckIn } = await supabase
+            .from('daily_team_checkins')
+            .select('id')
+            .eq('team_streak_id', streakId)
+            .eq('user_id', COACH_MAX_ID)
+            .eq('check_in_date', todayStr)
+            .maybeSingle()
+
+          if (existingCheckIn) {
+            console.log(`✅ Coach Max already checked in for user ${user_id}`)
+            await supabase
+              .from('coach_max_schedule')
+              .update({ has_checked_in: true, checked_in_at: now.toISOString() })
+              .eq('id', scheduleId)
+            continue
+          }
+
+          await supabase.from('daily_team_checkins').insert({
+            team_streak_id: streakId,
+            user_id: COACH_MAX_ID,
+            check_in_date: todayStr,
+            check_in_time: now.toISOString(),
+          })
+
           await supabase
             .from('coach_max_schedule')
             .update({ has_checked_in: true, checked_in_at: now.toISOString() })
             .eq('id', scheduleId)
-          continue
+
+          const { data: userCheckIn } = await supabase
+            .from('daily_team_checkins')
+            .select('id')
+            .eq('team_streak_id', streakId)
+            .eq('check_in_date', todayStr)
+            .neq('user_id', COACH_MAX_ID)
+            .maybeSingle()
+
+          if (userCheckIn) {
+            await _updateStreak(supabase, streakId, todayStr)
+          }
+
+          const message = _getMotivationalMessage(currentStreak)
+
+          await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+            },
+            body: JSON.stringify({
+              user_id,
+              title: '🤖 Coach Max',
+              body: message,
+              type: 'coach_max_motivational',
+              batch_key: `coach_max_daily_${todayStr}_${user_id}`,
+            }),
+          })
+
+          console.log(`✅ Processed Coach Max check-in for user ${user_id}`)
+          processed++
+
+        } catch (err) {
+          console.error(`❌ Failed for user ${user_id}:`, err)
+          failed++
         }
+      }
+    } else {
+      console.log('✅ No pending Coach Max check-ins right now')
+    }
 
-        // ── Step 4: Perform Coach Max check-in ──
-        await supabase.from('daily_team_checkins').insert({
-          team_streak_id: streakId,
-          user_id: COACH_MAX_ID,
-          check_in_date: todayStr,
-          check_in_time: now.toISOString(),
-        })
+    // ── PART 3: Streak danger notifications at 18:00 UTC ──
+    if (currentHour === 18) {
+      console.log('🚨 Running streak danger check...')
 
-        // ── Step 5: Mark schedule as complete ──
-        await supabase
-          .from('coach_max_schedule')
-          .update({ has_checked_in: true, checked_in_at: now.toISOString() })
-          .eq('id', scheduleId)
+      const { data: activeStreaks } = await supabase
+        .from('team_streaks')
+        .select('id, team_id, current_streak')
+        .eq('is_active', true)
+        .gt('current_streak', 0)
 
-        // ── Step 6: Check if user has also checked in (update streak if so) ──
-        const { data: userCheckIn } = await supabase
-          .from('daily_team_checkins')
-          .select('id')
-          .eq('team_streak_id', streakId)
-          .eq('check_in_date', todayStr)
-          .neq('user_id', COACH_MAX_ID)
-          .maybeSingle()
+      if (activeStreaks && activeStreaks.length > 0) {
+        for (const streak of activeStreaks) {
+          try {
+            const { id: streakId, team_id: teamId, current_streak: currentStreak } = streak
 
-        if (userCheckIn) {
-          // Both checked in — update streak
-          await _updateStreak(supabase, streakId, todayStr)
+            const { data: team } = await supabase
+              .from('buddy_teams')
+              .select('team_name, is_coach_max_team')
+              .eq('id', teamId)
+              .single()
+
+            if (!team) continue
+
+            const { data: todayCheckIns } = await supabase
+              .from('daily_team_checkins')
+              .select('user_id')
+              .eq('team_streak_id', streakId)
+              .eq('check_in_date', todayStr)
+
+            const checkedInUserIds = new Set(
+              (todayCheckIns ?? []).map((c: any) => c.user_id)
+            )
+
+            const { data: members } = await supabase
+              .from('team_members')
+              .select('user_id')
+              .eq('team_id', teamId)
+              .neq('user_id', COACH_MAX_ID)
+
+            if (!members || members.length === 0) continue
+
+            const isCoachMaxTeam = team.is_coach_max_team
+            const humanMembers = members.map((m: any) => m.user_id)
+
+            let shouldAlert = false
+            if (isCoachMaxTeam) {
+              shouldAlert = !checkedInUserIds.has(humanMembers[0])
+            } else {
+              const anyoneCheckedIn = humanMembers.some((id: string) => checkedInUserIds.has(id))
+              shouldAlert = !anyoneCheckedIn
+            }
+
+            if (!shouldAlert) continue
+
+            for (const userId of humanMembers) {
+              if (checkedInUserIds.has(userId)) continue
+
+              await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+                },
+                body: JSON.stringify({
+                  user_id: userId,
+                  title: '🔥 Streak in Danger!',
+                  body: currentStreak === 1
+                    ? `Don't lose your first streak day! Check in before midnight!`
+                    : `Your ${currentStreak}-day streak ends at midnight — check in now!`,
+                  type: 'streak_danger',
+                  reference_id: streakId,
+                  batch_key: `streak_danger_${userId}_${todayStr}`,
+                }),
+              })
+
+              console.log(`🚨 Streak danger sent to user ${userId} — ${currentStreak} day streak at risk`)
+            }
+
+          } catch (err) {
+            console.error(`❌ Streak danger failed for team ${streak.team_id}:`, err)
+          }
         }
-
-        // ── Step 7: Send push notification ──
-        const message = _getMotivationalMessage(currentStreak)
-
-        await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-          },
-          body: JSON.stringify({
-            user_id,
-            title: '🤖 Coach Max',
-            body: message,
-            type: 'coach_max_motivational',
-            batch_key: `coach_max_daily_${todayStr}_${user_id}`,
-          }),
-        })
-
-        console.log(`✅ Processed Coach Max check-in for user ${user_id}`)
-        processed++
-
-      } catch (err) {
-        console.error(`❌ Failed for user ${user_id}:`, err)
-        failed++
       }
     }
 
     return new Response(
-      JSON.stringify({ processed, failed, total: pendingSchedules.length }),
+      JSON.stringify({ processed, failed, total: pendingSchedules?.length ?? 0 }),
       { status: 200 }
     )
 
@@ -160,7 +276,33 @@ serve(async () => {
   }
 })
 
-// ── Update streak when both have checked in ──────────────────────────────
+// ── Generate random time within user's active (non-quiet) hours ──────────
+function _generateActiveWindowTime(notifSettings: any): string {
+  let activeStart = DEFAULT_ACTIVE_START
+  let activeEnd = DEFAULT_ACTIVE_END
+
+  if (notifSettings?.quiet_hours_enabled) {
+    const quietStart = notifSettings.quiet_hours_start
+    const quietEnd = notifSettings.quiet_hours_end
+
+    if (quietStart > quietEnd) {
+      activeStart = quietEnd
+      activeEnd = quietStart
+    } else {
+      activeStart = quietEnd
+      activeEnd = quietStart + 24
+    }
+  }
+
+  const totalMinutes = (activeEnd - activeStart) * 60
+  const randomMinutes = Math.floor(Math.random() * totalMinutes)
+  const hour = (activeStart + Math.floor(randomMinutes / 60)) % 24
+  const minute = randomMinutes % 60
+
+  return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`
+}
+
+// ── Update streak when both have checked in ───────────────────────────────
 async function _updateStreak(supabase: any, streakId: string, today: string) {
   const { data: streakData } = await supabase
     .from('team_streaks')
@@ -187,12 +329,12 @@ async function _updateStreak(supabase: any, streakId: string, today: string) {
       (todayDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)
     )
 
-    if (daysDiff === 0) return      // already counted
+    if (daysDiff === 0) return
     if (daysDiff === 1) {
       newStreak = currentStreak + 1
       if (newStreak > longestStreak) newLongest = newStreak
     } else {
-      newStreak = 1                  // streak broken
+      newStreak = 1
     }
   }
 
