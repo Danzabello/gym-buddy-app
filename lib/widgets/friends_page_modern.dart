@@ -4,6 +4,8 @@ import '../services/friend_service.dart';
 import 'user_avatar.dart';
 import 'profile_view_dialog.dart';
 import 'schedule_workout_dialog.dart';
+import '../services/achievement_service.dart';
+import 'achievement_toast.dart';
 
 /// Modern, mobile-optimized Friends/Buddies Page
 class FriendsPageModern extends StatefulWidget {
@@ -81,11 +83,11 @@ class _FriendsPageModernState extends State<FriendsPageModern> with SingleTicker
 
   Future<void> _sendFriendRequest(String friendId) async {
     setState(() => _sendingRequestTo = friendId);
-    
+
     final success = await _friendService.sendFriendRequest(friendId);
-    
+
     setState(() => _sendingRequestTo = null);
-    
+
     if (success) {
       HapticFeedback.mediumImpact();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -103,6 +105,10 @@ class _FriendsPageModernState extends State<FriendsPageModern> with SingleTicker
       );
       _searchController.clear();
       setState(() => _searchResults = []);
+
+      // 🏆 Connector achievement
+      final results = await AchievementService().checkConnectorAchievement();
+      if (mounted) AchievementToast.show(context, results);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -116,11 +122,11 @@ class _FriendsPageModernState extends State<FriendsPageModern> with SingleTicker
 
   Future<void> _acceptRequest(String requestId) async {
     setState(() => _processingRequestId = requestId);
-    
+
     final success = await _friendService.acceptFriendRequest(requestId);
-    
+
     setState(() => _processingRequestId = null);
-    
+
     if (success) {
       HapticFeedback.heavyImpact();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -137,6 +143,10 @@ class _FriendsPageModernState extends State<FriendsPageModern> with SingleTicker
         ),
       );
       await _loadFriends();
+
+      // 🏆 Social achievements
+      final results = await AchievementService().checkSocialAchievements();
+      if (mounted) AchievementToast.show(context, results);
     }
   }
 

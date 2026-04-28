@@ -524,7 +524,16 @@ class TeamStreakService {
         print('✅ Checked in to $successCount/${streaks.length} teams');
       }
 
-      final partnerBonusTransaction = await _supabase 
+      // 🏆 Workout achievements
+      List<AchievementUnlockResult> workoutAchievements = [];
+      if (successCount > 0) {
+        workoutAchievements = await AchievementService().checkWorkoutAchievements(
+          durationMinutes: durationMinutes ?? 0,
+          workoutType: workoutName ?? 'workout',
+        );
+      }
+
+      final partnerBonusTransaction = await _supabase
           .from('coin_transactions')
           .select('id')
           .eq('user_id', currentUserId)
@@ -539,6 +548,7 @@ class TeamStreakService {
         'break_cancelled': onBreak,
         'level_up': levelUpResult,
         'partner_bonus_earned': partnerBonusTransaction != null,
+        'workout_achievements': workoutAchievements,
       };
     } catch (e) {
       if (kDebugMode) print('❌ Error checking in: $e');

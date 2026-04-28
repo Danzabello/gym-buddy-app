@@ -7,7 +7,7 @@ import 'dart:async' show unawaited;
 import '../services/achievement_service.dart';
 
 class WorkoutSelectionModal extends StatefulWidget {
-  final Function(WorkoutTemplate, int, String?) onWorkoutSelected;
+  final Function(WorkoutTemplate, int, String?, List<AchievementUnlockResult>) onWorkoutSelected;
 
   const WorkoutSelectionModal({
     super.key,
@@ -112,20 +112,21 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
     });
   }
 
-  void _acceptRandom() {
+  void _acceptRandom() async {
     if (_randomTemplate == null) return;
     HapticFeedback.heavyImpact();
-    // 🏆 Feeling Lucky achievement — fire-and-forget
-    unawaited(AchievementService().checkFeelingLucky());
+
+    final results = await AchievementService().checkFeelingLucky();
+    
     Navigator.pop(context);
-    widget.onWorkoutSelected(_randomTemplate!, _randomDuration, null);
+    widget.onWorkoutSelected(_randomTemplate!, _randomDuration, null, results);
   }
 
   // ── Quick select (existing flow) ──────────────────────────────
   void _quickSelectTemplate(WorkoutTemplate template) {
     HapticFeedback.lightImpact();
     Navigator.pop(context);
-    widget.onWorkoutSelected(template, template.defaultDurationMinutes, null);
+    widget.onWorkoutSelected(template, template.defaultDurationMinutes, null, []);
   }
 
   void _showCustomDurationDialog(WorkoutTemplate template) {
@@ -267,7 +268,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                 final notes = InputValidators.truncate(
                   notesController.text, InputLimits.notesMax,
                 );
-                widget.onWorkoutSelected(template, customDuration, notes);
+                widget.onWorkoutSelected(template, customDuration, notes, []);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange[600],

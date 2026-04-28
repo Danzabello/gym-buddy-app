@@ -18,7 +18,6 @@ import 'widgets/completed_workouts_section.dart';
 import 'widgets/workout_celebration.dart';
 import 'widgets/custom_streak_selector.dart';
 import 'widgets/buddy_profile_sheet.dart';
-import 'widgets/buddy_profile_sheet.dart';
 import 'services/nickname_service.dart';
 import 'widgets/workout_card.dart';
 import 'widgets/schedule_workout_sheet.dart';
@@ -34,6 +33,10 @@ import 'widgets/xp_progress_bar.dart';
 import 'widgets/avatar_picker_screen.dart';
 import 'services/level_service.dart';
 import 'pages/achievements_page.dart' as achievements_page;
+import 'widgets/achievement_toast.dart';
+import 'services/achievement_service.dart';
+
+
 
 
 // import 'services/streak_service.dart'; Not using it anymore
@@ -2057,6 +2060,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   duration: const Duration(seconds: 3),
                 ),
               );
+
+              // 🏆 Show workout achievement toasts
+              final workoutAchievements = result['workout_achievements'];
+              if (workoutAchievements is List && workoutAchievements.isNotEmpty && mounted) {
+                AchievementToast.show(
+                  context,
+                  List<AchievementUnlockResult>.from(workoutAchievements),
+                );
+              }
+
               await _loadStreakData();
               _checkForMilestone();
               return result['partner_bonus_earned'] == true;
@@ -4124,28 +4137,34 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   Future<void> _handleCheckIn() async {
-    // Store template info to use after modal closes
-    WorkoutTemplate? selectedTemplate;
-    int? selectedDuration;
-    String? selectedNotes;
+      WorkoutTemplate? selectedTemplate;
+      int? selectedDuration;
+      String? selectedNotes;
+      List<AchievementUnlockResult> _pendingAchievements = [];
 
-    // Show workout selection modal FIRST
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (modalContext) => WorkoutSelectionModal(
-        onWorkoutSelected: (template, duration, notes) {
-          // Store selections
-          selectedTemplate = template;
-          selectedDuration = duration;
-          selectedNotes = notes;
-        },
-      ),
-    );
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (modalContext) => WorkoutSelectionModal(
+          onWorkoutSelected: (template, duration, notes, extraAchievements) {
+            selectedTemplate = template;
+            selectedDuration = duration;
+            selectedNotes = notes;
+            _pendingAchievements = extraAchievements;
+          },
+        ),
+      );
 
-    // ✅ Check if user selected something (didn't just dismiss the modal)
-    if (selectedTemplate == null || !mounted) return;
+      if (selectedTemplate == null || !mounted) return;
+
+      print('🎲 Pending achievements count: ${_pendingAchievements.length}');
+
+      // 🏆 Show Feeling Lucky toast if randomiser was used
+      if (_pendingAchievements.isNotEmpty && mounted) {
+        AchievementToast.show(context, _pendingAchievements);
+        _pendingAchievements = [];
+      }
 
     // ✅ NOW show the timer with workout details (after modal is fully closed)
     final completed = await WorkoutCheckInSheet.show(
@@ -4177,6 +4196,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               duration: const Duration(seconds: 3),
             ),
           );
+
+          // 🏆 Show workout achievement toasts
+          final workoutAchievements = result['workout_achievements'];
+          if (workoutAchievements is List && workoutAchievements.isNotEmpty && mounted) {
+            AchievementToast.show(
+              context,
+              List<AchievementUnlockResult>.from(workoutAchievements),
+            );
+          }
+
           await _loadStreakData();
           _checkForMilestone();
           return result['partner_bonus_earned'] == true;

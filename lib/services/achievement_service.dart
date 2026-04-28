@@ -17,7 +17,6 @@ class Achievement {
   final int targetValue;
   final int sortOrder;
 
-  // User progress (null = not started)
   final int? progress;
   final DateTime? unlockedAt;
 
@@ -86,7 +85,7 @@ class AchievementService {
 
   String? get _userId => _supabase.auth.currentUser?.id;
 
-  // ── FETCH ALL (definitions + user progress merged) ──────────
+  // ── FETCH ALL ────────────────────────────────────────────────
   Future<List<Achievement>> getAll() async {
     try {
       final uid = _userId;
@@ -97,7 +96,7 @@ class AchievementService {
         _supabase.from('user_achievements').select().eq('user_id', uid),
       ]);
 
-      final defs    = results[0] as List<dynamic>;
+      final defs     = results[0] as List<dynamic>;
       final userRows = results[1] as List<dynamic>;
 
       final userMap = {
@@ -126,7 +125,6 @@ class AchievementService {
       final uid = _userId;
       if (uid == null) return null;
 
-      // Fetch definition
       final def = await _supabase
           .from('achievements')
           .select()
@@ -136,7 +134,6 @@ class AchievementService {
 
       final target = def['target_value'] as int;
 
-      // Fetch existing user row
       final existing = await _supabase
           .from('user_achievements')
           .select()
@@ -144,7 +141,6 @@ class AchievementService {
           .eq('achievement_id', achievementId)
           .maybeSingle();
 
-      // Already unlocked — nothing to do
       if (existing != null && existing['unlocked_at'] != null) return null;
 
       final clamped   = newProgress.clamp(0, target);
@@ -159,32 +155,48 @@ class AchievementService {
 
       if (!didUnlock) return null;
 
-      // Award XP + coins
       final xp    = def['xp_reward'] as int;
       final coins = def['coin_reward'] as int;
 
+      // ── FIX: correct column names for xp_transactions ───────
       if (xp > 0) {
         await _supabase.from('xp_transactions').insert({
-          'user_id':     uid,
-          'amount':      xp,
-          'reason':      'achievement_$achievementId',
-          'reference_id':'achievement_$achievementId',
+          'user_id':          uid,
+          'amount':           xp,
+          'transaction_type': 'achievement',
+          'description':      'Achievement: ${def['name']}',
+          'reference_id':     'achievement_$achievementId',
         });
-        await _supabase.rpc('increment_user_xp', params: {'p_user_id': uid, 'p_xp': xp});
+        await _supabase.rpc('award_xp', params: {
+          'p_user_id': uid,
+          'p_amount':  xp,
+          'p_source':  'achievement',
+          'p_ref_id':  achievementId,
+        });
       }
 
+      // ── FIX: correct column name for coin_transactions ───────
       if (coins > 0) {
         await _supabase.from('coin_transactions').insert({
-          'user_id':     uid,
-          'amount':      coins,
-          'type':        'earn',
-          'description': 'Achievement: ${def['name']}',
-          'reference_id':'achievement_$achievementId',
+          'user_id':          uid,
+          'amount':           coins,
+          'transaction_type': 'earn',
+          'description':      'Achievement: ${def['name']}',
         });
-        await _supabase.rpc('increment_user_coins', params: {'p_user_id': uid, 'p_amount': coins});
+        // Direct balance update — no RPC exists for coins
+        final profile = await _supabase
+            .from('user_profiles')
+            .select('coin_balance')
+            .eq('id', uid)
+            .single();
+        final current = (profile['coin_balance'] as int?) ?? 0;
+        await _supabase
+            .from('user_profiles')
+            .update({'coin_balance': current + coins})
+            .eq('id', uid);
       }
 
-      if (kDebugMode) print('🏆 Achievement unlocked: ${def['name']} (+$xp XP, +$coins coins)');
+      if (kDebugMode) print('🏆 Unlocked: ${def['name']} (+$xp XP, +$coins coins)');
 
       return AchievementUnlockResult(
         achievement: Achievement.fromRow(def, {
@@ -201,24 +213,21 @@ class AchievementService {
   }
 
   // ══════════════════════════════════════════════════════════════
-  // PUBLIC CHECK METHODS — call these from event sites
+  // PUBLIC CHECK METHODS
   // ══════════════════════════════════════════════════════════════
 
-  // Call after every streak increment
   Future<List<AchievementUnlockResult>> checkStreakAchievements({
     required int currentStreak,
     required int bestStreak,
     required int previousBest,
-    required bool isRealBuddy, // false = Coach Max
+    required bool isRealBuddy,
     required String teamStreakId,
   }) async {
     final results = <AchievementUnlockResult>[];
 
-    // first_flame — any streak day
     final r1 = await _upsertProgress('first_flame', 1);
     if (r1 != null) results.add(r1);
 
-    // streak milestones
     for (final entry in {
       'week_warrior':      7,
       'two_weeks_strong':  14,
@@ -228,19 +237,16 @@ class AchievementService {
       'half_year_hero':    180,
       'year_of_the_beast': 365,
     }.entries) {
-      final r = await _upsertProgress(entry.key, currentStreak >= entry.value ? entry.value : currentStreak);
+      final r = await _upsertProgress(
+          entry.key, currentStreak >= entry.value ? entry.value : currentStreak);
       if (r != null) results.add(r);
     }
 
-    // personal_best
     if (currentStreak > previousBest) {
       final r = await _upsertProgress('personal_best', 1);
       if (r != null) results.add(r);
     }
 
-    // comeback_king — handled externally, pass progress=1 when applicable
-
-    // Coach Max graduate
     if (!isRealBuddy) {
       final count = await _getCoachMaxCheckinCount();
       final r = await _upsertProgress('coach_max_grad', count);
@@ -250,7 +256,6 @@ class AchievementService {
     return results;
   }
 
-  // Call after every mutual co-op check-in (both users checked in)
   Future<List<AchievementUnlockResult>> checkCoopAchievements({
     required String teamStreakId,
     required DateTime myCheckInTime,
@@ -258,18 +263,15 @@ class AchievementService {
   }) async {
     final results = <AchievementUnlockResult>[];
 
-    // dynamic_duo — first coop day ever
     final r1 = await _upsertProgress('dynamic_duo', 1);
     if (r1 != null) results.add(r1);
 
-    // in_sync — within 30 mins
     final diff = myCheckInTime.difference(partnerCheckInTime).inMinutes.abs();
     if (diff <= 30) {
       final r = await _upsertProgress('in_sync', 1);
       if (r != null) results.add(r);
     }
 
-    // reliable_partner / ride_or_die / power_couple
     final coopCount = await _getMutualCoopCount(teamStreakId);
     for (final entry in {
       'reliable_partner': 7,
@@ -280,7 +282,6 @@ class AchievementService {
       if (r != null) results.add(r);
     }
 
-    // early_bird / night_owl
     final hour = myCheckInTime.toLocal().hour;
     if (hour < 8) {
       final r = await _upsertProgress('early_bird', 1);
@@ -294,7 +295,6 @@ class AchievementService {
     return results;
   }
 
-  // Call after every workout completion
   Future<List<AchievementUnlockResult>> checkWorkoutAchievements({
     required int durationMinutes,
     required String workoutType,
@@ -303,7 +303,6 @@ class AchievementService {
     final uid = _userId;
     if (uid == null) return results;
 
-    // first_rep / warm_up_done / ten_strong / fifty_club / century_lifter
     final total = await _getTotalWorkouts();
     for (final entry in {
       'first_rep':      1,
@@ -316,24 +315,15 @@ class AchievementService {
       if (r != null) results.add(r);
     }
 
-    // speed_demon
-    if (durationMinutes < 20) {
-      final r = await _upsertProgress('speed_demon', 1);
-      if (r != null) results.add(r);
-    }
-
-    // marathon
     if (durationMinutes > 90) {
       final r = await _upsertProgress('marathon', 1);
       if (r != null) results.add(r);
     }
 
-    // mixed_bag
     final distinctTypes = await _getDistinctWorkoutTypes();
     final r = await _upsertProgress('mixed_bag', distinctTypes);
     if (r != null) results.add(r);
 
-    // iron_will — 7 consecutive workout days
     final consecutive = await _getConsecutiveWorkoutDays();
     final r2 = await _upsertProgress('iron_will', consecutive);
     if (r2 != null) results.add(r2);
@@ -341,7 +331,6 @@ class AchievementService {
     return results;
   }
 
-  // Call after a friend request is accepted
   Future<List<AchievementUnlockResult>> checkSocialAchievements() async {
     final results = <AchievementUnlockResult>[];
     final friendCount = await _getFriendCount();
@@ -358,20 +347,17 @@ class AchievementService {
     return results;
   }
 
-  // Call after a friend request is SENT
   Future<List<AchievementUnlockResult>> checkConnectorAchievement() async {
     final count = await _getSentRequestCount();
     final r = await _upsertProgress('connector', count);
     return r != null ? [r] : [];
   }
 
-  // Call after randomiser is used
   Future<List<AchievementUnlockResult>> checkFeelingLucky() async {
     final r = await _upsertProgress('feeling_lucky', 1);
     return r != null ? [r] : [];
   }
 
-  // Call after XP awarded / level up
   Future<List<AchievementUnlockResult>> checkLevelAchievements(int newLevel) async {
     final results = <AchievementUnlockResult>[];
     for (final entry in {
@@ -381,13 +367,13 @@ class AchievementService {
       'level_50': 50,
       'level_99': 99,
     }.entries) {
-      final r = await _upsertProgress(entry.key, newLevel >= entry.value ? entry.value : newLevel);
+      final r = await _upsertProgress(
+          entry.key, newLevel >= entry.value ? entry.value : newLevel);
       if (r != null) results.add(r);
     }
     return results;
   }
 
-  // Call after any coin is earned
   Future<List<AchievementUnlockResult>> checkCoinAchievements() async {
     final results = <AchievementUnlockResult>[];
     final lifetime = await _getLifetimeCoins();
@@ -402,7 +388,6 @@ class AchievementService {
     return results;
   }
 
-  // Call after any cosmetic unlocked
   Future<List<AchievementUnlockResult>> checkPrestigeAchievements() async {
     final results = <AchievementUnlockResult>[];
     final count = await _getCosmeticCount();
@@ -417,7 +402,6 @@ class AchievementService {
     return results;
   }
 
-  // Call on app login — checks loyalty milestones passively
   Future<List<AchievementUnlockResult>> checkLoyaltyAchievements() async {
     final results = <AchievementUnlockResult>[];
     final uid = _userId;
@@ -430,7 +414,7 @@ class AchievementService {
           .eq('id', uid)
           .single();
 
-      final created = DateTime.parse(profile['created_at'] as String);
+      final created   = DateTime.parse(profile['created_at'] as String);
       final daysSince = DateTime.now().difference(created).inDays;
 
       for (final entry in {
@@ -438,7 +422,8 @@ class AchievementService {
         'veteran':   30,
         'og_member': 90,
       }.entries) {
-        final r = await _upsertProgress(entry.key, daysSince >= entry.value ? entry.value : daysSince);
+        final r = await _upsertProgress(
+            entry.key, daysSince >= entry.value ? entry.value : daysSince);
         if (r != null) results.add(r);
       }
     } catch (e) {
@@ -514,6 +499,7 @@ class AchievementService {
     } catch (_) { return 0; }
   }
 
+  // ── FIX: use user_id / friend_id columns (not requester/addressee) ──
   Future<int> _getFriendCount() async {
     try {
       final uid = _userId;
@@ -522,7 +508,7 @@ class AchievementService {
           .from('friends')
           .select('id')
           .eq('status', 'accepted')
-          .or('requester_id.eq.$uid,addressee_id.eq.$uid');
+          .or('user_id.eq.$uid,friend_id.eq.$uid');
       return (res as List).length;
     } catch (_) { return 0; }
   }
@@ -534,7 +520,7 @@ class AchievementService {
       final res = await _supabase
           .from('friends')
           .select('id')
-          .eq('requester_id', uid);
+          .eq('user_id', uid);
       return (res as List).length;
     } catch (_) { return 0; }
   }
@@ -546,7 +532,6 @@ class AchievementService {
           .select('check_in_date')
           .eq('team_streak_id', teamStreakId);
 
-      // Count dates where 2 check-ins exist
       final dateCounts = <String, int>{};
       for (final r in res as List) {
         final d = r['check_in_date'] as String;
@@ -560,7 +545,6 @@ class AchievementService {
     try {
       final uid = _userId;
       if (uid == null) return 0;
-      // Get coach max team IDs for this user
       final teams = await _supabase
           .from('buddy_teams')
           .select('id')
@@ -585,7 +569,7 @@ class AchievementService {
           .from('coin_transactions')
           .select('amount')
           .eq('user_id', uid)
-          .eq('type', 'earn');
+          .eq('transaction_type', 'earn'); // ── FIX: was 'type'
       return (res as List).fold<int>(0, (sum, r) => sum + (r['amount'] as int));
     } catch (_) { return 0; }
   }
