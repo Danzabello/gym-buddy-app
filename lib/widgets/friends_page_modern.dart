@@ -6,6 +6,8 @@ import 'profile_view_dialog.dart';
 import 'schedule_workout_dialog.dart';
 import '../services/achievement_service.dart';
 import 'achievement_toast.dart';
+import 'package:share_plus/share_plus.dart';
+import '../services/invite_service.dart';
 
 /// Modern, mobile-optimized Friends/Buddies Page
 class FriendsPageModern extends StatefulWidget {
@@ -188,6 +190,49 @@ class _FriendsPageModernState extends State<FriendsPageModern> with SingleTicker
       );
       _loadFriends();
     }
+  }
+
+  Future<void> _shareInviteLink() async {
+    HapticFeedback.mediumImpact();
+    
+    // Show loading briefly while generating code
+    final snackBar = ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+            SizedBox(width: 12),
+            Text('Generating your invite link...'),
+          ],
+        ),
+        duration: Duration(seconds: 10),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    final link = await InviteService().createInviteLink();
+    
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    if (link == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to generate invite link. Try again!'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    await SharePlus.instance.share(
+      ShareParams(
+        text: '💪 Join me on Gym Buddy! We\'ll keep each other accountable and build streaks together.\n\n$link',
+        subject: 'Join me on Gym Buddy!',
+      ),
+    );
   }
 
   Future<void> _removeFriend(String friendId, String friendName) async {
@@ -669,9 +714,17 @@ class _FriendsPageModernState extends State<FriendsPageModern> with SingleTicker
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _friends.length,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+      itemCount: _friends.length + 1, // +1 for invite button at bottom
       itemBuilder: (context, index) {
+        // Last item = invite button
+        if (index == _friends.length) {
+          return Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _buildInviteButton(),
+          );
+        }
+
         final friend = _friends[index];
         final isRemoving = _removingFriendId == friend['id'];
         
@@ -950,22 +1003,52 @@ class _FriendsPageModernState extends State<FriendsPageModern> with SingleTicker
             const SizedBox(height: 24),
             const Text(
               'No Gym Buddies Yet',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             Text(
-              'Search for friends and start\ntraining together!',
+              'Search for friends above, or invite\nsomeone who isn\'t on the app yet!',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-                height: 1.5,
-              ),
+              style: TextStyle(fontSize: 16, color: Colors.grey[600], height: 1.5),
             ),
+            const SizedBox(height: 32),
+            _buildInviteButton(),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInviteButton() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue[700]!, Colors.purple[600]!],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ElevatedButton.icon(
+        onPressed: _shareInviteLink,
+        icon: const Text('🔗', style: TextStyle(fontSize: 18)),
+        label: const Text(
+          'Invite a Buddy',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          shadowColor: Colors.transparent,
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
       ),
     );

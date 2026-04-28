@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
@@ -10,7 +11,9 @@ import 'dart:io';
 import 'onboarding/splash_screen.dart';
 import 'login_screen.dart';
 import 'services/achievement_service.dart';
-import 'dart:async' show unawaited;
+import 'dart:async';
+import 'package:app_links/app_links.dart';
+import 'services/invite_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,6 +54,9 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   final CoachMaxService _coachMaxService = CoachMaxService();
+  final _appLinks = AppLinks();
+  StreamSubscription<Uri>? _linkSubscription;
+
   bool _isInitializing = true;
   bool _hasCompletedOnboarding = false;
 
@@ -58,7 +64,46 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void initState() {
     super.initState();
     _initializeApp();
+    _initDeepLinks();
   }
+
+  @override
+  void dispose() {
+    _linkSubscription?.cancel();
+    super.dispose();
+  }
+
+  // ─── Deep link handling ────────────────────────────────────────────────────
+
+  Future<void> _initDeepLinks() async {
+    // Handle link that cold-launched the app (app was fully closed)
+    try {
+      final initialUri = await _appLinks.getInitialLink();
+      if (initialUri != null) {
+        _handleInviteLink(initialUri);
+      }
+    } catch (e) {
+      if (kDebugMode) print('❌ Deep link initial: $e');
+    }
+
+    // Handle links while app is already running in background
+    _linkSubscription = _appLinks.uriLinkStream.listen(
+      _handleInviteLink,
+      onError: (e) {
+        if (kDebugMode) print('❌ Deep link stream: $e');
+      },
+    );
+  }
+
+  void _handleInviteLink(Uri uri) {
+    final code = uri.queryParameters['code'];
+    if (code != null && code.isNotEmpty) {
+      if (kDebugMode) print('🔗 Invite code received via deep link: $code');
+      unawaited(InviteService().storePendingInviteCode(code));
+    }
+  }
+
+  // ─── App initialisation ────────────────────────────────────────────────────
 
   Future<void> _initializeApp() async {
     final user = Supabase.instance.client.auth.currentUser;
@@ -67,7 +112,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final onboardingStatus = await _checkOnboardingStatus(user.id);
       if (onboardingStatus) {
         await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
-        // 🏆 Loyalty achievements — check passively on every login
         unawaited(AchievementService().checkLoyaltyAchievements());
       }
       setState(() {
@@ -92,6 +136,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
   }
 
+  // ─── Build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     if (_isInitializing) {
@@ -101,7 +147,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
 
     final user = Supabase.instance.client.auth.currentUser;
-
     if (user == null) {
       return const SplashScreen();
     } else if (!_hasCompletedOnboarding) {

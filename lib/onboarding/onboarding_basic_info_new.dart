@@ -8,6 +8,8 @@ import '../services/coach_max_service.dart';
 import '../services/friend_service.dart';
 import '../services/auth_service.dart';
 import '../utils/input_validators.dart';
+import 'package:flutter/foundation.dart';
+import '../services/invite_service.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STEP 1 — Basic info
@@ -788,86 +790,116 @@ class _OnboardingBuddyPrefsState
     {'value': 'both', 'label': 'Both', 'emoji': '⚡'},
   ];
 
-  Future<void> _finish() async {
-    setState(() => _isLoading = true);
-    try {
-      // ── Step 1: Create the account NOW (first time we touch Supabase Auth) ──
-      final authService = AuthService();
-      final signUpError = await authService.signUp(
-        email: widget.email,
-        password: widget.password,
-      );
+Future<void> _finish() async {
+  setState(() => _isLoading = true);
+  try {
+    // ── Step 1: Create the account NOW (first time we touch Supabase Auth) ──
+    final authService = AuthService();
+    final signUpError = await authService.signUp(
+      email: widget.email,
+      password: widget.password,
+    );
 
-      if (signUpError != null) {
-        // Handle duplicate email gracefully — try signing in instead
-        // (edge case: user somehow completed this screen twice)
-        if (signUpError.contains('user_already_exists') ||
-            signUpError.contains('User already registered')) {
-          final signInError = await authService.signIn(
-            email: widget.email,
-            password: widget.password,
-          );
-          if (signInError != null) {
-            throw Exception('Account already exists. Please sign in.');
-          }
-        } else {
-          throw Exception(signUpError);
-        }
-      }
-
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) throw Exception('Authentication failed');
-
-      // ── Step 2: Save complete profile in one go ────────────────────────
-      await Supabase.instance.client
-          .from('user_profiles')
-          .upsert({
-        'id': user.id,
-        'display_name': widget.userData['display_name'],
-        'username': widget.userData['username'],
-        'age': widget.userData['age'],
-        'gender': widget.userData['gender'],
-        'avatar_id': widget.userData['avatar_id'],
-        'avatar_border': widget.userData['avatar_border'] ?? 'simple',
-        'fitness_goals': widget.userData['fitness_goals'],
-        'fitness_level': widget.userData['fitness_level'],
-        'looking_for_buddy': _lookingForBuddy,
-        'preferred_workout_style': _style,
-        'onboarding_completed': true,
-        'updated_at': DateTime.now().toIso8601String(),
-      });
-
-      // ── Step 3: Initialize Coach Max ───────────────────────────────────
-      await _coachMaxService.initializeCoachMaxForUser(user.id);
-
-      // ── Step 4: Fire pending friend invites ────────────────────────────
-      if (widget.pendingInvites.isNotEmpty) {
-        final friendService = FriendService();
-        for (final invite in widget.pendingInvites) {
-          try {
-            await friendService.sendFriendRequest(invite['id']);
-          } catch (_) {}
-        }
-      }
-
-      if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          FadeSlideRoute(page: const _OnboardingConfirmation()),
-          (r) => false,
+    if (signUpError != null) {
+      if (signUpError.contains('user_already_exists') ||
+          signUpError.contains('User already registered')) {
+        final signInError = await authService.signIn(
+          email: widget.email,
+          password: widget.password,
         );
+        if (signInError != null) {
+          throw Exception('Account already exists. Please sign in.');
+        }
+      } else {
+        throw Exception(signUpError);
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Error saving profile: $e'),
-              backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) throw Exception('Authentication failed');
+
+    // ── Step 2: Save complete profile in one go ────────────────────────────
+    await Supabase.instance.client
+        .from('user_profiles')
+        .upsert({
+      'id': user.id,
+      'display_name': widget.userData['display_name'],
+      'username': widget.userData['username'],
+      'age': widget.userData['age'],
+      'gender': widget.userData['gender'],
+      'avatar_id': widget.userData['avatar_id'],
+      'avatar_border': widget.userData['avatar_border'] ?? 'simple',
+      'fitness_goals': widget.userData['fitness_goals'],
+      'fitness_level': widget.userData['fitness_level'],
+      'looking_for_buddy': _lookingForBuddy,
+      'preferred_workout_style': _style,
+      'onboarding_completed': true,
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+
+    // ── Step 3: Initialize Coach Max ───────────────────────────────────────
+    await _coachMaxService.initializeCoachMaxForUser(user.id);
+
+    // ── Step 4: Check for pending invite code (from deep link) ────────────
+    final inviteService = InviteService();
+    final pendingCode = await inviteService.consumePendingInviteCode();
+
+    if (pendingCode != null) {
+      if (kDebugMode) print('🔗 Found pending invite code: $pendingCode — attempting auto-pair');
+      final inviterId = await inviteService.acceptInvite(pendingCode);
+
+      if (inviterId != null) {
+        if (kDebugMode) print('✅ Invite accepted — auto-pairing with inviter: $inviterId');
+        await _createBuddyTeam(user.id, inviterId);
+      } else {
+        if (kDebugMode) print('⚠️ Invite code was invalid or already used — skipping auto-pair');
+      }
+    }
+
+    // ── Step 5: Fire pending friend invites (from onboarding search) ──────
+    if (widget.pendingInvites.isNotEmpty) {
+      final friendService = FriendService();
+      for (final invite in widget.pendingInvites) {
+        try {
+          await friendService.sendFriendRequest(invite['id']);
+        } catch (_) {}
+      }
+    }
+
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        FadeSlideRoute(page: const _OnboardingConfirmation()),
+        (r) => false,
+      );
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Error saving profile: $e'),
+            backgroundColor: Colors.red),
+      );
+    }
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
   }
+}
+
+// ── Auto-create a buddy team between new user and inviter ─────────────────
+Future<void> _createBuddyTeam(String newUserId, String inviterId) async {
+  try {
+    final teamId = await Supabase.instance.client.rpc(
+      'create_invite_team',
+      params: {
+        'p_inviter_id': inviterId,
+        'p_invitee_id': newUserId,
+      },
+    );
+    if (kDebugMode) print('🎉 Buddy team created via RPC: $teamId');
+  } catch (e) {
+    if (kDebugMode) print('❌ _createBuddyTeam failed: $e');
+  }
+}
 
   @override
   Widget build(BuildContext context) {
