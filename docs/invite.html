@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gym Buddy Invite</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0f;
+      color: #f0f0f8;
+      font-family: 'Syne', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      background: #13131a;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 24px;
+      padding: 48px 32px;
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+    }
+    .emoji { font-size: 64px; margin-bottom: 24px; display: block; }
+    h1 { font-size: 28px; font-weight: 800; margin-bottom: 12px; line-height: 1.2; }
+    h1 span {
+      background: linear-gradient(135deg, #00ff88, #4d9fff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    p { color: #6b6b85; font-size: 15px; line-height: 1.6; margin-bottom: 32px; }
+    .btn {
+      display: block;
+      background: linear-gradient(135deg, #00ff88, #4d9fff);
+      color: #0a0a0f;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 16px;
+      padding: 16px 24px;
+      border-radius: 14px;
+      text-decoration: none;
+      margin-bottom: 16px;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .code-pill {
+      display: inline-block;
+      background: rgba(0,255,136,0.08);
+      border: 1px solid rgba(0,255,136,0.2);
+      color: #00ff88;
+      font-size: 13px;
+      padding: 6px 14px;
+      border-radius: 100px;
+      letter-spacing: 0.15em;
+      font-family: monospace;
+      margin-bottom: 24px;
+    }
+    .error { color: #ff6b35; font-size: 15px; }
+    #loading { color: #6b6b85; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div id="loading">
+      <span class="emoji">&#x23F3;</span>
+      <p>Loading your invite...</p>
+    </div>
+    <div id="content" style="display:none"></div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const inviter = params.get('inviter');
+    const error = params.get('error');
+
+    // Store code for deferred deep link
+    if (code) {
+      try { localStorage.setItem('gym_buddy_invite_code', code); } catch(e) {}
+    }
+
+    const content = document.getElementById('content');
+    const loading = document.getElementById('loading');
+
+    if (error || !code) {
+      content.innerHTML = `
+        <span class="emoji">&#x1F62C;</span>
+        <h1>Invite <span>Not Found</span></h1>
+        <p class="error">This invite link is invalid or has expired.</p>
+        <p>Ask your buddy to send you a fresh invite link.</p>
+      `;
+    } else {
+      const name = inviter || 'Someone';
+      content.innerHTML = `
+        <span class="emoji">&#x1F4AA;</span>
+        <h1><span>${name}</span> wants to be your Gym Buddy!</h1>
+        <p>Stay accountable together. You both check in daily &mdash; miss a day and the streak dies. No solo streaks. That's the point.</p>
+        <div class="code-pill">INVITE: ${code}</div>
+        <a class="btn" href="https://play.google.com/store/apps/details?id=com.gymbuddy.app">
+          Download Gym Buddy &#x1F3CB;&#xFE0F;
+        </a>
+        <p style="font-size:13px; margin-bottom:0;">Already have the app? Open it and your invite will be waiting.</p>
+      `;
+    }
+
+    loading.style.display = 'none';
+    content.style.display = 'block';
+  </script>
+</body>
+</html>
