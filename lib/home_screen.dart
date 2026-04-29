@@ -35,6 +35,8 @@ import 'services/level_service.dart';
 import 'pages/achievements_page.dart' as achievements_page;
 import 'widgets/achievement_toast.dart';
 import 'services/achievement_service.dart';
+import 'package:share_plus/share_plus.dart';
+import 'services/invite_service.dart';
 
 
 
@@ -238,6 +240,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   List<String> _customStreakOrder = [];
   List<TeamStreak> _customSelection = [];
   StreakSortMode _streakSortMode = StreakSortMode.highestCurrent;
+
+  bool _showInviteNudge = false;
+  static const _inviteNudgeKey = 'invite_nudge_dismissed';
 
 
   @override
@@ -1264,6 +1269,115 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
   }
 
+  Future<void> _checkInviteNudge() async {
+    final prefs = await SharedPreferences.getInstance();
+    //final dismissed = prefs.getBool(_inviteNudgeKey) ?? false;
+    //if (dismissed) return;
+
+    // Only show if user has zero real friends (no non-CoachMax streaks)
+    final hasRealBuddy = _allStreaks.any((s) => !s.isCoachMaxTeam);
+    if (!hasRealBuddy && mounted) {
+      setState(() => _showInviteNudge = true);
+    }
+  }
+
+  Future<void> _dismissInviteNudge() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_inviteNudgeKey, true);
+    setState(() => _showInviteNudge = false);
+  }
+
+  Widget _buildInviteButton() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.blue[700]!, Colors.purple[600]!],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const Text('👋', style: TextStyle(fontSize: 28)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Invite your first buddy!',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Streaks are better together. Send a link and get paired instantly.',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.8),
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: () async {
+                      HapticFeedback.mediumImpact();
+                      _dismissInviteNudge();
+                      final link = await InviteService().createInviteLink();
+                      if (link == null || !mounted) return;
+                      await SharePlus.instance.share(
+                        ShareParams(
+                          text: '💪 Join me on Gym Buddy! We\'ll keep each other accountable and build streaks together.\n\n$link',
+                          subject: 'Join me on Gym Buddy!',
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '🔗 Send Invite',
+                        style: TextStyle(
+                          color: Colors.blue[700],
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            GestureDetector(
+              onTap: _dismissInviteNudge,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Icon(Icons.close, color: Colors.white.withOpacity(0.7), size: 20),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildStreakInfo(TeamStreak streak) {
     final checkedInCount = streak.todayCheckIns.length;
     final totalMembers = streak.members.length;
@@ -1718,6 +1832,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       buddyCount:      friends.length,
       achievements:    achievements,
     );
+
+    // Check if we should show the one-time invite nudge
+    _checkInviteNudge();
   }
 
   List<TeamStreak> _sortStreaks(List<TeamStreak> streaks, StreakSortMode mode) {
@@ -2219,6 +2336,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       children: [
                         _buildStreakCarousel(),
                         const SizedBox(height: 24),
+                        if (_showInviteNudge) _buildInviteButton(),
                         _buildQuickActionsSection(),
                         const SizedBox(height: 20),
                       ],

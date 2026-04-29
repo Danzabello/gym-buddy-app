@@ -105,6 +105,11 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
   }
 
   Future<void> _loadUnlocks() async {
+    // Skip unlock loading during onboarding — no user exists yet
+    if (Supabase.instance.client.auth.currentUser == null) {
+      if (mounted) setState(() => _loadingUnlocks = false);
+      return;
+    }
     try {
       final unlocks = await LevelService().getUnlockedCosmetics();
       if (mounted) {
@@ -183,19 +188,23 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
     setState(() => _isSaving = true);
 
     try {
+      // ── Onboarding flow — no user exists yet, just pass data back ──────
+      if (widget.onCompleteWithData != null) {
+        widget.onCompleteWithData!(_selected.id, _selectedBorder.name);
+        return;
+      }
+
+      // ── Profile edit flow — user is authenticated ────────────────────
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) throw Exception('Not authenticated');
 
-      if (widget.onCompleteWithData == null) {
-        await Supabase.instance.client.from('user_profiles').update({
-          'avatar_id': _selected.id,
-          'avatar_border': _selectedBorder.name,
-          'updated_at': DateTime.now().toUtc().toIso8601String(),
-        }).eq('id', userId);
-        widget.onComplete!();
-      } else {
-        widget.onCompleteWithData!(_selected.id, _selectedBorder.name);
-      }
+      await Supabase.instance.client.from('user_profiles').update({
+        'avatar_id': _selected.id,
+        'avatar_border': _selectedBorder.name,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', userId);
+      
+      widget.onComplete!();
     } catch (e) {
       debugPrint('❌ Avatar save failed: $e');
       if (mounted) {

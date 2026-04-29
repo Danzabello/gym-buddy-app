@@ -810,6 +810,29 @@ Future<void> _finish() async {
         if (signInError != null) {
           throw Exception('Account already exists. Please sign in.');
         }
+        // Check if this is an orphaned account (signed in but never finished onboarding)
+        final existingUser = Supabase.instance.client.auth.currentUser;
+        if (existingUser != null) {
+          final hasProfile = await Supabase.instance.client
+              .from('user_profiles')
+              .select('onboarding_completed')
+              .eq('id', existingUser.id)
+              .maybeSingle();
+          final completed = hasProfile?['onboarding_completed'] == true;
+          if (!completed) {
+            // Orphaned — delete and let signup continue fresh
+            try {
+              await Supabase.instance.client.rpc('delete_own_account');
+            } catch (_) {}
+            await Supabase.instance.client.auth.signOut();
+            // Retry signup
+            final retryError = await authService.signUp(
+              email: widget.email,
+              password: widget.password,
+            );
+            if (retryError != null) throw Exception(retryError);
+          }
+        }
       } else {
         throw Exception(signUpError);
       }

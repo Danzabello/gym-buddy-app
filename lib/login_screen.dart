@@ -14,6 +14,7 @@ import 'onboarding/onboarding_theme.dart';
 import 'onboarding/splash_screen.dart';
 import 'utils/input_validators.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 
 class LoginScreen extends StatefulWidget {
@@ -110,11 +111,34 @@ class _LoginScreenState extends State<LoginScreen>
       if (user != null) {
         await NotificationService().initialize();
         final onboardingComplete = await _checkOnboardingStatus(user.id);
-        if (onboardingComplete) {
-          await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
-        }
         if (!mounted) return;
         setState(() => _isLoading = false);
+
+        if (!onboardingComplete) {
+          // Orphaned account — clean it up and send back to splash
+          try {
+            await Supabase.instance.client.rpc('delete_own_account');
+          } catch (e) {
+            if (kDebugMode) debugPrint('⚠️ cleanup: $e');
+          } finally {
+            await Supabase.instance.client.auth.signOut();
+          }
+          if (!mounted) return;
+          Navigator.of(context).pushAndRemoveUntil(
+            FadeSlideRoute(page: const SplashScreen()),
+            (r) => false,
+          );
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Previous signup was incomplete. Please register again.'),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+
+        await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
         Navigator.of(context).pushAndRemoveUntil(
           FadeSlideRoute(page: const HomeScreen()),
           (r) => false,

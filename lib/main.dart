@@ -113,6 +113,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
       if (onboardingStatus) {
         await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
         unawaited(AchievementService().checkLoyaltyAchievements());
+      } else {
+        // Orphaned auth account — user abandoned onboarding
+        // Clean it up so they can re-register with the same email
+        await _cleanupOrphanedAccount();
       }
       setState(() {
         _hasCompletedOnboarding = onboardingStatus;
@@ -120,6 +124,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
       });
     } else {
       setState(() => _isInitializing = false);
+    }
+  }
+
+  Future<void> _cleanupOrphanedAccount() async {
+    try {
+      await Supabase.instance.client.rpc('delete_own_account');
+    } catch (e) {
+      if (kDebugMode) print('⚠️ Could not delete orphaned account: $e');
+    } finally {
+      await Supabase.instance.client.auth.signOut();
     }
   }
 
@@ -150,7 +164,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (user == null) {
       return const SplashScreen();
     } else if (!_hasCompletedOnboarding) {
-      Supabase.instance.client.auth.signOut();
       return const SplashScreen();
     } else {
       return const HomeScreen();
