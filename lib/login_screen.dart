@@ -467,8 +467,8 @@ class _Field extends StatelessWidget {
       obscureText: obscureText,
       keyboardType: keyboardType,
       onSubmitted: onSubmitted,
-      // 🔒 Use per-field formatters if provided, else default email cap
       inputFormatters: inputFormatters,
+      style: const TextStyle(color: Color(0xFF111827)),  // ← ADD THIS
       buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
       decoration: InputDecoration(
         hintText: hint,

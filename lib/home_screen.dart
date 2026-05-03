@@ -37,6 +37,9 @@ import 'widgets/achievement_toast.dart';
 import 'services/achievement_service.dart';
 import 'package:share_plus/share_plus.dart';
 import 'services/invite_service.dart';
+import 'package:provider/provider.dart';
+import 'theme/app_theme.dart';
+import 'theme/theme_provider.dart';
 
 
 
@@ -417,17 +420,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     // ✅ MERGED CARD: Carousel + Action Buttons in one! (PIXEL 7A OPTIMIZED)
     return Card(
       elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Container(
-        // ✅ FIX: Reduced padding from all(20) to give more horizontal room
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.white, Colors.blue[50]!],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(20),
+          color: AppColors.of(context).cardBackground,
+          borderRadius: BorderRadius.circular(24),
         ),
         child: Column(
           children: [
@@ -442,13 +440,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.grey[100],
+                        color: AppColors.of(context).sectionBackground,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
                         Icons.more_vert,
                         size: 20,
-                        color: Colors.grey[700],
+                        color: AppColors.of(context).subtleText,
                       ),
                     ),
                   ),
@@ -462,7 +460,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: Colors.grey[100],
+                          color: AppColors.of(context).sectionBackground,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
@@ -475,7 +473,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                                 style: TextStyle(
                                   fontSize: 14,  // ✅ Was 16
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.grey[700],
+                                  color: AppColors.of(context).subtleText,
                                 ),
                                 overflow: TextOverflow.ellipsis,  // ✅ Safety net
                               ),
@@ -484,7 +482,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                             Icon(
                               Icons.chevron_right,
                               size: 18,  // ✅ Was 20
-                              color: Colors.grey[600],
+                              color: AppColors.of(context).subtleText,
                             ),
                           ],
                         ),
@@ -594,8 +592,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     fontSize: 16,  // ✅ Was 18
                     fontWeight: FontWeight.bold,
                     color: displayItems[_currentCarouselIndex] != null 
-                        ? Colors.black
-                        : Colors.grey[600],
+                        ? Theme.of(context).colorScheme.onSurface
+                        : AppColors.of(context).subtleText,
                   ),
                 ),
                 const SizedBox(height: 4),  // ✅ Was 8
@@ -606,7 +604,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     style: TextStyle(
                       fontSize: 24,  // ✅ Was 28
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   )
                 else
@@ -674,46 +672,30 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ),
             ),
             
-            const SizedBox(height: 10),  // ✅ Was 12
-            
-            // Take a Break button
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: _hasCheckedInToday
-                    ? null 
-                    : () => _showTakeBreakDialog(),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),  // ✅ Was 18
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  side: BorderSide(
-                    color: _hasCheckedInToday ? Colors.grey[300]! : Colors.blue[600]!,
-                    width: 2,
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.bedtime,
-                      size: 22,  // ✅ Was 24
-                      color: _hasCheckedInToday ? Colors.grey[400] : Colors.blue[700],
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      _hasCheckedInToday ? 'Already Checked In' : 'Take a Break',
-                      style: TextStyle(
-                        fontSize: 16,  // ✅ Was 18
-                        fontWeight: FontWeight.bold,
-                        color: _hasCheckedInToday ? Colors.grey[400] : Colors.blue[700],
+            const SizedBox(height: 8),
+
+            // Take a Break — subtle text link
+            if (!_hasCheckedInToday)
+              GestureDetector(
+                onTap: _showTakeBreakDialog,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.bedtime, size: 14, color: AppColors.of(context).subtleText),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Take a break day',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.of(context).subtleText,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -2228,119 +2210,47 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+return Stack(
       children: [
         Scaffold(
-          backgroundColor: const Color(0xFFF5F7FA),
-          appBar: AppBar(
-            elevation: 0,
-            title: Text(
-              _getGreeting(),
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            flexibleSpace: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.blue[700]!, Colors.purple[600]!],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-            ),
-            actions: [
-              Stack(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('No new notifications'),
-                          duration: Duration(seconds: 1),
-                        ),
-                      );
-                    },
-                  ),
-                  if (_pendingRequests > 0)
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 16,
-                          minHeight: 16,
-                        ),
-                        child: Text(
-                          '$_pendingRequests',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: IconButton(
-                  icon: const Icon(Icons.settings, color: Colors.white),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const NotificationSettingsPage(),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
+          backgroundColor: AppColors.of(context).sectionBackground,
           body: _isLoading
-              ? SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      _buildSkeletonCard(),
-                      const SizedBox(height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _skeletonBox(100, 80, radius: 16),
-                          _skeletonBox(100, 80, radius: 16),
-                          _skeletonBox(100, 80, radius: 16),
-                        ],
-                      ),
-                    ],
-                  ),
-                )
+              ? _buildLoadingSkeleton()
               : RefreshIndicator(
                   onRefresh: _loadStreakData,
-                  child: SingleChildScrollView(
+                  child: CustomScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildStreakCarousel(),
-                        const SizedBox(height: 24),
-                        if (_showInviteNudge) _buildInviteButton(),
-                        _buildQuickActionsSection(),
-                        const SizedBox(height: 20),
-                      ],
-                    ),
+                    slivers: [
+                      // ── Sticky gradient banner (never scrolls away) ──
+                      SliverPersistentHeader(
+                        pinned: true,
+                        delegate: _HomeHeaderDelegate(
+                          greeting: _getGreeting(),
+                          pendingRequests: _pendingRequests,
+                          onNotificationTap: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('No new notifications'),
+                                duration: Duration(seconds: 1),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      // ── Scrollable content ──
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                        sliver: SliverList(
+                          delegate: SliverChildListDelegate([
+                            _buildStreakCarousel(),
+                            const SizedBox(height: 24),
+                            if (_showInviteNudge) _buildInviteButton(),
+                            _buildQuickActionsSection(),
+                            const SizedBox(height: 20),
+                          ]),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
         ),
@@ -2348,41 +2258,31 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           alignment: Alignment.centerLeft,
           child: ConfettiWidget(
             confettiController: _confettiController,
-            blastDirection: 0,  // ← Shoots to the right
+            blastDirection: 0,
             emissionFrequency: 0.05,
             numberOfParticles: 30,
             maxBlastForce: 100,
             minBlastForce: 80,
             gravity: 0.3,
             colors: const [
-              Colors.green,
-              Colors.blue,
-              Colors.pink,
-              Colors.orange,
-              Colors.purple,
-              Colors.yellow,
+              Colors.green, Colors.blue, Colors.pink,
+              Colors.orange, Colors.purple, Colors.yellow,
             ],
           ),
         ),
-
-        // ✅ RIGHT SIDE CONFETTI
         Align(
           alignment: Alignment.centerRight,
           child: ConfettiWidget(
             confettiController: _confettiControllerRight,
-            blastDirection: 3.14,  // ← Shoots to the left
+            blastDirection: 3.14,
             emissionFrequency: 0.05,
             numberOfParticles: 30,
             maxBlastForce: 100,
             minBlastForce: 80,
             gravity: 0.3,
             colors: const [
-              Colors.green,
-              Colors.blue,
-              Colors.pink,
-              Colors.orange,
-              Colors.purple,
-              Colors.yellow,
+              Colors.green, Colors.blue, Colors.pink,
+              Colors.orange, Colors.purple, Colors.yellow,
             ],
           ),
         ),
@@ -2391,18 +2291,15 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   // REDESIGNED: Quick stats row
-  Widget _buildQuickStatsRow() {
+ Widget _buildQuickStatsRow() {
+    final appColors = AppColors.of(context);
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.white, Colors.blue[50]!],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: appColors.cardBackground,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -2809,7 +2706,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         height: 420,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.of(context).cardBackground,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
@@ -2846,6 +2743,38 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLoadingSkeleton() {
+    return CustomScrollView(
+      slivers: [
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: _HomeHeaderDelegate(
+            greeting: _getGreeting(),
+            pendingRequests: 0,
+            onNotificationTap: () {},
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              _buildSkeletonCard(),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _skeletonBox(100, 80, radius: 16),
+                  _skeletonBox(100, 80, radius: 16),
+                  _skeletonBox(100, 80, radius: 16),
+                ],
+              ),
+            ]),
+          ),
+        ),
+      ],
     );
   }
   
@@ -3302,12 +3231,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Quick Actions',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF2C3E50),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         const SizedBox(height: 16),
@@ -3370,12 +3299,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withOpacity(0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(icon, color: color, size: 28),
+                  child: Icon(icon, color: color, size: 34),
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -3383,7 +3312,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey[800],
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -4337,9 +4266,92 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       await _loadStreakData();
     }
   }
-
-
 }
+
+  // ── Home screen header delegate ───────────────────────────────
+  class _HomeHeaderDelegate extends SliverPersistentHeaderDelegate {
+    final String greeting;
+    final int pendingRequests;
+    final VoidCallback onNotificationTap;
+
+    const _HomeHeaderDelegate({
+      required this.greeting,
+      required this.pendingRequests,
+      required this.onNotificationTap,
+    });
+
+    @override
+    double get minExtent => 80;
+    @override
+    double get maxExtent => 80;
+
+    @override
+    Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+      return Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    greeting,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                Stack(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+                      onPressed: onNotificationTap,
+                    ),
+                    if (pendingRequests > 0)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          child: Text(
+                            '$pendingRequests',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    @override
+    bool shouldRebuild(_HomeHeaderDelegate old) =>
+        greeting != old.greeting || pendingRequests != old.pendingRequests;
+  }
 
 class _AllStreaksDialog extends StatefulWidget {
   final List<TeamStreak> streaks;
@@ -5633,22 +5645,20 @@ class _SchedulePageState extends State<SchedulePage> {
 // Profile Page
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
- 
+
   @override
   State<ProfilePage> createState() => _ProfilePageState();
 }
  
 class _ProfilePageState extends State<ProfilePage>
     with SingleTickerProviderStateMixin {
-  // ── data ──────────────────────────────────────────────────────
   Map<String, dynamic>? _profile;
   List<TeamStreak> _allStreaks = [];
   LevelInfo? _levelInfo;
   int _totalWorkouts = 0;
   int _buddyCount = 0;
   bool _isLoading = true;
- 
-  // ── animation ─────────────────────────────────────────────────
+
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -5658,36 +5668,24 @@ class _ProfilePageState extends State<ProfilePage>
   @override
   void initState() {
     super.initState();
- 
-    // Fade + slide up animation for content reveal
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
- 
-    _fadeAnimation = CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeOut,
-    );
- 
+    _fadeAnimation = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
     _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.06), // slides up from 6% below
+      begin: const Offset(0, 0.06),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeOut,
-    ));
-
+    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
     _xpAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _fadeController, curve: const Interval(0.3, 1.0, curve: Curves.easeOut)),
     );
     _ringAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _fadeController, curve: const Interval(0.2, 1.0, curve: Curves.easeOut)),
     );
- 
     _loadAll();
   }
- 
+
   @override
   void dispose() {
     _fadeController.dispose();
@@ -5699,34 +5697,30 @@ class _ProfilePageState extends State<ProfilePage>
     try {
       final uid = Supabase.instance.client.auth.currentUser?.id;
       if (uid == null) return;
- 
-      // Fire all requests simultaneously
+
       final profileFuture = Supabase.instance.client
           .from('user_profiles')
           .select('avatar_id, display_name, created_at, xp, level')
           .eq('id', uid)
           .single();
- 
+
       final streaksFuture = TeamStreakService().getAllUserStreaks();
       final levelFuture = LevelService().getLevelInfo();
- 
       final workoutsFuture = Supabase.instance.client
           .from('workouts')
           .select('id')
           .or('user_id.eq.$uid,buddy_id.eq.$uid')
           .eq('status', 'completed');
- 
       final friendsFuture = FriendService().getFriends();
- 
-      // Await all simultaneously
+
       final profile  = await profileFuture;
       final streaks  = await streaksFuture;
       final level    = await levelFuture;
       final workouts = await workoutsFuture;
       final friends  = await friendsFuture;
- 
+
       if (!mounted) return;
- 
+
       setState(() {
         _profile       = profile as Map<String, dynamic>;
         _allStreaks     = streaks;
@@ -5735,27 +5729,24 @@ class _ProfilePageState extends State<ProfilePage>
         _buddyCount    = friends.length;
         _isLoading     = false;
       });
- 
-      // Small delay then play the reveal animation
+
       await Future.delayed(const Duration(milliseconds: 50));
       if (mounted) _fadeController.forward();
- 
     } catch (e) {
       if (kDebugMode) print('❌ ProfilePage._loadAll: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
- 
-  // ── helpers ───────────────────────────────────────────────────
+
   String _formatYear(String? dateStr) {
     if (dateStr == null) return '2025';
     try { return '${DateTime.parse(dateStr).year}'; } catch (_) { return '2025'; }
   }
- 
+
   int get _bestStreak => _allStreaks.isEmpty
       ? 0
       : _allStreaks.map((s) => s.bestStreak).reduce((a, b) => a > b ? a : b);
- 
+
   String _avatarEmoji(String? id) {
     const map = {
       'lion': '🦁', 'wolf': '🐺', 'bear': '🐻',
@@ -5765,7 +5756,7 @@ class _ProfilePageState extends State<ProfilePage>
     };
     return map[id] ?? '🦁';
   }
- 
+
   List<Color> _levelGradient(int level) {
     if (level >= 91) return [const Color(0xFF7F77DD), const Color(0xFF534AB7)];
     if (level >= 76) return [const Color(0xFFD85A30), const Color(0xFF993C1D)];
@@ -5775,7 +5766,7 @@ class _ProfilePageState extends State<ProfilePage>
     if (level >= 11) return [const Color(0xFF378ADD), const Color(0xFF185FA5)];
     return [const Color(0xFFFFB300), const Color(0xFFFF8F00)];
   }
- 
+
   String _titleIcon(String title) {
     const map = {
       'Newcomer': '🌱', 'Beginner': '⚡', 'Rookie': '🔥',
@@ -5791,37 +5782,34 @@ class _ProfilePageState extends State<ProfilePage>
   // ══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
-    // Show skeleton while loading
     if (_isLoading) return _buildSkeleton();
- 
+
+    final appColors = AppColors.of(context);
     final profile  = _profile ?? {};
     final level    = _levelInfo?.level ?? 1;
     final title    = _levelInfo?.title ?? 'Newcomer';
     final avatarId = profile['avatar_id'] as String? ?? 'lion';
     final name     = profile['display_name'] as String? ?? 'User';
     final year     = _formatYear(profile['created_at'] as String?);
- 
-    // Wrap entire page in fade + slide animation
+
     return FadeTransition(
       opacity: _fadeAnimation,
       child: SlideTransition(
         position: _slideAnimation,
         child: Scaffold(
-          backgroundColor: const Color(0xFFF0F2F7),
+          backgroundColor: appColors.sectionBackground,
           body: RefreshIndicator(
             onRefresh: () async {
               _fadeController.reset();
               await _loadAll();
             },
             child: CustomScrollView(
+              clipBehavior: Clip.none,
               slivers: [
                 SliverToBoxAdapter(
                   child: _buildHero(
-                    name: name,
-                    year: year,
-                    avatarId: avatarId,
-                    level: level,
-                    title: title,
+                    name: name, year: year, avatarId: avatarId,
+                    level: level, title: title,
                   ),
                 ),
                 SliverPadding(
@@ -5837,7 +5825,7 @@ class _ProfilePageState extends State<ProfilePage>
                       _buildMenuCard([
                         _MenuItem(
                           emoji: '🔥',
-                          color: const Color(0xFFFFF3E0),
+                          color: appColors.sectionBackground,
                           label: 'All Streaks',
                           sub: '${_allStreaks.length} active streaks',
                           onTap: () => showDialog(
@@ -5847,19 +5835,17 @@ class _ProfilePageState extends State<ProfilePage>
                         ),
                         _MenuItem(
                           emoji: '🏆',
-                          color: const Color(0xFFE8F5E9),
+                          color: appColors.sectionBackground,
                           label: 'Achievements',
                           sub: 'View all achievements',
                           onTap: () => Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (_) => achievements_page.AchievementsPage(),
-                            ),
+                            MaterialPageRoute(builder: (_) => achievements_page.AchievementsPage()),
                           ),
                         ),
                         _MenuItem(
                           emoji: '📊',
-                          color: const Color(0xFFE3F2FD),
+                          color: appColors.sectionBackground,
                           label: 'Progress',
                           sub: 'View your history',
                           onTap: () {},
@@ -5871,19 +5857,17 @@ class _ProfilePageState extends State<ProfilePage>
                       _buildMenuCard([
                         _MenuItem(
                           emoji: '🔔',
-                          color: const Color(0xFFF3E5F5),
+                          color: appColors.sectionBackground,
                           label: 'Notifications',
                           sub: 'Manage alerts',
                           onTap: () => Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (_) => const NotificationSettingsPage(),
-                            ),
+                            MaterialPageRoute(builder: (_) => const NotificationSettingsPage()),
                           ),
                         ),
                         _MenuItem(
                           emoji: '🎨',
-                          color: const Color(0xFFE0F7FA),
+                          color: appColors.sectionBackground,
                           label: 'Appearance',
                           sub: 'Avatar & border',
                           onTap: () => Navigator.push(
@@ -5907,8 +5891,15 @@ class _ProfilePageState extends State<ProfilePage>
                           ),
                         ),
                         _MenuItem(
+                          emoji: '🌙',
+                          color: appColors.sectionBackground,
+                          label: 'Dark Mode',
+                          sub: _themeModeLabel(context),
+                          onTap: () => _showThemePicker(context),
+                        ),
+                        _MenuItem(
                           emoji: '❓',
-                          color: const Color(0xFFFFF8E1),
+                          color: appColors.sectionBackground,
                           label: 'Help & Support',
                           sub: 'FAQs & contact',
                           onTap: () {},
@@ -5926,17 +5917,136 @@ class _ProfilePageState extends State<ProfilePage>
       ),
     );
   }
+
+  String _themeModeLabel(BuildContext context) {
+    final mode = context.watch<ThemeProvider>().themeMode;
+    return switch (mode) {
+      ThemeMode.dark   => 'Dark',
+      ThemeMode.light  => 'Light',
+      ThemeMode.system => 'Follow system',
+    };
+  }
+
+  void _showThemePicker(BuildContext context) {
+    final provider = context.read<ThemeProvider>();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final appColors = AppColors.of(context);
+        return Container(
+          decoration: BoxDecoration(
+            color: appColors.cardBackground,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: appColors.divider,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Appearance',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 20),
+              _themeOption(ctx, provider, ThemeMode.system, '☀️🌙', 'Follow System',
+                  'Matches your phone setting'),
+              const SizedBox(height: 10),
+              _themeOption(ctx, provider, ThemeMode.light, '☀️', 'Light',
+                  'Always use light mode'),
+              const SizedBox(height: 10),
+              _themeOption(ctx, provider, ThemeMode.dark, '🌙', 'Dark',
+                  'Always use dark mode'),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _themeOption(
+    BuildContext ctx,
+    ThemeProvider provider,
+    ThemeMode mode,
+    String emoji,
+    String label,
+    String sub,
+  ) {
+    final isSelected = provider.themeMode == mode;
+    final appColors = AppColors.of(ctx);
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        provider.setThemeMode(mode);
+        Navigator.pop(ctx);
+        setState(() {}); // refresh sub-label
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF4B6EF5).withOpacity(0.1)
+              : appColors.sectionBackground,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF4B6EF5) : appColors.cardBorder,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 22)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected
+                          ? const Color(0xFF4B6EF5)
+                          : Theme.of(ctx).colorScheme.onSurface,
+                    ),
+                  ),
+                  Text(
+                    sub,
+                    style: TextStyle(fontSize: 12, color: appColors.subtleText),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              const Icon(Icons.check_circle, color: Color(0xFF4B6EF5), size: 22),
+          ],
+        ),
+      ),
+    );
+  }
  
   // ══════════════════════════════════════════════════════════════
   // HERO
   // ══════════════════════════════════════════════════════════════
   Widget _buildHero({
-    required String name,
-    required String year,
-    required String avatarId,
-    required int level,
-    required String title,
+    required String name, required String year,
+    required String avatarId, required int level, required String title,
   }) {
+    // Hero gradient is always the brand purple — looks great in both modes
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -5979,18 +6089,12 @@ class _ProfilePageState extends State<ProfilePage>
                     children: [
                       const Text(
                         'Profile',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
                       ),
                       GestureDetector(
                         onTap: () => Navigator.push(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) => const NotificationSettingsPage(),
-                          ),
+                          MaterialPageRoute(builder: (_) => const NotificationSettingsPage()),
                         ),
                         child: Container(
                           width: 36, height: 36,
@@ -5998,11 +6102,7 @@ class _ProfilePageState extends State<ProfilePage>
                             shape: BoxShape.circle,
                             color: Colors.white.withOpacity(0.15),
                           ),
-                          child: const Icon(
-                            Icons.settings_outlined,
-                            color: Colors.white,
-                            size: 18,
-                          ),
+                          child: const Icon(Icons.settings_outlined, color: Colors.white, size: 18),
                         ),
                       ),
                     ],
@@ -6011,38 +6111,31 @@ class _ProfilePageState extends State<ProfilePage>
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      // Avatar with XP ring
                       Stack(
                         clipBehavior: Clip.none,
                         alignment: Alignment.center,
                         children: [
-                        SizedBox(
-                          width: 98, height: 98,
-                          child: AnimatedBuilder(
-                            animation: _ringAnimation,
-                            builder: (context, _) => CircularProgressIndicator(
-                              value: (_levelInfo?.progressPercent ?? 0.0) * _ringAnimation.value,
-                              strokeWidth: 4,
-                              backgroundColor: Colors.white.withOpacity(0.2),
-                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                          SizedBox(
+                            width: 98, height: 98,
+                            child: AnimatedBuilder(
+                              animation: _ringAnimation,
+                              builder: (context, _) => CircularProgressIndicator(
+                                value: (_levelInfo?.progressPercent ?? 0.0) * _ringAnimation.value,
+                                strokeWidth: 4,
+                                backgroundColor: Colors.white.withOpacity(0.2),
+                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
                             ),
                           ),
-                        ),
                           Container(
                             width: 86, height: 86,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: Colors.white.withOpacity(0.15),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.3),
-                                width: 2,
-                              ),
+                              border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
                             ),
                             child: Center(
-                              child: Text(
-                                _avatarEmoji(avatarId),
-                                style: const TextStyle(fontSize: 46),
-                              ),
+                              child: Text(_avatarEmoji(avatarId), style: const TextStyle(fontSize: 46)),
                             ),
                           ),
                           Positioned(
@@ -6067,11 +6160,7 @@ class _ProfilePageState extends State<ProfilePage>
                               child: Center(
                                 child: Text(
                                   '$level',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                  ),
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white),
                                 ),
                               ),
                             ),
@@ -6086,38 +6175,24 @@ class _ProfilePageState extends State<ProfilePage>
                           children: [
                             Text(
                               name,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w800,
-                              ),
+                              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               'Member since $year',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.65),
-                                fontSize: 13,
-                              ),
+                              style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 13),
                             ),
                             const SizedBox(height: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(20),
                                 color: Colors.white.withOpacity(0.18),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.3),
-                                ),
+                                border: Border.all(color: Colors.white.withOpacity(0.3)),
                               ),
                               child: Text(
                                 '${_titleIcon(title)}  $title',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
                               ),
                             ),
                           ],
@@ -6138,13 +6213,14 @@ class _ProfilePageState extends State<ProfilePage>
   // XP CARD
   // ══════════════════════════════════════════════════════════════
   Widget _buildXpCard() {
+    final appColors = AppColors.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: appColors.cardBackground,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF4B6EF5).withOpacity(0.15),
+            color: const Color(0xFF4B6EF5).withOpacity(0.1),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -6171,9 +6247,7 @@ class _ProfilePageState extends State<ProfilePage>
                             end: Alignment.bottomRight,
                           ),
                         ),
-                        child: const Center(
-                          child: Text('⭐', style: TextStyle(fontSize: 20)),
-                        ),
+                        child: const Center(child: Text('⭐', style: TextStyle(fontSize: 20))),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -6182,10 +6256,10 @@ class _ProfilePageState extends State<ProfilePage>
                           children: [
                             Text(
                               'Level ${_levelInfo!.level} — ${_levelInfo!.title}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF1A1A2E),
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -6193,7 +6267,7 @@ class _ProfilePageState extends State<ProfilePage>
                               _levelInfo!.level >= 99
                                   ? 'Max level reached 🏆'
                                   : '${_levelInfo!.xpNeededForNext} XP to level ${_levelInfo!.level + 1}',
-                              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                              style: TextStyle(fontSize: 12, color: appColors.subtleText),
                             ),
                           ],
                         ),
@@ -6201,7 +6275,7 @@ class _ProfilePageState extends State<ProfilePage>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEEF0FF),
+                          color: const Color(0xFF4B6EF5).withOpacity(0.12),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -6223,7 +6297,7 @@ class _ProfilePageState extends State<ProfilePage>
                       builder: (context, _) => LinearProgressIndicator(
                         value: _levelInfo!.progressPercent * _xpAnimation.value,
                         minHeight: 8,
-                        backgroundColor: const Color(0xFFF0F2F7),
+                        backgroundColor: appColors.sectionBackground,
                         valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4B6EF5)),
                       ),
                     ),
@@ -6234,11 +6308,11 @@ class _ProfilePageState extends State<ProfilePage>
                     children: [
                       Text(
                         '${_levelInfo!.xpIntoCurrentLevel} / ${_levelInfo!.xpForNextLevel - _levelInfo!.xpForThisLevel} XP',
-                        style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                        style: TextStyle(fontSize: 11, color: appColors.subtleText),
                       ),
                       Text(
                         '${(_levelInfo!.progressPercent * 100).toStringAsFixed(0)}%',
-                        style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                        style: TextStyle(fontSize: 11, color: appColors.subtleText),
                       ),
                     ],
                   ),
@@ -6264,13 +6338,14 @@ class _ProfilePageState extends State<ProfilePage>
       ],
     );
   }
- 
+
   Widget _buildStatCard(String emoji, String value, String label) {
+    final appColors = AppColors.of(context);
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: appColors.cardBackground,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -6286,20 +6361,16 @@ class _ProfilePageState extends State<ProfilePage>
             const SizedBox(height: 4),
             Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color: Color(0xFF1A1A2E),
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               label,
-              style: TextStyle(
-                fontSize: 9,
-                color: Colors.grey[500],
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(fontSize: 9, color: appColors.subtleText, fontWeight: FontWeight.w500),
               textAlign: TextAlign.center,
             ),
           ],
@@ -6312,21 +6383,23 @@ class _ProfilePageState extends State<ProfilePage>
   // MENU
   // ══════════════════════════════════════════════════════════════
   Widget _sectionLabel(String text) {
+    final appColors = AppColors.of(context);
     return Text(
       text.toUpperCase(),
       style: TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w700,
-        color: Colors.grey[500],
+        color: appColors.subtleText,
         letterSpacing: 0.8,
       ),
     );
   }
- 
+
   Widget _buildMenuCard(List<_MenuItem> items) {
+    final appColors = AppColors.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: appColors.cardBackground,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
@@ -6349,9 +6422,7 @@ class _ProfilePageState extends State<ProfilePage>
                 },
                 borderRadius: BorderRadius.vertical(
                   top: i == 0 ? const Radius.circular(18) : Radius.zero,
-                  bottom: i == items.length - 1
-                      ? const Radius.circular(18)
-                      : Radius.zero,
+                  bottom: i == items.length - 1 ? const Radius.circular(18) : Radius.zero,
                 ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -6374,29 +6445,29 @@ class _ProfilePageState extends State<ProfilePage>
                           children: [
                             Text(
                               item.label,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF1A1A2E),
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
                             if (item.sub != null) ...[
                               const SizedBox(height: 1),
                               Text(
                                 item.sub!,
-                                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                                style: TextStyle(fontSize: 12, color: appColors.subtleText),
                               ),
                             ],
                           ],
                         ),
                       ),
-                      Icon(Icons.chevron_right_rounded, color: Colors.grey[300], size: 20),
+                      Icon(Icons.chevron_right_rounded, color: appColors.subtleText, size: 20),
                     ],
                   ),
                 ),
               ),
               if (i < items.length - 1)
-                Divider(height: 1, indent: 66, color: Colors.grey[100]),
+                Divider(height: 1, indent: 66, color: appColors.divider),
             ],
           );
         }).toList(),
@@ -6422,9 +6493,9 @@ class _ProfilePageState extends State<ProfilePage>
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 15),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFF0F0),
+          color: const Color(0xFFE53935).withOpacity(0.08),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFFFD0D0), width: 1.5),
+          border: Border.all(color: const Color(0xFFE53935).withOpacity(0.3), width: 1.5),
         ),
         child: const Center(
           child: Text(
@@ -6444,12 +6515,12 @@ class _ProfilePageState extends State<ProfilePage>
   // SKELETON — shown while data loads
   // Shows a realistic shimmer layout matching the real page
   // ══════════════════════════════════════════════════════════════
-  Widget _buildSkeleton() {
+   Widget _buildSkeleton() {
+    final appColors = AppColors.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F2F7),
+      backgroundColor: appColors.sectionBackground,
       body: Column(
         children: [
-          // Hero shimmer
           Container(
             height: 220,
             decoration: const BoxDecoration(
@@ -6466,7 +6537,6 @@ class _ProfilePageState extends State<ProfilePage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Top row
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -6475,7 +6545,6 @@ class _ProfilePageState extends State<ProfilePage>
                       ],
                     ),
                     const SizedBox(height: 24),
-                    // Avatar + name row
                     Row(
                       children: [
                         _shimmerCircle(86),
@@ -6497,18 +6566,14 @@ class _ProfilePageState extends State<ProfilePage>
               ),
             ),
           ),
- 
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // XP card shimmer
                   _shimmerCard(height: 110),
                   const SizedBox(height: 14),
- 
-                  // Stats row shimmer
                   Row(
                     children: [
                       Expanded(child: _shimmerCard(height: 90)),
@@ -6521,20 +6586,12 @@ class _ProfilePageState extends State<ProfilePage>
                     ],
                   ),
                   const SizedBox(height: 22),
- 
-                  // Activity label
                   _shimmerBox(70, 12, radius: 4),
                   const SizedBox(height: 10),
- 
-                  // Activity menu card shimmer
                   _shimmerCard(height: 160),
                   const SizedBox(height: 22),
- 
-                  // Settings label
                   _shimmerBox(70, 12, radius: 4),
                   const SizedBox(height: 10),
- 
-                  // Settings menu card shimmer
                   _shimmerCard(height: 160),
                 ],
               ),
@@ -6544,16 +6601,14 @@ class _ProfilePageState extends State<ProfilePage>
       ),
     );
   }
- 
-  // Animated shimmer box
+
   Widget _shimmerBox(double width, double height, {double radius = 8}) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.3, end: 0.7),
       duration: const Duration(milliseconds: 900),
       curve: Curves.easeInOut,
       builder: (_, value, __) => Container(
-        width: width,
-        height: height,
+        width: width, height: height,
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(value),
           borderRadius: BorderRadius.circular(radius),
@@ -6561,16 +6616,14 @@ class _ProfilePageState extends State<ProfilePage>
       ),
     );
   }
- 
-  // Animated shimmer circle
+
   Widget _shimmerCircle(double size) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.3, end: 0.7),
       duration: const Duration(milliseconds: 900),
       curve: Curves.easeInOut,
       builder: (_, value, __) => Container(
-        width: size,
-        height: size,
+        width: size, height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: Colors.white.withOpacity(value),
@@ -6578,9 +6631,9 @@ class _ProfilePageState extends State<ProfilePage>
       ),
     );
   }
- 
-  // Animated shimmer card (white background)
+
   Widget _shimmerCard({required double height}) {
+    final appColors = AppColors.of(context);
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.6, end: 1.0),
       duration: const Duration(milliseconds: 900),
@@ -6588,7 +6641,7 @@ class _ProfilePageState extends State<ProfilePage>
       builder: (_, value, __) => Container(
         height: height,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(value),
+          color: appColors.cardBackground.withOpacity(value),
           borderRadius: BorderRadius.circular(18),
         ),
       ),
@@ -6603,7 +6656,7 @@ class _MenuItem {
   final String label;
   final String? sub;
   final VoidCallback onTap;
- 
+
   const _MenuItem({
     required this.emoji,
     required this.color,

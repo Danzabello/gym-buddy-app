@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../theme/app_theme.dart';
 import '../services/coin_service.dart';
 
 class ShopPage extends StatefulWidget {
@@ -57,7 +59,6 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
 
   Future<void> _purchaseItem(ShopItem item) async {
     if (item.isOwned) {
-      // Equip it
       await _coinService.equipItem(itemId: item.id, category: item.category);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -113,85 +114,104 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
   }
 
   Future<bool?> _showPurchaseDialog(ShopItem item) {
+    final colors = AppColors.of(context);
     return showDialog<bool>(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF0F9FF),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Center(child: Text(item.emoji, style: const TextStyle(fontSize: 40))),
-              ),
-              const SizedBox(height: 16),
-              Text(item.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text(item.description, textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFFBEB),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFFDE68A)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('🪙', style: TextStyle(fontSize: 20)),
-                    const SizedBox(width: 8),
-                    Text('${item.cost} coins',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFD97706))),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text('Cancel'),
-                    ),
+      builder: (context) {
+        final colors = AppColors.of(context);
+        return Dialog(
+          backgroundColor: colors.cardBackground,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: colors.sectionBackground,
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)]),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
+                  child: Center(child: Text(item.emoji, style: const TextStyle(fontSize: 40))),
+                ),
+                const SizedBox(height: 16),
+                Text(item.name,
+                    style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface)),
+                const SizedBox(height: 8),
+                Text(item.description,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: colors.subtleText, fontSize: 14)),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('🪙', style: TextStyle(fontSize: 20)),
+                      const SizedBox(width: 8),
+                      Text('${item.cost} coins',
+                          style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFD97706))),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Theme.of(context).colorScheme.onSurface,
+                          side: BorderSide(color: colors.divider),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: const Text('Buy!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        child: const Text('Cancel'),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                              colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)]),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Buy!',
+                              style: TextStyle(
+                                  color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -199,49 +219,60 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
     final needed = item.cost - _coinBalance;
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('🪙', style: TextStyle(fontSize: 48)),
-              const SizedBox(height: 16),
-              const Text('Not enough coins!',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text('You need $needed more coins to buy ${item.name}.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-              const SizedBox(height: 8),
-              Text('Keep checking in daily to earn more! 💪',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey[500], fontSize: 13)),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3B82F6),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      builder: (context) {
+        final colors = AppColors.of(context);
+        return Dialog(
+          backgroundColor: colors.cardBackground,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('🪙', style: TextStyle(fontSize: 48)),
+                const SizedBox(height: 16),
+                Text('Not enough coins!',
+                    style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface)),
+                const SizedBox(height: 8),
+                Text('You need $needed more coins to buy ${item.name}.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: colors.subtleText, fontSize: 14)),
+                const SizedBox(height: 8),
+                Text('Keep checking in daily to earn more! 💪',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: colors.subtleText, fontSize: 13)),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF3B82F6),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Got it!',
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
-                  child: const Text('Got it!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: colors.sectionBackground,
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) => [
           SliverAppBar(
@@ -264,10 +295,15 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Shop', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                        const Text('Shop',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold)),
                         const SizedBox(height: 12),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(12),
@@ -279,7 +315,10 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                               const SizedBox(width: 8),
                               Text(
                                 '$_coinBalance coins',
-                                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold),
                               ),
                             ],
                           ),
@@ -296,8 +335,11 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
               indicatorColor: Colors.white,
               labelColor: Colors.white,
               unselectedLabelColor: Colors.white60,
-              labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-              tabs: _categories.map((c) => Tab(text: '${c['emoji']} ${c['label']}')).toList(),
+              labelStyle:
+                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              tabs: _categories
+                  .map((c) => Tab(text: '${c['emoji']} ${c['label']}'))
+                  .toList(),
             ),
           ),
         ],
@@ -308,20 +350,27 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                 children: _categories.map((category) {
                   final items = _getItemsForCategory(category['key']!);
                   if (items.isEmpty) {
-                    return const Center(child: Text('No items available'));
+                    return Center(
+                      child: Text(
+                        'No items available',
+                        style: TextStyle(color: colors.subtleText),
+                      ),
+                    );
                   }
                   return RefreshIndicator(
                     onRefresh: _loadData,
                     child: GridView.builder(
                       padding: const EdgeInsets.all(16),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
                         crossAxisSpacing: 12,
                         mainAxisSpacing: 12,
                         childAspectRatio: 0.8,
                       ),
                       itemCount: items.length,
-                      itemBuilder: (context, index) => _buildShopCard(items[index]),
+                      itemBuilder: (context, index) =>
+                          _buildShopCard(items[index]),
                     ),
                   );
                 }).toList(),
@@ -331,19 +380,25 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
   }
 
   Widget _buildShopCard(ShopItem item) {
+    final colors = AppColors.of(context);
     final canAfford = _coinBalance >= item.cost;
     return GestureDetector(
       onTap: () => _purchaseItem(item),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: colors.cardBackground,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: item.isOwned ? const Color(0xFF10B981) : const Color(0xFFE2E8F0),
+            color: item.isOwned
+                ? const Color(0xFF10B981)
+                : colors.divider,
             width: item.isOwned ? 2 : 1,
           ),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
+            BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2)),
           ],
         ),
         child: Column(
@@ -352,12 +407,17 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: item.isOwned ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                  color: item.isOwned
+                      ? const Color(0xFF10B981).withOpacity(0.12)
+                      : colors.sectionBackground,
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(15)),
                 ),
                 child: Stack(
                   children: [
-                    Center(child: Text(item.emoji, style: const TextStyle(fontSize: 52))),
+                    Center(
+                        child: Text(item.emoji,
+                            style: const TextStyle(fontSize: 52))),
                     if (item.isOwned)
                       Positioned(
                         top: 8,
@@ -368,7 +428,8 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                             color: Color(0xFF10B981),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.check, color: Colors.white, size: 12),
+                          child: const Icon(Icons.check,
+                              color: Colors.white, size: 12),
                         ),
                       ),
                     if (!canAfford && !item.isOwned)
@@ -376,7 +437,8 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                         child: Container(
                           decoration: BoxDecoration(
                             color: Colors.black.withOpacity(0.05),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                            borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(15)),
                           ),
                         ),
                       ),
@@ -391,18 +453,26 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(item.name,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF1E293B)),
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.onSurface),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 6),
                   if (item.isOwned)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: const Color(0xFF10B981),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Text('Equip', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                      child: const Text('Equip',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600)),
                     )
                   else
                     Row(
@@ -413,11 +483,14 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
-                              color: canAfford ? const Color(0xFFD97706) : Colors.grey,
+                              color: canAfford
+                                  ? const Color(0xFFD97706)
+                                  : colors.subtleText,
                             )),
                         if (!canAfford) ...[
                           const Spacer(),
-                          const Icon(Icons.lock_outline, size: 14, color: Colors.grey),
+                          Icon(Icons.lock_outline,
+                              size: 14, color: colors.subtleText),
                         ],
                       ],
                     ),
