@@ -40,6 +40,8 @@ import 'services/invite_service.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
+import 'data/coach_tips.dart';
+import 'services/presence_service.dart';
 
 
 
@@ -247,6 +249,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   bool _showInviteNudge = false;
   static const _inviteNudgeKey = 'invite_nudge_dismissed';
 
+  late List<int> _trayOrder;
+  int _trayIndex = 0;
+  late PageController _trayController;
+
+  final PresenceService _presenceService = PresenceService();
+  Map<String, Map<String, dynamic>> _presenceState = {};
+  List<String> _friendIds = [];
+
 
   @override
   void initState() {
@@ -260,6 +270,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       viewportFraction: 0.35,
       initialPage: 1,
     );
+
+    _trayOrder = [0, 1, 2]..shuffle();
+    _trayController = PageController();
+
+    _presenceService.onPresenceChanged = (state) {
+        if (mounted) setState(() => _presenceState = state);
+    };
+    _presenceService.join();
     
     // ✅ ENTRANCE ANIMATION SETUP
     _carouselEntranceController = AnimationController(
@@ -312,6 +330,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _confettiControllerRight.dispose();
     _carouselEntranceController.dispose();
     _appLifecycleListener?.dispose();
+    _trayController.dispose();
+    _presenceService.leave();
     super.dispose();
   }
 
@@ -417,6 +437,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   print('  Current index: $_currentCarouselIndex');
   print('  Showing: ${displayItems[_currentCarouselIndex] is TeamStreak ? (displayItems[_currentCarouselIndex] as TeamStreak).teamName : 'Add Buddy'}');
 
+    final appColors = AppColors.of(context);
+
     // ✅ MERGED CARD: Carousel + Action Buttons in one! (PIXEL 7A OPTIMIZED)
     return Card(
       elevation: 4,
@@ -424,7 +446,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
-          color: AppColors.of(context).cardBackground,
+          color: appColors.cardBackground,
           borderRadius: BorderRadius.circular(24),
         ),
         child: Column(
@@ -440,13 +462,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppColors.of(context).sectionBackground,
+                        color: appColors.sectionBackground,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
                         Icons.more_vert,
                         size: 20,
-                        color: AppColors.of(context).subtleText,
+                        color: appColors.subtleText,
                       ),
                     ),
                   ),
@@ -460,7 +482,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: AppColors.of(context).sectionBackground,
+                          color: appColors.sectionBackground,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
@@ -473,7 +495,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                                 style: TextStyle(
                                   fontSize: 14,  // ✅ Was 16
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.of(context).subtleText,
+                                  color: appColors.subtleText,
                                 ),
                                 overflow: TextOverflow.ellipsis,  // ✅ Safety net
                               ),
@@ -482,7 +504,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                             Icon(
                               Icons.chevron_right,
                               size: 18,  // ✅ Was 20
-                              color: AppColors.of(context).subtleText,
+                              color: appColors.subtleText,
                             ),
                           ],
                         ),
@@ -510,7 +532,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             
             // ✅ INFINITE CAROUSEL - Wraps around in a circle
             SizedBox(
-              height: 160,  // ✅ Was 200 - major space saver
+              height: 170,  // ✅ Was 200 - major space saver
               child: AnimatedBuilder(
                 animation: _carouselEntranceAnimation,
                 builder: (context, child) {
@@ -593,7 +615,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     fontWeight: FontWeight.bold,
                     color: displayItems[_currentCarouselIndex] != null 
                         ? Theme.of(context).colorScheme.onSurface
-                        : AppColors.of(context).subtleText,
+                        : appColors.subtleText,
                   ),
                 ),
                 const SizedBox(height: 4),  // ✅ Was 8
@@ -613,7 +635,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     style: TextStyle(
                       fontSize: 24,  // ✅ Was 28
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey[400],
+                      color: appColors.subtleText,
                     ),
                   ),
               ],
@@ -639,7 +661,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   elevation: 4,
                   disabledBackgroundColor: _hasCheckedInToday 
                       ? Colors.green[600]
-                      : Colors.grey[400],
+                      : appColors.subtleText,
                 ),
                 child: _isCheckingIn
                     ? const SizedBox(
@@ -683,19 +705,24 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.bedtime, size: 14, color: AppColors.of(context).subtleText),
+                      Icon(Icons.bedtime, size: 14, color: appColors.subtleText),
                       const SizedBox(width: 6),
                       Text(
                         'Take a break day',
                         style: TextStyle(
                           fontSize: 13,
-                          color: AppColors.of(context).subtleText,
+                          color: appColors.subtleText,
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: 2),
+              child: Divider(height: 1, color: appColors.divider),
+            ),
+            _buildInfoTray(),
           ],
         ),
       ),
@@ -730,6 +757,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   Widget _buildAddFriendPlaceholder(bool isFocused) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: () {
         // Navigate to Buddies tab
@@ -748,7 +776,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: LinearGradient(
-            colors: [Colors.blue[50]!, Colors.purple[50]!],
+            colors: isDark
+                ? [const Color(0xFF1E3A5F), const Color(0xFF2D1B4E)]
+                : [Colors.blue[50]!, Colors.purple[50]!],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -772,7 +802,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             Icon(
               Icons.person_add_rounded,
               size: isFocused ? 40 : 25,
-              color: Colors.blue[600],
+              color: Colors.blue[400],
             ),
             if (isFocused) ...[
               const SizedBox(height: 8),
@@ -782,7 +812,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: Colors.blue[700],
+                  color: Colors.blue[400],
                   height: 1.1,
                 ),
               ),
@@ -795,6 +825,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   // NEW METHOD 2: Build Add Friend Info (replaces streak info when placeholder is focused)
   Widget _buildAddFriendInfo() {
+    final appColors = AppColors.of(context);
     return Column(
       children: [
         // Placeholder streak count
@@ -803,7 +834,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           style: TextStyle(
             fontSize: 32,
             fontWeight: FontWeight.bold,
-            color: Colors.grey[400],
+            color: appColors.subtleText,
           ),
         ),
         
@@ -815,8 +846,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           child: LinearProgressIndicator(
             value: 0.0,
             minHeight: 8,
-            backgroundColor: Colors.grey[300],
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.grey[400]!),
+            backgroundColor: appColors.divider,
+            valueColor: AlwaysStoppedAnimation<Color>(appColors.subtleText),
           ),
         ),
         
@@ -827,22 +858,25 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [Colors.blue[100]!, Colors.purple[100]!],
+              colors: [
+                Colors.blue.withOpacity(0.15),
+                Colors.purple.withOpacity(0.15),
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(25),
-            border: Border.all(color: Colors.blue[300]!, width: 2),
+            border: Border.all(color: Colors.blue[400]!, width: 2),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.touch_app_rounded, color: Colors.blue[700], size: 22),
+              Icon(Icons.touch_app_rounded, color: Colors.blue[400], size: 22),
               const SizedBox(width: 10),
               Text(
                 'Tap to find friends!',
                 style: TextStyle(
-                  color: Colors.blue[700],
+                  color: Colors.blue[400],
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
                 ),
@@ -851,6 +885,563 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildInfoTray() {
+    final appColors = AppColors.of(context);
+    final tip = coachTips[DateTime.now().millisecondsSinceEpoch % coachTips.length];
+    final cards = [
+      _buildTrayWorkout(),
+      _buildTrayCoachTip(tip),
+      _buildTrayHeatmap(),
+    ];
+    final orderedCards = _trayOrder.map((i) => cards[i]).toList();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: 140,
+          child: PageView(
+            controller: _trayController,
+            onPageChanged: (i) => setState(() => _trayIndex = i),
+            children: orderedCards,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(3, (i) {
+            final active = i == _trayIndex;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              width: active ? 22 : 9,
+              height: 9,
+              decoration: BoxDecoration(
+                color: active ? Colors.blue[400] : appColors.divider,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTrayWorkout() {
+    final appColors = AppColors.of(context);
+    final currentUserId = _supabase.auth.currentUser?.id;
+
+    // ── Priority 1: Active workout (in_progress) ──
+    final activeWorkout = _todaysWorkouts.firstWhere(
+      (w) => w['status'] == 'in_progress',
+      orElse: () => {},
+    );
+    if (activeWorkout.isNotEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          color: appColors.cardBackground,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 38, height: 38,
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Center(child: Text('🏋️', style: TextStyle(fontSize: 18))),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Active Workout', style: TextStyle(fontSize: 10, color: appColors.subtleText, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+                  const SizedBox(height: 2),
+                  Text(
+                    activeWorkout['workout_type'] ?? 'Workout',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.orange[400]),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            GestureDetector(
+              onTap: () => _checkIn(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange[400]!, width: 1),
+                ),
+                child: Text('Resume', style: TextStyle(color: Colors.orange[400], fontWeight: FontWeight.w600, fontSize: 13)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Priority 2: Pending invite ──
+    final pendingInvite = _todaysWorkouts.firstWhere(
+      (w) => w['buddy_id'] == currentUserId && w['buddy_status'] == 'pending',
+      orElse: () => {},
+    );
+    if (pendingInvite.isNotEmpty) {
+      final creator = pendingInvite['creator'];
+      final creatorName = creator?['display_name'] ?? 'Someone';
+      return Container(
+        decoration: BoxDecoration(
+          color: appColors.cardBackground,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 38, height: 38,
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Center(child: Text('📨', style: TextStyle(fontSize: 18))),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Workout Invite', style: TextStyle(fontSize: 10, color: appColors.subtleText, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$creatorName invited you!',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: () => _acceptWorkoutInviteDash(pendingInvite['id']),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.green[400]!, width: 1),
+                    ),
+                    child: Icon(Icons.check, color: Colors.green[400], size: 16),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => _declineWorkoutInviteDash(pendingInvite['id']),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.red[400]!, width: 1),
+                    ),
+                    child: Icon(Icons.close, color: Colors.red[400], size: 16),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Priority 3: Friend working out live ──
+    final friendsWorkingOut = _presenceService.getFriendsWorkingOut(_friendIds);
+    if (friendsWorkingOut.isNotEmpty) {
+      final friend = friendsWorkingOut.first;
+      final friendId = friend['user_id'] as String;
+      final friendName = _nicknames[friendId] ?? 
+          _allStreaks
+              .expand((s) => s.members)
+              .firstWhere((m) => m.userId == friendId, orElse: () => _allStreaks.first.members.first)
+              .displayName;
+
+      return Container(
+        decoration: BoxDecoration(
+          color: appColors.cardBackground,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 38, height: 38,
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Center(child: Text('👀', style: TextStyle(fontSize: 18))),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Live', style: TextStyle(fontSize: 10, color: Colors.green[400], fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$friendName is training right now 💪',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: 8, height: 8,
+              decoration: BoxDecoration(
+                color: Colors.green[400],
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Priority 4: Scheduled workout ──
+    final scheduled = _todaysWorkouts.firstWhere(
+      (w) => w['status'] == 'scheduled',
+      orElse: () => {},
+    );
+    if (scheduled.isNotEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          color: appColors.cardBackground,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 38, height: 38,
+              decoration: BoxDecoration(
+                color: appColors.cardBackground,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: appColors.cardBorder, width: 1),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 38, height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.red[400],
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(7),
+                        topRight: Radius.circular(7),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        '${DateTime.now().day}',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text("Today's Workout", style: TextStyle(fontSize: 10, color: appColors.subtleText, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+                  const SizedBox(height: 2),
+                  Text(
+                    scheduled['workout_type'] ?? 'Workout',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    scheduled['workout_time'] ?? '',
+                    style: TextStyle(fontSize: 11, color: appColors.subtleText),
+                  ),
+                ],
+              ),
+            ),
+            GestureDetector(
+              onTap: () {
+                final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+                homeState?.setState(() => homeState._selectedIndex = 2);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.blue[400]!.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue[400]!, width: 1),
+                ),
+                child: Text('View', style: TextStyle(color: Colors.blue[400], fontWeight: FontWeight.w600, fontSize: 13)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Priority 5: Nothing ──
+    return Container(
+      decoration: BoxDecoration(
+        color: appColors.cardBackground,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 38, height: 38,
+            decoration: BoxDecoration(
+              color: appColors.cardBackground,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: appColors.cardBorder, width: 1),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 38, height: 12,
+                  decoration: BoxDecoration(
+                    color: Colors.red[400],
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(7),
+                      topRight: Radius.circular(7),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      '${DateTime.now().day}',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text("Today's Workout", style: TextStyle(fontSize: 10, color: appColors.subtleText, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+                const SizedBox(height: 2),
+                Text('No workout scheduled', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.onSurface)),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: _showQuickCreateWorkoutDialog,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.blue[400]!.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue[400]!, width: 1),
+              ),
+              child: Text('+ Add', style: TextStyle(color: Colors.blue[400], fontWeight: FontWeight.w600, fontSize: 13)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrayCoachTip(Map<String, dynamic> tip) {
+    final appColors = AppColors.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: appColors.cardBackground,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: appColors.sectionBackground,
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: Text('🤖', style: TextStyle(fontSize: 20)),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'COACH MAX',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: appColors.subtleText,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        tip['category'],
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: Colors.blue[400],
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  tip['tip'],
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).colorScheme.onSurface,
+                    height: 1.3,
+                  ),
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrayHeatmap() {
+    final appColors = AppColors.of(context);
+    final today = DateTime.now();
+    final monday = today.subtract(Duration(days: today.weekday - 1));
+    final week = List.generate(7, (i) => monday.add(Duration(days: i)));
+    final checkedCount = week.where((d) => _isDateCheckedIn(d)).length;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: appColors.cardBackground,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'This Week',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: appColors.subtleText,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                '$checkedCount/7 days',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.green[400],
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: week.map((date) {
+              final checked = _isSameDay(date, today) 
+                  ? _hasCheckedInToday 
+                  : (!date.isAfter(today) && _isDateCheckedIn(date));
+              final isToday = _isSameDay(date, today);
+              final isFuture = date.isAfter(today);
+
+              return Column(
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: checked
+                          ? Colors.orange[600]
+                          : isToday
+                              ? Colors.orange.withOpacity(0.15)
+                              : appColors.divider,
+                      border: isToday
+                          ? Border.all(color: Colors.orange, width: 2)
+                          : null,
+                    ),
+                    child: Center(
+                      child: checked
+                          ? const Text('🔥', style: TextStyle(fontSize: 14))
+                          : Text(
+                              '${date.day}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isFuture
+                                    ? appColors.divider
+                                    : isToday
+                                        ? Colors.orange
+                                        : appColors.subtleText,
+                                fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _getDayInitial(date),
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: isToday ? Colors.orange : appColors.subtleText,
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -982,7 +1573,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ? Colors.green[600]  // ← Green when checked in
               : Colors.orange[600],
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 20),
+          padding: const EdgeInsets.symmetric(vertical: 15),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
@@ -1024,6 +1615,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   Widget _buildTakeBreakButton() {
+    final appColors = AppColors.of(context);
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton(
@@ -1036,7 +1628,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             borderRadius: BorderRadius.circular(16),
           ),
           side: BorderSide(
-            color: _hasCheckedInToday ? Colors.grey[300]! : Colors.blue[600]!,
+            color: _hasCheckedInToday ? appColors.divider : Colors.blue[600]!,
             width: 2,
           ),
         ),
@@ -1046,15 +1638,15 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             Icon(
               Icons.bedtime,
               size: 24,
-              color: _hasCheckedInToday ? Colors.grey[400] : Colors.blue[700],
+              color: _hasCheckedInToday ? appColors.subtleText : Colors.blue[400],
             ),
             const SizedBox(width: 12),
             Text(
-              _hasCheckedInToday ? 'Already Checked In' : 'Take a Break',  // ✅ Change text
+              _hasCheckedInToday ? 'Already Checked In' : 'Take a Break',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: _hasCheckedInToday ? Colors.grey[400] : Colors.blue[700],
+                color: _hasCheckedInToday ? appColors.subtleText : Colors.blue[400],
               ),
             ),
           ],
@@ -1361,6 +1953,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   Widget _buildStreakInfo(TeamStreak streak) {
+    final appColors = AppColors.of(context);
     final checkedInCount = streak.todayCheckIns.length;
     final totalMembers = streak.members.length;
     
@@ -1393,7 +1986,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           style: TextStyle(
             fontSize: 32,
             fontWeight: FontWeight.bold,
-            color: Colors.grey[800],
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         
@@ -1405,7 +1998,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           child: LinearProgressIndicator(
             value: isComplete ? 1.0 : (checkedInCount / totalMembers),
             minHeight: 8,
-            backgroundColor: Colors.grey[300],
+            backgroundColor: appColors.divider,
             valueColor: AlwaysStoppedAnimation<Color>(statusColor),
           ),
         ),
@@ -1788,6 +2381,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _pendingRequests       = pendingFriends.length + pendingWorkouts;
       _totalWorkouts         = completedWorkouts;
       _buddyCount            = friends.length;
+      _friendIds = List<String>.from(friends.map((f) => f['id']));
       _achievementCount      = achievements;
       _isLoading             = false;
     });
@@ -2210,47 +2804,50 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-return Stack(
+    final appColors = AppColors.of(context);
+    return Stack(
       children: [
         Scaffold(
-          backgroundColor: AppColors.of(context).sectionBackground,
+          backgroundColor: appColors.sectionBackground,
           body: _isLoading
               ? _buildLoadingSkeleton()
-              : RefreshIndicator(
-                  onRefresh: _loadStreakData,
-                  child: CustomScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    slivers: [
-                      // ── Sticky gradient banner (never scrolls away) ──
-                      SliverPersistentHeader(
-                        pinned: true,
-                        delegate: _HomeHeaderDelegate(
-                          greeting: _getGreeting(),
-                          pendingRequests: _pendingRequests,
-                          onNotificationTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('No new notifications'),
-                                duration: Duration(seconds: 1),
+              : SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ── Greeting row ──
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _getGreeting(),
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
                               ),
-                            );
-                          },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+                              onPressed: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('No new notifications'),
+                                    duration: Duration(seconds: 1),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                         ),
-                      ),
-                      // ── Scrollable content ──
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-                        sliver: SliverList(
-                          delegate: SliverChildListDelegate([
-                            _buildStreakCarousel(),
-                            const SizedBox(height: 24),
-                            if (_showInviteNudge) _buildInviteButton(),
-                            _buildQuickActionsSection(),
-                            const SizedBox(height: 20),
-                          ]),
-                        ),
-                      ),
-                    ],
+                        const SizedBox(height: 8),
+                        if (_showInviteNudge) _buildInviteButton(),
+                        // ── Streak card ──
+                        Expanded(child: _buildStreakCarousel()),
+                      ],
+                    ),
                   ),
                 ),
         ),
@@ -2342,7 +2939,7 @@ return Stack(
     return Container(
       height: 40,
       width: 1,
-      color: Colors.grey[300],
+      color: AppColors.of(context).divider,
     );
   }
 
@@ -2370,7 +2967,7 @@ return Stack(
           label,
           style: TextStyle(
             fontSize: 10,
-            color: Colors.grey[600],
+            color: AppColors.of(context).subtleText,
           ),
           textAlign: TextAlign.center,
         ),
@@ -2499,7 +3096,7 @@ return Stack(
                     builder: (context, value, _) => CircularProgressIndicator(
                       value: value > 1.0 ? 1.0 : value,
                       strokeWidth: 10,
-                      backgroundColor: Colors.grey[300],
+                      backgroundColor: AppColors.of(context).divider,
                       valueColor: AlwaysStoppedAnimation<Color>(
                         isCoachMax ? Colors.blue[700]! : Colors.orange[700]!,
                       ),
@@ -2556,7 +3153,7 @@ return Stack(
               'Current Streak',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey[600],
+                color: AppColors.of(context).subtleText,
               ),
             ),
             
@@ -2568,7 +3165,7 @@ return Stack(
                 'Best: ${currentStreak.longestStreak} days',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey[600],
+                  color: AppColors.of(context).subtleText,
                 ),
               ),
             
@@ -2653,17 +3250,14 @@ return Stack(
 
   // No streaks card
   Widget _buildNoStreaksCard() {
+    final appColors = AppColors.of(context);
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
         padding: const EdgeInsets.all(40),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.grey[100]!, Colors.grey[200]!],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: appColors.cardBackground,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Center(
@@ -2672,7 +3266,7 @@ return Stack(
               Icon(
                 Icons.local_fire_department,
                 size: 64,
-                color: Colors.grey[400],
+                color: appColors.subtleText,
               ),
               const SizedBox(height: 16),
               Text(
@@ -2680,7 +3274,7 @@ return Stack(
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey[700],
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 8),
@@ -2688,7 +3282,7 @@ return Stack(
                 'Check in to start your streak!',
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey[600],
+                  color: appColors.subtleText,
                 ),
               ),
             ],
@@ -2699,6 +3293,7 @@ return Stack(
   }
 
   Widget _buildSkeletonCard() {
+    final appColors = AppColors.of(context);
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -2706,7 +3301,7 @@ return Stack(
         height: 420,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.of(context).cardBackground,
+          color: appColors.cardBackground,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
@@ -2747,34 +3342,24 @@ return Stack(
   }
 
   Widget _buildLoadingSkeleton() {
-    return CustomScrollView(
-      slivers: [
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: _HomeHeaderDelegate(
-            greeting: _getGreeting(),
-            pendingRequests: 0,
-            onNotificationTap: () {},
-          ),
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _skeletonBox(160, 24, radius: 8),
+                _skeletonBox(40, 40, radius: 20),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Expanded(child: _buildSkeletonCard()),
+          ],
         ),
-        SliverPadding(
-          padding: const EdgeInsets.all(16),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              _buildSkeletonCard(),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _skeletonBox(100, 80, radius: 16),
-                  _skeletonBox(100, 80, radius: 16),
-                  _skeletonBox(100, 80, radius: 16),
-                ],
-              ),
-            ]),
-          ),
-        ),
-      ],
+      ),
     );
   }
   
@@ -2787,7 +3372,7 @@ return Stack(
         width: width,
         height: height,
         decoration: BoxDecoration(
-          color: Colors.grey.withOpacity(value * 0.3),
+          color: AppColors.of(context).divider.withOpacity(value),
           borderRadius: BorderRadius.circular(radius),
         ),
       ),
@@ -2804,24 +3389,21 @@ return Stack(
         height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.grey.withOpacity(value * 0.3),
+          color: AppColors.of(context).divider.withOpacity(value),
         ),
       ),
     );
   }
 
   Widget _buildEmptyFavoritesCard() {
+    final appColors = AppColors.of(context);
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.white, Colors.orange[50]!],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: appColors.cardBackground,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
@@ -2830,7 +3412,7 @@ return Stack(
             Icon(
               Icons.star_border,
               size: 80,
-              color: Colors.orange[300],
+              color: Colors.orange[400],
             ),
             const SizedBox(height: 16),
             Text(
@@ -2838,7 +3420,7 @@ return Stack(
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 8),
@@ -2847,7 +3429,7 @@ return Stack(
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey[600],
+                color: appColors.subtleText,
                 height: 1.5,
               ),
             ),
@@ -2888,12 +3470,12 @@ return Stack(
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
+            Text(
               "Today's Workouts",
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF2C3E50),
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             TextButton(
@@ -2919,6 +3501,7 @@ return Stack(
   }
 
   Widget _buildWorkoutCardDashboard(Map<String, dynamic> workout) {
+    final appColors = AppColors.of(context);
     final creator = workout['creator'];
     final buddy = workout['buddy'];
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
@@ -2927,14 +3510,14 @@ return Stack(
     final buddyStatus = workout['buddy_status'];
     
     String buddyName = 'Solo';
-    Color buddyColor = Colors.grey[700]!;
+    Color buddyColor = appColors.subtleText;
     
     if (buddy != null && isCreator) {
       buddyName = buddy['display_name'] ?? 'Unknown';
       buddyColor = buddyStatus == 'accepted' ? Colors.green[700]! : Colors.orange[700]!;
     } else if (creator != null && isBuddy) {
       buddyName = creator['display_name'] ?? 'Unknown';
-      buddyColor = Colors.blue[700]!;
+      buddyColor = Colors.blue[400]!;
     }
     
     return Card(
@@ -2943,11 +3526,7 @@ return Stack(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.white, Colors.blue[50]!],
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-          ),
+          color: appColors.cardBackground,
           borderRadius: BorderRadius.circular(16),
         ),
         child: ListTile(
@@ -2958,7 +3537,7 @@ return Stack(
                 radius: 28,
                 backgroundColor: _getWorkoutColorDash(workout['workout_type']).withOpacity(0.2),
                 child: Icon(
-                  _getWorkoutIcon(workout['workout_type']),  // ✅ NEW ICON!
+                  _getWorkoutIcon(workout['workout_type']),
                   color: _getWorkoutColorDash(workout['workout_type']),
                   size: 28,
                 ),
@@ -2987,9 +3566,10 @@ return Stack(
               Expanded(
                 child: Text(
                   workout['workout_type'] ?? 'Workout',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
               ),
@@ -3017,11 +3597,11 @@ return Stack(
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(Icons.schedule, size: 14, color: Colors.grey[600]),
+                  Icon(Icons.schedule, size: 14, color: appColors.subtleText),
                   const SizedBox(width: 4),
                   Text(
                     workout['workout_time'] ?? '',
-                    style: TextStyle(color: Colors.grey[600]),
+                    style: TextStyle(color: appColors.subtleText),
                   ),
                   const SizedBox(width: 12),
                   Icon(Icons.person, size: 14, color: buddyColor),
@@ -3039,11 +3619,11 @@ return Stack(
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(Icons.timer, size: 14, color: Colors.grey[600]),
+                    Icon(Icons.timer, size: 14, color: appColors.subtleText),
                     const SizedBox(width: 4),
                     Text(
                       _formatDurationDash(workout['planned_duration_minutes']),
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      style: TextStyle(color: appColors.subtleText, fontSize: 12),
                     ),
                   ],
                 ),
@@ -3094,7 +3674,7 @@ return Stack(
         });
       },
       style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.blue[700],
+        backgroundColor: Colors.blue[600],
         foregroundColor: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
@@ -3106,6 +3686,7 @@ return Stack(
   }
 
   Widget _buildCreateWorkoutPromptDashboard() {
+    final appColors = AppColors.of(context);
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -3115,11 +3696,7 @@ return Stack(
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.blue[50]!, Colors.purple[50]!],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: appColors.cardBackground,
             borderRadius: BorderRadius.circular(16),
           ),
           child: Column(
@@ -3127,7 +3704,7 @@ return Stack(
               Icon(
                 Icons.add_circle_outline,
                 size: 48,
-                color: Colors.blue[700],
+                color: Colors.blue[400],
               ),
               const SizedBox(height: 12),
               Text(
@@ -3135,7 +3712,7 @@ return Stack(
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 8),
@@ -3143,7 +3720,7 @@ return Stack(
                 'Create a workout with a friend!',
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey[600],
+                  color: appColors.subtleText,
                 ),
               ),
               const SizedBox(height: 16),
@@ -3152,7 +3729,7 @@ return Stack(
                 icon: const Icon(Icons.add),
                 label: const Text('Create Workout'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[700],
+                  backgroundColor: Colors.blue[600],
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
@@ -3283,6 +3860,7 @@ return Stack(
     required Color color,
     required VoidCallback onTap,
   }) {
+    final appColors = AppColors.of(context);
     return Expanded(
       child: Card(
         elevation: 2,
@@ -3326,6 +3904,7 @@ return Stack(
 
   // Build team completion bar (shows who checked in)
   Widget _buildTeamCompletionBar(TeamStreak streak) {
+    final appColors = AppColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3336,7 +3915,7 @@ return Stack(
               'Team Progress',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[600],
+                color: appColors.subtleText,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -3344,7 +3923,7 @@ return Stack(
               '${streak.todayCheckIns.length}/${streak.members.length} checked in',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[600],
+                color: appColors.subtleText,
               ),
             ),
           ],
@@ -3356,7 +3935,7 @@ return Stack(
           child: LinearProgressIndicator(
             value: streak.completionPercentage,
             minHeight: 8,
-            backgroundColor: Colors.grey[300],
+            backgroundColor: appColors.divider,
             valueColor: AlwaysStoppedAnimation<Color>(
               streak.isCompleteToday ? Colors.green : Colors.orange,
             ),
@@ -3375,7 +3954,7 @@ return Stack(
             
             return Chip(
               avatar: CircleAvatar(
-                backgroundColor: hasCheckedIn ? Colors.green : Colors.grey[400],
+                backgroundColor: hasCheckedIn ? Colors.green : appColors.subtleText,
                 child: Icon(
                   hasCheckedIn ? Icons.check : Icons.person,
                   size: 16,
@@ -3386,7 +3965,9 @@ return Stack(
                 member.displayName,
                 style: const TextStyle(fontSize: 12),
               ),
-              backgroundColor: hasCheckedIn ? Colors.green[50] : Colors.grey[200],
+              backgroundColor: hasCheckedIn
+                  ? Colors.green.withOpacity(0.15)
+                  : appColors.sectionBackground,
             );
           }).toList(),
         ),
@@ -3423,6 +4004,7 @@ return Stack(
   }
 
   Widget _buildCalendarHeatMap() {
+    final appColors = AppColors.of(context);
     final today = DateTime.now();
     final last7Days = List.generate(7, (index) {
       return today.subtract(Duration(days: 6 - index));
@@ -3435,7 +4017,7 @@ return Stack(
           'Last 7 Days',
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey[600],
+            color: appColors.subtleText,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -3455,7 +4037,7 @@ return Stack(
                     shape: BoxShape.circle,
                     color: isCheckedIn 
                         ? Colors.green 
-                        : (isToday ? Colors.orange[100] : Colors.grey[300]),
+                        : (isToday ? Colors.orange.withOpacity(0.2) : appColors.divider),
                     border: isToday 
                         ? Border.all(color: Colors.orange, width: 2)
                         : null,
@@ -3471,7 +4053,7 @@ return Stack(
                             '${date.day}',
                             style: TextStyle(
                               fontSize: 12,
-                              color: isToday ? Colors.orange : Colors.grey[600],
+                              color: isToday ? Colors.orange : appColors.subtleText,
                               fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
                             ),
                           ),
@@ -3482,7 +4064,7 @@ return Stack(
                   _getDayInitial(date),
                   style: TextStyle(
                     fontSize: 10,
-                    color: Colors.grey[600],
+                    color: appColors.subtleText,
                   ),
                 ),
               ],
@@ -3683,23 +4265,19 @@ return Stack(
   }
 
   Widget _buildEmptyWorkoutsState() {
+    final appColors = AppColors.of(context);
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.blue[50]!, Colors.purple[50]!],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: appColors.cardBackground,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Animated Icon
             TweenAnimationBuilder<double>(
               tween: Tween(begin: 0.8, end: 1.0),
               duration: const Duration(milliseconds: 1500),
@@ -3710,13 +4288,13 @@ return Stack(
                   child: Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.blue[100],
+                      color: Colors.blue.withOpacity(0.12),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       Icons.calendar_today,
                       size: 64,
-                      color: Colors.blue[700],
+                      color: Colors.blue[400],
                     ),
                   ),
                 );
@@ -3728,7 +4306,7 @@ return Stack(
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
+                color: Theme.of(context).colorScheme.onSurface,
               ),
               textAlign: TextAlign.center,
             ),
@@ -3737,7 +4315,7 @@ return Stack(
               'Create a workout with a friend\nand start crushing your goals!',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey[600],
+                color: appColors.subtleText,
                 height: 1.5,
               ),
               textAlign: TextAlign.center,
@@ -3751,7 +4329,7 @@ return Stack(
               icon: const Icon(Icons.add_circle),
               label: const Text('Create Your First Workout'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[700],
+                backgroundColor: Colors.blue[600],
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -3834,6 +4412,7 @@ return Stack(
   }
 
   void _showSortBottomSheet() {
+    final appColors = AppColors.of(context);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -3846,6 +4425,7 @@ return Stack(
         maxChildSize: 0.8,
         expand: false,
         builder: (context, scrollController) => Container(
+          color: appColors.cardBackground,
           padding: const EdgeInsets.all(24),
           child: ListView(
             controller: scrollController,
@@ -3856,7 +4436,7 @@ return Stack(
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey[300],
+                    color: appColors.divider,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -3866,20 +4446,21 @@ return Stack(
               // Title with info hint
               Column(
                 children: [
-                  const Text(
+                  Text(
                     '📊 Sort Your Streaks',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '👆 Tap to select • ✋ Long-press for info',  // ⭐ NEW HINT
+                    '👆 Tap to select • ✋ Long-press for info',
                     style: TextStyle(
                       fontSize: 13,
-                      color: Colors.grey[600],
+                      color: appColors.subtleText,
                       fontStyle: FontStyle.italic,
                     ),
                     textAlign: TextAlign.center,
@@ -3892,33 +4473,25 @@ return Stack(
               GridView.count(
                 crossAxisCount: 2,
                 shrinkWrap: true,
-                crossAxisSpacing: 8,        // ✅ REDUCED from 12
-                mainAxisSpacing: 8,         // ✅ REDUCED from 12
-                childAspectRatio: 2.0,      // ✅ ADJUSTED for less height
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 2.0,
                 physics: const NeverScrollableScrollPhysics(),
                 children: StreakSortMode.values.map((mode) {
                   final isSelected = mode == _streakSortMode;
                   
                   return GestureDetector(
-                    // ✅ FIX: Tap handler (was missing the actual code!)
                     onTap: () async {
-                      print('🎯 USER TAPPED: ${mode.displayName}');
-                      print('🎯 Old mode: ${_streakSortMode.displayName}');
-                      
                       HapticFeedback.selectionClick();
                       
-                      // ✅ SPECIAL HANDLING for Custom mode
                       if (mode == StreakSortMode.custom) {
-                        Navigator.pop(context);  // Close sort menu first
-                        
-                        // ✅ Use addPostFrameCallback to show selector AFTER build completes
+                        Navigator.pop(context);
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           _showCustomModeSelector();
                         });
-                        return;  // Don't continue with normal flow
+                        return;
                       }
                       
-                      // ✅ For all other modes, continue normally
                       setState(() {
                         _streakSortMode = mode;
                         _currentCarouselIndex = 1;
@@ -3926,40 +4499,34 @@ return Stack(
                       
                       Navigator.pop(context);
                       
-                      // Save preference to database
                       final userId = Supabase.instance.client.auth.currentUser?.id;
                       if (userId != null) {
                         await Supabase.instance.client.from('user_profiles').update({
                           'preferred_streak_sort': mode.name,
                         }).eq('id', userId);
-                        print('💾 Saved preference: ${mode.name}');
                       }
                       
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (_carouselController.hasClients && mounted) {
                           _carouselController.jumpToPage(1000);
-                          print('🎯 Jumped to center after preset change');
                         }
                       });
                     },
                     
-                    // ⭐ Long-press shows info dialog
                     onLongPress: () {
                       HapticFeedback.mediumImpact();
                       _showSortModeInfo(context, mode);
                     },
                     
                     child: Container(
-                      padding: const EdgeInsets.all(8),  // ✅ REDUCED from 12
+                      padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: isSelected
-                              ? [Colors.blue[50]!, Colors.blue[100]!]
-                              : [Colors.grey[50]!, Colors.grey[100]!],
-                        ),
+                        color: isSelected
+                            ? Colors.blue.withOpacity(0.15)
+                            : appColors.sectionBackground,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: isSelected ? Colors.blue[400]! : Colors.grey[300]!,
+                          color: isSelected ? Colors.blue[400]! : appColors.cardBorder,
                           width: isSelected ? 2 : 1,
                         ),
                       ),
@@ -3977,14 +4544,16 @@ return Stack(
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                                    color: isSelected ? Colors.blue[900] : Colors.grey[800],
+                                    color: isSelected
+                                        ? Colors.blue[400]
+                                        : Theme.of(context).colorScheme.onSurface,
                                   ),
                                 ),
                                 Text(
                                   mode.description,
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: Colors.grey[600],
+                                    color: appColors.subtleText,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -4006,6 +4575,7 @@ return Stack(
   }
 
   void _showSortModeInfo(BuildContext context, StreakSortMode mode) {
+    final appColors = AppColors.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -4015,7 +4585,13 @@ return Stack(
             Text(mode.emoji, style: const TextStyle(fontSize: 28)),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(mode.displayName, style: const TextStyle(fontSize: 20)),
+              child: Text(
+                mode.displayName,
+                style: TextStyle(
+                  fontSize: 20,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
             ),
           ],
         ),
@@ -4027,7 +4603,7 @@ return Stack(
               _getSortModeDetailedDescription(mode),
               style: TextStyle(
                 fontSize: 15,
-                color: Colors.grey[700],
+                color: Theme.of(context).colorScheme.onSurface,
                 height: 1.5,
               ),
             ),
@@ -4035,20 +4611,20 @@ return Stack(
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.blue[50],
+                color: Colors.blue.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue[200]!),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.lightbulb_outline, color: Colors.blue[700], size: 20),
+                  Icon(Icons.lightbulb_outline, color: Colors.blue[400], size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       _getSortModeExample(mode),
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.blue[900],
+                        color: Colors.blue[400],
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -4288,13 +4864,7 @@ return Stack(
     @override
     Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
       return Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
+        color: Colors.transparent,
         child: SafeArea(
           bottom: false,
           child: Padding(
@@ -4390,7 +4960,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
           children: [
             Text(
               'Give your workout partnership a custom name!',
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 14, color: AppColors.of(context).subtleText),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -4502,11 +5072,16 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final appColors = AppColors.of(context);
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
         width: double.maxFinite,
         constraints: const BoxConstraints(maxHeight: 500, maxWidth: 400),
+        decoration: BoxDecoration(
+          color: appColors.cardBackground,
+          borderRadius: BorderRadius.circular(20),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -4561,13 +5136,13 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  Icon(Icons.lightbulb_outline, size: 16, color: Colors.grey[500]),
+                  Icon(Icons.lightbulb_outline, size: 16, color: appColors.subtleText),
                   const SizedBox(width: 8),
                   Text(
                     'Tap a streak to rename it',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey[500],
+                      color: appColors.subtleText,
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -4584,11 +5159,11 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.sentiment_neutral, size: 48, color: Colors.grey[400]),
+                            Icon(Icons.sentiment_neutral, size: 48, color: appColors.subtleText),
                             const SizedBox(height: 12),
                             Text(
                               'No active streaks yet!',
-                              style: TextStyle(color: Colors.grey[600]),
+                              style: TextStyle(color: appColors.subtleText),
                             ),
                           ],
                         ),
@@ -4616,7 +5191,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: Colors.grey[300]!),
+                      side: BorderSide(color: appColors.divider),
                     ),
                   ),
                   child: const Text('Close'),
@@ -4630,7 +5205,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
   }
 
   Widget _buildStreakCard(TeamStreak streak) {
-    final buddyName = _getBuddyName(streak);
+    final appColors = AppColors.of(context);
     final isComplete = streak.isCompleteToday;
 
     return GestureDetector(
@@ -4639,10 +5214,12 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isComplete ? Colors.green[50] : Colors.white,
+          color: isComplete
+              ? Colors.green.withOpacity(0.1)
+              : appColors.sectionBackground,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isComplete ? Colors.green[200]! : Colors.grey[200]!,
+            color: isComplete ? Colors.green.withOpacity(0.4) : appColors.cardBorder,
             width: 1.5,
           ),
           boxShadow: [
@@ -4692,9 +5269,10 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
                       Flexible(
                         child: Text(
                           streak.teamName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 15,
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -4703,7 +5281,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
                       Icon(
                         Icons.edit_outlined,
                         size: 14,
-                        color: Colors.grey[400],
+                        color: appColors.subtleText,
                       ),
                     ],
                   ),
@@ -4714,14 +5292,14 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
                       Icon(
                         Icons.local_fire_department,
                         size: 14,
-                        color: Colors.orange[600],
+                        color: Colors.orange[500],
                       ),
                       const SizedBox(width: 4),
                       Text(
                         '${streak.currentStreak} day streak',
                         style: TextStyle(
                           fontSize: 13,
-                          color: Colors.orange[700],
+                          color: Colors.orange[500],
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -4735,13 +5313,15 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
             Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: isComplete ? Colors.green[100] : Colors.grey[100],
+                color: isComplete
+                    ? Colors.green.withOpacity(0.15)
+                    : appColors.sectionBackground,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 isComplete ? Icons.check : Icons.access_time,
                 size: 18,
-                color: isComplete ? Colors.green[700] : Colors.grey[500],
+                color: isComplete ? Colors.green[500] : appColors.subtleText,
               ),
             ),
           ],
@@ -4778,9 +5358,9 @@ class _StatItem extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
-            color: Colors.grey,
+            color: AppColors.of(context).subtleText,
           ),
           textAlign: TextAlign.center,
           overflow: TextOverflow.ellipsis,
@@ -5270,7 +5850,7 @@ class _SchedulePageState extends State<SchedulePage> {
             Icon(
               Icons.calendar_today,
               size: 64,
-              color: Colors.grey[400],
+              color: AppColors.of(context).subtleText,
             ),
             const SizedBox(height: 16),
             Text(
@@ -5278,7 +5858,7 @@ class _SchedulePageState extends State<SchedulePage> {
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey[600],
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 8),
@@ -5286,7 +5866,7 @@ class _SchedulePageState extends State<SchedulePage> {
               'Tap the + button to schedule your first workout',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey[500],
+                color: AppColors.of(context).subtleText,
               ),
               textAlign: TextAlign.center,
             ),
@@ -5444,6 +6024,7 @@ class _SchedulePageState extends State<SchedulePage> {
   }
 
   Widget _buildEmptyWorkoutsCard() {
+    final appColors = AppColors.of(context);
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -5451,20 +6032,20 @@ class _SchedulePageState extends State<SchedulePage> {
         padding: const EdgeInsets.all(32),
         child: Column(
           children: [
-            Icon(Icons.calendar_today, size: 64, color: Colors.grey[400]),
+            Icon(Icons.calendar_today, size: 64, color: appColors.subtleText),
             const SizedBox(height: 16),
             Text(
               'No scheduled workouts',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey[700],
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               'Tap + to schedule a workout',
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 14, color: appColors.subtleText),
             ),
           ],
         ),
@@ -5526,8 +6107,6 @@ class _SchedulePageState extends State<SchedulePage> {
       return dateStr;
     }
   }
-
-  
 
   String _formatDuration(int? minutes) {
     if (minutes == null) return '';
@@ -6491,7 +7070,7 @@ class _ProfilePageState extends State<ProfilePage>
       },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 15),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: const Color(0xFFE53935).withOpacity(0.08),
           borderRadius: BorderRadius.circular(16),
@@ -6692,7 +7271,7 @@ class _QuickActionButton extends StatelessWidget {
             child: Icon(icon, color: color, size: 30),
           ),
           const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 12)),
+          Text(label, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface)),
         ],
       ),
     );
@@ -6710,11 +7289,11 @@ class _DayCircle extends StatelessWidget {
   Widget build(BuildContext context) {
     return CircleAvatar(
       radius: 20,
-      backgroundColor: completed ? Colors.green : Colors.grey[300],
+      backgroundColor: completed ? Colors.green : AppColors.of(context).divider,
       child: Text(
         day,
         style: TextStyle(
-          color: completed ? Colors.white : Colors.black,
+          color: completed ? Colors.white : Theme.of(context).colorScheme.onSurface,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -6763,11 +7342,15 @@ class _StatCard extends StatelessWidget {
       children: [
         Text(
           value,
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
         ),
         Text(
           label,
-          style: const TextStyle(color: Colors.grey),
+          style: TextStyle(color: AppColors.of(context).subtleText),
         ),
       ],
     );
@@ -6784,13 +7367,13 @@ class _QuickTip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Icon(icon, size: 20, color: Colors.grey[600]),
+        Icon(icon, size: 20, color: AppColors.of(context).subtleText),
         const SizedBox(height: 4),
         Text(
           text,
           style: TextStyle(
             fontSize: 10,
-            color: Colors.grey[600],
+            color: AppColors.of(context).subtleText,
           ),
         ),
       ],
@@ -6827,7 +7410,7 @@ class _BenefitRow extends StatelessWidget {
             text,
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey[700],
+              color: Theme.of(context).colorScheme.onSurface,
               fontWeight: FontWeight.w500,
             ),
           ),
