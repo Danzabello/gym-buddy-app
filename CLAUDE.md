@@ -75,3 +75,11 @@ Secrets are in `.env` (bundled as a Flutter asset via `flutter_dotenv`). Require
 
 ### Onboarding / orphaned-account cleanup
 If a user authenticates but never completes onboarding (`onboarding_completed = false`), `AuthWrapper` calls the `delete_own_account` RPC and signs them out, allowing re-registration with the same email.
+
+## Rules
+
+- **Brand gradient** is `Color(0xFF1D4ED8)` → `Color(0xFF7C3AED)`. Never change this. Warm/orange tones are only for the primary CTA button.
+- **Never use `const`** on widgets that reference `AppColors.of(context)` or `Theme.of(context)` — it causes a compile error.
+- **One page at a time.** Only touch the file explicitly asked about. No collateral changes.
+- **Mockup approval before code.** For any UI change, describe or show the plan first and wait for approval.
+- **Commit before starting anything new.**
