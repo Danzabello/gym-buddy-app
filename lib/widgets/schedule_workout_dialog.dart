@@ -1,70 +1,84 @@
+// lib/widgets/schedule_workout_dialog.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/workout_invite_service.dart';
+import '../theme/app_theme.dart';
+import 'user_avatar.dart';
 
-/// Schedule Workout Dialog - Schedule workouts with friends
 class ScheduleWorkoutDialog extends StatefulWidget {
   final Map<String, dynamic> friendProfile;
-
-  const ScheduleWorkoutDialog({
-    super.key,
-    required this.friendProfile,
-  });
+  const ScheduleWorkoutDialog(
+      {super.key, required this.friendProfile});
 
   @override
-  State<ScheduleWorkoutDialog> createState() => _ScheduleWorkoutDialogState();
+  State<ScheduleWorkoutDialog> createState() =>
+      _ScheduleWorkoutDialogState();
 }
 
-class _ScheduleWorkoutDialogState extends State<ScheduleWorkoutDialog> {
+class _ScheduleWorkoutDialogState
+    extends State<ScheduleWorkoutDialog> {
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   bool _isSending = false;
 
+  bool get _hasDateTime =>
+      _selectedDate != null && _selectedTime != null;
+
   Future<void> _pickDateTime() async {
-    // Pick date
+    final appColors = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
+
     final date = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: Colors.blue[700]!,
-              onPrimary: Colors.white,
-              surface: Colors.white,
-              onSurface: Colors.black,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: isDark
+              ? ColorScheme.dark(
+                  primary: const Color(0xFF3B82F6),
+                  onPrimary: Colors.white,
+                  surface: appColors.cardBackground,
+                  onSurface: cs.onSurface,
+                )
+              : ColorScheme.light(
+                  primary: const Color(0xFF1D4ED8),
+                  onPrimary: Colors.white,
+                  surface: Colors.white,
+                  onSurface: Colors.black,
+                ),
+        ),
+        child: child!,
+      ),
     );
+    if (date == null || !mounted) return;
 
-    if (date == null) return;
-
-    // Pick time
-    if (!mounted) return;
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: Colors.blue[700]!,
-              onPrimary: Colors.white,
-              surface: Colors.white,
-              onSurface: Colors.black,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: isDark
+              ? ColorScheme.dark(
+                  primary: const Color(0xFF3B82F6),
+                  onPrimary: Colors.white,
+                  surface: appColors.cardBackground,
+                  onSurface: cs.onSurface,
+                )
+              : ColorScheme.light(
+                  primary: const Color(0xFF1D4ED8),
+                  onPrimary: Colors.white,
+                  surface: Colors.white,
+                  onSurface: Colors.black,
+                ),
+        ),
+        child: child!,
+      ),
     );
-
     if (time == null) return;
 
     setState(() {
@@ -73,375 +87,374 @@ class _ScheduleWorkoutDialogState extends State<ScheduleWorkoutDialog> {
     });
   }
 
-  Future<void> _sendWorkoutInvite({bool isToday = false}) async {
+  Future<void> _send({required bool isToday}) async {
     setState(() => _isSending = true);
-
     try {
-      final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+      final currentUserId =
+          Supabase.instance.client.auth.currentUser?.id;
       if (currentUserId == null) return;
 
-      final friendName = widget.friendProfile['display_name'] ?? 'your friend';
-      
-      DateTime scheduledDateTime;
-      String inviteMessage;
+      final friendName =
+          widget.friendProfile['display_name'] ?? 'your friend';
+
+      DateTime scheduledAt;
+      String message;
 
       if (isToday) {
-        scheduledDateTime = DateTime.now();
-        inviteMessage = 'Hey! Let\'s workout together today! 💪';
+        scheduledAt = DateTime.now();
+        message = 'Hey! Let\'s workout together today! 💪';
       } else {
-        if (_selectedDate == null || _selectedTime == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please select a date and time'),
-              backgroundColor: Colors.orange,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          setState(() => _isSending = false);
-          return;
-        }
-
-        scheduledDateTime = DateTime(
+        scheduledAt = DateTime(
           _selectedDate!.year,
           _selectedDate!.month,
           _selectedDate!.day,
           _selectedTime!.hour,
           _selectedTime!.minute,
         );
-
-        inviteMessage = 'Workout scheduled for ${_formatDateTime(scheduledDateTime)}';
+        message =
+            'Workout scheduled for ${_formatDateTime(scheduledAt)}';
       }
 
-      // Save invite to database
-      final workoutInviteService = WorkoutInviteService();
-      final invite = await workoutInviteService.sendInvite(
+      final service = WorkoutInviteService();
+      final invite = await service.sendInvite(
         recipientId: widget.friendProfile['id'],
-        scheduledFor: scheduledDateTime,
-        message: inviteMessage,
+        scheduledFor: scheduledAt,
+        message: message,
       );
 
-      if (invite == null) {
-        throw Exception('Failed to save workout invite');
-      }
+      if (invite == null) throw Exception('Failed to send invite');
 
       if (!mounted) return;
-
       HapticFeedback.heavyImpact();
-      
       Navigator.pop(context);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  isToday 
-                      ? 'Workout invite sent to $friendName! 🎉'
-                      : 'Workout scheduled with $friendName! 📅',
-                ),
-              ),
-            ],
+
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Row(children: [
+          const Icon(Icons.check_circle, color: Colors.white),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(isToday
+                ? 'Workout invite sent to $friendName! 🎉'
+                : 'Workout scheduled with $friendName! 📅'),
           ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+        ]),
+        backgroundColor: const Color(0xFF10B981),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10)),
+      ));
     } catch (e) {
-      print('❌ Error sending workout invite: $e');
       if (!mounted) return;
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to send workout invite'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Failed to send workout invite'),
+        backgroundColor: Color(0xFFEF4444),
+        behavior: SnackBarBehavior.floating,
+      ));
     } finally {
-      if (mounted) {
-        setState(() => _isSending = false);
-      }
+      if (mounted) setState(() => _isSending = false);
     }
   }
 
-  String _formatDateTime(DateTime dateTime) {
+  String _formatDateTime(DateTime dt) {
     final now = DateTime.now();
-    final difference = dateTime.difference(now);
-
+    final diff = dt.difference(now);
     String dateStr;
-    if (difference.inDays == 0) {
+    if (diff.inDays == 0) {
       dateStr = 'Today';
-    } else if (difference.inDays == 1) {
+    } else if (diff.inDays == 1) {
       dateStr = 'Tomorrow';
     } else {
-      dateStr = '${_getWeekday(dateTime.weekday)}, ${_getMonth(dateTime.month)} ${dateTime.day}';
+      const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+      const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                      'Jul','Aug','Sep','Oct','Nov','Dec'];
+      dateStr =
+          '${days[dt.weekday - 1]}, ${months[dt.month - 1]} ${dt.day}';
     }
-
-    final hour = dateTime.hour == 0 ? 12 : (dateTime.hour > 12 ? dateTime.hour - 12 : dateTime.hour);
-    final minute = dateTime.minute.toString().padLeft(2, '0');
-    final period = dateTime.hour >= 12 ? 'PM' : 'AM';
-
-    return '$dateStr at $hour:$minute $period';
-  }
-
-  String _getWeekday(int weekday) {
-    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return weekdays[weekday - 1];
-  }
-
-  String _getMonth(int month) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return months[month - 1];
+    final h = dt.hour == 0
+        ? 12
+        : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+    final m = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$dateStr at $h:$m $period';
   }
 
   @override
   Widget build(BuildContext context) {
-    final friendName = widget.friendProfile['display_name'] ?? 'Unknown';
+    final appColors = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final friendName =
+        widget.friendProfile['display_name'] ?? 'Buddy';
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header - Gradient banner that reaches edges
-                Stack(
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 24),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Colors.blue[600]!, Colors.purple[600]!],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.fitness_center,
-                            size: 48,
-                            color: Colors.white,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Schedule Workout',
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'with $friendName',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.white.withOpacity(0.9),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // X CLOSE BUTTON
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close, color: Colors.white, size: 24),
-                        padding: const EdgeInsets.all(8),
-                      ),
-                    ),
-                  ],
+      backgroundColor: Colors.transparent,
+      insetPadding:
+          const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+      child: Container(
+        decoration: BoxDecoration(
+          color: appColors.cardBackground,
+          borderRadius: BorderRadius.circular(20),
+          border:
+              Border.all(color: appColors.cardBorder, width: 0.5),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Gradient header ─────────────────────────────
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-
-                // Content
-                Padding(
-                  padding: const EdgeInsets.all(24),
+                borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(20)),
+              ),
+              child: Row(children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 2),
+                    color: Colors.white.withOpacity(0.12),
+                  ),
+                  child: ClipOval(
+                    child: UserAvatar(
+                      avatarId: widget.friendProfile['avatar_id'],
+                      size: 38,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Quick "Workout Today!" button
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Colors.orange[400]!, Colors.red[400]!],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.orange.withOpacity(0.3),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: _isSending ? null : () => _sendWorkoutInvite(isToday: true),
-                            borderRadius: BorderRadius.circular(16),
-                            child: Padding(
-                              padding: const EdgeInsets.all(20),
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.bolt,
-                                    size: 40,
-                                    color: Colors.white,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  const Text(
-                                    'Workout Today!',
-                                    style: TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Send quick invite for today',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.white.withOpacity(0.9),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // Divider with "OR"
-                      Row(
-                        children: [
-                          Expanded(child: Divider(color: Colors.grey[300])),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Text(
-                              'OR',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          Expanded(child: Divider(color: Colors.grey[300])),
-                        ],
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // Schedule for later
-                      Text(
-                        'Schedule for Later',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[800],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Date/Time picker button
-                      OutlinedButton.icon(
-                        onPressed: _pickDateTime,
-                        icon: Icon(Icons.calendar_today, color: Colors.blue[700]),
-                        label: Text(
-                          _selectedDate != null && _selectedTime != null
-                              ? _formatDateTime(DateTime(
-                                  _selectedDate!.year,
-                                  _selectedDate!.month,
-                                  _selectedDate!.day,
-                                  _selectedTime!.hour,
-                                  _selectedTime!.minute,
-                                ))
-                              : 'Pick Date & Time',
+                      const Text('Workout with',
                           style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.blue[700],
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-                          side: BorderSide(color: Colors.blue[700]!, width: 2),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Send scheduled invite button
-                      ElevatedButton.icon(
-                        onPressed: _isSending || _selectedDate == null || _selectedTime == null
-                            ? null
-                            : () => _sendWorkoutInvite(isToday: false),
-                        icon: _isSending
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.send, size: 20),
-                        label: Text(
-                          _isSending ? 'Sending...' : 'Send Invite',
+                              fontSize: 11,
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w500)),
+                      Text(friendName,
                           style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue[700],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          disabledBackgroundColor: Colors.grey[300],
-                        ),
-                      ),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: -0.3)),
                     ],
                   ),
                 ),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.close,
+                        size: 14, color: Colors.white),
+                  ),
+                ),
+              ]),
+            ),
 
-                // Cancel button
+            // ── Workout Today CTA ────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+              child: GestureDetector(
+                onTap: _isSending ? null : () => _send(isToday: true),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF97316),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.18),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Center(
+                        child: Text('⚡',
+                            style: TextStyle(fontSize: 18)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Workout Today!',
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white)),
+                          Text('Send a quick invite for right now',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.white70)),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right,
+                        color: Colors.white70, size: 20),
+                  ]),
+                ),
+              ),
+            ),
+
+            // ── OR divider ───────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 12),
+              child: Row(children: [
+                Expanded(
+                    child: Container(
+                        height: 0.5, color: appColors.divider)),
                 Padding(
-                  padding: const EdgeInsets.only(left: 24, right: 24, bottom: 24),
-                  child: TextButton(
-                    onPressed: _isSending ? null : () => Navigator.pop(context),
-                    child: Text(
-                      'Cancel',
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10),
+                  child: Text('OR SCHEDULE',
                       style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey[600],
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                          color: appColors.subtleText)),
+                ),
+                Expanded(
+                    child: Container(
+                        height: 0.5, color: appColors.divider)),
+              ]),
+            ),
+
+            // ── Schedule for later ───────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('PICK A DATE & TIME',
+                      style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.7,
+                          color: appColors.subtleText)),
+                  const SizedBox(height: 8),
+
+                  // Date/time picker button
+                  GestureDetector(
+                    onTap: _pickDateTime,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.all(13),
+                      decoration: BoxDecoration(
+                        color: _hasDateTime
+                            ? const Color(0xFF3B82F6).withOpacity(0.08)
+                            : appColors.sectionBackground,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: _hasDateTime
+                              ? const Color(0xFF3B82F6).withOpacity(0.3)
+                              : appColors.cardBorder,
+                          width: 0.5,
+                        ),
+                      ),
+                      child: Row(children: [
+                        Icon(Icons.calendar_today,
+                            size: 16,
+                            color: _hasDateTime
+                                ? const Color(0xFF3B82F6)
+                                : appColors.subtleText),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _hasDateTime
+                                ? _formatDateTime(DateTime(
+                                    _selectedDate!.year,
+                                    _selectedDate!.month,
+                                    _selectedDate!.day,
+                                    _selectedTime!.hour,
+                                    _selectedTime!.minute,
+                                  ))
+                                : 'Pick Date & Time',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _hasDateTime
+                                  ? const Color(0xFF3B82F6)
+                                  : appColors.subtleText,
+                            ),
+                          ),
+                        ),
+                        Icon(Icons.chevron_right,
+                            size: 16,
+                            color: appColors.subtleText),
+                      ]),
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // Send invite button
+                  GestureDetector(
+                    onTap: (_hasDateTime && !_isSending)
+                        ? () => _send(isToday: false)
+                        : null,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 200),
+                      opacity: _hasDateTime ? 1.0 : 0.35,
+                      child: Container(
+                        width: double.infinity,
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3B82F6),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Center(
+                          child: _isSending
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white))
+                              : const Text('Send Invite 📅',
+                                  style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white)),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+
+            // ── Cancel ───────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: GestureDetector(
+                onTap: _isSending
+                    ? null
+                    : () => Navigator.pop(context),
+                child: Text('Cancel',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: appColors.subtleText)),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -116,6 +116,7 @@ serve(async (req) => {
         'break_day_taken': 'notif_streaks',
         'coach_max_checked_in': 'notif_coach_max',
         'coach_max_motivational': 'notif_coach_max',
+        'buddy_nudge': 'notif_streaks',
       }
 
       const categoryField = categoryMap[type]

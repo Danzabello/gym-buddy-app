@@ -414,7 +414,7 @@ class FriendService {
       // Get friend profiles (now including username)
       final profiles = await _supabase
           .from('user_profiles')
-          .select('id, username, display_name, avatar_id, avatar_border, fitness_level, looking_for_buddy') // 🔒 explicit, no age/gender
+          .select('id, username, display_name, avatar_id, avatar_border, fitness_level, looking_for_buddy, workout_days_per_week') // 🔒 explicit, no age/gender
           .inFilter('id', friendIds);
 
       if (kDebugMode) print('✅ Loaded ${profiles.length} friend profiles');

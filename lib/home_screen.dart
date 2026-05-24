@@ -2472,172 +2472,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   Future<void> _showWeeklyPlanDialog() async {
-    int selectedWorkoutDays = 5; // Default to 5 workout days
-    
+    int selectedWorkoutDays = 5;
+
     final result = await showDialog<int>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final breakDays = 7 - selectedWorkoutDays;
-          
-          return AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade100,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.calendar_today,
-                    color: Colors.orange,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Weekly Workout Plan',
-                    style: TextStyle(fontSize: 20),
-                  ),
-                ),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'How many days will you work out this week?',
-                  style: TextStyle(fontSize: 16),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-                
-                // Workout Days Selector
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.orange.shade200, width: 2),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.fitness_center, color: Colors.orange, size: 28),
-                          const SizedBox(width: 8),
-                          Text(
-                            '$selectedWorkoutDays',
-                            style: TextStyle(
-                              fontSize: 48,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.orange.shade700,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'workout day${selectedWorkoutDays == 1 ? '' : 's'}',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.orange.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      
-                      // Slider
-                      Slider(
-                        value: selectedWorkoutDays.toDouble(),
-                        min: 4,
-                        max: 7,
-                        divisions: 3,
-                        activeColor: Colors.orange,
-                        inactiveColor: Colors.orange.shade200,
-                        onChanged: (value) {
-                          setDialogState(() {
-                            selectedWorkoutDays = value.toInt();
-                          });
-                        },
-                      ),
-                      
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('4 days', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                          Text('7 days', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 16),
-                
-                // Break Days Info
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.blue.shade200, width: 2),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.bedtime, color: Colors.blue, size: 24),
-                      const SizedBox(width: 8),
-                      Text(
-                        '$breakDays break day${breakDays == 1 ? '' : 's'}',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.blue.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 16),
-                
-                const Text(
-                  'You can take break days when you need rest. Your streak stays safe! 💪',
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, breakDays),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Set Plan',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          );
-        },
+      builder: (context) => _WeeklyPlanDialog(
+        initialWorkoutDays: selectedWorkoutDays,
       ),
     );
 
@@ -4923,6 +4764,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         greeting != old.greeting || pendingRequests != old.pendingRequests;
   }
 
+
 class _AllStreaksDialog extends StatefulWidget {
   final List<TeamStreak> streaks;
   const _AllStreaksDialog({required this.streaks});
@@ -4940,217 +4782,244 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
     _streaks = List.from(widget.streaks);
   }
 
+  // ── Rename ──────────────────────────────────────────────
   Future<void> _showRenameDialog(TeamStreak streak) async {
-    final controller = TextEditingController(text: streak.teamName);
-    
+    final appColors = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final controller =
+        TextEditingController(text: streak.teamName);
+
     final newName = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(Icons.edit, color: Colors.blue[600], size: 24),
-            const SizedBox(width: 12),
-            const Text('Rename Team'),
-          ],
-        ),
+        backgroundColor: appColors.cardBackground,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          Icon(Icons.edit_outlined,
+              color: const Color(0xFF3B82F6), size: 20),
+          const SizedBox(width: 10),
+          Text('Rename team',
+              style: TextStyle(
+                  color: cs.onSurface,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700)),
+        ]),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Give your workout partnership a custom name!',
-              style: TextStyle(fontSize: 14, color: AppColors.of(context).subtleText),
-            ),
-            const SizedBox(height: 16),
+            Text('Give your partnership a custom name',
+                style: TextStyle(
+                    fontSize: 13, color: appColors.subtleText)),
+            const SizedBox(height: 14),
             TextField(
               controller: controller,
               autofocus: true,
               textCapitalization: TextCapitalization.words,
+              style: TextStyle(color: cs.onSurface),
               decoration: InputDecoration(
-                labelText: 'Team Name',
-                hintText: 'e.g., Gym Bros, Morning Crew',
+                labelText: 'Team name',
+                hintText: 'e.g. Morning Crew',
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                prefixIcon: const Icon(Icons.group),
+                    borderRadius: BorderRadius.circular(10)),
+                prefixIcon: const Icon(Icons.group_outlined),
               ),
-              onSubmitted: (value) => Navigator.pop(context, value),
+              onSubmitted: (v) => Navigator.pop(context, v),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text('Cancel',
+                style:
+                    TextStyle(color: appColors.subtleText)),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue[600],
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
+          GestureDetector(
+            onTap: () =>
+                Navigator.pop(context, controller.text),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3B82F6),
                 borderRadius: BorderRadius.circular(8),
               ),
+              child: const Text('Save',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700)),
             ),
-            child: const Text('Save'),
           ),
         ],
       ),
     );
 
-    if (newName != null && newName.trim().isNotEmpty && newName != streak.teamName) {
+    if (newName != null &&
+        newName.trim().isNotEmpty &&
+        newName != streak.teamName) {
       await _updateTeamName(streak, newName.trim());
     }
   }
 
-  Future<void> _updateTeamName(TeamStreak streak, String newName) async {
+  Future<void> _updateTeamName(
+      TeamStreak streak, String newName) async {
     try {
       await Supabase.instance.client
           .from('buddy_teams')
           .update({'team_name': newName})
           .eq('id', streak.teamId);
 
-      // Reload streaks and cast properly
-      final teamStreakService = TeamStreakService();
-      final updatedStreaks = await teamStreakService.getAllUserStreaks();
-
+      // Update local list immediately without waiting for a full reload
       if (mounted) {
         setState(() {
-          _streaks = List<TeamStreak>.from(updatedStreaks);
+          final idx = _streaks.indexWhere((s) => s.teamId == streak.teamId);
+          if (idx != -1) {
+            final updated = List<TeamStreak>.from(_streaks);
+            updated[idx] = TeamStreak(
+              id: streak.id,
+              teamId: streak.teamId,
+              teamName: newName,
+              teamEmoji: streak.teamEmoji,
+              currentStreak: streak.currentStreak,
+              longestStreak: streak.longestStreak,
+              totalWorkouts: streak.totalWorkouts,
+              bestStreak: streak.bestStreak,
+              lastWorkoutDate: streak.lastWorkoutDate,
+              lastInteractionAt: streak.lastInteractionAt,
+              isCoachMaxTeam: streak.isCoachMaxTeam,
+              members: streak.members,
+              todayCheckIns: streak.todayCheckIns,
+              isFavorite: streak.isFavorite,
+            );
+            _streaks = updated;
+          }
         });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white, size: 20),
-                const SizedBox(width: 12),
-                Text('Renamed to "$newName"'),
-              ],
-            ),
-            backgroundColor: Colors.green[600],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Renamed to "$newName"'),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8)),
+        ));
       }
     } catch (e) {
-      print('❌ Error renaming team: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to rename team'),
-            backgroundColor: Colors.red,
-          ),
-        );
+            const SnackBar(content: Text('Failed to rename')));
       }
     }
   }
 
-  String _getBuddyName(TeamStreak streak) {
+  // ── Buddy helpers ────────────────────────────────────────
+  String _buddyName(TeamStreak streak) {
     if (streak.isCoachMaxTeam) return 'Coach Max';
-    
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final me =
+        Supabase.instance.client.auth.currentUser?.id;
     final buddy = streak.members.firstWhere(
-      (m) => m.userId != currentUserId,
-      orElse: () => streak.members.first,
-    );
+        (m) => m.userId != me,
+        orElse: () => streak.members.first);
     return buddy.displayName;
   }
 
-  String _getBuddyAvatar(TeamStreak streak) {
+  String _buddyAvatar(TeamStreak streak) {
     if (streak.isCoachMaxTeam) return 'coach_max';
-    
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final me =
+        Supabase.instance.client.auth.currentUser?.id;
     final buddy = streak.members.firstWhere(
-      (m) => m.userId != currentUserId,
-      orElse: () => streak.members.first,
-    );
+        (m) => m.userId != me,
+        orElse: () => streak.members.first);
     return buddy.avatarId ?? 'avatar_1';
   }
 
   @override
   Widget build(BuildContext context) {
     final appColors = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
+
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: Colors.transparent,
+      insetPadding:
+          const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       child: Container(
-        width: double.maxFinite,
-        constraints: const BoxConstraints(maxHeight: 500, maxWidth: 400),
+            constraints: const BoxConstraints(
+            maxWidth: 400),
         decoration: BoxDecoration(
           color: appColors.cardBackground,
           borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: appColors.cardBorder, width: 0.5),
         ),
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
+            // ── Header ──────────────────────────────────
             Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.orange[400]!, Colors.deepOrange[400]!],
+                  colors: [
+                    Color(0xFFF97316),
+                    Color(0xFFEA580C)
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
+                borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(20)),
+              ),
+              child: Row(children: [
+                const Text('🔥',
+                    style: TextStyle(fontSize: 20)),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text('All Your Streaks',
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: -0.3)),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text('${_streaks.length}',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13)),
+                ),
+              ]),
+            ),
+
+            // ── Tip ──────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 9),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                      color: appColors.divider, width: 0.5),
                 ),
               ),
-              child: Row(
-                children: [
-                  const Icon(Icons.local_fire_department, color: Colors.white, size: 28),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'All Your Streaks',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${_streaks.length}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Tip text
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  Icon(Icons.lightbulb_outline, size: 16, color: appColors.subtleText),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Tap a streak to rename it',
+              child: Row(children: [
+                const Text('✏️',
+                    style: TextStyle(fontSize: 12)),
+                const SizedBox(width: 7),
+                Text('Tap the edit icon to rename any team',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: appColors.subtleText,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ],
-              ),
+                        fontSize: 10,
+                        color: appColors.subtleText)),
+              ]),
             ),
 
-            // Streaks list
+            // ── List ──────────────────────────────────────
             Flexible(
               child: _streaks.isEmpty
                   ? Center(
@@ -5159,180 +5028,203 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.sentiment_neutral, size: 48, color: appColors.subtleText),
+                            Icon(Icons.sentiment_neutral,
+                                size: 48,
+                                color: appColors.subtleText),
                             const SizedBox(height: 12),
-                            Text(
-                              'No active streaks yet!',
-                              style: TextStyle(color: appColors.subtleText),
-                            ),
+                            Text('No active streaks yet!',
+                                style: TextStyle(
+                                    color: appColors.subtleText)),
                           ],
                         ),
                       ),
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      padding: const EdgeInsets.fromLTRB(
+                          12, 8, 12, 4),
                       shrinkWrap: true,
                       itemCount: _streaks.length,
-                      itemBuilder: (context, index) {
-                        final streak = _streaks[index];
-                        return _buildStreakCard(streak);
-                      },
+                      itemBuilder: (context, i) =>
+                          _streakRow(_streaks[i],
+                              appColors, cs),
                     ),
             ),
 
-            // Close button
+            // ── Close ─────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: appColors.divider),
+              padding: const EdgeInsets.all(12),
+              child: GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 13),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFF1D4ED8),
+                        Color(0xFF7C3AED)
+                      ],
                     ),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Text('Close'),
+                  child: const Center(
+                    child: Text('Close',
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white)),
+                  ),
                 ),
               ),
             ),
           ],
         ),
+        ), // SingleChildScrollView
       ),
     );
   }
 
-  Widget _buildStreakCard(TeamStreak streak) {
-    final appColors = AppColors.of(context);
+  Widget _streakRow(TeamStreak streak,
+      AppColors appColors, ColorScheme cs) {
+    final isCoach = streak.isCoachMaxTeam;
     final isComplete = streak.isCompleteToday;
+    final buddyName = _buddyName(streak);
 
-    return GestureDetector(
-      onTap: () => _showRenameDialog(streak),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isComplete
-              ? Colors.green.withOpacity(0.1)
-              : appColors.sectionBackground,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isComplete ? Colors.green.withOpacity(0.4) : appColors.cardBorder,
-            width: 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+    return Container(
+      margin: const EdgeInsets.only(bottom: 7),
+      decoration: BoxDecoration(
+        color: isCoach
+            ? const Color(0xFFF97316).withOpacity(0.06)
+            : appColors.sectionBackground,
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(
+          color: isCoach
+              ? const Color(0xFFF97316).withOpacity(0.2)
+              : appColors.cardBorder,
+          width: 0.5,
         ),
-        child: Row(
-          children: [
-            // Avatar
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: streak.isCoachMaxTeam
-                      ? [Colors.blue[400]!, Colors.purple[400]!]
-                      : [Colors.orange[300]!, Colors.deepOrange[300]!],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(9),
+        child: Row(children: [
+          // Avatar
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: isCoach
+                    ? [
+                        const Color(0xFF1D4ED8),
+                        const Color(0xFF7C3AED)
+                      ]
+                    : [
+                        const Color(0xFFF97316),
+                        const Color(0xFFEA580C)
+                      ],
+              ),
+            ),
+            child: isCoach
+                ? const Center(
+                    child: Text('🤖',
+                        style: TextStyle(fontSize: 20)))
+                : ClipOval(
+                    child: UserAvatar(
+                        avatarId: _buddyAvatar(streak),
+                        size: 40)),
+          ),
+          const SizedBox(width: 10),
+          // Name + buddy
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isCoach ? 'Coach Max' : streak.teamName,
+                  style: TextStyle(
+                      fontSize: streak.teamName.length > 20
+                          ? 10
+                          : 12,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              child: streak.isCoachMaxTeam
-                  ? const Center(child: Text('🤖', style: TextStyle(fontSize: 22)))
-                  : ClipOval(
-                      child: UserAvatar(
-                        avatarId: _getBuddyAvatar(streak),
-                        size: 44,
-                      ),
-                    ),
+                Text(
+                  isCoach
+                      ? 'always here'
+                      : 'with $buddyName',
+                  style: TextStyle(
+                      fontSize: 9,
+                      color: appColors.subtleText),
+                ),
+              ],
             ),
-            
-            const SizedBox(width: 12),
-            
-            // Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Team name (or buddy name if not renamed)
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          streak.teamName,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Icon(
-                        Icons.edit_outlined,
-                        size: 14,
-                        color: appColors.subtleText,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  // Streak count
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.local_fire_department,
-                        size: 14,
-                        color: Colors.orange[500],
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${streak.currentStreak} day streak',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.orange[500],
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+          ),
+          // Streak count
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${streak.currentStreak}',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.5,
+                    color: isComplete
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFFF97316)),
               ),
-            ),
-            
-            // Status
+              Text('day streak',
+                  style: TextStyle(
+                      fontSize: 8,
+                      color: appColors.subtleText)),
+            ],
+          ),
+          const SizedBox(width: 6),
+          // Status + edit
+          if (!isCoach)
+            GestureDetector(
+              onTap: () => _showRenameDialog(streak),
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: appColors.cardBackground,
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(
+                      color: appColors.cardBorder, width: 0.5),
+                ),
+                child: Icon(Icons.edit_outlined,
+                    size: 14,
+                    color: appColors.subtleText),
+              ),
+            )
+          else
             Container(
-              padding: const EdgeInsets.all(6),
+              width: 28,
+              height: 28,
               decoration: BoxDecoration(
                 color: isComplete
-                    ? Colors.green.withOpacity(0.15)
+                    ? const Color(0xFF10B981).withOpacity(0.12)
                     : appColors.sectionBackground,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 isComplete ? Icons.check : Icons.access_time,
-                size: 18,
-                color: isComplete ? Colors.green[500] : appColors.subtleText,
+                size: 15,
+                color: isComplete
+                    ? const Color(0xFF10B981)
+                    : appColors.subtleText,
               ),
             ),
-          ],
-        ),
+        ]),
       ),
     );
   }
 }
-
-
-
 class _StatItem extends StatelessWidget {
   final String label;
   final String value;
@@ -7416,6 +7308,415 @@ class _BenefitRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WEEKLY PLAN DIALOG — Editorial stepper redesign
+// Returns breakDays (int) on confirm, null on cancel.
+// ═══════════════════════════════════════════════════════════════
+class _WeeklyPlanDialog extends StatefulWidget {
+  final int initialWorkoutDays;
+  const _WeeklyPlanDialog({required this.initialWorkoutDays});
+
+  @override
+  State<_WeeklyPlanDialog> createState() => _WeeklyPlanDialogState();
+}
+
+class _WeeklyPlanDialogState extends State<_WeeklyPlanDialog>
+    with SingleTickerProviderStateMixin {
+  late int _workoutDays;
+  late AnimationController _numAnim;
+  late Animation<double> _scaleAnim;
+
+  static const int _min = 4;
+  static const int _max = 7;
+
+  @override
+  void initState() {
+    super.initState();
+    _workoutDays = widget.initialWorkoutDays.clamp(_min, _max);
+    _numAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 120),
+    );
+    _scaleAnim = Tween<double>(begin: 1.0, end: 1.18).animate(
+      CurvedAnimation(parent: _numAnim, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _numAnim.dispose();
+    super.dispose();
+  }
+
+  void _step(int delta) {
+    final next = (_workoutDays + delta).clamp(_min, _max);
+    if (next == _workoutDays) return;
+    setState(() => _workoutDays = next);
+    _numAnim.forward(from: 0).then((_) => _numAnim.reverse());
+  }
+
+  double get _trackProgress =>
+      (_workoutDays - _min) / (_max - _min);
+
+  @override
+  Widget build(BuildContext context) {
+    final appColors = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final breakDays = 7 - _workoutDays;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: Container(
+        decoration: BoxDecoration(
+          color: appColors.cardBackground,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: appColors.cardBorder, width: 0.5),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Header ──────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                      color: appColors.cardBorder, width: 0.5),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'THIS WEEK',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
+                      color: const Color(0xFFF97316),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  RichText(
+                    text: TextSpan(
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -1.5,
+                        height: 0.9,
+                        color: cs.onSurface,
+                      ),
+                      children: [
+                        const TextSpan(text: 'WORKOUT\n'),
+                        TextSpan(
+                          text: 'PLAN',
+                          style: TextStyle(
+                            color: isDark
+                                ? const Color(0xFF7C3AED)
+                                : const Color(0xFF6D28D9),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Body ─────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: Column(
+                children: [
+                  // Big animated number
+                  ScaleTransition(
+                    scale: _scaleAnim,
+                    child: Column(
+                      children: [
+                        Text(
+                          '$_workoutDays',
+                          style: const TextStyle(
+                            fontSize: 72,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -4,
+                            height: 1,
+                            color: Color(0xFFF97316),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'workout day${_workoutDays == 1 ? '' : 's'}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.3,
+                            color: appColors.subtleText,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Stepper row: − track +
+                  Row(
+                    children: [
+                      _StepButton(
+                        label: '−',
+                        enabled: _workoutDays > _min,
+                        onTap: () => _step(-1),
+                        appColors: appColors,
+                        cs: cs,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            // Gradient track
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(3),
+                              child: SizedBox(
+                                height: 5,
+                                child: Stack(
+                                  children: [
+                                    Container(
+                                        color: appColors.divider),
+                                    FractionallySizedBox(
+                                      widthFactor: _trackProgress,
+                                      child: Container(
+                                        decoration: const BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              Color(0xFFF97316),
+                                              Color(0xFF7C3AED),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('4 days',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: appColors.subtleText)),
+                                Text('7 days',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: appColors.subtleText)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      _StepButton(
+                        label: '+',
+                        enabled: _workoutDays < _max,
+                        onTap: () => _step(1),
+                        appColors: appColors,
+                        cs: cs,
+                        accent: true,
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Break days info row
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3B82F6).withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color:
+                              const Color(0xFF3B82F6).withOpacity(0.2),
+                          width: 0.5),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text('🌙',
+                            style: TextStyle(fontSize: 18)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '$breakDays break day${breakDays == 1 ? '' : 's'}',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF3B82F6),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '$breakDays',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -1,
+                            color: const Color(0xFF3B82F6)
+                                .withOpacity(0.35),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  Text(
+                    'Your streak stays safe on break days.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: appColors.subtleText,
+                      height: 1.4,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+
+            // ── Actions ──────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: appColors.cardBorder, width: 0.5),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: appColors.subtleText,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context, breakDays),
+                      child: Container(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF97316),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Set Plan',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Stepper button ──────────────────────────────────────────────
+class _StepButton extends StatelessWidget {
+  final String label;
+  final bool enabled;
+  final bool accent;
+  final VoidCallback onTap;
+  final AppColors appColors;
+  final ColorScheme cs;
+
+  const _StepButton({
+    required this.label,
+    required this.enabled,
+    required this.onTap,
+    required this.appColors,
+    required this.cs,
+    this.accent = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final active = enabled && accent;
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: active
+              ? const Color(0xFFF97316)
+              : appColors.sectionBackground,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: active
+                ? const Color(0xFFF97316)
+                : appColors.cardBorder,
+            width: 0.5,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              height: 1,
+              color: !enabled
+                  ? appColors.subtleText.withOpacity(0.4)
+                  : active
+                      ? Colors.white
+                      : cs.onSurface,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

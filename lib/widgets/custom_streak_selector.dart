@@ -1,130 +1,199 @@
+// lib/widgets/custom_streak_selector.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/team_streak_service.dart';
+import '../theme/app_theme.dart';
 import 'user_avatar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CustomStreakSelector extends StatefulWidget {
   final List<TeamStreak> availableStreaks;
   final List<TeamStreak>? currentSelection;
-  
+
   const CustomStreakSelector({
     super.key,
     required this.availableStreaks,
     this.currentSelection,
   });
-  
+
   @override
-  State<CustomStreakSelector> createState() => _CustomStreakSelectorState();
+  State<CustomStreakSelector> createState() =>
+      _CustomStreakSelectorState();
 }
 
-class _CustomStreakSelectorState extends State<CustomStreakSelector> 
+class _CustomStreakSelectorState extends State<CustomStreakSelector>
     with SingleTickerProviderStateMixin {
   late List<TeamStreak> _available;
   TeamStreak? _leftSlot;
   TeamStreak? _centerSlot;
   TeamStreak? _rightSlot;
   String _searchQuery = '';
-  
-  late AnimationController _animationController;
-  late Animation<Offset> _slideAnimation;
-  
+
+  late AnimationController _animController;
+  late Animation<Offset> _slideAnim;
+
   @override
   void initState() {
     super.initState();
     _available = List.from(widget.availableStreaks);
-    
-    // ✅ SMOOTH ENTRANCE ANIMATION
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
+
+    _animController = AnimationController(
       vsync: this,
+      duration: const Duration(milliseconds: 300),
     );
-    
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 1),  // Start from bottom
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, 1),
       end: Offset.zero,
     ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
-    ));
-    
-    // Start animation
-    _animationController.forward();
-    
-    // Load existing selection if provided
-    if (widget.currentSelection != null && widget.currentSelection!.length == 3) {
-      _leftSlot = widget.currentSelection![0];
+        parent: _animController, curve: Curves.easeOutCubic));
+    _animController.forward();
+
+    if (widget.currentSelection?.length == 3) {
+      _leftSlot   = widget.currentSelection![0];
       _centerSlot = widget.currentSelection![1];
-      _rightSlot = widget.currentSelection![2];
-      
-      // Remove selected from available
-      _available.removeWhere((s) => 
-        s.teamId == _leftSlot?.teamId ||
-        s.teamId == _centerSlot?.teamId ||
-        s.teamId == _rightSlot?.teamId
-      );
+      _rightSlot  = widget.currentSelection![2];
+      _available.removeWhere((s) =>
+          s.teamId == _leftSlot?.teamId ||
+          s.teamId == _centerSlot?.teamId ||
+          s.teamId == _rightSlot?.teamId);
     }
   }
-  
+
   @override
   void dispose() {
-    _animationController.dispose();
+    _animController.dispose();
     super.dispose();
   }
-  
-  List<TeamStreak> get _filteredStreaks {
-    if (_searchQuery.isEmpty) return _available;
-    return _available.where((s) => 
-      s.teamName.toLowerCase().contains(_searchQuery.toLowerCase())
-    ).toList();
+
+  // ── Helpers ────────────────────────────────────────────
+  String _friendName(TeamStreak s) {
+    final me = Supabase.instance.client.auth.currentUser?.id;
+    final buddy = s.members.firstWhere(
+        (m) => m.userId != me,
+        orElse: () => s.members.first);
+    return buddy.displayName;
   }
-  
-  bool get _allSlotsFilled => _leftSlot != null && _centerSlot != null && _rightSlot != null;
-  
-  // ✅ Get friend's display name and avatar
-  String _getFriendName(TeamStreak streak) {
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    final friendMember = streak.members.firstWhere(
-      (member) => member.userId != currentUserId,
-      orElse: () => streak.members.first,
-    );
-    return friendMember.displayName;
+
+  String _friendAvatar(TeamStreak s) {
+    final me = Supabase.instance.client.auth.currentUser?.id;
+    final buddy = s.members.firstWhere(
+        (m) => m.userId != me,
+        orElse: () => s.members.first);
+    return buddy.avatarId ?? 'avatar_1';
   }
-  
-  String _getFriendAvatar(TeamStreak streak) {
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    final friendMember = streak.members.firstWhere(
-      (member) => member.userId != currentUserId,
-      orElse: () => streak.members.first,
-    );
-    return friendMember.avatarId ?? 'avatar_1';
+
+  List<TeamStreak> get _filtered => _searchQuery.isEmpty
+      ? _available
+      : _available
+          .where((s) => _friendName(s)
+              .toLowerCase()
+              .contains(_searchQuery.toLowerCase()))
+          .toList();
+
+  bool get _allFilled =>
+      _leftSlot != null &&
+      _centerSlot != null &&
+      _rightSlot != null;
+
+  List<TeamStreak> get _assigned => [
+        if (_leftSlot != null) _leftSlot!,
+        if (_centerSlot != null) _centerSlot!,
+        if (_rightSlot != null) _rightSlot!,
+      ];
+
+  // ── Tap to assign: fills next empty slot ──────────────
+  void _assign(TeamStreak streak) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (_leftSlot == null) {
+        _leftSlot = streak;
+      } else if (_centerSlot == null) {
+        _centerSlot = streak;
+      } else if (_rightSlot == null) {
+        _rightSlot = streak;
+      } else {
+        return; // all full
+      }
+      _available.remove(streak);
+    });
   }
-  
+
+  void _unassign(TeamStreak streak) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (_leftSlot?.teamId == streak.teamId)   _leftSlot   = null;
+      if (_centerSlot?.teamId == streak.teamId) _centerSlot = null;
+      if (_rightSlot?.teamId == streak.teamId)  _rightSlot  = null;
+      _available.add(streak);
+    });
+  }
+
+  String? _slotLabel(TeamStreak streak) {
+    if (_leftSlot?.teamId == streak.teamId)   return 'Left';
+    if (_centerSlot?.teamId == streak.teamId) return 'Centre';
+    if (_rightSlot?.teamId == streak.teamId)  return 'Right';
+    return null;
+  }
+
+  // ── Next slot name for hint text ──────────────────────
+  String get _nextSlotHint {
+    if (_leftSlot == null)   return 'Left';
+    if (_centerSlot == null) return 'Centre';
+    if (_rightSlot == null)  return 'Right';
+    return '';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final appColors = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
+
     return SlideTransition(
-      position: _slideAnimation,
+      position: _slideAnim,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
-          title: const Text('Custom Streak Order'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.pop(context),  // ✅ BACK BUTTON
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
           ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios,
+                color: Colors.white, size: 18),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text('Pick your 3',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800)),
           actions: [
-            if (_allSlotsFilled)
+            if (_allFilled)
               Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context, [_leftSlot!, _centerSlot!, _rightSlot!]);
-                  },
-                  icon: const Icon(Icons.check, size: 20),
-                  label: const Text('SAVE'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green[600],
-                    foregroundColor: Colors.white,
-                    elevation: 0,
+                padding: const EdgeInsets.only(right: 12),
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(
+                      context,
+                      [_leftSlot!, _centerSlot!, _rightSlot!]),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF97316),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text('Save',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700)),
                   ),
                 ),
               ),
@@ -132,305 +201,364 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
         ),
         body: Column(
           children: [
-            // Search Bar
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: 'Search workout buddies...',
-                  prefixIcon: const Icon(Icons.search),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[100],
-                ),
-                onChanged: (value) {
-                  setState(() {
-                    _searchQuery = value;
-                  });
-                },
-              ),
-            ),
-            
-            // Instruction Text
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'Drag buddies into the 3 slots below',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[700],
+            // ── Carousel preview ───────────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              decoration: BoxDecoration(
+                color: appColors.cardBackground,
+                border: Border(
+                  bottom: BorderSide(
+                      color: appColors.cardBorder, width: 0.5),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            
-            // Slot Selector
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              child: Column(
                 children: [
-                  _buildSlot('Left', _leftSlot, (streak) {
-                    setState(() {
-                      if (_leftSlot != null) _available.add(_leftSlot!);
-                      _leftSlot = streak;
-                      _available.remove(streak);
-                    });
-                  }),
-                  _buildSlot('Center', _centerSlot, (streak) {
-                    setState(() {
-                      if (_centerSlot != null) _available.add(_centerSlot!);
-                      _centerSlot = streak;
-                      _available.remove(streak);
-                    });
-                  }),
-                  _buildSlot('Right', _rightSlot, (streak) {
-                    setState(() {
-                      if (_rightSlot != null) _available.add(_rightSlot!);
-                      _rightSlot = streak;
-                      _available.remove(streak);
-                    });
-                  }),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 24),
-            
-            // Divider
-            Divider(color: Colors.grey[300], thickness: 1),
-            
-            // Available Buddies Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  Text(
-                    'Available Buddies',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[100],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${_filteredStreaks.length}',
+                  Text('CAROUSEL PREVIEW',
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue[700],
-                      ),
-                    ),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                          color: appColors.subtleText)),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _previewSlot('Left', _leftSlot,
+                          size: 52, appColors: appColors, cs: cs),
+                      Container(
+                          width: 20,
+                          height: 2,
+                          color: appColors.divider,
+                          margin: const EdgeInsets.only(bottom: 20)),
+                      _previewSlot('Centre', _centerSlot,
+                          size: 68,
+                          isCenter: true,
+                          appColors: appColors,
+                          cs: cs),
+                      Container(
+                          width: 20,
+                          height: 2,
+                          color: appColors.divider,
+                          margin: const EdgeInsets.only(bottom: 20)),
+                      _previewSlot('Right', _rightSlot,
+                          size: 52, appColors: appColors, cs: cs),
+                    ],
                   ),
+                  if (!_allFilled) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Tap a buddy below → fills $_nextSlotHint slot',
+                      style: TextStyle(
+                          fontSize: 10, color: appColors.subtleText),
+                    ),
+                  ],
                 ],
               ),
             ),
-            
-            // Available Buddies List
+
+            // ── Search ─────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: appColors.cardBackground,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: appColors.cardBorder, width: 0.5),
+                ),
+                child: TextField(
+                  style:
+                      TextStyle(color: cs.onSurface, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Search buddies...',
+                    hintStyle: TextStyle(
+                        color: appColors.subtleText, fontSize: 13),
+                    prefixIcon: Icon(Icons.search,
+                        color: appColors.subtleText, size: 18),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
+                  ),
+                  onChanged: (v) =>
+                      setState(() => _searchQuery = v),
+                ),
+              ),
+            ),
+
             Expanded(
-              child: _filteredStreaks.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            _searchQuery.isEmpty ? Icons.check_circle : Icons.search_off,
-                            size: 64,
-                            color: Colors.grey[400],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _searchQuery.isEmpty
-                                ? 'All buddies assigned!'
-                                : 'No matches found',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _filteredStreaks.length,
-                      itemBuilder: (context, index) {
-                        final streak = _filteredStreaks[index];
-                        return _buildBuddyCard(streak);
-                      },
+              child: ListView(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 4),
+                children: [
+                  // ── Available buddies ──────────────
+                  if (_filtered.isNotEmpty) ...[
+                    _sectionHeader('Available',
+                        _filtered.length, appColors,
+                        countColor: const Color(0xFF3B82F6)),
+                    ..._filtered.map(
+                        (s) => _buddyRow(s, appColors, cs,
+                            assigned: false)),
+                  ] else if (_searchQuery.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    Center(
+                      child: Text('No matches',
+                          style: TextStyle(
+                              color: appColors.subtleText)),
                     ),
+                  ],
+
+                  // ── Assigned buddies ───────────────
+                  if (_assigned.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    _sectionHeader('Assigned',
+                        _assigned.length, appColors,
+                        countColor: const Color(0xFFF97316)),
+                    ..._assigned.map(
+                        (s) => _buddyRow(s, appColors, cs,
+                            assigned: true)),
+                  ],
+
+                  // ── All filled empty state ─────────
+                  if (_filtered.isEmpty && _searchQuery.isEmpty) ...[
+                    const SizedBox(height: 24),
+                    Center(
+                      child: Column(children: [
+                        const Text('✅',
+                            style: TextStyle(fontSize: 32)),
+                        const SizedBox(height: 8),
+                        Text('All buddies assigned!',
+                            style: TextStyle(
+                                color: appColors.subtleText,
+                                fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                ],
+              ),
             ),
           ],
         ),
       ),
     );
   }
-  
-  Widget _buildSlot(String label, TeamStreak? streak, Function(TeamStreak) onAccept) {
+
+  Widget _previewSlot(String label, TeamStreak? streak,
+      {required double size,
+      bool isCenter = false,
+      required AppColors appColors,
+      required ColorScheme cs}) {
+    final filled = streak != null;
     return Column(
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-            fontWeight: FontWeight.w600,
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: filled
+                ? (isCenter
+                    ? const Color(0xFF7C3AED).withOpacity(0.12)
+                    : const Color(0xFF3B82F6).withOpacity(0.10))
+                : appColors.sectionBackground,
+            border: Border.all(
+              color: filled
+                  ? (isCenter
+                      ? const Color(0xFF7C3AED)
+                      : const Color(0xFF3B82F6))
+                  : appColors.cardBorder,
+              width: filled ? 2 : 1.5,
+              style: filled ? BorderStyle.solid : BorderStyle.solid,
+            ),
           ),
+          child: filled
+              ? ClipOval(
+                  child: streak.isCoachMaxTeam
+                      ? Center(
+                          child: Text('🤖',
+                              style: TextStyle(
+                                  fontSize: size * 0.45)))
+                      : UserAvatar(
+                          avatarId: _friendAvatar(streak),
+                          size: size))
+              : Icon(Icons.add,
+                  size: size * 0.35, color: appColors.subtleText),
         ),
-        const SizedBox(height: 8),
-        DragTarget<TeamStreak>(
-          onAccept: onAccept,
-          builder: (context, candidateData, rejectedData) {
-            final isHighlighted = candidateData.isNotEmpty;
-            
-            return Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: isHighlighted ? Colors.blue[100] : Colors.grey[200],
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isHighlighted ? Colors.blue[400]! : Colors.grey[400]!,
-                  width: 2,
-                ),
-              ),
-              child: streak != null
-                  ? Stack(
-                      children: [
-                        // ✅ Show actual user avatar!
-                        Center(
-                          child: ClipOval(
-                            child: UserAvatar(
-                              avatarId: _getFriendAvatar(streak),
-                              size: 70,
-                            ),
-                          ),
-                        ),
-                        // Remove button
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _available.add(streak);
-                                if (label == 'Left') _leftSlot = null;
-                                if (label == 'Center') _centerSlot = null;
-                                if (label == 'Right') _rightSlot = null;
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(2),
-                              decoration: const BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.close,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Icon(
-                      Icons.add,
-                      color: Colors.grey[400],
-                      size: 32,
-                    ),
-            );
-          },
-        ),
+        const SizedBox(height: 4),
+        Text(label,
+            style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: isCenter && filled
+                    ? const Color(0xFF7C3AED)
+                    : appColors.subtleText)),
       ],
     );
   }
-  
-  Widget _buildBuddyCard(TeamStreak streak) {
-    return Draggable<TeamStreak>(
-      data: streak,
-      feedback: Material(
-        elevation: 8,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Container(
-          width: 250,
-          padding: const EdgeInsets.all(12),
+
+  Widget _sectionHeader(String label, int count,
+      AppColors appColors,
+      {required Color countColor}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6, top: 4),
+      child: Row(children: [
+        Text(label.toUpperCase(),
+            style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.7,
+                color: appColors.subtleText)),
+        const SizedBox(width: 8),
+        Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
+            color: countColor.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(8),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ClipOval(
-                child: UserAvatar(
-                  avatarId: _getFriendAvatar(streak),
-                  size: 40,
+          child: Text('$count',
+              style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: countColor)),
+        ),
+      ]),
+    );
+  }
+
+  Widget _buddyRow(TeamStreak streak, AppColors appColors,
+      ColorScheme cs, {required bool assigned}) {
+    final name = streak.isCoachMaxTeam
+        ? 'Coach Max'
+        : _friendName(streak);
+    final slotLbl = _slotLabel(streak);
+    final canAssign = !assigned && !_allFilled;
+
+    return Opacity(
+      opacity: assigned ? 0.6 : 1.0,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        decoration: BoxDecoration(
+          color: appColors.cardBackground,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: appColors.cardBorder, width: 0.5),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(9),
+          child: Row(children: [
+            // Avatar
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: streak.isCoachMaxTeam
+                      ? [
+                          const Color(0xFF1D4ED8),
+                          const Color(0xFF7C3AED)
+                        ]
+                      : [
+                          const Color(0xFF374151),
+                          const Color(0xFF4B5563)
+                        ],
                 ),
               ),
-              const SizedBox(width: 12),
-              Column(
+              child: streak.isCoachMaxTeam
+                  ? const Center(
+                      child: Text('🤖',
+                          style: TextStyle(fontSize: 18)))
+                  : ClipOval(
+                      child: UserAvatar(
+                          avatarId: _friendAvatar(streak),
+                          size: 38)),
+            ),
+            const SizedBox(width: 10),
+            // Info
+            Expanded(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
                 children: [
+                  Row(children: [
+                    Text(name,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: cs.onSurface)),
+                    if (slotLbl != null) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: slotLbl == 'Centre'
+                              ? const Color(0xFF7C3AED)
+                                  .withOpacity(0.12)
+                              : const Color(0xFF3B82F6)
+                                  .withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(slotLbl,
+                            style: TextStyle(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700,
+                                color: slotLbl == 'Centre'
+                                    ? const Color(0xFF7C3AED)
+                                    : const Color(0xFF3B82F6))),
+                      ),
+                    ],
+                  ]),
                   Text(
-                    _getFriendName(streak),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    '${streak.currentStreak} day streak',
+                    streak.isCoachMaxTeam
+                        ? 'Always active'
+                        : '🔥 ${streak.currentStreak} day streak',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
+                        fontSize: 9, color: appColors.subtleText),
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+            // Add / remove button
+            GestureDetector(
+              onTap: assigned
+                  ? () => _unassign(streak)
+                  : canAssign
+                      ? () => _assign(streak)
+                      : null,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: assigned
+                      ? const Color(0xFFEF4444).withOpacity(0.10)
+                      : canAssign
+                          ? const Color(0xFF3B82F6).withOpacity(0.10)
+                          : appColors.sectionBackground,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: assigned
+                        ? const Color(0xFFEF4444).withOpacity(0.25)
+                        : canAssign
+                            ? const Color(0xFF3B82F6)
+                                .withOpacity(0.25)
+                            : appColors.cardBorder,
+                    width: 0.5,
+                  ),
+                ),
+                child: Icon(
+                  assigned ? Icons.close : Icons.add,
+                  size: 16,
+                  color: assigned
+                      ? const Color(0xFFEF4444)
+                      : canAssign
+                          ? const Color(0xFF3B82F6)
+                          : appColors.subtleText,
+                ),
+              ),
+            ),
+          ]),
         ),
-      ),
-      childWhenDragging: Opacity(
-        opacity: 0.3,
-        child: _buildCardContent(streak),
-      ),
-      child: _buildCardContent(streak),
-    );
-  }
-  
-  Widget _buildCardContent(TeamStreak streak) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        leading: ClipOval(
-          child: UserAvatar(
-            avatarId: _getFriendAvatar(streak),
-            size: 40,
-          ),
-        ),
-        title: Text(
-          _getFriendName(streak),
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Text('${streak.currentStreak} day streak'),
-        trailing: const Icon(Icons.drag_indicator),
       ),
     );
   }
