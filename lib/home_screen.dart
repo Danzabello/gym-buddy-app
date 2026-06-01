@@ -119,11 +119,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: PageView(
         controller: _tabPageController,
-        physics: const _TabScrollPhysics(),
+        physics: const PageScrollPhysics(),
         onPageChanged: (index) {
           if (index != _selectedIndex) {
             setState(() => _selectedIndex = index);
-
             if (index == 2 && _selectedIndex == 1) {
               _dashboardKey.currentState?._syncTeamCheckIns();
               _dashboardKey.currentState?._loadStreakData();
@@ -994,7 +993,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.orange[400]!, width: 1),
                 ),
-                child: Text('Resume', style: TextStyle(color: Colors.orange[400], fontWeight: FontWeight.w600, fontSize: 13)),
+                child: Text('Continue', style: TextStyle(color: Colors.orange[400], fontWeight: FontWeight.w600, fontSize: 13)),
               ),
             ),
           ],
@@ -5731,8 +5730,22 @@ class _SchedulePageState extends State<SchedulePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Workout Schedule'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        title: const Text(
+          'Workout Schedule',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        elevation: 0,
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showCreateWorkoutDialog,
@@ -6138,7 +6151,7 @@ class ProfilePage extends StatefulWidget {
 }
  
 class _ProfilePageState extends State<ProfilePage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   Map<String, dynamic>? _profile;
   List<TeamStreak> _allStreaks = [];
   LevelInfo? _levelInfo;
@@ -6147,8 +6160,6 @@ class _ProfilePageState extends State<ProfilePage>
   bool _isLoading = true;
 
   late AnimationController _fadeController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
   late Animation<double> _xpAnimation;
   late Animation<double> _ringAnimation;
  
@@ -6159,11 +6170,10 @@ class _ProfilePageState extends State<ProfilePage>
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
-    _fadeAnimation = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.06),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
     _xpAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _fadeController, curve: const Interval(0.3, 1.0, curve: Curves.easeOut)),
     );
@@ -6279,30 +6289,26 @@ class _ProfilePageState extends State<ProfilePage>
     final name     = profile['display_name'] as String? ?? 'User';
     final year     = _formatYear(profile['created_at'] as String?);
 
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: SlideTransition(
-        position: _slideAnimation,
-        child: Scaffold(
-          backgroundColor: appColors.sectionBackground,
-          body: RefreshIndicator(
-            onRefresh: () async {
-              _fadeController.reset();
-              await _loadAll();
-            },
-            child: CustomScrollView(
-              clipBehavior: Clip.none,
-              slivers: [
-                SliverToBoxAdapter(
-                  child: _buildHero(
-                    name: name, year: year, avatarId: avatarId,
-                    level: level, title: title,
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 5, 16, 32),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate([
+    return Scaffold(
+      backgroundColor: appColors.sectionBackground,
+      body: RefreshIndicator(
+        onRefresh: () async {
+          _fadeController.reset();
+          await _loadAll();
+        },
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          children: [
+            _buildHero(
+              name: name, year: year, avatarId: avatarId,
+              level: level, title: title,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 5, 16, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                       _buildXpCard(),
                       const SizedBox(height: 14),
                       _buildStatsRow(),
@@ -6393,13 +6399,11 @@ class _ProfilePageState extends State<ProfilePage>
                         ),
                       ]),
                       const SizedBox(height: 22),
-                      _buildLogoutButton(),
-                    ]),
-                  ),
-                ),
-              ],
+                  _buildLogoutButton(),
+                ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
