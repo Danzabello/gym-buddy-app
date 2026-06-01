@@ -56,42 +56,60 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _selectedIndex = 0;
+  int _selectedIndex = 2; // Start on Streaks (centre)
 
+  late PageController _tabPageController;
   final GlobalKey<_DashboardPageState> _dashboardKey = GlobalKey<_DashboardPageState>();
-  
-  // Different pages for each tab
+
   late List<Widget> _pages;
-  
+
   @override
   void initState() {
     super.initState();
-    // Initialize pages with the dashboard key
+    _tabPageController = PageController(initialPage: 2);
     _pages = [
-      DashboardPage(key: _dashboardKey),  // Add the key here
-      const FriendsPageModern(),
       const SchedulePage(),
+      const FriendsPageModern(),
+      DashboardPage(key: _dashboardKey),
       const ShopPage(),
       const ProfilePage(),
     ];
   }
 
+  @override
+  void dispose() {
+    _tabPageController.dispose();
+    super.dispose();
+  }
+
   void _onTabChanged(int index) {
     final previousIndex = _selectedIndex;
-    
+
     setState(() {
       _selectedIndex = index;
     });
-    
+
+    // Animate tab PageView if not already on the right page
+    if (_tabPageController.hasClients &&
+        _tabPageController.page?.round() != index) {
+      _tabPageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+
     // Refresh dashboard when returning from friends page
-    if (index == 0 && previousIndex == 1) {
+    if (index == 2 && previousIndex == 1) {
       _dashboardKey.currentState?._syncTeamCheckIns();
       _dashboardKey.currentState?._loadStreakData();
     }
 
-    if (index == 2) {
+    // Refresh schedule when navigating to it
+    if (index == 0) {
       setState(() {
-        _pages[2] = SchedulePage(key: ValueKey('schedule_${DateTime.now().millisecondsSinceEpoch}'));
+        _pages[0] = SchedulePage(
+            key: ValueKey('schedule_${DateTime.now().millisecondsSinceEpoch}'));
       });
     }
   }
@@ -99,37 +117,31 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _pages[_selectedIndex],
-      bottomNavigationBar: NavigationBar(
+      body: PageView(
+        controller: _tabPageController,
+        physics: const _TabScrollPhysics(),
+        onPageChanged: (index) {
+          if (index != _selectedIndex) {
+            setState(() => _selectedIndex = index);
+
+            if (index == 2 && _selectedIndex == 1) {
+              _dashboardKey.currentState?._syncTeamCheckIns();
+              _dashboardKey.currentState?._loadStreakData();
+            }
+            if (index == 0) {
+              setState(() {
+                _pages[0] = SchedulePage(
+                    key: ValueKey(
+                        'schedule_${DateTime.now().millisecondsSinceEpoch}'));
+              });
+            }
+          }
+        },
+        children: _pages,
+      ),
+      bottomNavigationBar: _GymBuddyNavBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: _onTabChanged,  // Use the new method
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: 'Buddies',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.calendar_today_outlined),
-            selectedIcon: Icon(Icons.calendar_today),
-            label: 'Schedule',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.storefront_outlined),
-            selectedIcon: Icon(Icons.storefront),
-            label: 'Shop',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
+        onTabSelected: _onTabChanged,
       ),
     );
   }
@@ -219,6 +231,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   bool _isLoading = true;
   bool _isCheckingIn = false;
   bool _isRefreshing = false;
+  static bool _weeklyPlanCheckedThisSession = false;
+
 
   String _timeUntilMidnight = '';
   int _pendingRequests = 0;
@@ -1185,7 +1199,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             GestureDetector(
               onTap: () {
                 final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-                homeState?.setState(() => homeState._selectedIndex = 2);
+                homeState?.setState(() => homeState._selectedIndex = 0);
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -2464,8 +2478,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   Future<void> _checkWeeklyPlan() async {
+    if (_weeklyPlanCheckedThisSession) return; // once per app open
+    _weeklyPlanCheckedThisSession = true;       // set before await → no re-fire
     final needsPlan = await _breakDayService.needsToSetWeeklyPlan();
-    
+    if (!mounted) return;
     if (needsPlan) {
       _showWeeklyPlanDialog();
     }
@@ -3323,7 +3339,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               onPressed: () {
                 final homeState = context.findAncestorStateOfType<_HomeScreenState>();
                 homeState?.setState(() {
-                  homeState._selectedIndex = 2;
+                  homeState._selectedIndex = 0;
                 });
               },
               child: const Text('View All'),
@@ -3511,7 +3527,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         HapticFeedback.selectionClick();  // ✅ HAPTIC FEEDBACK!
         final homeState = context.findAncestorStateOfType<_HomeScreenState>();
         homeState?.setState(() {
-          homeState._selectedIndex = 2;
+          homeState._selectedIndex = 0;
         });
       },
       style: ElevatedButton.styleFrom(
@@ -3668,7 +3684,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               onTap: () {
                 final homeState = context.findAncestorStateOfType<_HomeScreenState>();
                 homeState?.setState(() {
-                  homeState._selectedIndex = 2;
+                  homeState._selectedIndex = 0;
                 });
               },
             ),
@@ -7682,41 +7698,284 @@ class _StepButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = enabled && accent;
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: active
-              ? const Color(0xFFF97316)
-              : appColors.sectionBackground,
-          shape: BoxShape.circle,
-          border: Border.all(
+      final active = enabled && accent;
+      return GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
             color: active
                 ? const Color(0xFFF97316)
-                : appColors.cardBorder,
-            width: 0.5,
+                : appColors.sectionBackground,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: active
+                  ? const Color(0xFFF97316)
+                  : appColors.cardBorder,
+              width: 0.5,
+            ),
           ),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              height: 1,
-              color: !enabled
-                  ? appColors.subtleText.withOpacity(0.4)
-                  : active
-                      ? Colors.white
-                      : cs.onSurface,
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                height: 1,
+                color: !enabled
+                    ? appColors.subtleText.withOpacity(0.4)
+                    : active
+                        ? Colors.white
+                        : cs.onSurface,
+              ),
             ),
           ),
         ),
-      ),
+      );
+    }
+}
+
+// ── Tab swipe physics — rubber-band at edges ───────────────────────────────
+// ── Tab swipe physics — deliberate one-page swipes ───────────────
+class _TabScrollPhysics extends ScrollPhysics {
+  const _TabScrollPhysics({super.parent});
+
+  @override
+  _TabScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return _TabScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  Simulation? createBallisticSimulation(
+      ScrollMetrics position, double velocity) {
+    final tolerance = toleranceFor(position);
+    final page = position.pixels / position.viewportDimension;
+    final currentPage = page.round();
+
+    // Require a deliberate flick to move (default fling threshold is ~50)
+    if (velocity.abs() < 500) {
+      final target = currentPage * position.viewportDimension;
+      return ScrollSpringSimulation(
+        spring,
+        position.pixels,
+        target,
+        velocity,
+        tolerance: tolerance,
+      );
+    }
+
+    // Move exactly 1 page in swipe direction
+    final targetPage = (velocity < 0 ? currentPage + 1 : currentPage - 1)
+        .clamp(0, (position.maxScrollExtent / position.viewportDimension).round());
+    final target = targetPage * position.viewportDimension;
+
+    return ScrollSpringSimulation(
+      spring,
+      position.pixels,
+      target,
+      velocity,
+      tolerance: tolerance,
     );
   }
+
+  @override
+  bool get allowImplicitScrolling => false;
 }
+
+  // ── Custom nav bar ─────────────────────────────────────────────────────────
+
+class _GymBuddyNavBar extends StatelessWidget {
+    final int selectedIndex;
+    final ValueChanged<int> onTabSelected;
+
+    const _GymBuddyNavBar({
+      required this.selectedIndex,
+      required this.onTabSelected,
+    });
+
+    // Visual order → logical index mapping
+    // Display: [Buddies, Schedule, 🔥Streaks, Shop, Profile]
+    // Indices: [1,       2,        0,          3,    4      ]
+    static const _visualToLogical = [1, 2, 0, 3, 4];
+
+    @override
+    Widget build(BuildContext context) {
+      final appColors = AppColors.of(context);
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+
+      final navBg = isDark
+          ? const Color(0xFF0F0F1A)
+          : const Color(0xFFFFFFFF);
+      final borderColor = isDark
+          ? const Color(0xFF2A2A3E)
+          : const Color(0xFFE5E7EB);
+      final inactiveColor = isDark
+          ? const Color(0xFF4B4B6B)
+          : const Color(0xFFADADB8);
+      final activeColor = isDark
+          ? Colors.white
+          : const Color(0xFF1D4ED8);
+
+      return SafeArea(
+        child: Container(
+          height: 60,
+          decoration: BoxDecoration(
+            color: navBg,
+            border: Border(
+              top: BorderSide(color: borderColor, width: 0.5),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Schedule (logical 0)
+              _NavIcon(
+                icon: Icons.calendar_today_outlined,
+                activeIcon: Icons.calendar_today,
+                isActive: selectedIndex == 0,
+                color: selectedIndex == 0 ? activeColor : inactiveColor,
+                semanticLabel: 'Schedule',
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onTabSelected(0);
+                },
+              ),
+              // Buddies (logical 1)
+              _NavIcon(
+                icon: Icons.people_outline,
+                activeIcon: Icons.people,
+                isActive: selectedIndex == 1,
+                color: selectedIndex == 1 ? activeColor : inactiveColor,
+                semanticLabel: 'Buddies',
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onTabSelected(1);
+                },
+              ),
+              // 🔥 Streaks — centre hero (logical 2)
+              _FireNavButton(
+                isActive: selectedIndex == 2,
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  onTabSelected(2);
+                },
+              ),
+              // Shop (logical 3)
+              _NavIcon(
+                icon: Icons.shopping_bag_outlined,
+                activeIcon: Icons.shopping_bag,
+                isActive: selectedIndex == 3,
+                color: selectedIndex == 3 ? activeColor : inactiveColor,
+                semanticLabel: 'Shop',
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onTabSelected(3);
+                },
+              ),
+              // Profile (logical 4)
+              _NavIcon(
+                icon: Icons.person_outline,
+                activeIcon: Icons.person,
+                isActive: selectedIndex == 4,
+                color: selectedIndex == 4 ? activeColor : inactiveColor,
+                semanticLabel: 'Profile',
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onTabSelected(4);
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+
+class _NavIcon extends StatelessWidget {
+
+    final IconData icon;
+    final IconData activeIcon;
+    final bool isActive;
+    final Color color;
+    final String semanticLabel;
+    final VoidCallback onTap;
+
+    const _NavIcon({
+      required this.icon,
+      required this.activeIcon,
+      required this.isActive,
+      required this.color,
+      required this.semanticLabel,
+      required this.onTap,
+    });
+
+    @override
+    Widget build(BuildContext context) {
+      return Semantics(
+        label: semanticLabel,
+        button: true,
+        child: GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: Center(
+              child: Icon(
+                isActive ? activeIcon : icon,
+                color: color,
+                size: 26,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+class _FireNavButton extends StatelessWidget {
+
+    final bool isActive;
+    final VoidCallback onTap;
+
+    const _FireNavButton({required this.isActive, required this.onTap});
+
+    @override
+    Widget build(BuildContext context) {
+      return Semantics(
+        label: 'Streaks',
+        button: true,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Transform.translate(
+            offset: const Offset(0, -10),
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFF97316), Color(0xFFDC2626)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFF97316).withOpacity(isActive ? 0.55 : 0.35),
+                    blurRadius: isActive ? 18 : 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Center(
+                child: const Icon(Icons.local_fire_department, color: Colors.white, size: 35),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+  }
