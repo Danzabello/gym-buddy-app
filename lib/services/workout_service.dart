@@ -178,9 +178,9 @@ class WorkoutService {
           .update({
             'buddy_status': 'accepted',
             'status': 'in_progress',
-            'workout_started_at': now.toIso8601String(),
+            'workout_started_at': now.toUtc().toIso8601String(),
             'started_by_user_id': currentUserId,
-            'updated_at': now.toIso8601String(),
+            'updated_at': now.toUtc().toIso8601String(),
           })
           .eq('id', workoutId);
       
@@ -279,7 +279,7 @@ class WorkoutService {
       // The started_at should reflect when THEY started (now), but planned_duration is what's left
       await _supabase.from('active_checkin_sessions').upsert({
         'user_id': currentUserId,
-        'started_at': now.toIso8601String(),
+        'started_at': now.toUtc().toIso8601String(),
         'planned_duration': remainingMinutes > 0 ? remainingMinutes : 5, // Min 5 minutes
         'workout_type': workoutType,
         'workout_emoji': emoji,
@@ -639,8 +639,8 @@ class WorkoutService {
           .from('workouts')
           .select('''
             *,
-            creator:user_profiles!user_id(display_name),
-            buddy:user_profiles!buddy_id(display_name)
+            creator:user_profiles!user_id(display_name, avatar_id),
+            buddy:user_profiles!buddy_id(display_name, avatar_id)
           ''')
           .or('user_id.eq.$currentUserId,buddy_id.eq.$currentUserId')
           .eq('status', 'completed')
@@ -699,10 +699,10 @@ class WorkoutService {
       await _supabase
           .from('workouts')
           .update({
-            'workout_started_at': DateTime.now().toIso8601String(),
+            'workout_started_at': DateTime.now().toUtc().toIso8601String(),
             'status': 'in_progress',
             'started_by_user_id': currentUserId,
-            'updated_at': DateTime.now().toIso8601String(),
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
           })
           .eq('id', workoutId);
 
@@ -830,15 +830,22 @@ class WorkoutService {
         }).eq('id', workoutId);
         
         if (kDebugMode) print('✅ Both users cancelled - workout fully cancelled');
+
+      } else if (buddyId == null) {
+        // Solo workout — no buddy, cancel completely
+        await _supabase.from('workouts').update({
+          'status': 'cancelled',
+          'creator_cancelled': true,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', workoutId);
+        if (kDebugMode) print('✅ Solo workout cancelled completely');
       } else {
-        // Only THIS user cancelled - mark their cancellation, but workout continues
+        // Buddy workout — mark cancellation only, buddy can still complete
         await _supabase.from('workouts').update({
           'creator_cancelled': isCreator ? true : (workout['creator_cancelled'] ?? false),
           'buddy_cancelled': isBuddy ? true : (workout['buddy_cancelled'] ?? false),
           'updated_at': DateTime.now().toIso8601String(),
-          // DON'T change status - the other person is still working out!
         }).eq('id', workoutId);
-        
         if (kDebugMode) print('✅ User cancelled their part - other user can still complete');
       }
       

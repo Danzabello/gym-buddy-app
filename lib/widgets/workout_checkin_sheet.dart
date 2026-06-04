@@ -348,6 +348,17 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
             .from('active_checkin_sessions')
             .delete()
             .eq('user_id', userId);
+
+        // Also cancel any in_progress workout records
+        try {
+          await Supabase.instance.client
+              .from('workouts')
+              .update({'status': 'cancelled', 'workout_started_at': null})
+              .eq('user_id', userId)
+              .eq('status', 'in_progress');
+        } catch (e) {
+          print('⚠️ Could not cancel workout record: $e');
+        }
       }
 
       if (mounted) {

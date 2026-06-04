@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../theme/app_theme.dart';
 import '../services/workout_service.dart';
 import '../services/friend_service.dart';
+import 'user_avatar.dart';
 
-/// Modern bottom sheet for scheduling a workout
-/// Can be used standalone or with a pre-selected buddy
 class ScheduleWorkoutSheet extends StatefulWidget {
   final String? preSelectedBuddyId;
   final String? preSelectedBuddyName;
@@ -17,7 +18,6 @@ class ScheduleWorkoutSheet extends StatefulWidget {
     this.onWorkoutScheduled,
   });
 
-  /// Show as a bottom sheet
   static void show(
     BuildContext context, {
     String? buddyId,
@@ -25,7 +25,6 @@ class ScheduleWorkoutSheet extends StatefulWidget {
     VoidCallback? onWorkoutScheduled,
   }) {
     HapticFeedback.mediumImpact();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -52,25 +51,26 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
   int _duration = 60;
   String? _selectedBuddyId;
   String? _selectedBuddyName;
+  String? _selectedBuddyAvatarId;
   List<Map<String, dynamic>> _friends = [];
   bool _isCreating = false;
   bool _isLoadingFriends = true;
 
   final List<Map<String, dynamic>> _workoutTypes = [
-    {'name': 'Strength', 'icon': Icons.fitness_center, 'color': Colors.blue},
-    {'name': 'Cardio', 'icon': Icons.directions_run, 'color': Colors.red},
-    {'name': 'HIIT', 'icon': Icons.flash_on, 'color': Colors.orange},
-    {'name': 'Leg Day', 'icon': Icons.directions_walk, 'color': Colors.purple},
+    {'name': 'Strength',   'icon': Icons.fitness_center,    'color': Colors.blue},
+    {'name': 'Cardio',     'icon': Icons.directions_run,    'color': Colors.red},
+    {'name': 'HIIT',       'icon': Icons.flash_on,          'color': Colors.orange},
+    {'name': 'Leg Day',    'icon': Icons.directions_walk,   'color': Colors.purple},
     {'name': 'Upper Body', 'icon': Icons.accessibility_new, 'color': Colors.teal},
-    {'name': 'Full Body', 'icon': Icons.sports_gymnastics, 'color': Colors.indigo},
-    {'name': 'Yoga', 'icon': Icons.self_improvement, 'color': Colors.green},
-    {'name': 'Other', 'icon': Icons.sports, 'color': Colors.grey},
+    {'name': 'Full Body',  'icon': Icons.sports_gymnastics, 'color': Colors.indigo},
+    {'name': 'Yoga',       'icon': Icons.self_improvement,  'color': Colors.green},
+    {'name': 'Other',      'icon': Icons.sports,            'color': Colors.grey},
   ];
 
   @override
   void initState() {
     super.initState();
-    _selectedBuddyId = widget.preSelectedBuddyId;
+    _selectedBuddyId   = widget.preSelectedBuddyId;
     _selectedBuddyName = widget.preSelectedBuddyName;
     _loadFriends();
   }
@@ -87,7 +87,6 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
 
   Future<void> _scheduleWorkout() async {
     setState(() => _isCreating = true);
-
     final timeString =
         '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}:00';
 
@@ -112,11 +111,9 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                 const Icon(Icons.check_circle, color: Colors.white),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    _selectedBuddyId != null
-                        ? 'Workout invite sent to $_selectedBuddyName! 🎉'
-                        : 'Workout scheduled! 💪',
-                  ),
+                  child: Text(_selectedBuddyId != null
+                      ? 'Workout invite sent to $_selectedBuddyName! 🎉'
+                      : 'Workout scheduled! 💪'),
                 ),
               ],
             ),
@@ -127,10 +124,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $error'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $error'), backgroundColor: Colors.red),
         );
       }
     }
@@ -138,25 +132,24 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final appColors = AppColors.of(context);
+
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: appColors.cardBackground,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle bar
+            // Handle
             Container(
               margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
+              width: 40, height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey[300],
+                color: appColors.divider,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -169,94 +162,73 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.green[100],
+                      color: Colors.green.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child:
-                        Icon(Icons.calendar_today, color: Colors.green[700], size: 24),
+                    child: Icon(Icons.calendar_today, color: Colors.green[400], size: 24),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Schedule Workout',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        Text('Schedule Workout',
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.onSurface)),
                         if (_selectedBuddyName != null)
-                          Text(
-                            'with $_selectedBuddyName',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                            ),
-                          ),
+                          Text('with $_selectedBuddyName',
+                              style: TextStyle(fontSize: 14, color: appColors.subtleText)),
                       ],
                     ),
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: Icon(Icons.close, color: Colors.grey[400]),
+                    icon: Icon(Icons.close, color: appColors.subtleText),
                   ),
                 ],
               ),
             ),
 
-            const Divider(height: 1),
+            Divider(height: 1, color: appColors.divider),
 
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Workout Type Selection
-                  const Text(
-                    'Workout Type',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  // Workout Type
+                  Text('Workout Type',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurface)),
                   const SizedBox(height: 12),
-                  _buildWorkoutTypeGrid(),
+                  _buildWorkoutTypeGrid(appColors),
 
                   const SizedBox(height: 24),
 
-                  // Buddy Selection (if not pre-selected)
+                  // Buddy selector
                   if (widget.preSelectedBuddyId == null) ...[
-                    const Text(
-                      'Workout Buddy',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    Text('Workout Buddy',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurface)),
                     const SizedBox(height: 12),
-                    _buildBuddySelector(),
+                    _buildBuddySelector(appColors),
                     const SizedBox(height: 24),
                   ],
 
-                  // Date & Time Row
+                  // Date & Time
                   Row(
                     children: [
-                      Expanded(child: _buildDatePicker()),
+                      Expanded(child: _buildDatePicker(appColors)),
                       const SizedBox(width: 16),
-                      Expanded(child: _buildTimePicker()),
+                      Expanded(child: _buildTimePicker(appColors)),
                     ],
                   ),
 
                   const SizedBox(height: 24),
-
-                  // Duration
-                  _buildDurationSelector(),
-
+                  _buildDurationSelector(appColors),
                   const SizedBox(height: 32),
 
-                  // Schedule Button
+                  // CTA button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -266,43 +238,31 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                            borderRadius: BorderRadius.circular(16)),
                         elevation: 2,
                       ),
                       child: _isCreating
                           ? const SizedBox(
-                              width: 24,
-                              height: 24,
+                              width: 24, height: 24,
                               child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
+                                  strokeWidth: 2, color: Colors.white))
                           : Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(
-                                  _selectedBuddyId != null
-                                      ? Icons.send
-                                      : Icons.check,
-                                  size: 20,
-                                ),
+                                Icon(_selectedBuddyId != null
+                                    ? Icons.send : Icons.check, size: 20),
                                 const SizedBox(width: 8),
                                 Text(
                                   _selectedBuddyId != null
                                       ? 'Send Invite to $_selectedBuddyName'
                                       : 'Schedule Workout',
                                   style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                      fontSize: 16, fontWeight: FontWeight.bold),
                                 ),
                               ],
                             ),
                     ),
                   ),
-
                   SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
                 ],
               ),
@@ -313,14 +273,12 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
     );
   }
 
-  Widget _buildWorkoutTypeGrid() {
+  Widget _buildWorkoutTypeGrid(AppColors appColors) {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
+        crossAxisCount: 4, crossAxisSpacing: 10, mainAxisSpacing: 10,
         childAspectRatio: 0.9,
       ),
       itemCount: _workoutTypes.length,
@@ -332,38 +290,36 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
         return GestureDetector(
           onTap: () {
             HapticFeedback.selectionClick();
-            setState(() => _selectedType = type['name']);
+            setState(() => _selectedType = type['name'] as String);
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             decoration: BoxDecoration(
-              color: isSelected ? color[50] : Colors.grey[50],
+              color: isSelected
+                  ? color.withOpacity(0.12)
+                  : appColors.sectionBackground,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isSelected ? color[400]! : Colors.grey[200]!,
+                color: isSelected ? color[400]! : appColors.cardBorder,
                 width: isSelected ? 2 : 1,
               ),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  type['icon'] as IconData,
-                  color: isSelected ? color[700] : Colors.grey[500],
-                  size: 24,
-                ),
+                Icon(type['icon'] as IconData,
+                    color: isSelected ? color[400] : appColors.subtleText,
+                    size: 24),
                 const SizedBox(height: 4),
-                Text(
-                  type['name'] as String,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                    color: isSelected ? color[700] : Colors.grey[600],
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Text(type['name'] as String,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      color: isSelected ? color[400] : appColors.subtleText,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
@@ -372,103 +328,91 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
     );
   }
 
-  Widget _buildBuddySelector() {
+  Widget _buildBuddySelector(AppColors appColors) {
     if (_isLoadingFriends) {
       return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.grey[50],
+          color: appColors.sectionBackground,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[200]!),
+          border: Border.all(color: appColors.cardBorder),
         ),
         child: const Center(
           child: SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
+              width: 20, height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2)),
         ),
       );
     }
 
-    // Compact selector - tap to open friend picker
     return GestureDetector(
       onTap: _friends.isEmpty ? null : _showBuddyPicker,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.grey[50],
+          color: appColors.sectionBackground,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: _selectedBuddyId != null ? Colors.green[300]! : Colors.grey[200]!,
+            color: _selectedBuddyId != null
+                ? Colors.green[400]!
+                : appColors.cardBorder,
           ),
         ),
         child: Row(
           children: [
-            // Avatar/Icon
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: _selectedBuddyId != null ? Colors.green[100] : Colors.grey[200],
-                shape: BoxShape.circle,
+            // Avatar or placeholder
+            if (_selectedBuddyAvatarId != null)
+              UserAvatar(avatarId: _selectedBuddyAvatarId!, size: 40)
+            else
+              Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: _selectedBuddyId != null
+                      ? Colors.green.withOpacity(0.15)
+                      : appColors.cardBorder,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _selectedBuddyId != null ? Icons.people : Icons.person,
+                  color: _selectedBuddyId != null
+                      ? Colors.green[400]
+                      : appColors.subtleText,
+                  size: 20,
+                ),
               ),
-              child: Icon(
-                _selectedBuddyId != null ? Icons.people : Icons.person,
-                color: _selectedBuddyId != null ? Colors.green[700] : Colors.grey[600],
-                size: 20,
-              ),
-            ),
             const SizedBox(width: 12),
-            
-            // Name and status
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _selectedBuddyId != null 
+                    _selectedBuddyId != null
                         ? _selectedBuddyName ?? 'Unknown'
                         : 'Solo Workout',
                     style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: _selectedBuddyId != null ? Colors.green[700] : Colors.grey[800],
+                      fontSize: 15, fontWeight: FontWeight.w600,
+                      color: _selectedBuddyId != null
+                          ? Colors.green[400]
+                          : Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   if (_friends.isNotEmpty)
                     Text(
-                      _selectedBuddyId != null 
+                      _selectedBuddyId != null
                           ? 'Tap to change'
                           : '${_friends.length} friends available',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                      ),
+                      style: TextStyle(fontSize: 12, color: appColors.subtleText),
                     ),
                 ],
               ),
             ),
-            
-            // Action indicator
             if (_friends.isNotEmpty)
-              Icon(
-                Icons.chevron_right,
-                color: Colors.grey[400],
-              )
+              Icon(Icons.chevron_right, color: appColors.subtleText)
             else
               TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  // Navigate to friends tab
-                },
-                child: Text(
-                  'Add Friends',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.blue[600],
-                  ),
-                ),
+                onPressed: () { Navigator.pop(context); },
+                child: Text('Add Friends',
+                    style: TextStyle(fontSize: 12, color: Colors.blue[400])),
               ),
           ],
         ),
@@ -484,10 +428,11 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
       builder: (context) => _BuddyPickerSheet(
         friends: _friends,
         selectedBuddyId: _selectedBuddyId,
-        onSelect: (String? buddyId, String? buddyName) {
+        onSelect: (String? buddyId, String? buddyName, String? avatarId) {
           setState(() {
-            _selectedBuddyId = buddyId;
-            _selectedBuddyName = buddyName;
+            _selectedBuddyId       = buddyId;
+            _selectedBuddyName     = buddyName;
+            _selectedBuddyAvatarId = avatarId;
           });
           Navigator.pop(context);
         },
@@ -495,7 +440,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
     );
   }
 
-  Widget _buildDatePicker() {
+  Widget _buildDatePicker(AppColors appColors) {
     return GestureDetector(
       onTap: () async {
         final date = await showDatePicker(
@@ -504,38 +449,26 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
           firstDate: DateTime.now(),
           lastDate: DateTime.now().add(const Duration(days: 365)),
         );
-        if (date != null) {
-          setState(() => _selectedDate = date);
-        }
+        if (date != null) setState(() => _selectedDate = date);
       },
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.grey[50],
+          color: appColors.sectionBackground,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[200]!),
+          border: Border.all(color: appColors.cardBorder),
         ),
         child: Row(
           children: [
-            Icon(Icons.calendar_today, color: Colors.grey[600], size: 20),
+            Icon(Icons.calendar_today, color: appColors.subtleText, size: 20),
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Date',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey[500],
-                  ),
-                ),
-                Text(
-                  _formatDate(_selectedDate),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                Text('Date', style: TextStyle(fontSize: 11, color: appColors.subtleText)),
+                Text(_formatDate(_selectedDate),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSurface)),
               ],
             ),
           ],
@@ -544,45 +477,31 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
     );
   }
 
-  Widget _buildTimePicker() {
+  Widget _buildTimePicker(AppColors appColors) {
     return GestureDetector(
       onTap: () async {
         final time = await showTimePicker(
-          context: context,
-          initialTime: _selectedTime,
-        );
-        if (time != null) {
-          setState(() => _selectedTime = time);
-        }
+            context: context, initialTime: _selectedTime);
+        if (time != null) setState(() => _selectedTime = time);
       },
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.grey[50],
+          color: appColors.sectionBackground,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[200]!),
+          border: Border.all(color: appColors.cardBorder),
         ),
         child: Row(
           children: [
-            Icon(Icons.access_time, color: Colors.grey[600], size: 20),
+            Icon(Icons.access_time, color: appColors.subtleText, size: 20),
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Time',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey[500],
-                  ),
-                ),
-                Text(
-                  _selectedTime.format(context),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                Text('Time', style: TextStyle(fontSize: 11, color: appColors.subtleText)),
+                Text(_selectedTime.format(context),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSurface)),
               ],
             ),
           ],
@@ -591,77 +510,60 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
     );
   }
 
-  Widget _buildDurationSelector() {
+  Widget _buildDurationSelector(AppColors appColors) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'Duration',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            Text(
-              _formatDuration(_duration),
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.green[700],
-              ),
-            ),
+            Text('Duration',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurface)),
+            Text(_formatDuration(_duration),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold,
+                    color: Colors.green[400])),
           ],
         ),
         const SizedBox(height: 12),
         Row(
-          children: [
-            _buildDurationChip(30),
-            const SizedBox(width: 8),
-            _buildDurationChip(45),
-            const SizedBox(width: 8),
-            _buildDurationChip(60),
-            const SizedBox(width: 8),
-            _buildDurationChip(90),
-          ],
+          children: [30, 45, 60, 90].map((m) {
+            final isSelected = _duration == m;
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: m != 90 ? 8 : 0),
+                child: GestureDetector(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _duration = m);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? Colors.green.withOpacity(0.12)
+                          : appColors.sectionBackground,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected ? Colors.green[400]! : appColors.cardBorder,
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Text(_formatDuration(m),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          color: isSelected ? Colors.green[400] : appColors.subtleText,
+                        )),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
         ),
       ],
-    );
-  }
-
-  Widget _buildDurationChip(int minutes) {
-    final isSelected = _duration == minutes;
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          setState(() => _duration = minutes);
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.green[50] : Colors.grey[50],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected ? Colors.green[400]! : Colors.grey[200]!,
-              width: isSelected ? 2 : 1,
-            ),
-          ),
-          child: Text(
-            _formatDuration(minutes),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-              color: isSelected ? Colors.green[700] : Colors.grey[600],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -669,28 +571,25 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final tomorrow = today.add(const Duration(days: 1));
-    final selected = DateTime(date.year, date.month, date.day);
-
-    if (selected == today) return 'Today';
-    if (selected == tomorrow) return 'Tomorrow';
-
-    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final sel = DateTime(date.year, date.month, date.day);
+    if (sel == today) return 'Today';
+    if (sel == tomorrow) return 'Tomorrow';
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return '${days[date.weekday - 1]}, ${date.month}/${date.day}';
   }
 
   String _formatDuration(int minutes) {
     if (minutes < 60) return '${minutes}m';
-    final hours = minutes ~/ 60;
-    final mins = minutes % 60;
-    return mins > 0 ? '${hours}h ${mins}m' : '${hours}h';
+    final h = minutes ~/ 60; final m = minutes % 60;
+    return m > 0 ? '${h}h ${m}m' : '${h}h';
   }
 }
 
-/// Bottom sheet for picking a workout buddy with search
+// ── Buddy picker sheet ──────────────────────────────────────────
 class _BuddyPickerSheet extends StatefulWidget {
   final List<Map<String, dynamic>> friends;
   final String? selectedBuddyId;
-  final Function(String? buddyId, String? buddyName) onSelect;
+  final Function(String? buddyId, String? buddyName, String? avatarId) onSelect;
 
   const _BuddyPickerSheet({
     required this.friends,
@@ -712,38 +611,37 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
     _filteredFriends = widget.friends;
   }
 
-  void _filterFriends(String query) {
+  void _filter(String query) {
     setState(() {
-      if (query.isEmpty) {
-        _filteredFriends = widget.friends;
-      } else {
-        _filteredFriends = widget.friends.where((friend) {
-          final name = (friend['display_name'] ?? '').toLowerCase();
-          final username = (friend['username'] ?? '').toLowerCase();
-          return name.contains(query.toLowerCase()) || 
-                 username.contains(query.toLowerCase());
-        }).toList();
-      }
+      _filteredFriends = query.isEmpty
+          ? widget.friends
+          : widget.friends.where((f) {
+              final name = (f['display_name'] ?? '').toLowerCase();
+              final user = (f['username'] ?? '').toLowerCase();
+              return name.contains(query.toLowerCase()) ||
+                  user.contains(query.toLowerCase());
+            }).toList();
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final appColors = AppColors.of(context);
+
     return Container(
       height: MediaQuery.of(context).size.height * 0.6,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: appColors.cardBackground,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         children: [
-          // Handle bar
+          // Handle
           Container(
             margin: const EdgeInsets.only(top: 12),
-            width: 40,
-            height: 4,
+            width: 40, height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey[300],
+              color: appColors.divider,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -753,39 +651,32 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                Icon(Icons.people, color: Colors.green[700], size: 24),
+                Icon(Icons.people, color: Colors.green[400], size: 24),
                 const SizedBox(width: 12),
-                const Text(
-                  'Choose Workout Buddy',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                Text('Choose Workout Buddy',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface)),
                 const Spacer(),
-                Text(
-                  '${widget.friends.length} friends',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[500],
-                  ),
-                ),
+                Text('${widget.friends.length} friends',
+                    style: TextStyle(fontSize: 13, color: appColors.subtleText)),
               ],
             ),
           ),
 
-          // Search bar (only show if more than 5 friends)
+          // Search (5+ friends)
           if (widget.friends.length > 5)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
                 controller: _searchController,
-                onChanged: _filterFriends,
+                onChanged: _filter,
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                 decoration: InputDecoration(
                   hintText: 'Search friends...',
-                  prefixIcon: Icon(Icons.search, color: Colors.grey[400]),
+                  hintStyle: TextStyle(color: appColors.subtleText),
+                  prefixIcon: Icon(Icons.search, color: appColors.subtleText),
                   filled: true,
-                  fillColor: Colors.grey[100],
+                  fillColor: appColors.sectionBackground,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
@@ -797,16 +688,19 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
 
           const SizedBox(height: 12),
 
-          // Solo option at top
-          _buildPickerOption(
+          // Solo option
+          _buildOption(
+            context: context,
+            appColors: appColors,
             name: 'Solo Workout',
             subtitle: 'Work out by yourself',
-            icon: Icons.person,
+            avatarId: null,
+            isSolo: true,
             isSelected: widget.selectedBuddyId == null,
-            onTap: () => widget.onSelect(null, null),
+            onTap: () => widget.onSelect(null, null, null),
           ),
 
-          const Divider(height: 1),
+          Divider(height: 1, color: appColors.divider),
 
           // Friends list
           Expanded(
@@ -815,12 +709,10 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.search_off, size: 48, color: Colors.grey[300]),
+                        Icon(Icons.search_off, size: 48, color: appColors.divider),
                         const SizedBox(height: 12),
-                        Text(
-                          'No friends found',
-                          style: TextStyle(color: Colors.grey[500]),
-                        ),
+                        Text('No friends found',
+                            style: TextStyle(color: appColors.subtleText)),
                       ],
                     ),
                   )
@@ -830,17 +722,20 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
                     itemBuilder: (context, index) {
                       final friend = _filteredFriends[index];
                       final isSelected = widget.selectedBuddyId == friend['id'];
-                      
-                      return _buildPickerOption(
+                      return _buildOption(
+                        context: context,
+                        appColors: appColors,
                         name: friend['display_name'] ?? 'Unknown',
-                        subtitle: friend['username'] != null 
+                        subtitle: friend['username'] != null
                             ? '@${friend['username']}'
                             : null,
-                        icon: Icons.people,
+                        avatarId: friend['avatar_id'] as String?,
+                        isSolo: false,
                         isSelected: isSelected,
                         onTap: () => widget.onSelect(
                           friend['id'],
                           friend['display_name'],
+                          friend['avatar_id'] as String?,
                         ),
                       );
                     },
@@ -851,10 +746,13 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
     );
   }
 
-  Widget _buildPickerOption({
+  Widget _buildOption({
+    required BuildContext context,
+    required AppColors appColors,
     required String name,
     String? subtitle,
-    required IconData icon,
+    String? avatarId,
+    required bool isSolo,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
@@ -865,58 +763,58 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        color: isSelected ? Colors.green[50] : Colors.transparent,
+        color: isSelected
+            ? Colors.green.withOpacity(0.08)
+            : Colors.transparent,
         child: Row(
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: isSelected ? Colors.green[100] : Colors.grey[100],
-                shape: BoxShape.circle,
+            // Avatar
+            if (!isSolo && avatarId != null)
+              UserAvatar(avatarId: avatarId, size: 44)
+            else
+              Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Colors.green.withOpacity(0.15)
+                      : appColors.sectionBackground,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isSolo ? Icons.person : Icons.people,
+                  color: isSelected ? Colors.green[400] : appColors.subtleText,
+                  size: 22,
+                ),
               ),
-              child: Icon(
-                icon,
-                color: isSelected ? Colors.green[700] : Colors.grey[600],
-                size: 22,
-              ),
-            ),
             const SizedBox(width: 14),
+
+            // Name + subtitle
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    name,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                      color: isSelected ? Colors.green[700] : Colors.grey[800],
-                    ),
-                  ),
-                  if (subtitle != null)
-                    Text(
-                      subtitle,
+                  Text(name,
                       style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                      ),
-                    ),
+                        fontSize: 15,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        color: isSelected
+                            ? Colors.green[400]
+                            : Theme.of(context).colorScheme.onSurface,
+                      )),
+                  if (subtitle != null)
+                    Text(subtitle,
+                        style: TextStyle(fontSize: 12, color: appColors.subtleText)),
                 ],
               ),
             ),
+
+            // Check
             if (isSelected)
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: Colors.green[600],
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.check,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                    color: Colors.green[500], shape: BoxShape.circle),
+                child: const Icon(Icons.check, color: Colors.white, size: 16),
               ),
           ],
         ),

@@ -104,14 +104,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _dashboardKey.currentState?._syncTeamCheckIns();
       _dashboardKey.currentState?._loadStreakData();
     }
-
-    // Refresh schedule when navigating to it
-    if (index == 0) {
-      setState(() {
-        _pages[0] = SchedulePage(
-            key: ValueKey('schedule_${DateTime.now().millisecondsSinceEpoch}'));
-      });
-    }
   }
 
   @override
@@ -3967,13 +3959,17 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     
     if (milestones.contains(currentStreak) && currentStreak > _lastCelebratedStreak) {
       _lastCelebratedStreak = currentStreak;
-      _confettiController.play();
-      _confettiControllerRight.play();
-      _showMilestoneDialog(currentStreak);
+      _showMilestoneDialog(currentStreak).then((_) {
+        if (mounted) {
+          _confettiController.play();
+          _confettiControllerRight.play();
+        }
+      });
     }
   }
 
-  void _showMilestoneDialog(int streak) {
+  Future<void> _showMilestoneDialog(int streak) async {
+
     String title = '';
     String emoji = '';
     String message = '';
@@ -4025,7 +4021,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         message = '$streak days strong!';
     }
     
-    showDialog(
+    await showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -5291,6 +5287,8 @@ class _SchedulePageState extends State<SchedulePage> {
   final FriendService _friendService = FriendService();
 
   int _refreshTrigger = 0;
+  int _completedRefreshTrigger = 0;
+
   
   List<Map<String, dynamic>> _upcomingWorkouts = [];
   List<Map<String, dynamic>> _friends = [];
@@ -5334,12 +5332,12 @@ class _SchedulePageState extends State<SchedulePage> {
     if (!mounted) return; // ✅ CHECK MOUNTED before setState
     
     setState(() {
-      // ✅ Extra safety filter - remove completed/cancelled on client side too
       _upcomingWorkouts = workouts.where((w) => 
         w['status'] != 'completed' && w['status'] != 'cancelled'
       ).toList();
       _friends = friends;
       _isLoading = false;
+      _completedRefreshTrigger++;
     });
   }
 
@@ -5686,7 +5684,21 @@ class _SchedulePageState extends State<SchedulePage> {
     if (confirmed == true) {
       final success = await _workoutService.cancelWorkout(workoutId);
       if (success) {
-        if (!mounted) return; // ✅ CHECK MOUNTED
+        // Solo workout — force status to cancelled (no buddy to protect)
+        final workout = _upcomingWorkouts.firstWhere(
+          (w) => w['id'] == workoutId,
+          orElse: () => <String, dynamic>{},
+        );
+        if (workout.isNotEmpty && workout['buddy_id'] == null) {
+          await Supabase.instance.client
+              .from('workouts')
+              .update({'status': 'cancelled'})
+              .eq('id', workoutId);
+        }
+        setState(() {
+          _upcomingWorkouts.removeWhere((w) => w['id'] == workoutId);
+        });
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Workout cancelled'),
@@ -5833,6 +5845,7 @@ class _SchedulePageState extends State<SchedulePage> {
           }
 
           return WorkoutCard(
+            key: ValueKey(workout['id']),
             workout: workout,
             partnerName: partnerName,
             isCreator: isCreator,
@@ -5846,7 +5859,7 @@ class _SchedulePageState extends State<SchedulePage> {
             onDecline: () => _declineInvitation(workout['id']),
           );
         }).toList(),
-        const CompletedWorkoutsSection(),
+        CompletedWorkoutsSection(refreshTrigger: _completedRefreshTrigger),
       ],
     );
   }

@@ -1,14 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import '../theme/app_theme.dart';
 
-/// Workout card with buddy join system states
-/// Shows different UI based on:
-/// - scheduled: Normal scheduled workout
-/// - waiting_to_join: Buddy started, waiting for creator to join
-/// - in_progress: User is actively working out
-/// - window_expired: Creator missed the join window
-/// - buddy_completed: Buddy finished the workout
 class WorkoutCard extends StatefulWidget {
   final Map<String, dynamic> workout;
   final String partnerName;
@@ -21,7 +15,7 @@ class WorkoutCard extends StatefulWidget {
   final VoidCallback? onCancel;
   final VoidCallback? onAccept;
   final VoidCallback? onDecline;
-  final VoidCallback? onJoin; // New: Creator joins buddy's workout
+  final VoidCallback? onJoin;
   final VoidCallback? onOpenTimer;
 
   const WorkoutCard({
@@ -47,8 +41,8 @@ class WorkoutCard extends StatefulWidget {
 
 class _WorkoutCardState extends State<WorkoutCard> {
   Timer? _timer;
-  int _joinWindowRemaining = 0; // seconds
-  int _workoutElapsed = 0; // seconds
+  int _joinWindowRemaining = 0;
+  int _workoutElapsed = 0;
 
   @override
   void initState() {
@@ -69,29 +63,22 @@ class _WorkoutCardState extends State<WorkoutCard> {
   void _initTimers() {
     final startedAt = widget.workout['workout_started_at'];
     final plannedDuration = widget.workout['planned_duration_minutes'] ?? 30;
-    final creatorJoined = widget.workout['creator_joined'] ?? false;
-    final startedByUserId = widget.workout['started_by_user_id'];
 
-    if (widget.workoutStatus == 'in_progress' && startedAt != null) {
-      final startTime = DateTime.parse(startedAt);
-      final now = DateTime.now();
-      
-      // Calculate elapsed time
-      _workoutElapsed = now.difference(startTime).inSeconds;
-
-      // Calculate join window (quarter of planned duration)
-      final joinWindowMinutes = plannedDuration ~/ 4;
-      final joinWindowEnd = startTime.add(Duration(minutes: joinWindowMinutes));
-      _joinWindowRemaining = joinWindowEnd.difference(now).inSeconds;
-
-      // Start timer to update every second
+    if (widget.workoutStatus == 'in_progress') {
+      if (startedAt != null) {
+        final startTime = DateTime.parse(startedAt);
+        final now = DateTime.now();
+        _workoutElapsed = now.difference(startTime).inSeconds.clamp(0, 999999);
+        final joinWindowMinutes = plannedDuration ~/ 4;
+        final joinWindowEnd = startTime.add(Duration(minutes: joinWindowMinutes));
+        _joinWindowRemaining = joinWindowEnd.difference(now).inSeconds;
+      }
+      // Always tick for in_progress — even if startedAt is null, timer counts up
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) {
           setState(() {
             _workoutElapsed++;
-            if (_joinWindowRemaining > 0) {
-              _joinWindowRemaining--;
-            }
+            if (_joinWindowRemaining > 0) _joinWindowRemaining--;
           });
         }
       });
@@ -104,29 +91,20 @@ class _WorkoutCardState extends State<WorkoutCard> {
     super.dispose();
   }
 
-  // Determine card state for creator
   String _getCreatorState() {
     final creatorJoined = widget.workout['creator_joined'] ?? false;
     final startedByUserId = widget.workout['started_by_user_id'];
     final buddyId = widget.workout['buddy_id'];
 
     if (widget.workoutStatus == 'completed') {
-      if (!creatorJoined && startedByUserId == buddyId) {
-        return 'buddy_completed';
-      }
+      if (!creatorJoined && startedByUserId == buddyId) return 'buddy_completed';
       return 'completed';
     }
 
     if (widget.workoutStatus == 'in_progress') {
-      // Buddy started, creator hasn't joined
       if (startedByUserId == buddyId && !creatorJoined) {
-        if (_joinWindowRemaining > 0) {
-          return 'waiting_to_join';
-        } else {
-          return 'window_expired';
-        }
+        return _joinWindowRemaining > 0 ? 'waiting_to_join' : 'window_expired';
       }
-      // Creator has joined or started
       if (creatorJoined || startedByUserId == widget.workout['user_id']) {
         return 'in_progress';
       }
@@ -137,15 +115,14 @@ class _WorkoutCardState extends State<WorkoutCard> {
 
   @override
   Widget build(BuildContext context) {
+    final appColors = AppColors.of(context);
     final isIncomingInvite = widget.isBuddy && widget.buddyStatus == 'pending';
-    
-    // Determine state if creator
     final creatorState = widget.isCreator ? _getCreatorState() : null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: appColors.cardBackground,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -154,18 +131,17 @@ class _WorkoutCardState extends State<WorkoutCard> {
             offset: const Offset(0, 4),
           ),
         ],
-        border: _getCardBorder(creatorState, isIncomingInvite),
+        border: _getCardBorder(creatorState, isIncomingInvite, appColors),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Main content
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildWorkoutIcon(creatorState),
+                _buildWorkoutIcon(creatorState, appColors),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -176,50 +152,47 @@ class _WorkoutCardState extends State<WorkoutCard> {
                           Expanded(
                             child: Text(
                               widget.workout['workout_type'] ?? 'Workout',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
                           ),
-                          _buildStatusChip(creatorState),
+                          _buildStatusChip(creatorState, appColors),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(Icons.person, size: 14, color: Colors.blue[600]),
+                          Icon(Icons.person, size: 14, color: Colors.blue[400]),
                           const SizedBox(width: 4),
                           Text(
                             'with ${widget.partnerName}',
                             style: TextStyle(
                               fontSize: 13,
-                              color: Colors.blue[600],
+                              color: Colors.blue[400],
                               fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      _buildInfoTags(),
+                      _buildInfoTags(appColors),
                     ],
                   ),
                 ),
               ],
             ),
           ),
-
-          // State-specific content
-          if (creatorState == 'waiting_to_join') _buildJoinWindowSection(),
-          if (creatorState == 'window_expired') _buildWindowExpiredSection(),
+          if (creatorState == 'waiting_to_join') _buildJoinWindowSection(appColors),
+          if (creatorState == 'window_expired') _buildWindowExpiredSection(appColors),
           if (creatorState == 'buddy_completed') _buildBuddyCompletedSection(),
-          if (creatorState == 'in_progress' || 
+          if (creatorState == 'in_progress' ||
               (widget.isBuddy && widget.workoutStatus == 'in_progress'))
-            _buildInProgressSection(),
-
-          // Actions
+            _buildInProgressSection(appColors),
           if (isIncomingInvite) _buildInviteActions(),
-          if (!isIncomingInvite) _buildWorkoutActions(creatorState),
+          if (!isIncomingInvite) _buildWorkoutActions(creatorState, appColors),
         ],
       ),
     );
@@ -228,32 +201,26 @@ class _WorkoutCardState extends State<WorkoutCard> {
   Color _getCardShadowColor(String? state) {
     switch (state) {
       case 'waiting_to_join':
-        return Colors.orange.withOpacity(0.2);
+        return Colors.orange.withOpacity(0.25);
       case 'in_progress':
-        return Colors.green.withOpacity(0.2);
+        return Colors.green.withOpacity(0.25);
       case 'window_expired':
-        return Colors.grey.withOpacity(0.15);
+        return Colors.black.withOpacity(0.15);
       case 'buddy_completed':
         return Colors.green.withOpacity(0.15);
       default:
-        return Colors.black.withOpacity(0.06);
+        return Colors.black.withOpacity(0.15);
     }
   }
 
-  Border? _getCardBorder(String? state, bool isInvite) {
-    if (state == 'waiting_to_join') {
-      return Border.all(color: Colors.orange[300]!, width: 2);
-    }
-    if (state == 'in_progress') {
-      return Border.all(color: Colors.green[300]!, width: 2);
-    }
-    if (isInvite) {
-      return Border.all(color: Colors.blue[300]!, width: 2);
-    }
-    return null;
+  Border? _getCardBorder(String? state, bool isInvite, AppColors appColors) {
+    if (state == 'waiting_to_join') return Border.all(color: Colors.orange.withOpacity(0.5), width: 2);
+    if (state == 'in_progress') return Border.all(color: Colors.green.withOpacity(0.4), width: 2);
+    if (isInvite) return Border.all(color: Colors.blue.withOpacity(0.4), width: 2);
+    return Border.all(color: appColors.cardBorder, width: 0.5);
   }
 
-  Widget _buildWorkoutIcon(String? state) {
+  Widget _buildWorkoutIcon(String? state, AppColors appColors) {
     final workoutType = widget.workout['workout_type'] ?? 'Workout';
     final color = _getWorkoutColor(workoutType);
     final icon = _getWorkoutIcon(workoutType);
@@ -262,58 +229,57 @@ class _WorkoutCardState extends State<WorkoutCard> {
       width: 56,
       height: 56,
       decoration: BoxDecoration(
-        color: state == 'window_expired' 
-            ? Colors.grey[100] 
+        color: state == 'window_expired'
+            ? appColors.sectionBackground
             : color.withOpacity(0.15),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Icon(
-        icon, 
-        color: state == 'window_expired' ? Colors.grey[400] : color, 
+        icon,
+        color: state == 'window_expired' ? appColors.subtleText : color,
         size: 28,
       ),
     );
   }
 
-  Widget _buildStatusChip(String? state) {
+  Widget _buildStatusChip(String? state, AppColors appColors) {
     Color bgColor;
     Color textColor;
     String label;
 
     switch (state) {
       case 'waiting_to_join':
-        bgColor = Colors.orange[100]!;
-        textColor = Colors.orange[800]!;
+        bgColor = Colors.orange.withOpacity(0.15);
+        textColor = Colors.orange[300]!;
         label = '⏳ Waiting';
         break;
       case 'in_progress':
-        bgColor = Colors.green[100]!;
-        textColor = Colors.green[800]!;
+        bgColor = Colors.green.withOpacity(0.15);
+        textColor = Colors.green[400]!;
         label = '🔥 Active';
         break;
       case 'window_expired':
-        bgColor = Colors.grey[200]!;
-        textColor = Colors.grey[600]!;
+        bgColor = appColors.sectionBackground;
+        textColor = appColors.subtleText;
         label = '❌ Missed';
         break;
       case 'buddy_completed':
-        bgColor = Colors.green[100]!;
-        textColor = Colors.green[800]!;
+        bgColor = Colors.green.withOpacity(0.15);
+        textColor = Colors.green[400]!;
         label = '✅ Done';
         break;
       default:
-        // Check if it's a pending invite for buddy
         if (widget.isBuddy && widget.buddyStatus == 'pending') {
-          bgColor = Colors.blue[100]!;
-          textColor = Colors.blue[800]!;
+          bgColor = Colors.blue.withOpacity(0.15);
+          textColor = Colors.blue[300]!;
           label = '📨 Invite';
         } else if (widget.workoutStatus == 'in_progress') {
-          bgColor = Colors.green[100]!;
-          textColor = Colors.green[800]!;
+          bgColor = Colors.green.withOpacity(0.15);
+          textColor = Colors.green[400]!;
           label = '🔥 Active';
         } else {
-          bgColor = Colors.blue[50]!;
-          textColor = Colors.blue[700]!;
+          bgColor = Colors.blue.withOpacity(0.1);
+          textColor = Colors.blue[300]!;
           label = '📅 Scheduled';
         }
     }
@@ -326,59 +292,43 @@ class _WorkoutCardState extends State<WorkoutCard> {
       ),
       child: Text(
         label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: textColor,
-        ),
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor),
       ),
     );
   }
 
-  Widget _buildInfoTags() {
+  Widget _buildInfoTags(AppColors appColors) {
     return Wrap(
       spacing: 8,
       runSpacing: 4,
       children: [
-        _buildInfoTag(
-          icon: Icons.calendar_today,
-          text: _formatDate(widget.workout['workout_date']),
-        ),
-        _buildInfoTag(
-          icon: Icons.access_time,
-          text: _formatTime(widget.workout['workout_time']),
-        ),
+        _buildInfoTag(icon: Icons.calendar_today, text: _formatDate(widget.workout['workout_date']), appColors: appColors),
+        _buildInfoTag(icon: Icons.access_time, text: _formatTime(widget.workout['workout_time']), appColors: appColors),
         if (widget.workout['planned_duration_minutes'] != null)
-          _buildInfoTag(
-            icon: Icons.timer,
-            text: _formatDuration(widget.workout['planned_duration_minutes']),
-          ),
+          _buildInfoTag(icon: Icons.timer, text: _formatDuration(widget.workout['planned_duration_minutes']), appColors: appColors),
       ],
     );
   }
 
-  Widget _buildInfoTag({required IconData icon, required String text}) {
+  Widget _buildInfoTag({required IconData icon, required String text, required AppColors appColors}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
+        color: appColors.sectionBackground,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: Colors.grey[600]),
+          Icon(icon, size: 12, color: appColors.subtleText),
           const SizedBox(width: 4),
-          Text(
-            text,
-            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-          ),
+          Text(text, style: TextStyle(fontSize: 12, color: appColors.subtleText)),
         ],
       ),
     );
   }
 
-  Widget _buildJoinWindowSection() {
+  Widget _buildJoinWindowSection(AppColors appColors) {
     final joinMinutes = _joinWindowRemaining ~/ 60;
     final joinSeconds = _joinWindowRemaining % 60;
 
@@ -386,36 +336,28 @@ class _WorkoutCardState extends State<WorkoutCard> {
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.orange[50]!, Colors.amber[50]!],
-        ),
+        color: Colors.orange.withOpacity(0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.orange[200]!),
+        border: Border.all(color: Colors.orange.withOpacity(0.3)),
       ),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.timer, color: Colors.orange[600], size: 22),
+              Icon(Icons.timer, color: Colors.orange[400], size: 22),
               const SizedBox(width: 8),
               Text(
                 'Waiting for you to join!',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.orange[800],
-                ),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.orange[400]),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          
-          // Countdown
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: appColors.sectionBackground,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -423,44 +365,34 @@ class _WorkoutCardState extends State<WorkoutCard> {
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
-                color: _joinWindowRemaining < 60 ? Colors.red : Colors.orange[700],
+                color: _joinWindowRemaining < 60 ? Colors.red[400] : Colors.orange[400],
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
           ),
           const SizedBox(height: 8),
-          
-          Text(
-            'left to join',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey[600],
-            ),
-          ),
+          Text('left to join', style: TextStyle(fontSize: 13, color: appColors.subtleText)),
         ],
       ),
     );
   }
 
-  Widget _buildWindowExpiredSection() {
+  Widget _buildWindowExpiredSection(AppColors appColors) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
+        color: appColors.sectionBackground,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
-          Icon(Icons.info_outline, color: Colors.grey[500], size: 22),
+          Icon(Icons.info_outline, color: appColors.subtleText, size: 22),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               '${widget.partnerName} started without you',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 14, color: appColors.subtleText),
             ),
           ),
         ],
@@ -473,21 +405,19 @@ class _WorkoutCardState extends State<WorkoutCard> {
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.green[50]!, Colors.teal[50]!],
-        ),
+        color: Colors.green.withOpacity(0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.green[200]!),
+        border: Border.all(color: Colors.green.withOpacity(0.3)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.green[100],
+              color: Colors.green.withOpacity(0.15),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.check, color: Colors.green[600], size: 20),
+            child: Icon(Icons.check, color: Colors.green[400], size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -496,20 +426,10 @@ class _WorkoutCardState extends State<WorkoutCard> {
               children: [
                 Text(
                   '${widget.partnerName} completed the workout!',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.green[800],
-                  ),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.green[400]),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  'Helped the streak grow 🎉',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.green[600],
-                  ),
-                ),
+                Text('Helped the streak grow 🎉', style: TextStyle(fontSize: 12, color: Colors.green[300])),
               ],
             ),
           ),
@@ -518,7 +438,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
     );
   }
 
-  Widget _buildInProgressSection() {
+  Widget _buildInProgressSection(AppColors appColors) {
     final plannedDuration = widget.workout['planned_duration_minutes'] ?? 30;
     final goalSeconds = plannedDuration * 60;
     final progress = (_workoutElapsed / goalSeconds).clamp(0.0, 1.0);
@@ -527,20 +447,24 @@ class _WorkoutCardState extends State<WorkoutCard> {
     final elapsedMinutes = _workoutElapsed ~/ 60;
     final elapsedSeconds = _workoutElapsed % 60;
 
+    final remainingSeconds = (goalSeconds - _workoutElapsed).clamp(0, goalSeconds);
+    final remainingMinutes = remainingSeconds ~/ 60;
+    final remainingSecs = remainingSeconds % 60;
+
     return GestureDetector(
       onTap: widget.onOpenTimer,
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: hasReachedGoal
-                ? [Colors.green[50]!, Colors.green[100]!]
-                : [Colors.blue[50]!, Colors.blue[100]!],
-          ),
+          color: hasReachedGoal
+              ? Colors.green.withOpacity(0.1)
+              : Colors.blue.withOpacity(0.1),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: hasReachedGoal ? Colors.green[300]! : Colors.blue[300]!,
+            color: hasReachedGoal
+                ? Colors.green.withOpacity(0.35)
+                : Colors.blue.withOpacity(0.3),
           ),
         ),
         child: Column(
@@ -550,7 +474,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
               children: [
                 Icon(
                   hasReachedGoal ? Icons.check_circle : Icons.timer,
-                  color: hasReachedGoal ? Colors.green[600] : Colors.blue[600],
+                  color: hasReachedGoal ? Colors.green[400] : Colors.blue[400],
                   size: 24,
                 ),
                 const SizedBox(width: 10),
@@ -559,7 +483,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
-                    color: hasReachedGoal ? Colors.green[700] : Colors.blue[700],
+                    color: hasReachedGoal ? Colors.green[400] : Colors.blue[400],
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
@@ -567,7 +491,9 @@ class _WorkoutCardState extends State<WorkoutCard> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: hasReachedGoal ? Colors.green[200] : Colors.blue[200],
+                    color: hasReachedGoal
+                        ? Colors.green.withOpacity(0.2)
+                        : Colors.blue.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -575,36 +501,33 @@ class _WorkoutCardState extends State<WorkoutCard> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: hasReachedGoal ? Colors.green[800] : Colors.blue[800],
+                      color: hasReachedGoal ? Colors.green[300] : Colors.blue[300],
                     ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            
-            // Progress bar
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 8,
-                backgroundColor: Colors.white.withOpacity(0.5),
+                backgroundColor: appColors.divider,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  hasReachedGoal ? Colors.green[500]! : Colors.blue[500]!,
+                  hasReachedGoal ? Colors.green[400]! : Colors.blue[400]!,
                 ),
               ),
             ),
             const SizedBox(height: 8),
-            
             Text(
-              hasReachedGoal 
-                  ? '🎉 Goal reached! Ready to complete!' 
-                  : 'Working out...',
+              hasReachedGoal
+                  ? '🎉 Goal reached! Ready to complete!'
+                  : '${remainingMinutes}:${remainingSecs.toString().padLeft(2, '0')} to go',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: hasReachedGoal ? Colors.green[700] : Colors.grey[600],
+                color: hasReachedGoal ? Colors.green[400] : appColors.subtleText,
               ),
             ),
           ],
@@ -622,7 +545,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
             '${widget.workout['creator']?['display_name'] ?? 'Someone'} invited you!',
             style: TextStyle(
               fontSize: 13,
-              color: Colors.grey[600],
+              color: AppColors.of(context).subtleText,
               fontStyle: FontStyle.italic,
             ),
           ),
@@ -631,10 +554,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    widget.onAccept?.call();
-                  },
+                  onPressed: () { HapticFeedback.lightImpact(); widget.onAccept?.call(); },
                   icon: const Icon(Icons.check, size: 18),
                   label: const Text('Accept'),
                   style: ElevatedButton.styleFrom(
@@ -642,27 +562,20 @@ class _WorkoutCardState extends State<WorkoutCard> {
                     foregroundColor: Colors.white,
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    widget.onDecline?.call();
-                  },
+                  onPressed: () { HapticFeedback.lightImpact(); widget.onDecline?.call(); },
                   icon: Icon(Icons.close, size: 18, color: Colors.red[400]),
                   label: Text('Decline', style: TextStyle(color: Colors.red[400])),
                   style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.red[300]!),
+                    side: BorderSide(color: Colors.red.withOpacity(0.4)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               ),
@@ -673,8 +586,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
     );
   }
 
-  Widget _buildWorkoutActions(String? creatorState) {
-    // No actions for expired or completed states
+  Widget _buildWorkoutActions(String? creatorState, AppColors appColors) {
     if (creatorState == 'window_expired' || creatorState == 'buddy_completed') {
       return const SizedBox.shrink();
     }
@@ -686,63 +598,59 @@ class _WorkoutCardState extends State<WorkoutCard> {
         child: SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: () {
-              HapticFeedback.heavyImpact();
-              widget.onJoin?.call();
-            },
+            onPressed: () { HapticFeedback.heavyImpact(); widget.onJoin?.call(); },
             icon: const Icon(Icons.play_arrow, size: 22),
             label: const Text('Join Workout'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange[500],
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
           ),
         ),
       );
     }
 
-    // In progress - show locked/unlocked complete button
-    if (creatorState == 'in_progress' || 
+    // In progress — complete (locked until goal) + abandon
+    if (creatorState == 'in_progress' ||
         (widget.isBuddy && widget.workoutStatus == 'in_progress')) {
       final plannedDuration = widget.workout['planned_duration_minutes'] ?? 30;
       final hasReachedGoal = _workoutElapsed >= (plannedDuration * 60);
 
       return Container(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: hasReachedGoal
-                ? () {
-                    HapticFeedback.heavyImpact();
-                    widget.onComplete?.call();
-                  }
-                : null,
-            icon: Icon(
-              hasReachedGoal ? Icons.check_circle : Icons.lock,
-              size: 20,
-            ),
-            label: Text(hasReachedGoal ? 'Complete Workout' : 'Complete Goal First'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: hasReachedGoal ? Colors.green[500] : Colors.grey[300],
-              foregroundColor: hasReachedGoal ? Colors.white : Colors.grey[600],
-              disabledBackgroundColor: Colors.grey[300],
-              disabledForegroundColor: Colors.grey[600],
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+        child: Column(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: hasReachedGoal
+                    ? () { HapticFeedback.heavyImpact(); widget.onComplete?.call(); }
+                    : null,
+                icon: Icon(hasReachedGoal ? Icons.check_circle : Icons.lock, size: 20),
+                label: Text(hasReachedGoal ? 'Complete Workout' : 'Complete Goal First'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: hasReachedGoal ? Colors.green[500] : appColors.sectionBackground,
+                  foregroundColor: hasReachedGoal ? Colors.white : appColors.subtleText,
+                  disabledBackgroundColor: appColors.sectionBackground,
+                  disabledForegroundColor: appColors.subtleText,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
               ),
             ),
-          ),
+            TextButton.icon(
+              onPressed: () { HapticFeedback.lightImpact(); widget.onCancel?.call(); },
+              icon: Icon(Icons.stop_circle_outlined, color: Colors.red[400], size: 16),
+              label: Text('Abandon Workout', style: TextStyle(color: Colors.red[400], fontSize: 13)),
+            ),
+          ],
         ),
       );
     }
 
-    // Scheduled - show start button
+    // Scheduled — start + cancel
     if (widget.workoutStatus == 'scheduled') {
       return Container(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -750,19 +658,14 @@ class _WorkoutCardState extends State<WorkoutCard> {
           children: [
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: () {
-                  HapticFeedback.lightImpact();
-                  widget.onStart?.call();
-                },
+                onPressed: () { HapticFeedback.lightImpact(); widget.onStart?.call(); },
                 icon: const Icon(Icons.play_arrow, size: 20),
                 label: const Text('Start Workout'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _getWorkoutColor(widget.workout['workout_type']),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
               ),
             ),
@@ -770,14 +673,11 @@ class _WorkoutCardState extends State<WorkoutCard> {
               const SizedBox(width: 12),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.red[50],
+                  color: Colors.red.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: IconButton(
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    widget.onCancel?.call();
-                  },
+                  onPressed: () { HapticFeedback.lightImpact(); widget.onCancel?.call(); },
                   icon: Icon(Icons.close, color: Colors.red[400]),
                   tooltip: 'Cancel',
                 ),
@@ -791,32 +691,33 @@ class _WorkoutCardState extends State<WorkoutCard> {
     return const SizedBox.shrink();
   }
 
-  // Helper methods
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
   Color _getWorkoutColor(String? type) {
     switch (type?.toLowerCase()) {
-      case 'cardio': return Colors.red[600]!;
-      case 'strength': return Colors.blue[600]!;
+      case 'cardio':      return Colors.red[600]!;
+      case 'strength':    return Colors.blue[600]!;
       case 'leg day':
-      case 'lower body': return Colors.orange[600]!;
-      case 'upper body': return Colors.purple[600]!;
-      case 'full body': return Colors.indigo[600]!;
-      case 'hiit': return Colors.deepOrange[600]!;
-      case 'yoga': return Colors.teal[600]!;
-      default: return Colors.green[600]!;
+      case 'lower body':  return Colors.orange[600]!;
+      case 'upper body':  return Colors.purple[600]!;
+      case 'full body':   return Colors.indigo[600]!;
+      case 'hiit':        return Colors.deepOrange[600]!;
+      case 'yoga':        return Colors.teal[600]!;
+      default:            return Colors.green[600]!;
     }
   }
 
   IconData _getWorkoutIcon(String? type) {
     switch (type?.toLowerCase()) {
-      case 'cardio': return Icons.directions_run;
-      case 'strength': return Icons.fitness_center;
-      case 'upper body': return Icons.accessibility_new;
+      case 'cardio':      return Icons.directions_run;
+      case 'strength':    return Icons.fitness_center;
+      case 'upper body':  return Icons.accessibility_new;
       case 'lower body':
-      case 'leg day': return Icons.directions_walk;
-      case 'full body': return Icons.sports_gymnastics;
-      case 'hiit': return Icons.flash_on;
-      case 'yoga': return Icons.self_improvement;
-      default: return Icons.sports;
+      case 'leg day':     return Icons.directions_walk;
+      case 'full body':   return Icons.sports_gymnastics;
+      case 'hiit':        return Icons.flash_on;
+      case 'yoga':        return Icons.self_improvement;
+      default:            return Icons.sports;
     }
   }
 
@@ -828,11 +729,9 @@ class _WorkoutCardState extends State<WorkoutCard> {
       final today = DateTime(now.year, now.month, now.day);
       final tomorrow = today.add(const Duration(days: 1));
       final workoutDate = DateTime(date.year, date.month, date.day);
-
       if (workoutDate == today) return 'Today';
       if (workoutDate == tomorrow) return 'Tomorrow';
-
-      final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       return '${days[date.weekday - 1]}, ${date.month}/${date.day}';
     } catch (e) {
       return dateStr;
