@@ -754,6 +754,12 @@ class WorkoutService {
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', workoutId);
 
+      if (!isCreator && buddyId != null) {
+        await _supabase.from('workouts').update({
+          'buddy_completed_at': DateTime.now().toUtc().toIso8601String(),
+        }).eq('id', workoutId);
+      }
+
       // Clear active session for this user
       await _supabase
           .from('active_checkin_sessions')

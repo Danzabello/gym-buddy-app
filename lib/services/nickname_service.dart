@@ -6,15 +6,23 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class NicknameService {
   final SupabaseClient _supabase = Supabase.instance.client;
   
-  // Cache nicknames in memory to avoid repeated database calls
   Map<String, String>? _nicknameCache;
   DateTime? _cacheTime;
+  String? _cacheUserId;  // ✅ ADD THIS FIELD
   static const Duration _cacheDuration = Duration(minutes: 5);
 
-  /// Get all nicknames for the current user
-  /// Returns a map of {friendId: nickname}
   Future<Map<String, String>> getAllNicknames({bool forceRefresh = false}) async {
     try {
+      final currentUserId = _supabase.auth.currentUser?.id;  // ← only ONCE
+      if (currentUserId == null) return {};
+
+      // ✅ Invalidate cache if user changed
+      if (_cacheUserId != null && _cacheUserId != currentUserId) {
+        _nicknameCache = null;
+        _cacheTime = null;
+      }
+      _cacheUserId = currentUserId;
+
       // Return cached data if still valid
       if (!forceRefresh && 
           _nicknameCache != null && 
@@ -22,9 +30,6 @@ class NicknameService {
           DateTime.now().difference(_cacheTime!) < _cacheDuration) {
         return _nicknameCache!;
       }
-
-      final currentUserId = _supabase.auth.currentUser?.id;
-      if (currentUserId == null) return {};
 
       final response = await _supabase
           .from('friend_nicknames')
@@ -116,6 +121,7 @@ class NicknameService {
   void clearCache() {
     _nicknameCache = null;
     _cacheTime = null;
+    _cacheUserId = null;
   }
 
   /// Force refresh the cache

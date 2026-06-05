@@ -5633,7 +5633,11 @@ class _SchedulePageState extends State<SchedulePage> {
         
         // Check in BUDDY if they didn't cancel
         if (!buddyCancelled && workoutBuddyId != null) {
-          if (workoutBuddyId == currentUserId) {
+          final buddyActuallyCompleted = workout['buddy_completed_at'] != null;
+          
+          if (!buddyActuallyCompleted && workoutBuddyId != currentUserId) {
+            print('⚠️ Buddy accepted but never completed workout - NO streak credit');
+          } else if (workoutBuddyId == currentUserId) {
             final userResult = await teamStreakService.checkInAllTeams();
             print('✅ Buddy (current user) check-in: ${userResult['message']}');
           } else {
