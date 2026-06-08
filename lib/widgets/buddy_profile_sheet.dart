@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../theme/app_theme.dart';
 import 'user_avatar.dart';
 import 'workout_history_sheet.dart';
 import 'quick_schedule_sheet.dart';
 
-/// A bottom sheet that displays a buddy's profile information
-/// Shows: avatar, display name, @username, streak stats, and actions
 class BuddyProfileSheet extends StatefulWidget {
   final String buddyDisplayName;
   final String buddyUsername;
@@ -16,7 +15,7 @@ class BuddyProfileSheet extends StatefulWidget {
   final int bestStreak;
   final int totalWorkouts;
   final DateTime? memberSince;
-  final String? nickname; // Your custom nickname for this buddy
+  final String? nickname;
   final VoidCallback? onNicknameChanged;
 
   const BuddyProfileSheet({
@@ -33,7 +32,6 @@ class BuddyProfileSheet extends StatefulWidget {
     this.onNicknameChanged,
   });
 
-  /// Static method to show the sheet
   static void show(
     BuildContext context, {
     required String buddyDisplayName,
@@ -48,7 +46,6 @@ class BuddyProfileSheet extends StatefulWidget {
     VoidCallback? onNicknameChanged,
   }) {
     HapticFeedback.mediumImpact();
-    
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -83,7 +80,7 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
 
   Future<void> _showSetNicknameDialog() async {
     final controller = TextEditingController(text: _currentNickname ?? '');
-    
+
     final newNickname = await showDialog<String?>(
       context: context,
       builder: (context) => AlertDialog(
@@ -106,21 +103,13 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
             const SizedBox(height: 16),
             TextField(
               controller: controller,
-              autofocus: true,
+              autofocus: false,
               textCapitalization: TextCapitalization.words,
               decoration: InputDecoration(
                 labelText: 'Nickname',
                 hintText: 'e.g., Gym Bro, Mike',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 prefixIcon: const Icon(Icons.person_outline),
-                suffixIcon: controller.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () => controller.clear(),
-                      )
-                    : null,
               ),
               onSubmitted: (value) => Navigator.pop(context, value),
             ),
@@ -134,7 +123,7 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
         actions: [
           if (_currentNickname != null && _currentNickname!.isNotEmpty)
             TextButton(
-              onPressed: () => Navigator.pop(context, ''), // Empty = remove
+              onPressed: () => Navigator.pop(context, ''),
               style: TextButton.styleFrom(foregroundColor: Colors.red),
               child: const Text('Remove'),
             ),
@@ -147,9 +136,7 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue[600],
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             child: const Text('Save'),
           ),
@@ -168,36 +155,25 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
       if (currentUserId == null) return;
 
       if (nickname == null || nickname.isEmpty) {
-        // Remove nickname
         await Supabase.instance.client
             .from('friend_nicknames')
             .delete()
             .eq('user_id', currentUserId)
             .eq('friend_id', widget.buddyUserId);
-        
         setState(() => _currentNickname = null);
-        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Nickname removed'),
-              backgroundColor: Colors.grey,
-            ),
+            const SnackBar(content: Text('Nickname removed'), backgroundColor: Colors.grey),
           );
         }
       } else {
-        // Upsert nickname
-        await Supabase.instance.client
-            .from('friend_nicknames')
-            .upsert({
-              'user_id': currentUserId,
-              'friend_id': widget.buddyUserId,
-              'nickname': nickname,
-              'updated_at': DateTime.now().toUtc().toIso8601String(),
-            }, onConflict: 'user_id, friend_id');
-        
+        await Supabase.instance.client.from('friend_nicknames').upsert({
+          'user_id': currentUserId,
+          'friend_id': widget.buddyUserId,
+          'nickname': nickname,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        }, onConflict: 'user_id, friend_id');
         setState(() => _currentNickname = nickname);
-        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -207,17 +183,11 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
           );
         }
       }
-
-      // Notify parent to refresh
       widget.onNicknameChanged?.call();
     } catch (e) {
-      print('❌ Error saving nickname: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to save nickname'),
-            backgroundColor: Colors.red,
-          ),
+          const SnackBar(content: Text('Failed to save nickname'), backgroundColor: Colors.red),
         );
       }
     }
@@ -225,53 +195,41 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final appColors = AppColors.of(context);
+
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: appColors.cardBackground,  // ✅ was Colors.white
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Handle bar
           Container(
             margin: const EdgeInsets.only(top: 12),
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey[300],
+              color: appColors.divider,  // ✅ was Colors.grey[300]
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          
           const SizedBox(height: 20),
-          
-          // Avatar and name section
-          _buildProfileHeader(),
-          
+          _buildProfileHeader(appColors),
           const SizedBox(height: 24),
-          
-          // Stats row
-          _buildStatsRow(),
-          
+          _buildStatsRow(appColors),
           const SizedBox(height: 24),
-          
-          // Actions section
-          _buildActionsSection(),
-          
-          // Bottom padding for safe area
+          _buildActionsSection(appColors),
           SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
         ],
       ),
     );
   }
 
-  Widget _buildProfileHeader() {
+  Widget _buildProfileHeader(AppColors appColors) {
     final displayedName = _currentNickname ?? widget.buddyDisplayName;
-    
     return Column(
       children: [
-        // Avatar with gradient border
         Container(
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
@@ -284,120 +242,71 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
           ),
           child: Container(
             padding: const EdgeInsets.all(3),
-            decoration: const BoxDecoration(
-              color: Colors.white,
+            decoration: BoxDecoration(
+              color: appColors.cardBackground,  // ✅ was Colors.white
               shape: BoxShape.circle,
             ),
-            child: UserAvatar(
-              avatarId: widget.buddyAvatarId,
-              size: 100,
-            ),
+            child: UserAvatar(avatarId: widget.buddyAvatarId, size: 100),
           ),
         ),
-        
         const SizedBox(height: 16),
-        
-        // Display name (or nickname) - clean, no extra tags
         Text(
           displayedName,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.onSurface,  // ✅ theme-aware
           ),
         ),
-        
         const SizedBox(height: 4),
-        
-        // Username
         Text(
           '@${widget.buddyUsername}',
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.blue[600],
-            fontWeight: FontWeight.w500,
-          ),
+          style: TextStyle(fontSize: 16, color: Colors.blue[600], fontWeight: FontWeight.w500),
         ),
       ],
     );
   }
 
-  Widget _buildStatsRow() {
+  Widget _buildStatsRow(AppColors appColors) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _buildStatItem(
-            icon: Icons.local_fire_department,
-            value: '${widget.currentStreak}',
-            label: 'Current\nStreak',
-            color: Colors.orange[700]!,
-          ),
-          Container(
-            height: 50,
-            width: 1,
-            color: Colors.grey[200],
-          ),
-          _buildStatItem(
-            icon: Icons.emoji_events,
-            value: '${widget.bestStreak}',
-            label: 'Best\nStreak',
-            color: Colors.amber[700]!,
-          ),
-          Container(
-            height: 50,
-            width: 1,
-            color: Colors.grey[200],
-          ),
-          _buildStatItem(
-            icon: Icons.fitness_center,
-            value: '${widget.totalWorkouts}',
-            label: 'Total\nWorkouts',
-            color: Colors.blue[700]!,
-          ),
+          _buildStatItem('${widget.currentStreak}', 'Current\nStreak',
+              Icons.local_fire_department, Colors.orange[700]!, appColors),
+          Container(height: 50, width: 1, color: appColors.divider),  // ✅
+          _buildStatItem('${widget.bestStreak}', 'Best\nStreak',
+              Icons.emoji_events, Colors.amber[700]!, appColors),
+          Container(height: 50, width: 1, color: appColors.divider),  // ✅
+          _buildStatItem('${widget.totalWorkouts}', 'Total\nWorkouts',
+              Icons.fitness_center, Colors.blue[700]!, appColors),
         ],
       ),
     );
   }
 
-  Widget _buildStatItem({
-    required IconData icon,
-    required String value,
-    required String label,
-    required Color color,
-  }) {
+  Widget _buildStatItem(String value, String label, IconData icon,
+      Color color, AppColors appColors) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, color: color, size: 24),
         const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 10,
-            color: Colors.grey[600],
-            height: 1.2,
-          ),
-        ),
+        Text(value,
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+        Text(label,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 10, color: appColors.subtleText, height: 1.2)),  // ✅
       ],
     );
   }
 
-  Widget _buildActionsSection() {
+  Widget _buildActionsSection(AppColors appColors) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
-          // Set Nickname button
           _buildActionTile(
             icon: Icons.edit,
             iconColor: Colors.blue[600]!,
@@ -406,11 +315,9 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
                 ? 'Currently: "$_currentNickname"'
                 : 'Give them a custom name only you see',
             onTap: _showSetNicknameDialog,
+            appColors: appColors,
           ),
-          
           const SizedBox(height: 12),
-          
-          // View Workout History
           _buildActionTile(
             icon: Icons.history,
             iconColor: Colors.purple[600]!,
@@ -425,11 +332,9 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
                 buddyAvatarId: widget.buddyAvatarId,
               );
             },
+            appColors: appColors,
           ),
-          
           const SizedBox(height: 12),
-          
-          // Schedule Workout button
           _buildActionTile(
             icon: Icons.calendar_today,
             iconColor: Colors.green[600]!,
@@ -443,6 +348,7 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
                 buddyDisplayName: widget.buddyDisplayName,
               );
             },
+            appColors: appColors,
           ),
         ],
       ),
@@ -455,6 +361,7 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
     required String title,
     required String subtitle,
     required VoidCallback onTap,
+    required AppColors appColors,
   }) {
     return Material(
       color: Colors.transparent,
@@ -467,9 +374,9 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.grey[50],
+            color: appColors.sectionBackground,  // ✅ was Colors.grey[50]
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey[200]!),
+            border: Border.all(color: appColors.cardBorder),  // ✅ was Colors.grey[200]
           ),
           child: Row(
             children: [
@@ -486,25 +393,19 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    Text(title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurface,  // ✅
+                        )),
                     const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
-                    ),
+                    Text(subtitle,
+                        style: TextStyle(fontSize: 12, color: appColors.subtleText)),  // ✅
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: Colors.grey[400]),
+              Icon(Icons.chevron_right, color: appColors.subtleText),  // ✅
             ],
           ),
         ),

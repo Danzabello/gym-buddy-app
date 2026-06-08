@@ -7,7 +7,7 @@ import '../services/achievement_service.dart';
 import '../theme/app_theme.dart';
 import 'user_avatar.dart';
 import 'profile_view_dialog.dart';
-import 'schedule_workout_dialog.dart';
+import 'schedule_workout_sheet.dart';
 import 'achievement_toast.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -465,10 +465,10 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
               subtitle: 'Schedule a session together',
               onTap: () {
                 Navigator.pop(context);
-                showDialog(
-                  context: context,
-                  builder: (_) =>
-                      ScheduleWorkoutDialog(friendProfile: friend),
+                ScheduleWorkoutSheet.show(
+                  context,
+                  buddyId: friend['id'] as String?,
+                  buddyName: friend['display_name'] as String?,
                 );
               },
               appColors: appColors,

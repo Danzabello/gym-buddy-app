@@ -198,6 +198,44 @@ class _WorkoutCardState extends State<WorkoutCard> {
     );
   }
 
+  Widget _buildDurationTag(int? minutes, AppColors appColors) {
+    final color = _durationColor(minutes);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.timer, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            _formatDuration(minutes),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _durationColor(int? minutes) {
+    if (minutes == null) return AppColors.of(context).subtleText;
+    if (minutes <= 20)  return Colors.grey[500]!;
+    if (minutes <= 30)  return Colors.blue[600]!;
+    if (minutes <= 45)  return Colors.green[600]!;
+    if (minutes <= 60)  return Colors.teal[600]!;
+    if (minutes <= 75)  return Colors.purple[600]!;
+    if (minutes <= 90)  return Colors.deepPurple[600]!;
+    return Colors.red[600]!;
+  }
+
   Color _getCardShadowColor(String? state) {
     switch (state) {
       case 'waiting_to_join':
@@ -305,7 +343,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
         _buildInfoTag(icon: Icons.calendar_today, text: _formatDate(widget.workout['workout_date']), appColors: appColors),
         _buildInfoTag(icon: Icons.access_time, text: _formatTime(widget.workout['workout_time']), appColors: appColors),
         if (widget.workout['planned_duration_minutes'] != null)
-          _buildInfoTag(icon: Icons.timer, text: _formatDuration(widget.workout['planned_duration_minutes']), appColors: appColors),
+          _buildDurationTag(widget.workout['planned_duration_minutes'], appColors),
       ],
     );
   }

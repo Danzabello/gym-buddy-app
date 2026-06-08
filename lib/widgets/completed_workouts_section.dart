@@ -59,6 +59,17 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
     }
   }
 
+  Color _durationColor(int? minutes) {
+    if (minutes == null) return AppColors.of(context).subtleText;
+    if (minutes <= 20)  return Colors.grey[500]!;
+    if (minutes <= 30)  return Colors.blue[600]!;
+    if (minutes <= 45)  return Colors.green[600]!;
+    if (minutes <= 60)  return Colors.teal[600]!;
+    if (minutes <= 75)  return Colors.purple[600]!;
+    if (minutes <= 90)  return Colors.deepPurple[600]!;
+    return Colors.red[600]!;
+  }
+
   IconData _typeIcon(String? type) {
     switch (type?.toLowerCase()) {
       case 'cardio':      return Icons.directions_run;
@@ -268,7 +279,7 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Recent workouts',
+                      Text('Recent completed workouts',
                           style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500,
                               color: Theme.of(context).colorScheme.onSurface)),
                       Text('${_completedWorkouts.length} completed',
@@ -348,10 +359,34 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
                                 color: Theme.of(context).colorScheme.onSurface)),
                         const SizedBox(height: 3),
                         Row(children: [
-                          Icon(Icons.timer_outlined, size: 11, color: appColors.subtleText),
-                          const SizedBox(width: 3),
-                          Text(_duration(workout['actual_duration_minutes'] as int?),
-                              style: TextStyle(fontSize: 11, color: appColors.subtleText)),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _durationColor(workout['actual_duration_minutes'] as int?)
+                                  .withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: _durationColor(workout['actual_duration_minutes'] as int?)
+                                    .withOpacity(0.4),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.timer_outlined, size: 10,
+                                    color: _durationColor(workout['actual_duration_minutes'] as int?)),
+                                const SizedBox(width: 3),
+                                Text(
+                                  _duration(workout['actual_duration_minutes'] as int?),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: _durationColor(workout['actual_duration_minutes'] as int?),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                           _pipe(appColors),
                           Icon(Icons.calendar_today_outlined, size: 11, color: appColors.subtleText),
                           const SizedBox(width: 3),

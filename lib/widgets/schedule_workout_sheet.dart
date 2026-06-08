@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../services/workout_service.dart';
 import '../services/friend_service.dart';
@@ -49,6 +48,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   int _duration = 60;
+  bool _isCustomDuration = false;  // ✅ NEW
   String? _selectedBuddyId;
   String? _selectedBuddyName;
   String? _selectedBuddyAvatarId;
@@ -130,6 +130,156 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
     }
   }
 
+  // ✅ NEW — Custom duration picker (matches QuickScheduleSheet)
+  void _showCustomDurationDialog() {
+    int tempDuration = _isCustomDuration ? _duration : 60;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final appColors = AppColors.of(sheetContext);
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final dialColor = _durationColor(tempDuration);
+            return Container(
+            padding: EdgeInsets.fromLTRB(
+              24, 20, 24, MediaQuery.of(sheetContext).padding.bottom + 20,
+            ),
+            decoration: BoxDecoration(
+              color: appColors.cardBackground,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: appColors.divider,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text('Set Duration',
+                    style: TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold,
+                      color: Theme.of(sheetContext).colorScheme.onSurface,
+                    )),
+                const SizedBox(height: 24),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+                  decoration: BoxDecoration(
+                    color: dialColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: dialColor.withOpacity(0.4), width: 2),
+                  ),
+                  child: Text(_formatDuration(tempDuration),
+                      style: TextStyle(
+                        fontSize: 52, fontWeight: FontWeight.bold,
+                        color: dialColor,
+                      )),
+                ),
+                const SizedBox(height: 28),
+                SliderTheme(
+                  data: SliderTheme.of(sheetContext).copyWith(
+                    activeTrackColor: dialColor,
+                    inactiveTrackColor: appColors.cardBorder,
+                    thumbColor: dialColor,
+                    overlayColor: dialColor.withOpacity(0.2),
+                    trackHeight: 10,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 16),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 28),
+                  ),
+                  child: Slider(
+                    value: tempDuration.toDouble(),
+                    min: 10, max: 180, divisions: 34,
+                    onChanged: (value) {
+                      final rounded = (value / 5).round() * 5;
+                      HapticFeedback.selectionClick();
+                      setSheetState(() => tempDuration = rounded);
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('10 min', style: TextStyle(color: appColors.subtleText, fontSize: 13)),
+                      Text('3 hours', style: TextStyle(color: appColors.subtleText, fontSize: 13)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Wrap(
+                  spacing: 10, runSpacing: 10,
+                  alignment: WrapAlignment.center,
+                  children: [15, 30, 45, 60, 90, 120].map((mins) {
+                    final isSelected = tempDuration == mins;
+                    final chipColor = _durationColor(mins);
+                    return GestureDetector(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        setSheetState(() => tempDuration = mins);
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? chipColor.withOpacity(0.15)
+                              : appColors.sectionBackground,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isSelected ? chipColor : appColors.cardBorder,
+                            width: isSelected ? 2 : 1,
+                          ),
+                        ),
+                        child: Text(_formatDuration(mins),
+                            style: TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w600,
+                              color: isSelected ? chipColor
+                                  : Theme.of(sheetContext).colorScheme.onSurface,
+                            )),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      setState(() {
+                        _duration = tempDuration;
+                        _isCustomDuration = true;
+                      });
+                      Navigator.pop(sheetContext);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: dialColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
+                      ),
+                      child: const Text('Set Duration',
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final appColors = AppColors.of(context);
@@ -144,7 +294,6 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle
             Container(
               margin: const EdgeInsets.only(top: 12),
               width: 40, height: 4,
@@ -153,8 +302,6 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-
-            // Header
             Padding(
               padding: const EdgeInsets.all(20),
               child: Row(
@@ -165,7 +312,8 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                       color: Colors.green.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(Icons.calendar_today, color: Colors.green[400], size: 24),
+                    child: Icon(Icons.calendar_today,
+                        color: Colors.green[400], size: 24),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -173,11 +321,14 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Schedule Workout',
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.onSurface)),
+                            style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            )),
                         if (_selectedBuddyName != null)
                           Text('with $_selectedBuddyName',
-                              style: TextStyle(fontSize: 14, color: appColors.subtleText)),
+                              style: TextStyle(
+                                  fontSize: 14, color: appColors.subtleText)),
                       ],
                     ),
                   ),
@@ -188,34 +339,30 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                 ],
               ),
             ),
-
             Divider(height: 1, color: appColors.divider),
-
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Workout Type
                   Text('Workout Type',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onSurface)),
+                      style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      )),
                   const SizedBox(height: 12),
                   _buildWorkoutTypeGrid(appColors),
-
                   const SizedBox(height: 24),
-
-                  // Buddy selector
                   if (widget.preSelectedBuddyId == null) ...[
                     Text('Workout Buddy',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.onSurface)),
+                        style: TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        )),
                     const SizedBox(height: 12),
                     _buildBuddySelector(appColors),
                     const SizedBox(height: 24),
                   ],
-
-                  // Date & Time
                   Row(
                     children: [
                       Expanded(child: _buildDatePicker(appColors)),
@@ -223,12 +370,9 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                       Expanded(child: _buildTimePicker(appColors)),
                     ],
                   ),
-
                   const SizedBox(height: 24),
                   _buildDurationSelector(appColors),
                   const SizedBox(height: 32),
-
-                  // CTA button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -286,7 +430,6 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
         final type = _workoutTypes[index];
         final isSelected = _selectedType == type['name'];
         final color = type['color'] as MaterialColor;
-
         return GestureDetector(
           onTap: () {
             HapticFeedback.selectionClick();
@@ -338,8 +481,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
           border: Border.all(color: appColors.cardBorder),
         ),
         child: const Center(
-          child: SizedBox(
-              width: 20, height: 20,
+          child: SizedBox(width: 20, height: 20,
               child: CircularProgressIndicator(strokeWidth: 2)),
         ),
       );
@@ -354,13 +496,11 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: _selectedBuddyId != null
-                ? Colors.green[400]!
-                : appColors.cardBorder,
+                ? Colors.green[400]! : appColors.cardBorder,
           ),
         ),
         child: Row(
           children: [
-            // Avatar or placeholder
             if (_selectedBuddyAvatarId != null)
               UserAvatar(avatarId: _selectedBuddyAvatarId!, size: 40)
             else
@@ -375,8 +515,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                 child: Icon(
                   _selectedBuddyId != null ? Icons.people : Icons.person,
                   color: _selectedBuddyId != null
-                      ? Colors.green[400]
-                      : appColors.subtleText,
+                      ? Colors.green[400] : appColors.subtleText,
                   size: 20,
                 ),
               ),
@@ -410,7 +549,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
               Icon(Icons.chevron_right, color: appColors.subtleText)
             else
               TextButton(
-                onPressed: () { Navigator.pop(context); },
+                onPressed: () => Navigator.pop(context),
                 child: Text('Add Friends',
                     style: TextStyle(fontSize: 12, color: Colors.blue[400])),
               ),
@@ -428,7 +567,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
       builder: (context) => _BuddyPickerSheet(
         friends: _friends,
         selectedBuddyId: _selectedBuddyId,
-        onSelect: (String? buddyId, String? buddyName, String? avatarId) {
+        onSelect: (buddyId, buddyName, avatarId) {
           setState(() {
             _selectedBuddyId       = buddyId;
             _selectedBuddyName     = buddyName;
@@ -465,10 +604,13 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Date', style: TextStyle(fontSize: 11, color: appColors.subtleText)),
+                Text('Date',
+                    style: TextStyle(fontSize: 11, color: appColors.subtleText)),
                 Text(_formatDate(_selectedDate),
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.onSurface)),
+                    style: TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    )),
               ],
             ),
           ],
@@ -498,16 +640,29 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Time', style: TextStyle(fontSize: 11, color: appColors.subtleText)),
+                Text('Time',
+                    style: TextStyle(fontSize: 11, color: appColors.subtleText)),
                 Text(_selectedTime.format(context),
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.onSurface)),
+                    style: TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    )),
               ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  Color _durationColor(int minutes) {
+    if (minutes <= 20)  return Colors.grey[500]!;
+    if (minutes <= 30)  return Colors.blue[600]!;
+    if (minutes <= 45)  return Colors.green[600]!;
+    if (minutes <= 60)  return Colors.teal[600]!;
+    if (minutes <= 75)  return Colors.purple[600]!;
+    if (minutes <= 90)  return Colors.deepPurple[600]!;
+    return Colors.red[600]!;
   }
 
   Widget _buildDurationSelector(AppColors appColors) {
@@ -522,46 +677,91 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                     color: Theme.of(context).colorScheme.onSurface)),
             Text(_formatDuration(_duration),
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold,
-                    color: Colors.green[400])),
+                    color: _durationColor(_duration))),  // ← dynamic colour
           ],
         ),
         const SizedBox(height: 12),
         Row(
-          children: [30, 45, 60, 90].map((m) {
-            final isSelected = _duration == m;
-            return Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(right: m != 90 ? 8 : 0),
-                child: GestureDetector(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    setState(() => _duration = m);
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? Colors.green.withOpacity(0.12)
-                          : appColors.sectionBackground,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected ? Colors.green[400]! : appColors.cardBorder,
-                        width: isSelected ? 2 : 1,
+          children: [
+            ...[30, 45, 60].map((m) {
+              final isSelected = _duration == m && !_isCustomDuration;
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GestureDetector(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      setState(() { _duration = m; _isCustomDuration = false; });
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? _durationColor(m).withOpacity(0.12)
+                            : appColors.sectionBackground,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? _durationColor(m) : appColors.cardBorder,
+                          width: isSelected ? 2 : 1,
+                        ),
                       ),
+                      child: Text(_formatDuration(m),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                            color: isSelected ? _durationColor(m) : appColors.subtleText,
+                          )),
                     ),
-                    child: Text(_formatDuration(m),
-                        textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }),
+            // Custom chip
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  _showCustomDurationDialog();
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: _isCustomDuration
+                        ? _durationColor(_duration).withOpacity(0.12)
+                        : appColors.sectionBackground,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _isCustomDuration
+                          ? _durationColor(_duration) : appColors.cardBorder,
+                      width: _isCustomDuration ? 2 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.edit, size: 14,
+                          color: _isCustomDuration
+                              ? _durationColor(_duration) : appColors.subtleText),
+                      const SizedBox(width: 4),
+                      Text(
+                        _isCustomDuration ? _formatDuration(_duration) : 'Custom',
                         style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                          color: isSelected ? Colors.green[400] : appColors.subtleText,
-                        )),
+                          fontSize: 13,
+                          fontWeight: _isCustomDuration
+                              ? FontWeight.bold : FontWeight.w500,
+                          color: _isCustomDuration
+                              ? _durationColor(_duration) : appColors.subtleText,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            );
-          }).toList(),
+            ),
+          ],
         ),
       ],
     );
@@ -580,7 +780,8 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
 
   String _formatDuration(int minutes) {
     if (minutes < 60) return '${minutes}m';
-    final h = minutes ~/ 60; final m = minutes % 60;
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
     return m > 0 ? '${h}h ${m}m' : '${h}h';
   }
 }
@@ -636,7 +837,6 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
       ),
       child: Column(
         children: [
-          // Handle
           Container(
             margin: const EdgeInsets.only(top: 12),
             width: 40, height: 4,
@@ -645,8 +845,6 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-
-          // Header
           Padding(
             padding: const EdgeInsets.all(20),
             child: Row(
@@ -654,16 +852,16 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
                 Icon(Icons.people, color: Colors.green[400], size: 24),
                 const SizedBox(width: 12),
                 Text('Choose Workout Buddy',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onSurface)),
+                    style: TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    )),
                 const Spacer(),
                 Text('${widget.friends.length} friends',
                     style: TextStyle(fontSize: 13, color: appColors.subtleText)),
               ],
             ),
           ),
-
-          // Search (5+ friends)
           if (widget.friends.length > 5)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -685,10 +883,7 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
                 ),
               ),
             ),
-
           const SizedBox(height: 12),
-
-          // Solo option
           _buildOption(
             context: context,
             appColors: appColors,
@@ -699,10 +894,7 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
             isSelected: widget.selectedBuddyId == null,
             onTap: () => widget.onSelect(null, null, null),
           ),
-
           Divider(height: 1, color: appColors.divider),
-
-          // Friends list
           Expanded(
             child: _filteredFriends.isEmpty
                 ? Center(
@@ -721,14 +913,14 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
                     itemCount: _filteredFriends.length,
                     itemBuilder: (context, index) {
                       final friend = _filteredFriends[index];
-                      final isSelected = widget.selectedBuddyId == friend['id'];
+                      final isSelected =
+                          widget.selectedBuddyId == friend['id'];
                       return _buildOption(
                         context: context,
                         appColors: appColors,
                         name: friend['display_name'] ?? 'Unknown',
                         subtitle: friend['username'] != null
-                            ? '@${friend['username']}'
-                            : null,
+                            ? '@${friend['username']}' : null,
                         avatarId: friend['avatar_id'] as String?,
                         isSolo: false,
                         isSelected: isSelected,
@@ -764,11 +956,9 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         color: isSelected
-            ? Colors.green.withOpacity(0.08)
-            : Colors.transparent,
+            ? Colors.green.withOpacity(0.08) : Colors.transparent,
         child: Row(
           children: [
-            // Avatar
             if (!isSolo && avatarId != null)
               UserAvatar(avatarId: avatarId, size: 44)
             else
@@ -782,13 +972,12 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
                 ),
                 child: Icon(
                   isSolo ? Icons.person : Icons.people,
-                  color: isSelected ? Colors.green[400] : appColors.subtleText,
+                  color: isSelected
+                      ? Colors.green[400] : appColors.subtleText,
                   size: 22,
                 ),
               ),
             const SizedBox(width: 14),
-
-            // Name + subtitle
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -796,19 +985,19 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
                   Text(name,
                       style: TextStyle(
                         fontSize: 15,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.w500,
                         color: isSelected
                             ? Colors.green[400]
                             : Theme.of(context).colorScheme.onSurface,
                       )),
                   if (subtitle != null)
                     Text(subtitle,
-                        style: TextStyle(fontSize: 12, color: appColors.subtleText)),
+                        style: TextStyle(
+                            fontSize: 12, color: appColors.subtleText)),
                 ],
               ),
             ),
-
-            // Check
             if (isSelected)
               Container(
                 padding: const EdgeInsets.all(4),
