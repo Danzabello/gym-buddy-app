@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 /// Service to sync check-ins across all teams
 /// This ensures that when a user checks in, ALL their teams get the check-in
@@ -16,13 +17,12 @@ class TeamSyncService {
         return {'success': false, 'message': 'Not logged in', 'synced': 0};
       }
 
-      if (kDebugMode) print('🔄 SYNC: Starting team check-in sync for user: $currentUserId');
 
       // Get today's date (local time)
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
       
-      if (kDebugMode) print('📅 SYNC: Checking for date: $today');
+      if (kDebugMode) debugLog('📅 SYNC: Checking for date: $today');
 
       // Step 1: Check if user has checked in today (in ANY team)
       final userCheckIn = await _supabase
@@ -34,11 +34,11 @@ class TeamSyncService {
           .maybeSingle();
 
       if (userCheckIn == null) {
-        if (kDebugMode) print('⏭️ SYNC: User hasn\'t checked in today yet, nothing to sync');
+        if (kDebugMode) debugLog('⏭️ SYNC: User hasn\'t checked in today yet, nothing to sync');
         return {'success': true, 'message': 'No check-ins to sync', 'synced': 0};
       }
 
-      if (kDebugMode) print('✅ SYNC: User checked in today at ${userCheckIn['check_in_time']}');
+      if (kDebugMode) debugLog('✅ SYNC: User checked in today at ${userCheckIn['check_in_time']}');
 
       // Step 2: Get ALL user's team streak IDs
       // ✅ FIXED: Correct relationship path through buddy_teams
@@ -56,7 +56,7 @@ class TeamSyncService {
           ''')
           .eq('user_id', currentUserId);
 
-      if (kDebugMode) print('📊 SYNC: Found ${allTeamsResponse.length} teams for user');
+      if (kDebugMode) debugLog('📊 SYNC: Found ${allTeamsResponse.length} teams for user');
 
       // Step 3: Get list of team streak IDs that already have today's check-in
       final existingCheckIns = await _supabase
@@ -69,7 +69,7 @@ class TeamSyncService {
           .map<String>((c) => c['team_streak_id'] as String)
           .toSet();
 
-      if (kDebugMode) print('✅ SYNC: User has already checked in to ${checkedInStreakIds.length} teams');
+      if (kDebugMode) debugLog('✅ SYNC: User has already checked in to ${checkedInStreakIds.length} teams');
 
       // Step 4: Find teams that need the check-in backfilled
       int syncedCount = 0;
@@ -86,7 +86,7 @@ class TeamSyncService {
         final streaks = team['team_streaks'];
         
         if (streaks == null || (streaks as List).isEmpty) {
-          if (kDebugMode) print('⏭️ SYNC: No active streak for team: ${team['team_name']}');
+          if (kDebugMode) debugLog('⏭️ SYNC: No active streak for team: ${team['team_name']}');
           continue;
         }
 
@@ -95,12 +95,12 @@ class TeamSyncService {
 
         // Skip if already checked in to this team
         if (checkedInStreakIds.contains(streakId)) {
-          if (kDebugMode) print('⏭️ SYNC: Already checked in to team: $teamName');
+          if (kDebugMode) debugLog('⏭️ SYNC: Already checked in to team: $teamName');
           continue;
         }
 
         // Backfill the check-in for this team
-        if (kDebugMode) print('🔄 SYNC: Backfilling check-in for team: $teamName');
+        if (kDebugMode) debugLog('🔄 SYNC: Backfilling check-in for team: $teamName');
         
         try {
           await _supabase.from('daily_team_checkins').insert({
@@ -112,18 +112,18 @@ class TeamSyncService {
 
           syncedCount++;
           syncedTeams.add(teamName);
-          if (kDebugMode) print('✅ SYNC: Successfully backfilled check-in for: $teamName');
+          if (kDebugMode) debugLog('✅ SYNC: Successfully backfilled check-in for: $teamName');
 
           // Check if this completes the team's check-ins for today
           await _checkAndUpdateTeamStreak(streakId, teamData['team_id'], today);
           
         } catch (e) {
-          if (kDebugMode) print('⚠️ SYNC: Error backfilling for $teamName: $e');
+          if (kDebugMode) debugLog('⚠️ SYNC: Error backfilling for $teamName: $e');
         }
       }
 
       if (syncedCount > 0) {
-        if (kDebugMode) print('🎉 SYNC: Successfully synced $syncedCount teams: ${syncedTeams.join(", ")}');
+        if (kDebugMode) debugLog('🎉 SYNC: Successfully synced $syncedCount teams: ${syncedTeams.join(", ")}');
         return {
           'success': true,
           'message': 'Synced check-ins to $syncedCount team${syncedCount == 1 ? "" : "s"}',
@@ -131,7 +131,7 @@ class TeamSyncService {
           'teams': syncedTeams,
         };
       } else {
-        if (kDebugMode) print('✅ SYNC: All teams already up to date');
+        if (kDebugMode) debugLog('✅ SYNC: All teams already up to date');
         return {
           'success': true,
           'message': 'All teams already synced',
@@ -140,10 +140,10 @@ class TeamSyncService {
       }
 
     } catch (e) {
-      if (kDebugMode) print('❌ SYNC ERROR: $e');
+      if (kDebugMode) debugLog('❌ SYNC ERROR: $e');
       return {
         'success': false,
-        'message': 'Sync error: $e',
+        'message': 'Something went wrong. Please try again.',
         'synced': 0,
       };
     }
@@ -172,12 +172,12 @@ class TeamSyncService {
       final checkedInMembers = checkInsResponse.length;
 
       if (kDebugMode) {
-        print('📊 SYNC: Team check-in status: $checkedInMembers/$totalMembers');
+        debugLog('📊 SYNC: Team check-in status: $checkedInMembers/$totalMembers');
       }
 
       // If all members checked in, update the streak
       if (checkedInMembers >= totalMembers) {
-        if (kDebugMode) print('🎉 SYNC: All members checked in! Updating streak...');
+        if (kDebugMode) debugLog('🎉 SYNC: All members checked in! Updating streak...');
         
         // Get current streak data
         final streakData = await _supabase
@@ -220,12 +220,12 @@ class TeamSyncService {
           }).eq('id', streakId);
 
           if (kDebugMode) {
-            print('✅ SYNC: Streak updated! Current: $newStreak, Longest: $newLongest');
+            debugLog('✅ SYNC: Streak updated! Current: $newStreak, Longest: $newLongest');
           }
         }
       }
     } catch (e) {
-      if (kDebugMode) print('❌ SYNC: Error updating team streak: $e');
+      if (kDebugMode) debugLog('❌ SYNC: Error updating team streak: $e');
     }
   }
 }

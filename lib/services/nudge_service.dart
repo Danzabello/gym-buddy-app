@@ -1,6 +1,7 @@
 // lib/services/nudge_service.dart
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 class NudgeService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -25,7 +26,7 @@ class NudgeService {
 
       return existing != null;
     } catch (e) {
-      if (kDebugMode) print('❌ NudgeService.hasNudgedToday: $e');
+      if (kDebugMode) debugLog('❌ NudgeService.hasNudgedToday: $e');
       return false;
     }
   }
@@ -88,12 +89,11 @@ class NudgeService {
       );
 
       if (kDebugMode) {
-        print('✅ Nudge sent to $targetDisplayName ($targetUserId)');
       }
 
       return NudgeResult.sent;
     } catch (e) {
-      if (kDebugMode) print('❌ NudgeService.sendNudge: $e');
+      if (kDebugMode) debugLog('❌ NudgeService.sendNudge: $e');
       return NudgeResult.error;
     }
   }
@@ -115,7 +115,7 @@ class NudgeService {
 
       return {for (final r in rows) r['receiver_id'] as String};
     } catch (e) {
-      if (kDebugMode) print('❌ NudgeService.getNudgedTodaySet: $e');
+      if (kDebugMode) debugLog('❌ NudgeService.getNudgedTodaySet: $e');
       return {};
     }
   }

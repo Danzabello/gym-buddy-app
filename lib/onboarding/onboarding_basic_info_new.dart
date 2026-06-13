@@ -10,6 +10,7 @@ import '../services/auth_service.dart';
 import '../utils/input_validators.dart';
 import 'package:flutter/foundation.dart';
 import '../services/invite_service.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STEP 1 — Basic info
@@ -868,14 +869,14 @@ Future<void> _finish() async {
     final pendingCode = await inviteService.consumePendingInviteCode();
 
     if (pendingCode != null) {
-      if (kDebugMode) print('🔗 Found pending invite code: $pendingCode — attempting auto-pair');
+      if (kDebugMode) debugLog('🔗 Found pending invite code: $pendingCode — attempting auto-pair');
       final inviterId = await inviteService.acceptInvite(pendingCode);
 
       if (inviterId != null) {
-        if (kDebugMode) print('✅ Invite accepted — auto-pairing with inviter: $inviterId');
+        if (kDebugMode) debugLog('✅ Invite accepted — auto-pairing with inviter: $inviterId');
         await _createBuddyTeam(user.id, inviterId);
       } else {
-        if (kDebugMode) print('⚠️ Invite code was invalid or already used — skipping auto-pair');
+        if (kDebugMode) debugLog('⚠️ Invite code was invalid or already used — skipping auto-pair');
       }
     }
 
@@ -896,10 +897,11 @@ Future<void> _finish() async {
       );
     }
   } catch (e) {
+    debugLog('Onboarding profile save failed: $e');
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Error saving profile: $e'),
+            content: Text('Could not save profile. Please try again.'),
             backgroundColor: Colors.red),
       );
     }
@@ -918,9 +920,9 @@ Future<void> _createBuddyTeam(String newUserId, String inviterId) async {
         'p_invitee_id': newUserId,
       },
     );
-    if (kDebugMode) print('🎉 Buddy team created via RPC: $teamId');
+    if (kDebugMode) debugLog('🎉 Buddy team created via RPC: $teamId');
   } catch (e) {
-    if (kDebugMode) print('❌ _createBuddyTeam failed: $e');
+    if (kDebugMode) debugLog('❌ _createBuddyTeam failed: $e');
   }
 }
 

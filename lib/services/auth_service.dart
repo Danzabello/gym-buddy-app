@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'nickname_service.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 class AuthService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -20,7 +21,8 @@ class AuthService {
       }
       return 'Sign up failed';
     } catch (e) {
-      return e.toString();
+      debugLog('AuthService.signUp failed: $e');
+      return 'Sign up failed. Please try again.';
     }
   }
 
@@ -40,7 +42,8 @@ class AuthService {
       }
       return 'Sign in failed';
     } catch (e) {
-      return e.toString();
+      debugLog('AuthService.signIn failed: $e');
+      return 'Sign in failed. Please try again.';
     }
   }
 
@@ -66,7 +69,8 @@ class AuthService {
       await _supabase.auth.resetPasswordForEmail(email);
       return null; // Success
     } catch (e) {
-      return e.toString();
+      debugLog('AuthService.resetPassword failed: $e');
+      return 'Could not send reset email. Please try again.';
     }
   }
 

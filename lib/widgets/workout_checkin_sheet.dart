@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/workout_service.dart';
 import 'dart:async';
 import 'streak_complete_sheet.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 
 /// Workout timer sheet for check-ins
@@ -60,7 +61,7 @@ class WorkoutCheckInSheet extends StatefulWidget {
 
       return existing;
     } catch (e) {
-      print('❌ Error checking active session: $e');
+      debugLog('❌ Error checking active session: $e');
       return null;
     }
   }
@@ -173,7 +174,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
         _startNewWorkout();
       }
     } catch (e) {
-      print('❌ Error checking existing workout: $e');
+      debugLog('❌ Error checking existing workout: $e');
       _startNewWorkout();
     }
   }
@@ -182,19 +183,38 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) return;
 
+    // ✅ RACE GUARD: another flow (e.g. invite accept) may have just created
+    // a session — adopt its start time instead of overwriting it
+    try {
+      final existing = await Supabase.instance.client
+          .from('active_checkin_sessions')
+          .select()
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      if (existing != null && existing['started_at'] != null) {
+        _workoutStartTime = DateTime.parse(existing['started_at']);
+        _updateElapsedTime();
+        _startTimer();
+        return;
+      }
+    } catch (e) {
+      debugLog('⚠️ Race-guard check failed, starting fresh: $e');
+    }
+
     _workoutStartTime = DateTime.now();
 
     try {
       // Save workout session WITH workout details for resume functionality
       await Supabase.instance.client.from('active_checkin_sessions').upsert({
         'user_id': userId,
-        'started_at': _workoutStartTime!.toIso8601String(),
+        'started_at': _workoutStartTime!.toUtc().toIso8601String(), // ✅ ALWAYS UTC
         'workout_type': widget.workoutType,
         'workout_emoji': widget.workoutEmoji,
         'planned_duration': widget.plannedDuration,
       });
     } catch (e) {
-      print('❌ Error saving workout session: $e');
+      debugLog('❌ Error saving workout session: $e');
     }
 
     _startTimer();
@@ -241,7 +261,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
           .delete()
           .eq('user_id', userId);
     } catch (e) {
-      print('❌ Error clearing session: $e');
+      debugLog('❌ Error clearing session: $e');
     }
 
     // ✅ Close the sheet IMMEDIATELY — don't wait for check-in to finish
@@ -260,7 +280,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
         }
       }
     } catch (e) {
-      print('❌ Error completing check-in: $e');
+      debugLog('❌ Error completing check-in: $e');
     }
   }
 
@@ -282,7 +302,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
       workoutId = session?['workout_id'];
       isBuddyWorkout = workoutId != null;
     } catch (e) {
-      print('⚠️ Could not check workout type: $e');
+      debugLog('⚠️ Could not check workout type: $e');
     }
 
     // ✅ Show context-appropriate dialog
@@ -357,7 +377,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
               .eq('user_id', userId)
               .eq('status', 'in_progress');
         } catch (e) {
-          print('⚠️ Could not cancel workout record: $e');
+          debugLog('⚠️ Could not cancel workout record: $e');
         }
       }
 

@@ -6,6 +6,7 @@ import 'coin_service.dart';
 import 'level_service.dart';
 import 'dart:async' show unawaited;
 import 'achievement_service.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 
 
@@ -119,11 +120,10 @@ class TeamStreakService {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) {
-        if (kDebugMode) print('❌ No user logged in');
+        if (kDebugMode) debugLog('❌ No user logged in');
         return [];
       }
 
-      if (kDebugMode) print('🔍 Getting all streaks for user: $currentUserId');
 
       // ✅ ONE round trip instead of 9+
       final response = await _supabase
@@ -211,9 +211,9 @@ class TeamStreakService {
           );
 
           streaks.add(streak);
-          if (kDebugMode) print('✅ Added streak: ${streak.teamName}');
+          if (kDebugMode) debugLog('✅ Added streak: ${streak.teamName}');
         } catch (e) {
-          if (kDebugMode) print('❌ Error parsing team data: $e');
+          if (kDebugMode) debugLog('❌ Error parsing team data: $e');
         }
       }
 
@@ -225,15 +225,15 @@ class TeamStreakService {
       });
 
       if (kDebugMode) {
-        print('✅ Returning ${streaks.length} active streaks');
+        debugLog('✅ Returning ${streaks.length} active streaks');
         for (var s in streaks) {
-          print('  - ${s.teamName} (${s.teamId})');
+          debugLog('  - ${s.teamName} (${s.teamId})');
         }
       }
 
       return streaks;
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting user streaks: $e');
+      if (kDebugMode) debugLog('❌ Error getting user streaks: $e');
       return [];
     }
   }
@@ -241,7 +241,7 @@ class TeamStreakService {
   /// Get streak data for a specific team
   Future<TeamStreak?> _getTeamStreakData(String teamId) async {
     try {
-      if (kDebugMode) print('  🔍 Getting streak data for team: $teamId');
+      if (kDebugMode) debugLog('  🔍 Getting streak data for team: $teamId');
       
       // Get team info
       final teamResponse = await _supabase
@@ -250,7 +250,7 @@ class TeamStreakService {
           .eq('id', teamId)
           .single();
 
-      if (kDebugMode) print('  ✅ Team info: ${teamResponse['team_name']}');
+      if (kDebugMode) debugLog('  ✅ Team info: ${teamResponse['team_name']}');
 
       // Get active streak
       final streakResponse = await _supabase
@@ -261,11 +261,11 @@ class TeamStreakService {
           .maybeSingle();
 
       if (streakResponse == null) {
-        if (kDebugMode) print('  ⚠️ No active streak found for team: $teamId');
+        if (kDebugMode) debugLog('  ⚠️ No active streak found for team: $teamId');
         return null;
       }
 
-      if (kDebugMode) print('  ✅ Found active streak: ${streakResponse['id']}');
+      if (kDebugMode) debugLog('  ✅ Found active streak: ${streakResponse['id']}');
 
       // Get team members
       final membersResponse = await _supabase
@@ -273,7 +273,7 @@ class TeamStreakService {
       .select('user_id, user_profiles!inner(display_name, avatar_id, username)')
       .eq('team_id', teamId);
 
-      if (kDebugMode) print('  ✅ Found ${membersResponse.length} team members');
+      if (kDebugMode) debugLog('  ✅ Found ${membersResponse.length} team members');
 
       final members = <TeamMember>[];
       for (final member in membersResponse) {
@@ -293,7 +293,7 @@ class TeamStreakService {
         teamId,
       );
 
-      if (kDebugMode) print('  ✅ Found ${todayCheckIns.length} check-ins today');
+      if (kDebugMode) debugLog('  ✅ Found ${todayCheckIns.length} check-ins today');
 
       return TeamStreak(
         id: streakResponse['id'] ?? '',
@@ -316,7 +316,7 @@ class TeamStreakService {
         isFavorite: streakResponse['is_favorite'] == true,  // ⭐ ADD THIS LINE
       );
     } catch (e) {
-      if (kDebugMode) print('  ❌ Error getting team streak data: $e');
+      if (kDebugMode) debugLog('  ❌ Error getting team streak data: $e');
       return null;
     }
   }
@@ -327,7 +327,7 @@ class TeamStreakService {
     
     try {
       // ✅ FIX: Get ALL recent check-ins and filter in Dart to avoid timezone issues
-      if (kDebugMode) print('  📅 Getting recent check-ins for streak: $streakId');
+      if (kDebugMode) debugLog('  📅 Getting recent check-ins for streak: $streakId');
       
       final response = await _supabase
           .from('daily_team_checkins')
@@ -342,7 +342,7 @@ class TeamStreakService {
           .limit(20);
 
       if (kDebugMode) {
-        print('  📊 Found ${response.length} total check-ins for this streak');
+        debugLog('  📊 Found ${response.length} total check-ins for this streak');
       }
 
       // Filter to today's check-ins in Dart
@@ -367,7 +367,7 @@ class TeamStreakService {
             orderIndex++;
           }
         } catch (e) {
-          if (kDebugMode) print('  ⚠️ Error parsing check-in date: $e');
+          if (kDebugMode) debugLog('  ⚠️ Error parsing check-in date: $e');
         }
       }
       
@@ -385,15 +385,15 @@ class TeamStreakService {
       }
 
       if (kDebugMode) {
-        print('  ✅ Found ${checkIns.length} check-ins for today');
+        debugLog('  ✅ Found ${checkIns.length} check-ins for today');
         for (var checkIn in checkIns) {
-          print('     - ${checkIn.displayName} at ${checkIn.checkInTime}');
+          debugLog('     - ${checkIn.displayName} at ${checkIn.checkInTime}');
         }
       }
 
       return checkIns;
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting today check-ins: $e');
+      if (kDebugMode) debugLog('❌ Error getting today check-ins: $e');
       return [];
     }
   }
@@ -436,7 +436,7 @@ class TeamStreakService {
       // ✅ Check if user is on break today and auto-cancel it
       final onBreak = await _breakDayService.isCurrentUserOnBreakToday();
       if (onBreak) {
-        if (kDebugMode) print('🔄 User was on break, cancelling it...');
+        if (kDebugMode) debugLog('🔄 User was on break, cancelling it...');
         await _breakDayService.cancelBreakDay();
       }
 
@@ -444,7 +444,7 @@ class TeamStreakService {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
       
-      if (kDebugMode) print('🔄 Check-in date: $today (UTC)');
+      if (kDebugMode) debugLog('🔄 Check-in date: $today (UTC)');
       
       // Get all user's teams
       final streaks = await getAllUserStreaks();
@@ -497,14 +497,14 @@ class TeamStreakService {
           notes: notes,
         );
         
-        if (kDebugMode) print('✅ Workout logged to history');
+        if (kDebugMode) debugLog('✅ Workout logged to history');
       }
 
       int successCount = 0;
       LevelUpResult? levelUpResult;
 
       for (final streak in streaks) {
-        if (kDebugMode) print('🔄 Checking in to team: ${streak.teamName}');
+        if (kDebugMode) debugLog('🔄 Checking in to team: ${streak.teamName}');
         
         try {
           final result = await _checkInToTeam(streak.id, streak.teamId, today);
@@ -512,16 +512,16 @@ class TeamStreakService {
           levelUpResult ??= result;
           
           if (streak.isCoachMaxTeam) {
-            if (kDebugMode) print('🤖 Auto-checking in Coach Max...');
+            if (kDebugMode) debugLog('🤖 Auto-checking in Coach Max...');
             await _checkInCoachMax(streak.id, today);
           }
         } catch (e) {
-          if (kDebugMode) print('❌ Failed check-in for ${streak.teamName}: $e');
+          if (kDebugMode) debugLog('❌ Failed check-in for ${streak.teamName}: $e');
         }
       }
 
       if (kDebugMode) {
-        print('✅ Checked in to $successCount/${streaks.length} teams');
+        debugLog('✅ Checked in to $successCount/${streaks.length} teams');
       }
 
       // 🏆 Workout achievements
@@ -551,8 +551,8 @@ class TeamStreakService {
         'workout_achievements': workoutAchievements,
       };
     } catch (e) {
-      if (kDebugMode) print('❌ Error checking in: $e');
-      return {'success': false, 'message': 'Error: $e'};
+      if (kDebugMode) debugLog('❌ Error checking in: $e');
+      return {'success': false, 'message': 'Could not complete check-in. Please try again.'};
     }
   }
 
@@ -568,7 +568,7 @@ class TeamStreakService {
           .maybeSingle();
 
       if (existing != null) {
-        if (kDebugMode) print('✅ Coach Max already checked in');
+        if (kDebugMode) debugLog('✅ Coach Max already checked in');
         return;
       }
 
@@ -580,9 +580,9 @@ class TeamStreakService {
         'check_in_time': DateTime.now().toUtc().toIso8601String(),
       });
 
-      if (kDebugMode) print('✅ Coach Max checked in successfully');
+      if (kDebugMode) debugLog('✅ Coach Max checked in successfully');
     } catch (e) {
-      if (kDebugMode) print('❌ Error checking in Coach Max: $e');
+      if (kDebugMode) debugLog('❌ Error checking in Coach Max: $e');
     }
   }
 
@@ -603,7 +603,7 @@ class TeamStreakService {
 
       return await _updateTeamStreak(streakId, teamId, today);
     } catch (e) {
-      if (kDebugMode) print('❌ Error checking in to team: $e');
+      if (kDebugMode) debugLog('❌ Error checking in to team: $e');
       return null;
     }
   }
@@ -621,7 +621,7 @@ class TeamStreakService {
       final memberIds = membersResponse.map((m) => m['user_id'] as String).toList();
       final totalMembers = memberIds.length;
 
-      if (kDebugMode) print('📊 Team has $totalMembers members (excluding Coach Max)');
+      if (kDebugMode) debugLog('📊 Team has $totalMembers members (excluding Coach Max)');
 
       // Get today's check-ins (excluding Coach Max)
       final checkInsResponse = await _supabase
@@ -648,27 +648,26 @@ class TeamStreakService {
       }
 
       if (kDebugMode) {
-        print('📊 Team participation status:');
-        print('  - Total members: $totalMembers');
-        print('  - Checked in: $checkedInMembers');
-        print('  - Participating (check-in OR break): $participatingMembers');
+        debugLog('📊 Team participation status:');
+        debugLog('  - Total members: $totalMembers');
+        debugLog('  - Checked in: $checkedInMembers');
+        debugLog('  - Participating (check-in OR break): $participatingMembers');
         for (var userId in memberIds) {
           final onBreak = breakDayStatus[userId] ?? false;
           final checkedIn = checkInsResponse.any((c) => c['user_id'] == userId);
-          print('  - User $userId: ${onBreak ? "ON BREAK" : checkedIn ? "CHECKED IN" : "MISSING"}');
         }
       }
 
       // ✅ If all members are participating (checked in or on break), increment streak
       if (participatingMembers >= totalMembers) {
-        if (kDebugMode) print('🎉 All members participating! Incrementing streak...');
+        if (kDebugMode) debugLog('🎉 All members participating! Incrementing streak...');
         return await _incrementStreak(streakId, teamId, today);
       } else {
-        if (kDebugMode) print('⏳ Waiting for more members... ($participatingMembers/$totalMembers participating)');
+        if (kDebugMode) debugLog('⏳ Waiting for more members... ($participatingMembers/$totalMembers participating)');
       }
       return null;
     } catch (e) {
-      if (kDebugMode) print('❌ Error updating team streak: $e');
+      if (kDebugMode) debugLog('❌ Error updating team streak: $e');
       return null;
     }
   }
@@ -706,13 +705,13 @@ class TeamStreakService {
         if (lastWorkoutDate == today && currentStreak > 0) {
           // Already incremented today, don't double-increment
           // BUT: if currentStreak is 0, we should still increment (fresh start)
-          if (kDebugMode) print('ℹ️ Streak already incremented today');
+          if (kDebugMode) debugLog('ℹ️ Streak already incremented today');
           return null;
         }
         // First workout ever OR restarting from 0
         newStreak = 1;
         newLongest = currentStreak > 0 ? longestStreak : 1;
-        if (kDebugMode) print('🎉 ${currentStreak == 0 ? "Starting fresh from 0" : "First workout"} - Streak: 1');
+        if (kDebugMode) debugLog('🎉 ${currentStreak == 0 ? "Starting fresh from 0" : "First workout"} - Streak: 1');
       }else {
         final lastDate = DateTime.parse(lastWorkoutDate);
         final todayDate = DateTime.parse(today);
@@ -734,11 +733,10 @@ class TeamStreakService {
           final breakDayStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, today);
           
           if (kDebugMode) {
-            print('📊 Break day analysis for $today:');
+            debugLog('📊 Break day analysis for $today:');
             for (var userId in memberIds) {
               final onBreak = breakDayStatus[userId] ?? false;
               final checkedIn = checkedInUsers.contains(userId);
-              print('  - User $userId: ${onBreak ? "ON BREAK" : checkedIn ? "CHECKED IN" : "NOT CHECKED IN"}');
             }
           }
           
@@ -755,22 +753,22 @@ class TeamStreakService {
             if (newStreak > longestStreak) {
               newLongest = newStreak;
             }
-            if (kDebugMode) print('🔥 Streak incremented! Someone worked out.');
+            if (kDebugMode) debugLog('🔥 Streak incremented! Someone worked out.');
           } else {
             // ❌ Everyone took a break - streak stays same (doesn't increment but doesn't break)
             newStreak = currentStreak; // Stay the same
-            if (kDebugMode) print('😴 Everyone on break - streak stays at $currentStreak');
+            if (kDebugMode) debugLog('😴 Everyone on break - streak stays at $currentStreak');
           }
         } else if (daysDifference > 1) {
           // ✅ CASE 3: MORE THAN 1 DAY GAP - CHECK IF GAP IS FILLED WITH BREAK DAYS
-          if (kDebugMode) print('⏰ Gap detected: $daysDifference days since last workout');
+          if (kDebugMode) debugLog('⏰ Gap detected: $daysDifference days since last workout');
           
           // ✅ FIX: If current streak is already 0, don't bother checking the gap
           // Just start fresh at 1
           if (currentStreak == 0) {
             newStreak = 1;
             newLongest = longestStreak > 0 ? longestStreak : 1;
-            if (kDebugMode) print('🆕 Starting fresh from 0 - Streak: 1');
+            if (kDebugMode) debugLog('🆕 Starting fresh from 0 - Streak: 1');
           } else {
             // Check if the gap is filled with break days
             bool gapIsValid = true;
@@ -801,16 +799,16 @@ class TeamStreakService {
               if (newStreak > longestStreak) {
                 newLongest = newStreak;
               }
-              if (kDebugMode) print('🔥 Gap filled by break days - streak continues!');
+              if (kDebugMode) debugLog('🔥 Gap filled by break days - streak continues!');
             } else {
               // Streak broken - reset to 1
               newStreak = 1;
-              if (kDebugMode) print('💔 Streak broken - resetting to 1');
+              if (kDebugMode) debugLog('💔 Streak broken - resetting to 1');
             }
           }
         } else if (daysDifference == 0) {
           // Same day as last workout - should not happen, but handle it
-          if (kDebugMode) print('ℹ️ Already counted today, skipping');
+          if (kDebugMode) debugLog('ℹ️ Already counted today, skipping');
           return null;
         }
       }
@@ -926,12 +924,12 @@ class TeamStreakService {
       }
 
       if (kDebugMode) {
-        print('✅ Streak updated! Current: $newStreak, Longest: $newLongest');
+        debugLog('✅ Streak updated! Current: $newStreak, Longest: $newLongest');
       }
 
       return null;
     } catch (e) {
-      if (kDebugMode) print('❌ Error incrementing streak: $e');
+      if (kDebugMode) debugLog('❌ Error incrementing streak: $e');
       return null;
     }
 
@@ -961,7 +959,7 @@ class TeamStreakService {
 
       return response.isNotEmpty;
     } catch (e) {
-      if (kDebugMode) print('❌ Error checking today status: $e');
+      if (kDebugMode) debugLog('❌ Error checking today status: $e');
       return false;
     }
   }
@@ -1005,7 +1003,7 @@ class TeamStreakService {
 
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting streak history: $e');
+      if (kDebugMode) debugLog('❌ Error getting streak history: $e');
       return [];
     }
   }
@@ -1015,7 +1013,7 @@ class TeamStreakService {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return;
 
-      if (kDebugMode) print('🔍 Checking for broken streaks...');
+      if (kDebugMode) debugLog('🔍 Checking for broken streaks...');
 
       final streaks = await getAllUserStreaks();
       
@@ -1023,9 +1021,9 @@ class TeamStreakService {
         await _checkStreakStatus(streak);
       }
 
-      if (kDebugMode) print('✅ Streak check complete');
+      if (kDebugMode) debugLog('✅ Streak check complete');
     } catch (e) {
-      if (kDebugMode) print('❌ Error checking streaks: $e');
+      if (kDebugMode) debugLog('❌ Error checking streaks: $e');
     }
   }
 
@@ -1054,7 +1052,7 @@ class TeamStreakService {
       // The streak just hasn't been incremented yet (waiting for partner)
       final anyCheckedInToday = streak.todayCheckIns.isNotEmpty;
       if (anyCheckedInToday) {
-        if (kDebugMode) print('⏳ ${streak.teamName}: partial check-in today, skipping reset');
+        if (kDebugMode) debugLog('⏳ ${streak.teamName}: partial check-in today, skipping reset');
         return;
       }
 
@@ -1087,13 +1085,13 @@ class TeamStreakService {
       }
 
       if (!gapIsValid) {
-        if (kDebugMode) print('💔 Resetting broken streak: ${streak.teamName}');
+        if (kDebugMode) debugLog('💔 Resetting broken streak: ${streak.teamName}');
         await _resetStreak(streak.id);
       } else {
-        if (kDebugMode) print('✅ Gap filled by break days: ${streak.teamName}');
+        if (kDebugMode) debugLog('✅ Gap filled by break days: ${streak.teamName}');
       }
     } catch (e) {
-      if (kDebugMode) print('❌ Error checking streak status: $e');
+      if (kDebugMode) debugLog('❌ Error checking streak status: $e');
     }
   }
 
@@ -1105,9 +1103,9 @@ class TeamStreakService {
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', streakId);
 
-      if (kDebugMode) print('✅ Streak reset to 0');
+      if (kDebugMode) debugLog('✅ Streak reset to 0');
     } catch (e) {
-      if (kDebugMode) print('❌ Error resetting streak: $e');
+      if (kDebugMode) debugLog('❌ Error resetting streak: $e');
     }
   }
 
@@ -1117,10 +1115,8 @@ class TeamStreakService {
     required String teamId,
   }) async {
     try {
-      if (kDebugMode) print('🏋️ Checking in both buddies for workout...');
-      if (kDebugMode) print('   User: $userId');
-      if (kDebugMode) print('   Buddy: $buddyId');
-      if (kDebugMode) print('   Team: $teamId');
+      if (kDebugMode) debugLog('🏋️ Checking in both buddies for workout...');
+      if (kDebugMode) debugLog('   Team: $teamId');
 
       // Get today's date
       final now = DateTime.now();
@@ -1135,7 +1131,7 @@ class TeamStreakService {
           .maybeSingle();
 
       if (streakResponse == null) {
-        if (kDebugMode) print('⚠️ No active streak found for team');
+        if (kDebugMode) debugLog('⚠️ No active streak found for team');
         return {'success': false, 'message': 'No active streak for this team'};
       }
 
@@ -1165,8 +1161,8 @@ class TeamStreakService {
       await _updateTeamStreak(streakId, teamId, today);
 
       if (kDebugMode) {
-        print('✅ Buddy workout check-in complete!');
-        print('   New check-ins created: $checkedInCount');
+        debugLog('✅ Buddy workout check-in complete!');
+        debugLog('   New check-ins created: $checkedInCount');
       }
 
       return {
@@ -1177,8 +1173,8 @@ class TeamStreakService {
         'new_checkins': checkedInCount,
       };
     } catch (e) {
-      if (kDebugMode) print('❌ Error in buddy workout check-in: $e');
-      return {'success': false, 'message': 'Error: $e'};
+      if (kDebugMode) debugLog('❌ Error in buddy workout check-in: $e');
+      return {'success': false, 'message': 'Could not complete check-in. Please try again.'};
     }
   }
 
@@ -1201,7 +1197,6 @@ class TeamStreakService {
           .maybeSingle();
 
       if (existing != null) {
-        if (kDebugMode) print('   ℹ️ User $userId already checked in to this team today');
         return false; // Already checked in, no new check-in created
       }
 
@@ -1214,16 +1209,13 @@ class TeamStreakService {
         'check_in_time': now.toIso8601String(),
       });
 
-      if (kDebugMode) print('   ✅ Created check-in for user $userId');
       return true; // New check-in created
     } catch (e) {
-      if (kDebugMode) print('   ❌ Error checking in user $userId: $e');
       return false;
     }
   }
 
   Future<int> checkInAllTeamsForUser(String userId) async {
-    print('🔄 Checking in user $userId to all their teams...');
     
     int checkedInCount = 0;
     int skippedNoStreak = 0;
@@ -1235,10 +1227,10 @@ class TeamStreakService {
           .rpc('get_user_team_ids', params: {'target_user_id': userId});
       
       final List<dynamic> teamIds = teamIdsResponse as List<dynamic>;
-      print('   📊 Found ${teamIds.length} teams for user (via RPC)');
+      debugLog('   📊 Found ${teamIds.length} teams for user (via RPC)');
       
       if (teamIds.isEmpty) {
-        print('   ⚠️ No teams found for user');
+        debugLog('   ⚠️ No teams found for user');
         return 0;
       }
       
@@ -1259,7 +1251,7 @@ class TeamStreakService {
               .maybeSingle();
           
           final teamName = teamResponse?['team_name'] ?? 'Unknown Team';
-          print('   🔍 Processing team: $teamName ($teamId)');
+          debugLog('   🔍 Processing team: $teamName ($teamId)');
           
           // Get the active streak for this team
           final streakResponse = await _supabase
@@ -1270,7 +1262,7 @@ class TeamStreakService {
               .maybeSingle();
           
           if (streakResponse == null) {
-            print('      ⏭️ Skipped (no active streak)');
+            debugLog('      ⏭️ Skipped (no active streak)');
             skippedNoStreak++;
             continue;
           }
@@ -1288,7 +1280,7 @@ class TeamStreakService {
               .maybeSingle();
           
           if (existingCheckin != null) {
-            print('      ⏭️ Skipped (already checked in)');
+            debugLog('      ⏭️ Skipped (already checked in)');
             skippedAlreadyCheckedIn++;
             continue;
           }
@@ -1302,25 +1294,24 @@ class TeamStreakService {
             'check_in_time': DateTime.now().toUtc().toIso8601String(),  // ← ADDED
           });
           
-          print('      ✅ Checked in to $teamName');
+          debugLog('      ✅ Checked in to $teamName');
           checkedInCount++;
           
           // Check if all team members have checked in and increment streak
           await _checkTeamStreakAfterBuddyCheckin(teamId, streakId, todayStr);
           
         } catch (e) {
-          print('      ❌ Error processing team $teamId: $e');
+          debugLog('      ❌ Error processing team $teamId: $e');
         }
       }
       
     } catch (e) {
-      print('   ❌ Error getting teams: $e');
+      debugLog('   ❌ Error getting teams: $e');
     }
     
-    print('✅ User $userId check-in summary:');
-    print('   - Checked in: $checkedInCount');
-    print('   - Skipped (no streak): $skippedNoStreak');
-    print('   - Skipped (already checked in): $skippedAlreadyCheckedIn');
+    debugLog('   - Checked in: $checkedInCount');
+    debugLog('   - Skipped (no streak): $skippedNoStreak');
+    debugLog('   - Skipped (already checked in): $skippedAlreadyCheckedIn');
     
     return checkedInCount;
   }
@@ -1349,7 +1340,7 @@ class TeamStreakService {
       // We just need 1 human to check in
       final humanMemberCount = isCoachMaxTeam ? 1 : allMemberIds.length;
       
-      print('      📊 Team has $humanMemberCount human members (isCoachMaxTeam: $isCoachMaxTeam)');
+      debugLog('      📊 Team has $humanMemberCount human members (isCoachMaxTeam: $isCoachMaxTeam)');
       
       // Get today's check-ins for this streak (excluding Coach Max check-ins for count)
       final checkinsResponse = await _supabase
@@ -1367,7 +1358,7 @@ class TeamStreakService {
           ? checkedInUserIds.where((id) => allMemberIds.contains(id)).length
           : checkedInUserIds.length;
       
-      print('      📊 Checked in: $humanCheckIns/$humanMemberCount');
+      debugLog('      📊 Checked in: $humanCheckIns/$humanMemberCount');
       
       final allCheckedIn = humanCheckIns >= humanMemberCount;
       
@@ -1382,7 +1373,7 @@ class TeamStreakService {
         final lastWorkoutDate = streakData['last_workout_date'] as String?;
         
         if (lastWorkoutDate == todayStr) {
-          print('      ℹ️ Streak already incremented today');
+          debugLog('      ℹ️ Streak already incremented today');
           return;
         }
         
@@ -1397,7 +1388,7 @@ class TeamStreakService {
             })
             .eq('id', streakId);
         
-        print('      🎉 All members checked in! Streak: ${currentStreak + 1}');
+        debugLog('      🎉 All members checked in! Streak: ${currentStreak + 1}');
         
         // Auto check-in Coach Max if this is a Coach Max team
         if (isCoachMaxTeam) {
@@ -1405,7 +1396,7 @@ class TeamStreakService {
         }
       }
     } catch (e) {
-      print('      ⚠️ Error checking streak: $e');
+      debugLog('      ⚠️ Error checking streak: $e');
     }
   }
 
@@ -1432,9 +1423,9 @@ class TeamStreakService {
         'check_in_time': DateTime.now().toUtc().toIso8601String(),  // ← ADDED
       });
       
-      print('      🤖 Coach Max checked in');
+      debugLog('      🤖 Coach Max checked in');
     } catch (e) {
-      print('      ⚠️ Error checking in Coach Max: $e');
+      debugLog('      ⚠️ Error checking in Coach Max: $e');
     }
   }
 
@@ -1463,15 +1454,14 @@ class TeamStreakService {
             .maybeSingle();
 
         if (buddyInTeam != null) {
-          if (kDebugMode) print('🎯 Found shared team: $teamId');
+          if (kDebugMode) debugLog('🎯 Found shared team: $teamId');
           return teamId;
         }
       }
 
-      if (kDebugMode) print('⚠️ No shared team found between $userId and $buddyId');
       return null;
     } catch (e) {
-      if (kDebugMode) print('❌ Error finding team with buddy: $e');
+      if (kDebugMode) debugLog('❌ Error finding team with buddy: $e');
       return null;
     }
   }
@@ -1489,9 +1479,9 @@ class TeamStreakService {
           .update({'is_favorite': isFavorite})
           .eq('id', teamId);
 
-      if (kDebugMode) print('⭐ Toggled favorite for team $teamId to $isFavorite');
+      if (kDebugMode) debugLog('⭐ Toggled favorite for team $teamId to $isFavorite');
     } catch (e) {
-      if (kDebugMode) print('❌ Error toggling favorite: $e');
+      if (kDebugMode) debugLog('❌ Error toggling favorite: $e');
       rethrow;
     }
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 class InviteService {
   final _supabase = Supabase.instance.client;
@@ -20,7 +21,7 @@ class InviteService {
 
       return code as String?;
     } catch (e) {
-      if (kDebugMode) print('❌ InviteService.createInvite: $e');
+      if (kDebugMode) debugLog('❌ InviteService.createInvite: $e');
       return null;
     }
   }
@@ -51,7 +52,7 @@ class InviteService {
 
       return result;
     } catch (e) {
-      if (kDebugMode) print('❌ InviteService.getInviteByCode: $e');
+      if (kDebugMode) debugLog('❌ InviteService.getInviteByCode: $e');
       return null;
     }
   }
@@ -65,13 +66,13 @@ class InviteService {
       // First fetch the invite so we know the inviter
       final invite = await getInviteByCode(code);
       if (invite == null) {
-        if (kDebugMode) print('⚠️ InviteService.acceptInvite: invite not found or already used');
+        if (kDebugMode) debugLog('⚠️ InviteService.acceptInvite: invite not found or already used');
         return null;
       }
 
       // Don't let someone accept their own invite
       if (invite['inviter_id'] == userId) {
-        if (kDebugMode) print('⚠️ InviteService.acceptInvite: user tried to accept own invite');
+        if (kDebugMode) debugLog('⚠️ InviteService.acceptInvite: user tried to accept own invite');
         return null;
       }
 
@@ -88,7 +89,7 @@ class InviteService {
 
       return invite['inviter_id'] as String?;
     } catch (e) {
-      if (kDebugMode) print('❌ InviteService.acceptInvite: $e');
+      if (kDebugMode) debugLog('❌ InviteService.acceptInvite: $e');
       return null;
     }
   }
@@ -97,7 +98,7 @@ class InviteService {
   Future<void> storePendingInviteCode(String code) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_pendingInviteKey, code.toUpperCase());
-    if (kDebugMode) print('💾 Stored pending invite code: $code');
+    if (kDebugMode) debugLog('💾 Stored pending invite code: $code');
   }
 
   // ─── Retrieve and clear the stored code ────────────────────────────────────
@@ -106,7 +107,7 @@ class InviteService {
     final code = prefs.getString(_pendingInviteKey);
     if (code != null) {
       await prefs.remove(_pendingInviteKey);
-      if (kDebugMode) print('📬 Consumed pending invite code: $code');
+      if (kDebugMode) debugLog('📬 Consumed pending invite code: $code');
     }
     return code;
   }
@@ -125,7 +126,7 @@ class InviteService {
 
       return List<Map<String, dynamic>>.from(result);
     } catch (e) {
-      if (kDebugMode) print('❌ InviteService.getSentInvites: $e');
+      if (kDebugMode) debugLog('❌ InviteService.getSentInvites: $e');
       return [];
     }
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 /// Compact avatar selector with expandable grid and image upload
 class AvatarSelector extends StatefulWidget {
@@ -92,9 +93,10 @@ class _AvatarSelectorState extends State<AvatarSelector> with SingleTickerProvid
         HapticFeedback.mediumImpact();
       }
     } catch (e) {
+      debugLog('Avatar gallery pick failed: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error picking image: $e'),
+          content: Text('Could not load image. Please try again.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -124,9 +126,10 @@ class _AvatarSelectorState extends State<AvatarSelector> with SingleTickerProvid
         HapticFeedback.mediumImpact();
       }
     } catch (e) {
+      debugLog('Avatar camera capture failed: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error taking photo: $e'),
+          content: Text('Could not take photo. Please try again.'),
           backgroundColor: Colors.red,
         ),
       );

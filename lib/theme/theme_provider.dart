@@ -1,6 +1,7 @@
 // lib/theme/theme_provider.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ThemeProvider extends ChangeNotifier {
@@ -35,5 +36,10 @@ class ThemeProvider extends ChangeNotifier {
     });
   }
 
-  bool get isDark => _themeMode == ThemeMode.dark;
+  bool get isDark {
+    if (_themeMode == ThemeMode.system) {
+      return SchedulerBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+    }
+    return _themeMode == ThemeMode.dark;
+  }
 }

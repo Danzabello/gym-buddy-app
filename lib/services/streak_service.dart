@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 class StreakService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -34,7 +35,7 @@ class StreakService {
         'last_workout_date': profile['last_workout_date'],
       };
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting streak data: $e');
+      if (kDebugMode) debugLog('❌ Error getting streak data: $e');
       return {'current_streak': 0, 'longest_streak': 0, 'last_workout_date': null};
     }
   }
@@ -61,7 +62,7 @@ class StreakService {
 
       return workouts.isNotEmpty;
     } catch (e) {
-      if (kDebugMode) print('❌ Error checking today\'s workout: $e');
+      if (kDebugMode) debugLog('❌ Error checking today\'s workout: $e');
       return false;
     }
   }
@@ -102,7 +103,7 @@ class StreakService {
       final streakData = await getStreakData();
 
       if (kDebugMode) {
-        print('✅ Check-in successful! Streak: ${streakData['current_streak']}');
+        debugLog('✅ Check-in successful! Streak: ${streakData['current_streak']}');
       }
 
       return {
@@ -112,8 +113,8 @@ class StreakService {
         'longest_streak': streakData['longest_streak'],
       };
     } catch (e) {
-      if (kDebugMode) print('❌ Error checking in: $e');
-      return {'success': false, 'message': 'Error: $e'};
+      if (kDebugMode) debugLog('❌ Error checking in: $e');
+      return {'success': false, 'message': 'Could not complete check-in. Please try again.'};
     }
   }
 
@@ -134,7 +135,7 @@ class StreakService {
 
       return List<Map<String, dynamic>>.from(workouts);
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting check-in history: $e');
+      if (kDebugMode) debugLog('❌ Error getting check-in history: $e');
       return [];
     }
   }
@@ -192,12 +193,12 @@ class StreakService {
           .eq('id', currentUserId);
 
       if (kDebugMode) {
-        print('✅ Streak updated! Current: $newStreak, Longest: $newLongest');
+        debugLog('✅ Streak updated! Current: $newStreak, Longest: $newLongest');
       }
 
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error updating streak: $e');
+      if (kDebugMode) debugLog('❌ Error updating streak: $e');
       return false;
     }
   }
@@ -255,8 +256,8 @@ class StreakService {
       final thisMonth = (thisMonthData as List).length;
 
       if (kDebugMode) {
-        print('📊 Stats - Total: $totalWorkouts, Week: $thisWeek, Month: $thisMonth');
-        print('📊 Streak - Current: ${streakData['current_streak']}, Longest: ${streakData['longest_streak']}');
+        debugLog('📊 Stats - Total: $totalWorkouts, Week: $thisWeek, Month: $thisMonth');
+        debugLog('📊 Streak - Current: ${streakData['current_streak']}, Longest: ${streakData['longest_streak']}');
       }
 
       return {
@@ -267,7 +268,7 @@ class StreakService {
         'this_month': thisMonth,
       };
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting streak stats: $e');
+      if (kDebugMode) debugLog('❌ Error getting streak stats: $e');
       return {
         'current_streak': 0,
         'longest_streak': 0,

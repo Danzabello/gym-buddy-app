@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 class BreakDayService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -14,7 +15,7 @@ class BreakDayService {
     final userId = _supabase.auth.currentUser!.id;
     final weekStart = getWeekStart(DateTime.now());
     
-    print('🗓️ Setting weekly break plan: $maxBreakDays break days for week starting ${weekStart.toIso8601String()}');
+    debugLog('🗓️ Setting weekly break plan: $maxBreakDays break days for week starting ${weekStart.toIso8601String()}');
 
     // ✅ Write to weekly_break_plans table
     await _supabase.from('weekly_break_plans').upsert({
@@ -28,7 +29,7 @@ class BreakDayService {
       'current_weekly_goal': maxBreakDays,
     }).eq('id', userId);
 
-    print('✅ Weekly break plan set successfully');
+    debugLog('✅ Weekly break plan set successfully');
   }
 
   /// Get the current week's break plan
@@ -55,7 +56,7 @@ class BreakDayService {
     // Get the plan for this week
     final plan = await getCurrentWeekPlan();
     if (plan == null) {
-      print('⚠️ No break plan found for current week');
+      debugLog('⚠️ No break plan found for current week');
       return 0;
     }
 
@@ -72,7 +73,7 @@ class BreakDayService {
         .count();
 
     final remaining = maxBreakDays - (usedBreakDays.count);
-    print('📊 Break days: $remaining remaining (${usedBreakDays.count} used / $maxBreakDays max)');
+    debugLog('📊 Break days: $remaining remaining (${usedBreakDays.count} used / $maxBreakDays max)');
     
     return remaining;
   }
@@ -86,7 +87,7 @@ class BreakDayService {
     // Check if user has break days remaining
     final remaining = await getRemainingBreakDays();
     if (remaining <= 0) {
-      print('❌ No break days remaining for this week');
+      debugLog('❌ No break days remaining for this week');
       return false;
     }
 
@@ -99,11 +100,11 @@ class BreakDayService {
         .maybeSingle();
 
     if (existing != null && existing['cancelled_at'] == null) {
-      print('⚠️ Break day already declared for today');
+      debugLog('⚠️ Break day already declared for today');
       return false;
     }
 
-    print('🛌 Declaring break day for $todayStr');
+    debugLog('🛌 Declaring break day for $todayStr');
 
     await _supabase.from('break_day_usage').upsert({
       'user_id': userId,
@@ -112,7 +113,7 @@ class BreakDayService {
       'cancelled_at': null,
     });
 
-    print('✅ Break day declared successfully');
+    debugLog('✅ Break day declared successfully');
     return true;
   }
 
@@ -122,7 +123,7 @@ class BreakDayService {
     final today = DateTime.now();
     final todayStr = DateTime(today.year, today.month, today.day).toIso8601String().split('T')[0];
 
-    print('🔄 Cancelling break day for $todayStr');
+    debugLog('🔄 Cancelling break day for $todayStr');
 
     final result = await _supabase
         .from('break_day_usage')
@@ -131,7 +132,7 @@ class BreakDayService {
         .eq('break_date', todayStr)
         .isFilter('cancelled_at', null);
 
-    print('✅ Break day cancelled successfully');
+    debugLog('✅ Break day cancelled successfully');
     return true;
   }
 

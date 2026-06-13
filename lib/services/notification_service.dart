@@ -4,12 +4,13 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 // Handle background messages (must be top-level function)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  if (kDebugMode) print('🔔 Background message: ${message.notification?.title}');
+  if (kDebugMode) debugLog('🔔 Background message: ${message.notification?.title}');
 }
 
 class NotificationService {
@@ -30,10 +31,10 @@ class NotificationService {
   );
 
   Future<void> initialize() async {
-    print('🚀 NotificationService.initialize() STARTING');
+    debugLog('🚀 NotificationService.initialize() STARTING');
 
     if (!Platform.isAndroid && !Platform.isIOS) {
-      print('⏭️ Skipping notifications on non-mobile platform');
+      debugLog('⏭️ Skipping notifications on non-mobile platform');
       return;
     }
 
@@ -50,11 +51,11 @@ class NotificationService {
       );
 
       if (kDebugMode) {
-        print('🔔 Notification permission: ${settings?.authorizationStatus}');
+        debugLog('🔔 Notification permission: ${settings?.authorizationStatus}');
       }
 
       if (settings?.authorizationStatus == AuthorizationStatus.denied) {
-        print('❌ Notifications denied by user');
+        debugLog('❌ Notifications denied by user');
         // Still try to save existing token even if denied
         await _saveTokenToSupabase();
         return;
@@ -70,9 +71,9 @@ class NotificationService {
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
       FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
 
-      print('✅ NotificationService initialized!');
+      debugLog('✅ NotificationService initialized!');
     } catch (e) {
-      print('❌ NotificationService error: $e');
+      debugLog('❌ NotificationService error: $e');
     }
   }
 
@@ -87,7 +88,7 @@ class NotificationService {
     await _localNotifications.initialize(
       initSettings,
       onDidReceiveNotificationResponse: (details) {
-        print('🔔 Notification tapped: ${details.payload}');
+        debugLog('🔔 Notification tapped: ${details.payload}');
       },
     );
 
@@ -106,7 +107,6 @@ class NotificationService {
       final token = await _fcm?.getToken();
       if (token == null) return;
 
-      print('📱 FCM Token: ${token.substring(0, 20)}...');
 
       await _supabase.from('device_tokens').upsert({
         'user_id': userId,
@@ -115,9 +115,9 @@ class NotificationService {
         'updated_at': DateTime.now().toIso8601String(),
       }, onConflict: 'user_id, token');
 
-      print('✅ FCM token saved to Supabase');
+      debugLog('✅ FCM token saved to Supabase');
     } catch (e) {
-      print('❌ Error saving token: $e');
+      debugLog('❌ Error saving token: $e');
     }
   }
 
@@ -136,14 +136,14 @@ class NotificationService {
           .eq('token', token);
 
       await _fcm?.deleteToken();
-      print('✅ FCM token removed');
+      debugLog('✅ FCM token removed');
     } catch (e) {
-      print('❌ Error removing token: $e');
+      debugLog('❌ Error removing token: $e');
     }
   }
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    print('🔔 Foreground message: ${message.notification?.title}');
+    debugLog('🔔 Foreground message: ${message.notification?.title}');
 
     final notification = message.notification;
     if (notification == null) return;
@@ -167,7 +167,7 @@ class NotificationService {
   }
 
   void _handleNotificationTap(RemoteMessage message) {
-    print('🔔 Notification tapped: ${message.data['type']}');
+    debugLog('🔔 Notification tapped: ${message.data['type']}');
   }
 
   Future<Map<String, dynamic>> getSettings() async {
@@ -198,9 +198,9 @@ class NotificationService {
         'updated_at': DateTime.now().toIso8601String(),
       });
 
-      print('✅ Notification settings updated');
+      debugLog('✅ Notification settings updated');
     } catch (e) {
-      print('❌ Error updating settings: $e');
+      debugLog('❌ Error updating settings: $e');
     }
   }
 

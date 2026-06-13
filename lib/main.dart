@@ -17,6 +17,7 @@ import 'services/invite_service.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -92,14 +93,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
         _handleInviteLink(initialUri);
       }
     } catch (e) {
-      if (kDebugMode) print('❌ Deep link initial: $e');
+      if (kDebugMode) debugLog('❌ Deep link initial: $e');
     }
 
     // Handle links while app is already running in background
     _linkSubscription = _appLinks.uriLinkStream.listen(
       _handleInviteLink,
       onError: (e) {
-        if (kDebugMode) print('❌ Deep link stream: $e');
+        if (kDebugMode) debugLog('❌ Deep link stream: $e');
       },
     );
   }
@@ -107,7 +108,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void _handleInviteLink(Uri uri) {
     final code = uri.queryParameters['code'];
     if (code != null && code.isNotEmpty) {
-      if (kDebugMode) print('🔗 Invite code received via deep link: $code');
+      if (kDebugMode) debugLog('🔗 Invite code received via deep link: $code');
       unawaited(InviteService().storePendingInviteCode(code));
     }
   }
@@ -140,7 +141,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     try {
       await Supabase.instance.client.rpc('delete_own_account');
     } catch (e) {
-      if (kDebugMode) print('⚠️ Could not delete orphaned account: $e');
+      if (kDebugMode) debugLog('⚠️ Could not delete orphaned account: $e');
     } finally {
       await Supabase.instance.client.auth.signOut();
     }

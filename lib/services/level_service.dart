@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 // ============================================================
 // LEVEL UP RESULT
@@ -96,7 +97,7 @@ class LevelService {
           .maybeSingle();
 
       if (existing != null) {
-        if (kDebugMode) print('⏭️ XP already awarded today for streak $streakId');
+        if (kDebugMode) debugLog('⏭️ XP already awarded today for streak $streakId');
         return null;
       }
 
@@ -128,7 +129,7 @@ class LevelService {
         reasons: reasons,
       );
     } catch (e) {
-      if (kDebugMode) print('❌ Error awarding check-in XP: $e');
+      if (kDebugMode) debugLog('❌ Error awarding check-in XP: $e');
       return null;
     }
   }
@@ -151,7 +152,7 @@ class LevelService {
           .maybeSingle();
 
       if (existing != null) {
-        if (kDebugMode) print('⏭️ XP already awarded for workout $workoutId');
+        if (kDebugMode) debugLog('⏭️ XP already awarded for workout $workoutId');
         return null;
       }
 
@@ -162,7 +163,7 @@ class LevelService {
         reasons: ['+$xpWorkout XP workout completed 🏋️'],
       );
     } catch (e) {
-      if (kDebugMode) print('❌ Error awarding workout XP: $e');
+      if (kDebugMode) debugLog('❌ Error awarding workout XP: $e');
       return null;
     }
   }
@@ -179,7 +180,7 @@ class LevelService {
 
       return List<Map<String, dynamic>>.from(rows);
     } catch (e) {
-      if (kDebugMode) print('❌ LevelService.getUnlockedCosmetics: $e');
+      if (kDebugMode) debugLog('❌ LevelService.getUnlockedCosmetics: $e');
       return [];
     }
   }
@@ -201,7 +202,7 @@ class LevelService {
       final currentXp = profile['xp'] as int? ?? 1;
       final rawLevel = profile['level'] as int? ?? 1;
       final currentLevel = (rawLevel < 1 ? 1 : rawLevel).clamp(1, 99);
-      if (kDebugMode) print('🔍 DB profile: xp=${profile['xp']}, level=${profile['level']}, currentLevel=$currentLevel');
+      if (kDebugMode) debugLog('🔍 DB profile: xp=${profile['xp']}, level=${profile['level']}, currentLevel=$currentLevel');
 
 
       final currentDef = await _supabase
@@ -220,7 +221,7 @@ class LevelService {
 
       final xpForThisLevel = currentDef['xp_required'] as int;
       final xpForNextLevel = nextDef?['xp_required'] as int? ?? xpForThisLevel;
-      if (kDebugMode) print('🔍 xpForThisLevel=$xpForThisLevel, xpForNextLevel=$xpForNextLevel, currentXp=$currentXp');
+      if (kDebugMode) debugLog('🔍 xpForThisLevel=$xpForThisLevel, xpForNextLevel=$xpForNextLevel, currentXp=$currentXp');
       final xpRange = (xpForNextLevel - xpForThisLevel).clamp(1, 999999);
       final xpInto = (currentXp - xpForThisLevel).clamp(0, xpRange);
 
@@ -235,7 +236,7 @@ class LevelService {
         progressPercent: (xpInto / xpRange).clamp(0.0, 1.0),
       );
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting level info: $e');
+      if (kDebugMode) debugLog('❌ Error getting level info: $e');
       return null;
     }
   }
@@ -292,12 +293,12 @@ class LevelService {
       final levelTitle = titleResult?['title'] as String? ?? 'Newcomer';
 
       if (didLevelUp) {
-        if (kDebugMode) print('🎉 LEVEL UP! $oldLevel → $newLevel ($levelTitle)');
+        if (kDebugMode) debugLog('🎉 LEVEL UP! $oldLevel → $newLevel ($levelTitle)');
         await _grantLevelUnlocks(userId: userId, newLevel: newLevel);
       }
 
       if (kDebugMode) {
-        print('⭐ +$amount XP ($reason) → Total: $newXp | Level: $newLevel');
+        debugLog('⭐ +$amount XP ($reason) → Total: $newXp | Level: $newLevel');
       }
 
       return LevelUpResult(
@@ -310,7 +311,7 @@ class LevelService {
         reasons: reasons,
       );
     } catch (e) {
-      if (kDebugMode) print('❌ Error applying XP: $e');
+      if (kDebugMode) debugLog('❌ Error applying XP: $e');
       return null;
     }
   }
@@ -347,10 +348,10 @@ class LevelService {
           'unlock_reason': 'level_$newLevel',
         });
 
-        if (kDebugMode) print('🎁 Unlocked cosmetic $shopItemId at level $newLevel');
+        if (kDebugMode) debugLog('🎁 Unlocked cosmetic $shopItemId at level $newLevel');
       }
     } catch (e) {
-      if (kDebugMode) print('❌ Error granting level unlocks: $e');
+      if (kDebugMode) debugLog('❌ Error granting level unlocks: $e');
     }
   }
 
@@ -387,10 +388,10 @@ class LevelService {
           'unlock_reason': 'milestone_$milestoneKey',
         });
 
-        if (kDebugMode) print('🎁 Unlocked cosmetic $shopItemId via milestone $milestoneKey');
+        if (kDebugMode) debugLog('🎁 Unlocked cosmetic $shopItemId via milestone $milestoneKey');
       }
     } catch (e) {
-      if (kDebugMode) print('❌ Error granting milestone unlock: $e');
+      if (kDebugMode) debugLog('❌ Error granting milestone unlock: $e');
     }
   }
 }

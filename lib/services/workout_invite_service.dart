@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 /// Service for managing workout invites
 class WorkoutInviteService {
@@ -13,15 +14,13 @@ class WorkoutInviteService {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) {
-        print('❌ No authenticated user');
+        debugLog('❌ No authenticated user');
         return null;
       }
 
-      print('📤 Sending workout invite...');
-      print('   From: $currentUserId');
-      print('   To: $recipientId');
-      print('   Scheduled: $scheduledFor');
-      print('   Message: $message');
+      debugLog('📤 Sending workout invite...');
+      debugLog('   Scheduled: $scheduledFor');
+      debugLog('   Message: $message');
 
       final invite = await _supabase
           .from('workout_invites')
@@ -35,10 +34,10 @@ class WorkoutInviteService {
           .select()
           .single();
 
-      print('✅ Workout invite sent successfully!');
+      debugLog('✅ Workout invite sent successfully!');
       return invite;
     } catch (e) {
-      print('❌ Error sending workout invite: $e');
+      debugLog('❌ Error sending workout invite: $e');
       return null;
     }
   }
@@ -49,7 +48,6 @@ class WorkoutInviteService {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return [];
 
-      print('📥 Getting pending workout invites for: $currentUserId');
 
       final invites = await _supabase
           .from('workout_invites')
@@ -61,10 +59,10 @@ class WorkoutInviteService {
           .eq('status', 'pending')
           .order('scheduled_for', ascending: true);
 
-      print('✅ Found ${invites.length} pending invites');
+      debugLog('✅ Found ${invites.length} pending invites');
       return List<Map<String, dynamic>>.from(invites);
     } catch (e) {
-      print('❌ Error getting pending invites: $e');
+      debugLog('❌ Error getting pending invites: $e');
       return [];
     }
   }
@@ -75,7 +73,6 @@ class WorkoutInviteService {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return [];
 
-      print('📤 Getting sent workout invites for: $currentUserId');
 
       final invites = await _supabase
           .from('workout_invites')
@@ -86,10 +83,10 @@ class WorkoutInviteService {
           .eq('sender_id', currentUserId)
           .order('scheduled_for', ascending: true);
 
-      print('✅ Found ${invites.length} sent invites');
+      debugLog('✅ Found ${invites.length} sent invites');
       return List<Map<String, dynamic>>.from(invites);
     } catch (e) {
-      print('❌ Error getting sent invites: $e');
+      debugLog('❌ Error getting sent invites: $e');
       return [];
     }
   }
@@ -97,11 +94,11 @@ class WorkoutInviteService {
   /// Accept a workout invite
   Future<bool> acceptInvite(String inviteId) async {
     try {
-      print('✅ Accepting workout invite: $inviteId');
+      debugLog('✅ Accepting workout invite: $inviteId');
 
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) {
-        print('❌ No authenticated user');
+        debugLog('❌ No authenticated user');
         return false;
       }
 
@@ -134,7 +131,7 @@ class WorkoutInviteService {
         'notes': message,
       });
 
-      print('✅ Created workout entry for accepted invite');
+      debugLog('✅ Created workout entry for accepted invite');
 
       // Update the invite status
       await _supabase
@@ -145,10 +142,10 @@ class WorkoutInviteService {
           })
           .eq('id', inviteId);
 
-      print('✅ Workout invite accepted and workout created!');
+      debugLog('✅ Workout invite accepted and workout created!');
       return true;
     } catch (e) {
-      print('❌ Error accepting invite: $e');
+      debugLog('❌ Error accepting invite: $e');
       return false;
     }
   }
@@ -156,7 +153,7 @@ class WorkoutInviteService {
   /// Decline a workout invite
   Future<bool> declineInvite(String inviteId) async {
     try {
-      print('❌ Declining workout invite: $inviteId');
+      debugLog('❌ Declining workout invite: $inviteId');
 
       await _supabase
           .from('workout_invites')
@@ -166,10 +163,10 @@ class WorkoutInviteService {
           })
           .eq('id', inviteId);
 
-      print('✅ Workout invite declined');
+      debugLog('✅ Workout invite declined');
       return true;
     } catch (e) {
-      print('❌ Error declining invite: $e');
+      debugLog('❌ Error declining invite: $e');
       return false;
     }
   }
@@ -177,17 +174,17 @@ class WorkoutInviteService {
   /// Delete an invite (for sender to cancel)
   Future<bool> cancelInvite(String inviteId) async {
     try {
-      print('🗑️ Canceling workout invite: $inviteId');
+      debugLog('🗑️ Canceling workout invite: $inviteId');
 
       await _supabase
           .from('workout_invites')
           .delete()
           .eq('id', inviteId);
 
-      print('✅ Workout invite canceled');
+      debugLog('✅ Workout invite canceled');
       return true;
     } catch (e) {
-      print('❌ Error canceling invite: $e');
+      debugLog('❌ Error canceling invite: $e');
       return false;
     }
   }
@@ -198,7 +195,6 @@ class WorkoutInviteService {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return [];
 
-      print('📅 Getting upcoming workouts for: $currentUserId');
 
       final now = DateTime.now().toIso8601String();
 
@@ -216,10 +212,10 @@ class WorkoutInviteService {
           .order('scheduled_for', ascending: true)
           .limit(10);
 
-      print('✅ Found ${invites.length} upcoming workouts');
+      debugLog('✅ Found ${invites.length} upcoming workouts');
       return List<Map<String, dynamic>>.from(invites);
     } catch (e) {
-      print('❌ Error getting upcoming workouts: $e');
+      debugLog('❌ Error getting upcoming workouts: $e');
       return [];
     }
   }

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'join_workout_popup.dart';
 import '../services/workout_service.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 /// Service that checks for workouts waiting for the creator to join
 /// Call this when the app opens or when returning to the home screen
@@ -17,7 +18,7 @@ class WorkoutJoinChecker {
       // Check if popups are enabled in settings
       final popupsEnabled = await _arePopupsEnabled();
       if (!popupsEnabled) {
-        if (kDebugMode) print('ℹ️ Workout join popups disabled in settings');
+        if (kDebugMode) debugLog('ℹ️ Workout join popups disabled in settings');
         return;
       }
 
@@ -25,11 +26,11 @@ class WorkoutJoinChecker {
       final awaitingWorkouts = await _workoutService.getWorkoutsAwaitingCreatorJoin();
       
       if (awaitingWorkouts.isEmpty) {
-        if (kDebugMode) print('✅ No workouts awaiting join');
+        if (kDebugMode) debugLog('✅ No workouts awaiting join');
         return;
       }
 
-      if (kDebugMode) print('📋 Found ${awaitingWorkouts.length} workouts awaiting join');
+      if (kDebugMode) debugLog('📋 Found ${awaitingWorkouts.length} workouts awaiting join');
 
       // Find first workout that hasn't had popup shown
       for (final workout in awaitingWorkouts) {
@@ -48,7 +49,7 @@ class WorkoutJoinChecker {
         break;
       }
     } catch (e) {
-      if (kDebugMode) print('❌ Error checking for pending joins: $e');
+      if (kDebugMode) debugLog('❌ Error checking for pending joins: $e');
     }
   }
 
@@ -130,7 +131,7 @@ class WorkoutJoinChecker {
       },
       onDecline: () {
         // Just close the popup - user can still join from card
-        if (kDebugMode) print('ℹ️ User declined join popup');
+        if (kDebugMode) debugLog('ℹ️ User declined join popup');
       },
     );
   }
@@ -145,10 +146,10 @@ class WorkoutJoinChecker {
         'workout_join_popups_enabled': enabled,
       }).eq('id', currentUserId);
 
-      if (kDebugMode) print('✅ Workout join popups ${enabled ? 'enabled' : 'disabled'}');
+      if (kDebugMode) debugLog('✅ Workout join popups ${enabled ? 'enabled' : 'disabled'}');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error updating popup setting: $e');
+      if (kDebugMode) debugLog('❌ Error updating popup setting: $e');
       return false;
     }
   }

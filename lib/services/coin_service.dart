@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 class CoinService {
   static final CoinService _instance = CoinService._internal();
@@ -31,7 +32,7 @@ class CoinService {
           .single();
       return result['coin_balance'] as int? ?? 0;
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting coin balance: $e');
+      if (kDebugMode) debugLog('❌ Error getting coin balance: $e');
       return 0;
     }
   }
@@ -64,10 +65,10 @@ class CoinService {
         'reference_id': referenceId,
       });
 
-      if (kDebugMode) print('🪙 Awarded $amount coins ($transactionType) → Balance: $newBalance');
+      if (kDebugMode) debugLog('🪙 Awarded $amount coins ($transactionType) → Balance: $newBalance');
       return newBalance;
     } catch (e) {
-      if (kDebugMode) print('❌ Error awarding coins: $e');
+      if (kDebugMode) debugLog('❌ Error awarding coins: $e');
       return 0;
     }
   }
@@ -96,7 +97,7 @@ class CoinService {
           .maybeSingle();
 
       if (existing != null) {
-        if (kDebugMode) print('⏭️ Already awarded daily check-in coins today');
+        if (kDebugMode) debugLog('⏭️ Already awarded daily check-in coins today');
         return null;
       }
 
@@ -172,7 +173,7 @@ class CoinService {
         reasons: reasons,
       );
     } catch (e) {
-      if (kDebugMode) print('❌ Error awarding check-in coins: $e');
+      if (kDebugMode) debugLog('❌ Error awarding check-in coins: $e');
       return null;
     }
   }
@@ -232,10 +233,9 @@ class CoinService {
         'reference_id': streakId,
       });
 
-      if (kDebugMode) print('🪙 Retroactive partner bonus +$partnerBonus → User: $userId | Balance: $newBalance');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error awarding retroactive partner bonus: $e');
+      if (kDebugMode) debugLog('❌ Error awarding retroactive partner bonus: $e');
       return false;
     }
   }
@@ -254,7 +254,7 @@ class CoinService {
 
       final balance = await getBalance();
       if (balance < cost) {
-        if (kDebugMode) print('❌ Insufficient coins: $balance < $cost');
+        if (kDebugMode) debugLog('❌ Insufficient coins: $balance < $cost');
         return false;
       }
 
@@ -266,7 +266,7 @@ class CoinService {
           .maybeSingle();
 
       if (existing != null) {
-        if (kDebugMode) print('❌ Item already owned');
+        if (kDebugMode) debugLog('❌ Item already owned');
         return false;
       }
 
@@ -288,10 +288,10 @@ class CoinService {
         'shop_item_id': itemId,
       });
 
-      if (kDebugMode) print('✅ Purchased $itemName for $cost coins → Balance: $newBalance');
+      if (kDebugMode) debugLog('✅ Purchased $itemName for $cost coins → Balance: $newBalance');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error purchasing item: $e');
+      if (kDebugMode) debugLog('❌ Error purchasing item: $e');
       return false;
     }
   }
@@ -320,7 +320,7 @@ class CoinService {
 
       return items.map<ShopItem>((item) => ShopItem.fromMap(item, ownedIds.contains(item['id']))).toList();
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting shop items: $e');
+      if (kDebugMode) debugLog('❌ Error getting shop items: $e');
       return [];
     }
   }
@@ -340,7 +340,7 @@ class CoinService {
           .limit(limit);
       return results.map<CoinTransaction>((t) => CoinTransaction.fromMap(t)).toList();
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting transactions: $e');
+      if (kDebugMode) debugLog('❌ Error getting transactions: $e');
       return [];
     }
   }
@@ -373,10 +373,10 @@ class CoinService {
           .eq('user_id', userId)
           .eq('shop_item_id', itemId);
 
-      if (kDebugMode) print('✅ Equipped item $itemId');
+      if (kDebugMode) debugLog('✅ Equipped item $itemId');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error equipping item: $e');
+      if (kDebugMode) debugLog('❌ Error equipping item: $e');
       return false;
     }
   }

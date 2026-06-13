@@ -42,6 +42,7 @@ import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
 import 'data/coach_tips.dart';
 import 'services/presence_service.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 
 
@@ -268,12 +269,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     super.initState();
     
     // ✅ Set initial index ONCE
-    _currentCarouselIndex = 1;
+    _currentCarouselIndex = 0;
     
     // ✅ Create controller ONCE
+    // 10080 is divisible by every wheel size (1–9), so the wheel always
+    // opens focused on item 0 and can swipe both directions infinitely
     _carouselController = PageController(
       viewportFraction: 0.35,
-      initialPage: 1,
+      initialPage: 10080,
     );
 
     _trayOrder = [0, 1, 2]..shuffle();
@@ -346,16 +349,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       return _buildNoStreaksCard();
     }
 
-  // ✅ INFINITE CAROUSEL: Always shows exactly 3 slots that wrap around
-  final displayItems = <dynamic>[null, null, null]; // 3 slots: [0, 1, 2]
+  // ✅ WHEEL: top 4 friends (by active sort) + Coach Max — max 5 slots,
+  // wrapping infinitely. Coach Max always has a slot: he's the automatic buddy.
+  final displayItems = <dynamic>[];
 
-  // Find Coach Max and friends
   final coachMaxStreak = _allStreaks.firstWhere(
     (s) => s.isCoachMaxTeam,
     orElse: () => _allStreaks.first,
   );
 
-  // Get friends and sort them by selected mode
+  // Friends ordered by the selected sort mode (custom keeps stored order)
   final friendStreaks = _streakSortMode == StreakSortMode.custom
     ? _allStreaks.where((s) => !s.isCoachMaxTeam).toList()  // Just filter, don't sort
     : _sortStreaks(_allStreaks, _streakSortMode);
@@ -364,83 +367,22 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     return _buildEmptyFavoritesCard();
   }
 
-  // ✅ BUILD CAROUSEL ITEMS (in display order)
-  if (friendStreaks.isEmpty) {
-    // NO FRIENDS: [Add] [Coach Max] [Add]
-    displayItems[0] = null;
-    displayItems[1] = coachMaxStreak;
-    displayItems[2] = null;
-    
-  } else if (friendStreaks.length == 1) {
-    // 1 FRIEND: Compare friend vs Coach Max for center
-    final friend = friendStreaks[0];
-    
-    // For numeric modes, use > for comparison
-    final friendValue = friend.currentStreak;
-    final coachValue = coachMaxStreak.currentStreak;
-    
-    bool friendIsHigher;
-    if (friendValue == coachValue) {
-      // ✅ TIE! Use alphabetical as tiebreaker
-      friendIsHigher = friend.teamName.toLowerCase().compareTo('coach max') < 0;
-      print('🤝 TIE at $friendValue! Tiebreaker: ${friend.teamName} vs Coach Max → ${friendIsHigher ? "Friend wins" : "Coach Max wins"}');
-    } else {
-      friendIsHigher = friendValue > coachValue;
-    }
-    
-    if (friendIsHigher) {
-      displayItems[0] = null;
-      displayItems[1] = friend;
-      displayItems[2] = coachMaxStreak;
-    } else {
-      displayItems[0] = null;
-      displayItems[1] = coachMaxStreak;
-      displayItems[2] = friend;
-    }
-    
-  } else {
-    // 2+ FRIENDS: Use sorted list directly!
-    
-    // ✅ CUSTOM MODE: Use exact order, no comparison with Coach Max
-    if (_streakSortMode == StreakSortMode.custom) {
-      displayItems[0] = friendStreaks[0];  // Left = first selection
-      displayItems[1] = friendStreaks[1];  // Center = second selection
-      displayItems[2] = friendStreaks.length > 2 ? friendStreaks[2] : coachMaxStreak;  // Right = third or Coach Max
-      print('👤 CUSTOM: Using exact order from selection');
-    } else {
-      // ✅ OTHER MODES: Compare with Coach Max to find center
-      bool friendIsHigher;
-      final friendValue = friendStreaks[0].currentStreak;
-      final coachValue = coachMaxStreak.currentStreak;
+  // Top 4 earn a wheel slot — the rest live in the full streak list
+  displayItems.addAll(friendStreaks.take(4));
+  displayItems.add(coachMaxStreak);
 
-      if (friendValue == coachValue) {
-        friendIsHigher = friendStreaks[0].teamName.toLowerCase().compareTo('coach max') < 0;
-        print('🤝 TIE at $friendValue! Tiebreaker: ${friendStreaks[0].teamName} vs Coach Max → ${friendIsHigher ? "Friend wins" : "Coach Max wins"}');
-      } else {
-        friendIsHigher = friendValue > coachValue;
-      }
-      
-      if (friendIsHigher) {
-        // Friend #1 in center
-        displayItems[0] = friendStreaks.length > 2 ? friendStreaks[2] : coachMaxStreak;
-        displayItems[1] = friendStreaks[0];  // #1 friend
-        displayItems[2] = friendStreaks.length > 1 ? friendStreaks[1] : coachMaxStreak;
-      } else {
-        // Coach Max #1 in center
-        displayItems[0] = friendStreaks.length > 1 ? friendStreaks[1] : null;
-        displayItems[1] = coachMaxStreak;
-        displayItems[2] = friendStreaks[0];  // Top friend on right
-      }
-    }
+  // Pad with "Add a buddy" placeholders so the wheel always has 3+ visuals
+  while (displayItems.length < 3) {
+    displayItems.add(null);
   }
 
   // ✅ Debug output
-  print('📊 DISPLAY ITEMS:');
-  print('  [0] Left: ${displayItems[0] is TeamStreak ? (displayItems[0] as TeamStreak).teamName : 'Add Buddy'}');
-  print('  [1] Center: ${displayItems[1] is TeamStreak ? (displayItems[1] as TeamStreak).teamName : 'Add Buddy'}');
-  print('  [2] Right: ${displayItems[2] is TeamStreak ? (displayItems[2] as TeamStreak).teamName : 'Add Buddy'}');
-  print('  Current index: $_currentCarouselIndex');
-  print('  Showing: ${displayItems[_currentCarouselIndex] is TeamStreak ? (displayItems[_currentCarouselIndex] as TeamStreak).teamName : 'Add Buddy'}');
+  debugLog('📊 WHEEL ITEMS (${displayItems.length}):');
+  for (var i = 0; i < displayItems.length; i++) {
+    final it = displayItems[i];
+    debugLog('  [$i] ${it is TeamStreak ? it.teamName : 'Add Buddy'}');
+  }
+  debugLog('  Current index: $_currentCarouselIndex');
 
     final appColors = AppColors.of(context);
 
@@ -555,7 +497,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 child: PageView.builder(
                   controller: _carouselController,
                   onPageChanged: (index) {
-                    final newIndex = index % 3;
+                    final newIndex = index % displayItems.length;
                     
                     // ✅ ONLY update index - preset stays locked
                     setState(() {
@@ -564,7 +506,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   },
                   itemCount: null,
                   itemBuilder: (context, index) {
-                    final displayIndex = index % 3;
+                    final displayIndex = index % displayItems.length;
                     final item = displayItems[displayIndex];
                     final isFocused = displayIndex == _currentCarouselIndex;
                     
@@ -578,7 +520,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                           final page = _carouselController.page ?? index.toDouble();
                           final diff = (page - index).abs();
                           scale = (1 - (diff * 0.45)).clamp(0.75, 1.0);
-                        } else if (displayIndex == 1) {
+                        } else if (displayIndex == _currentCarouselIndex) {
                           scale = 1.0;
                         } else {
                           scale = 0.75;
@@ -2122,15 +2064,18 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
     
     // ✅ User pressed SAVE with 3 buddies selected
-    if (result != null && result.length == 3) {
-      print('💾 Custom selection received: ${result.map((s) => s.teamName).join(", ")}');
+    if (result != null && result.isNotEmpty) {
+      debugLog('💾 Custom selection received: ${result.map((s) => s.teamName).join(", ")}');
       
       // ✅ 1. Update state
       setState(() {
         _customSelection = result;
         _streakSortMode = StreakSortMode.custom;
-        _currentCarouselIndex = 1;  // Reset to center
+        _currentCarouselIndex = 0;  // Reset to top item
       });
+      if (_carouselController.hasClients) {
+        _carouselController.jumpToPage(10080);
+      }
       
       // ✅ 2. Save to database (both mode AND order)
       final userId = Supabase.instance.client.auth.currentUser?.id;
@@ -2141,7 +2086,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             'custom_streak_order': result.map((s) => s.teamId).toList(),
           }).eq('id', userId);
           
-          print('💾 Saved custom mode with order: ${result.map((s) => s.teamId).join(", ")}');
+          debugLog('💾 Saved custom mode with order: ${result.map((s) => s.teamId).join(", ")}');
           
           // ✅ 3. Show success message
           if (mounted) {
@@ -2165,7 +2110,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             );
           }
         } catch (e) {
-          print('❌ Error saving custom order: $e');
+          debugLog('❌ Error saving custom order: $e');
         }
       }
       
@@ -2176,12 +2121,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_carouselController.hasClients && mounted) {
           _carouselController.jumpToPage(1000);
-          print('🎯 Jumped to center after custom selection');
+          debugLog('🎯 Jumped to center after custom selection');
         }
       });
     } else {
       // User cancelled or didn't fill all 3 slots
-      print('❌ Custom selection cancelled or incomplete');
+      debugLog('❌ Custom selection cancelled or incomplete');
     }
   }
 
@@ -2240,7 +2185,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       });
       // Trigger entrance animation on first cached load
       if (!_hasAnimatedEntrance && _allStreaks.isNotEmpty) {
-        _currentCarouselIndex = 1;
+        _currentCarouselIndex = 0;
         Future.delayed(const Duration(milliseconds: 100), () {
           if (mounted) {
             _carouselEntranceController.forward();
@@ -2275,13 +2220,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         if (_streakSortMode == StreakSortMode.custom &&
             prefs['custom_streak_order'] != null) {
           _customStreakOrder = List<String>.from(prefs['custom_streak_order']);
-          print('📥 Loaded custom order: ${_customStreakOrder.length} team IDs');
+          debugLog('📥 Loaded custom order: ${_customStreakOrder.length} team IDs');
         } else {
           _customStreakOrder = [];
         }
-        print('📥 Loaded sort mode: ${_streakSortMode.displayName}');
+        debugLog('📥 Loaded sort mode: ${_streakSortMode.displayName}');
       } catch (e) {
-        print('⚠️ Could not load preferences: $e');
+        debugLog('⚠️ Could not load preferences: $e');
         _customStreakOrder = [];
       }
     }
@@ -2291,9 +2236,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final allStreaks = await _teamStreakService.getAllUserStreaks();
     final nicknames  = await nicknameService.getAllNicknames();
   
-    print('🔥 Raw streaks count: ${allStreaks.length}');
+    debugLog('🔥 Raw streaks count: ${allStreaks.length}');
     for (var s in allStreaks) {
-      print('  - ${s.teamName} (${s.teamId}) - CoachMax: ${s.isCoachMaxTeam}');
+      debugLog('  - ${s.teamName} (${s.teamId}) - CoachMax: ${s.isCoachMaxTeam}');
     }
   
     // Deduplicate
@@ -2305,7 +2250,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   
     // Apply custom order
     if (_streakSortMode == StreakSortMode.custom && _customStreakOrder.isNotEmpty) {
-      print('🎯 Applying custom order to ${uniqueStreaks.length} streaks');
+      debugLog('🎯 Applying custom order to ${uniqueStreaks.length} streaks');
       final streakMap = {for (var s in uniqueStreaks) s.teamId: s};
       final orderedStreaks = <TeamStreak>[];
       for (final teamId in _customStreakOrder) {
@@ -2317,7 +2262,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       orderedStreaks.addAll(streakMap.values);
       uniqueStreaks.clear();
       uniqueStreaks.addAll(orderedStreaks);
-      print('✅ Custom order applied: ${orderedStreaks.length} streaks ordered');
+      debugLog('✅ Custom order applied: ${orderedStreaks.length} streaks ordered');
     }
   
     // ── STEP 4: ALL remaining calls IN PARALLEL ──────────────
@@ -2392,7 +2337,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     });
   
     if (_allStreaks.isNotEmpty && mounted) {
-      _currentCarouselIndex = 1;
+      _currentCarouselIndex = 0;
     }
   
     if (!_hasAnimatedEntrance && _allStreaks.isNotEmpty) {
@@ -2419,28 +2364,28 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   List<TeamStreak> _sortStreaks(List<TeamStreak> streaks, StreakSortMode mode) {
-    print('🔄 SORT: Mode = ${mode.displayName}');
-    print('🔄 SORT: Input streaks count = ${streaks.length}');
+    debugLog('🔄 SORT: Mode = ${mode.displayName}');
+    debugLog('🔄 SORT: Input streaks count = ${streaks.length}');
     
     // Filter out Coach Max
     final friendStreaks = streaks.where((s) => !s.isCoachMaxTeam).toList();
-    print('🔄 SORT: After filtering Coach Max = ${friendStreaks.length}');
+    debugLog('🔄 SORT: After filtering Coach Max = ${friendStreaks.length}');
     
     // Sort based on mode
     switch (mode) {
       case StreakSortMode.highestCurrent:
         friendStreaks.sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
-        print('⚡ SORT: Highest Current - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.currentStreak})').join(', ')}');
+        debugLog('⚡ SORT: Highest Current - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.currentStreak})').join(', ')}');
         break;
         
       case StreakSortMode.mostWorkouts:
         friendStreaks.sort((a, b) => b.totalWorkouts.compareTo(a.totalWorkouts)); 
-        print('💪 SORT: Most Workouts - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.totalWorkouts})').join(', ')}');
+        debugLog('💪 SORT: Most Workouts - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.totalWorkouts})').join(', ')}');
         break;
         
       case StreakSortMode.bestAllTime:
         friendStreaks.sort((a, b) => b.bestStreak.compareTo(a.bestStreak));  // ✅ Use real data!
-        print('🏆 SORT: Best All-Time - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.bestStreak})').join(', ')}');
+        debugLog('🏆 SORT: Best All-Time - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.bestStreak})').join(', ')}');
         break;
         
       case StreakSortMode.mostRecent:
@@ -2449,14 +2394,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           if (b.lastInteractionAt == null) return -1;
           return b.lastInteractionAt!.compareTo(a.lastInteractionAt!);  // Most recent first
         });
-        print('🕐 SORT: Most Recent - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.lastInteractionAt})').join(', ')}');
+        debugLog('🕐 SORT: Most Recent - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.lastInteractionAt})').join(', ')}');
         break;
         
       case StreakSortMode.favorites:
         // ✨ Filter to only favorites
         final favorites = friendStreaks.where((s) => s.isFavorite).toList();
         favorites.sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
-        print('⭐ SORT: Favorites - Found ${favorites.length} favorite(s)');
+        debugLog('⭐ SORT: Favorites - Found ${favorites.length} favorite(s)');
         return favorites; // ✅ Return empty list if no favorites
         
       case StreakSortMode.custom:
@@ -2464,7 +2409,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         break;
     }
     
-    print('✅ SORT: Returning ${friendStreaks.length} sorted streaks');
+    debugLog('✅ SORT: Returning ${friendStreaks.length} sorted streaks');
     return friendStreaks;
   }
 
@@ -2568,6 +2513,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         return;
       }
 
+      setState(() => _isCheckingIn = true);
+      try {
       // ✅ NEW: Check if there's an active workout session first
       final activeSession = await WorkoutCheckInSheet.getActiveSession();
       
@@ -2627,6 +2574,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
       // ✅ No active workout - show selection modal (existing flow)
       await _handleCheckIn();
+      } finally {
+        if (mounted) setState(() => _isCheckingIn = false);
+      }
     }
 
   Future<void> _checkForActiveWorkout() async {
@@ -2646,7 +2596,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         _checkIn();
       }
     } catch (e) {
-      print('Error checking for active workout: $e');
+      debugLog('Error checking for active workout: $e');
     }
   }
 
@@ -4232,12 +4182,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   Future<void> _syncTeamCheckIns() async {
-    if (kDebugMode) print('🔄 Dashboard: Starting team sync...');
+    if (kDebugMode) debugLog('🔄 Dashboard: Starting team sync...');
     
     final result = await _teamSyncService.syncAllTeamsCheckIns();
     
     if (result['success'] == true && result['synced'] > 0) {
-      if (kDebugMode) print('✅ Dashboard: Synced ${result['synced']} teams');
+      if (kDebugMode) debugLog('✅ Dashboard: Synced ${result['synced']} teams');
       
       // Show a subtle notification if teams were synced
       if (mounted) {
@@ -4346,8 +4296,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       
                       setState(() {
                         _streakSortMode = mode;
-                        _currentCarouselIndex = 1;
+                        _currentCarouselIndex = 0;
                       });
+                      if (_carouselController.hasClients) {
+                        _carouselController.jumpToPage(10080);
+                      }
                       
                       Navigator.pop(context);
                       
@@ -4581,7 +4534,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       await _loadStreakData();
       
     } catch (e) {
-      print('❌ Error toggling favorite: $e');
+      debugLog('❌ Error toggling favorite: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to update favorite')),
@@ -4633,7 +4586,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
       if (selectedTemplate == null || !mounted) return;
 
-      print('🎲 Pending achievements count: ${_pendingAchievements.length}');
+      debugLog('🎲 Pending achievements count: ${_pendingAchievements.length}');
 
       // 🏆 Show Feeling Lucky toast if randomiser was used
       if (_pendingAchievements.isNotEmpty && mounted) {
@@ -5303,20 +5256,19 @@ class _SchedulePageState extends State<SchedulePage> {
 
   Future<void> _debugCheckInvites() async {
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    print('🔍 DEBUG: Current user ID: $currentUserId');
     
     final allInvites = await Supabase.instance.client
         .from('workout_invites')
         .select('*');
     
-    print('🔍 DEBUG: ALL invites in database: $allInvites');
+    debugLog('🔍 DEBUG: ALL invites in database: $allInvites');
     
     final myInvites = await Supabase.instance.client
         .from('workout_invites')
         .select('*')
         .eq('recipient_id', currentUserId!);
     
-    print('🔍 DEBUG: My invites as recipient: $myInvites');
+    debugLog('🔍 DEBUG: My invites as recipient: $myInvites');
   }
 
   Future<void> loadData() async {
@@ -5493,7 +5445,7 @@ class _SchedulePageState extends State<SchedulePage> {
     );
     
     if (workout.isEmpty) {
-      print('❌ Workout not found in list');
+      debugLog('❌ Workout not found in list');
       return;
     }
     
@@ -5564,7 +5516,7 @@ class _SchedulePageState extends State<SchedulePage> {
     // Complete the workout in database
     final success = await _workoutService.completeWorkoutWithDuration(workoutId);
     if (!success) {
-      print('❌ Failed to complete workout');
+      debugLog('❌ Failed to complete workout');
       return;
     }
     
@@ -5622,13 +5574,13 @@ class _SchedulePageState extends State<SchedulePage> {
         if (!creatorCancelled && creatorId != null) {
           if (creatorId == currentUserId) {
             final userResult = await teamStreakService.checkInAllTeams();
-            print('✅ Creator (current user) check-in: ${userResult['message']}');
+            debugLog('✅ Creator (current user) check-in: ${userResult['message']}');
           } else {
             final result = await teamStreakService.checkInAllTeamsForUser(creatorId);
-            print('✅ Creator check-in: Checked in to $result teams');
+            debugLog('✅ Creator check-in: Checked in to $result teams');
           }
         } else if (creatorCancelled) {
-          print('⚠️ Creator cancelled - NO streak credit');
+          debugLog('⚠️ Creator cancelled - NO streak credit');
         }
         
         // Check in BUDDY if they didn't cancel
@@ -5636,20 +5588,20 @@ class _SchedulePageState extends State<SchedulePage> {
           final buddyActuallyCompleted = workout['buddy_completed_at'] != null;
           
           if (!buddyActuallyCompleted && workoutBuddyId != currentUserId) {
-            print('⚠️ Buddy accepted but never completed workout - NO streak credit');
+            debugLog('⚠️ Buddy accepted but never completed workout - NO streak credit');
           } else if (workoutBuddyId == currentUserId) {
             final userResult = await teamStreakService.checkInAllTeams();
-            print('✅ Buddy (current user) check-in: ${userResult['message']}');
+            debugLog('✅ Buddy (current user) check-in: ${userResult['message']}');
           } else {
             final result = await teamStreakService.checkInAllTeamsForUser(workoutBuddyId);
-            print('✅ Buddy check-in: Checked in to $result teams');
+            debugLog('✅ Buddy check-in: Checked in to $result teams');
           }
         } else if (buddyCancelled) {
-          print('⚠️ Buddy cancelled - NO streak credit');
+          debugLog('⚠️ Buddy cancelled - NO streak credit');
         }
         
       } catch (e) {
-        print('❌ Auto check-in error: $e');
+        debugLog('❌ Auto check-in error: $e');
       }
     }
     
@@ -5711,6 +5663,76 @@ class _SchedulePageState extends State<SchedulePage> {
         );
         loadData();
       }
+    }
+  }
+
+  // ── Mutual ready check handlers ─────────────────────────────────────────
+
+  Future<void> _setReady(String workoutId, bool ready) async {
+    final err = await _workoutService.setCreatorReady(
+        workoutId: workoutId, ready: ready);
+    if (!mounted) return;
+    if (err == null) {
+      HapticFeedback.mediumImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(ready
+              ? "You're ready! Waiting for your buddy to confirm…"
+              : 'Ready check cancelled'),
+          backgroundColor: ready ? Colors.green : Colors.grey,
+        ),
+      );
+      loadData();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $err'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _startTogether(String workoutId) async {
+    final err = await _workoutService.setBuddyReady(workoutId: workoutId);
+    if (!mounted) return;
+    if (err == null) {
+      HapticFeedback.heavyImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Workout started — timers are live! 💪'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      loadData();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $err'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _joinWorkout(String workoutId) async {
+    final result = await _workoutService.creatorJoinWorkout(workoutId);
+    if (!mounted) return;
+    if (result['success'] == true) {
+      HapticFeedback.heavyImpact();
+      loadData();
+      final completed = await WorkoutCheckInSheet.show(
+        context,
+        workoutType: result['workoutType'] ?? 'Workout',
+        workoutEmoji: result['emoji'] ?? '💪',
+        plannedDuration: result['remainingMinutes'] ?? 5,
+        onCheckInComplete: () async {
+          await _completeWorkout(workoutId);
+          return true;
+        },
+      );
+      if (completed == true) loadData();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['error'] ?? 'Could not join'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -5820,7 +5842,7 @@ class _SchedulePageState extends State<SchedulePage> {
         // ✅ NEW: Redesigned invites card
         WorkoutInvitesCardRedesigned(
           onInviteAction: () {
-            print('📋 Schedule page: Invite action triggered, reloading data...');
+            debugLog('📋 Schedule page: Invite action triggered, reloading data...');
             loadData();
           },
         ),
@@ -5861,6 +5883,10 @@ class _SchedulePageState extends State<SchedulePage> {
             onCancel: () => _cancelWorkout(workout['id']),
             onAccept: () => _acceptInvitation(workout['id']),
             onDecline: () => _declineInvitation(workout['id']),
+            onJoin: () => _joinWorkout(workout['id']),
+            onReady: () => _setReady(workout['id'], true),
+            onCancelReady: () => _setReady(workout['id'], false),
+            onStartTogether: () => _startTogether(workout['id']),
           );
         }).toList(),
         CompletedWorkoutsSection(refreshTrigger: _completedRefreshTrigger),
@@ -6247,7 +6273,7 @@ class _ProfilePageState extends State<ProfilePage>
       await Future.delayed(const Duration(milliseconds: 50));
       if (mounted) _fadeController.forward();
     } catch (e) {
-      if (kDebugMode) print('❌ ProfilePage._loadAll: $e');
+      if (kDebugMode) debugLog('❌ ProfilePage._loadAll: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }

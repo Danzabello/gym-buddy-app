@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 /// Service to manage friend nicknames
 /// Nicknames are personal - only YOU see the nicknames YOU set
@@ -46,12 +47,12 @@ class NicknameService {
       _cacheTime = DateTime.now();
 
       if (kDebugMode) {
-        print('📛 Loaded ${nicknames.length} nicknames');
+        debugLog('📛 Loaded ${nicknames.length} nicknames');
       }
 
       return nicknames;
     } catch (e) {
-      if (kDebugMode) print('❌ Error loading nicknames: $e');
+      if (kDebugMode) debugLog('❌ Error loading nicknames: $e');
       return _nicknameCache ?? {};
     }
   }
@@ -86,10 +87,9 @@ class NicknameService {
       // Update cache
       _nicknameCache?[friendId] = nickname;
 
-      if (kDebugMode) print('✅ Nickname set for $friendId: $nickname');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error setting nickname: $e');
+      if (kDebugMode) debugLog('❌ Error setting nickname: $e');
       return false;
     }
   }
@@ -109,10 +109,9 @@ class NicknameService {
       // Update cache
       _nicknameCache?.remove(friendId);
 
-      if (kDebugMode) print('✅ Nickname removed for $friendId');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error removing nickname: $e');
+      if (kDebugMode) debugLog('❌ Error removing nickname: $e');
       return false;
     }
   }

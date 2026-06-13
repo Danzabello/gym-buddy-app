@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/input_validators.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 
 class WorkoutTemplate {
@@ -119,7 +120,7 @@ class WorkoutHistoryService {
 
   Future<List<WorkoutTemplate>> getWorkoutTemplates() async {
     try {
-      if (kDebugMode) print('📋 Fetching workout templates...');
+      if (kDebugMode) debugLog('📋 Fetching workout templates...');
 
       final response = await _supabase
           .from('workout_templates')
@@ -131,10 +132,10 @@ class WorkoutHistoryService {
           .map((json) => WorkoutTemplate.fromJson(json))
           .toList();
 
-      if (kDebugMode) print('✅ Found ${templates.length} templates');
+      if (kDebugMode) debugLog('✅ Found ${templates.length} templates');
       return templates;
     } catch (e) {
-      if (kDebugMode) print('❌ Error fetching templates: $e');
+      if (kDebugMode) debugLog('❌ Error fetching templates: $e');
       return [];
     }
   }
@@ -152,7 +153,7 @@ class WorkoutHistoryService {
           .map((json) => WorkoutTemplate.fromJson(json))
           .toList();
     } catch (e) {
-      if (kDebugMode) print('❌ Error fetching templates by category: $e');
+      if (kDebugMode) debugLog('❌ Error fetching templates by category: $e');
       return [];
     }
   }
@@ -176,7 +177,7 @@ class WorkoutHistoryService {
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) {
-        if (kDebugMode) print('❌ No user logged in');
+        if (kDebugMode) debugLog('❌ No user logged in');
         return false;
       }
 
@@ -188,7 +189,7 @@ class WorkoutHistoryService {
       final safeWorkoutName = InputValidators.truncate(workoutName, InputLimits.workoutNameMax)
           ?? workoutName.substring(0, workoutName.length.clamp(0, InputLimits.workoutNameMax));
 
-      if (kDebugMode) print('📝 Logging workout: $safeWorkoutName');
+      if (kDebugMode) debugLog('📝 Logging workout: $safeWorkoutName');
 
       await _supabase.from('workout_logs').insert({
         'user_id': userId,
@@ -205,10 +206,10 @@ class WorkoutHistoryService {
         'intensity_rating': intensityRating,
       });
 
-      if (kDebugMode) print('✅ Workout logged successfully');
+      if (kDebugMode) debugLog('✅ Workout logged successfully');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error logging workout: $e');
+      if (kDebugMode) debugLog('❌ Error logging workout: $e');
       return false;
     }
   }
@@ -227,7 +228,7 @@ class WorkoutHistoryService {
         final userId = _supabase.auth.currentUser?.id;
         if (userId == null) return [];
 
-        if (kDebugMode) print('📊 Fetching workout history...');
+        if (kDebugMode) debugLog('📊 Fetching workout history...');
 
         // ✅ Fetch all workouts, we'll filter in Dart
         final response = await _supabase
@@ -270,10 +271,10 @@ class WorkoutHistoryService {
         // Apply limit
         final limitedLogs = filteredLogs.take(limit).toList();
 
-        if (kDebugMode) print('✅ Found ${limitedLogs.length} workout logs');
+        if (kDebugMode) debugLog('✅ Found ${limitedLogs.length} workout logs');
         return limitedLogs;
     } catch (e) {
-        if (kDebugMode) print('❌ Error fetching workout history: $e');
+        if (kDebugMode) debugLog('❌ Error fetching workout history: $e');
         return [];
     }
     }

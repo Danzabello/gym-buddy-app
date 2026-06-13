@@ -73,6 +73,40 @@ serve(async (req) => {
 
     const { user_id, title, body, type, reference_id, batch_key } = payload
 
+    // ============================================
+    // INPUT GUARD — user_id must be a UUID (feeds PostgREST filters below)
+    // ============================================
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!user_id || typeof user_id !== 'string' || !UUID_RE.test(user_id)) {
+      return new Response(JSON.stringify({ error: 'bad_request' }), { status: 400 })
+    }
+
+    // ============================================
+    // AUTHORIZATION
+    // Trusted server-to-server callers (cron) present the service-role key
+    // and may notify anyone. Every other caller must be the verified target's
+    // friend or teammate — never trust the payload's user_id as the sender.
+    // ============================================
+    const authHeader = req.headers.get('Authorization') ?? ''
+    const bearer = authHeader.replace(/^Bearer\s+/i, '').trim()
+
+    if (bearer !== SUPABASE_SERVICE_KEY) {
+      const { data: userData, error: authErr } = await supabase.auth.getUser(bearer)
+      const callerId = userData?.user?.id
+      if (authErr || !callerId) {
+        console.log('⛔ send-notification: invalid caller JWT')
+        return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
+      }
+
+      if (callerId !== user_id) {
+        const allowed = await isFriendOrTeammate(supabase, callerId, user_id)
+        if (!allowed) {
+          console.log(`⛔ ${callerId} not authorized to notify ${user_id}`)
+          return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 })
+        }
+      }
+    }
+
     console.log(`🔔 send-notification called for user ${user_id}, type: ${type}`)
 
     // ============================================
@@ -224,3 +258,32 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 })
   }
 })
+
+// ── AUTHORIZATION HELPER ──────────────────────────────────────────────────
+// True if a and b are accepted friends OR share a buddy team.
+// Both args are trusted UUIDs (caller from verified JWT, target UUID-checked).
+async function isFriendOrTeammate(supabase: any, a: string, b: string): Promise<boolean> {
+  const { data: friend } = await supabase
+    .from('friendships')
+    .select('id')
+    .eq('status', 'accepted')
+    .or(`and(user_id.eq.${a},friend_id.eq.${b}),and(user_id.eq.${b},friend_id.eq.${a})`)
+    .limit(1)
+  if (friend && friend.length > 0) return true
+
+  const { data: aTeams } = await supabase
+    .from('team_members')
+    .select('team_id')
+    .eq('user_id', a)
+  if (!aTeams || aTeams.length === 0) return false
+
+  const teamIds = aTeams.map((t: any) => t.team_id)
+  const { data: shared } = await supabase
+    .from('team_members')
+    .select('id')
+    .eq('user_id', b)
+    .in('team_id', teamIds)
+    .limit(1)
+
+  return !!(shared && shared.length > 0)
+}

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 class WorkoutService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -15,7 +16,6 @@ class WorkoutService {
           .select('id')
           .eq('user_id', userId);
       if (activeSessions.isNotEmpty) {
-        if (kDebugMode) print('🏋️ User $userId has active checkin session');
         return true;
       }
       final inProgressWorkouts = await _supabase
@@ -24,13 +24,11 @@ class WorkoutService {
           .eq('status', 'in_progress')
           .or('user_id.eq.$userId,buddy_id.eq.$userId');
       if (inProgressWorkouts.isNotEmpty) {
-        if (kDebugMode) print('🏋️ User $userId has in_progress workout');
         return true;
       }
-      if (kDebugMode) print('✅ User $userId is NOT in an active workout');
       return false;
     } catch (e) {
-      if (kDebugMode) print('❌ Error checking active workout: $e');
+      if (kDebugMode) debugLog('❌ Error checking active workout: $e');
       return false;
     }
   }
@@ -51,7 +49,7 @@ class WorkoutService {
           .limit(1);
       return workouts.isNotEmpty;
     } catch (e) {
-      if (kDebugMode) print('❌ Error in manual check: $e');
+      if (kDebugMode) debugLog('❌ Error in manual check: $e');
       return false;
     }
   }
@@ -64,10 +62,10 @@ class WorkoutService {
         'get_workouts_awaiting_creator_join',
         params: {'creator_id': currentUserId},
       );
-      if (kDebugMode) print('📋 Found ${result.length} workouts awaiting creator join');
+      if (kDebugMode) debugLog('📋 Found ${result.length} workouts awaiting creator join');
       return List<Map<String, dynamic>>.from(result);
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting awaiting workouts: $e');
+      if (kDebugMode) debugLog('❌ Error getting awaiting workouts: $e');
       return await _manualGetAwaitingWorkouts();
     }
   }
@@ -108,7 +106,7 @@ class WorkoutService {
       }
       return result;
     } catch (e) {
-      if (kDebugMode) print('❌ Error in manual awaiting query: $e');
+      if (kDebugMode) debugLog('❌ Error in manual awaiting query: $e');
       return [];
     }
   }
@@ -117,33 +115,16 @@ class WorkoutService {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return false;
-      final workout = await _supabase
-          .from('workouts')
-          .select('planned_duration_minutes, workout_type, user_id')
-          .eq('id', workoutId)
-          .single();
-      final plannedDuration = workout['planned_duration_minutes'] ?? 30;
-      final workoutType = workout['workout_type'] ?? 'Workout';
-      final now = DateTime.now();
+      // ✅ READY CHECK: accepting no longer starts the workout.
+      // Both users must confirm ready before the timer begins.
       await _supabase.from('workouts').update({
         'buddy_status': 'accepted',
-        'status': 'in_progress',
-        'workout_started_at': now.toUtc().toIso8601String(),
-        'started_by_user_id': currentUserId,
-        'updated_at': now.toUtc().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', workoutId);
-      await _supabase.from('active_checkin_sessions').upsert({
-        'user_id': currentUserId,
-        'started_at': now.toUtc().toIso8601String(),
-        'planned_duration': plannedDuration,
-        'workout_type': workoutType,
-        'workout_emoji': _getWorkoutEmoji(workoutType),
-        'workout_id': workoutId,
-      });
-      if (kDebugMode) print('✅ Workout invitation accepted, session created for acceptor');
+      if (kDebugMode) debugLog('✅ Invitation accepted — waiting for ready check');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error accepting invitation: $e');
+      if (kDebugMode) debugLog('❌ Error accepting invitation: $e');
       return false;
     }
   }
@@ -185,7 +166,7 @@ class WorkoutService {
         'workout_emoji': _getWorkoutEmoji(workoutType),
         'workout_id': workoutId,
       });
-      if (kDebugMode) print('✅ Creator joined workout with $remainingMinutes minutes remaining');
+      if (kDebugMode) debugLog('✅ Creator joined workout with $remainingMinutes minutes remaining');
       return {
         'success': true,
         'remainingMinutes': remainingMinutes,
@@ -193,8 +174,8 @@ class WorkoutService {
         'emoji': _getWorkoutEmoji(workoutType),
       };
     } catch (e) {
-      if (kDebugMode) print('❌ Error joining workout: $e');
-      return {'success': false, 'error': e.toString()};
+      if (kDebugMode) debugLog('❌ Error joining workout: $e');
+      return {'success': false, 'error': 'Could not join workout. Please try again.'};
     }
   }
 
@@ -205,7 +186,7 @@ class WorkoutService {
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', workoutId);
     } catch (e) {
-      if (kDebugMode) print('❌ Error marking popup shown: $e');
+      if (kDebugMode) debugLog('❌ Error marking popup shown: $e');
     }
   }
 
@@ -249,7 +230,7 @@ class WorkoutService {
       }
       return {'status': 'unknown', 'workout': workout};
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting creator workout status: $e');
+      if (kDebugMode) debugLog('❌ Error getting creator workout status: $e');
       return {'status': 'error'};
     }
   }
@@ -272,18 +253,18 @@ class WorkoutService {
               .toUtc()
               .toIso8601String(),
         }).eq('id', workoutId);
-        if (kDebugMode) print('✅ Creator marked ready for workout $workoutId');
+        if (kDebugMode) debugLog('✅ Creator marked ready for workout $workoutId');
       } else {
         await _supabase.from('workouts').update({
           'creator_ready': false,
           'ready_expires_at': null,
         }).eq('id', workoutId);
-        if (kDebugMode) print('✅ Creator cancelled ready for workout $workoutId');
+        if (kDebugMode) debugLog('✅ Creator cancelled ready for workout $workoutId');
       }
       return null;
     } catch (e) {
-      if (kDebugMode) print('❌ Error in setCreatorReady: $e');
-      return e.toString();
+      if (kDebugMode) debugLog('❌ Error in setCreatorReady: $e');
+      return 'Could not update workout. Please try again.';
     }
   }
 
@@ -325,11 +306,11 @@ class WorkoutService {
         'workout_id': workoutId,
       });
 
-      if (kDebugMode) print('✅ Both confirmed ready — workout $workoutId started');
+      if (kDebugMode) debugLog('✅ Both confirmed ready — workout $workoutId started');
       return null;
     } catch (e) {
-      if (kDebugMode) print('❌ Error in setBuddyReady: $e');
-      return e.toString();
+      if (kDebugMode) debugLog('❌ Error in setBuddyReady: $e');
+      return 'Could not update workout. Please try again.';
     }
   }
 
@@ -350,13 +331,12 @@ class WorkoutService {
       if (buddyId != null) {
         final buddyInWorkout = await isUserInActiveWorkout(buddyId);
         if (buddyInWorkout) {
-          if (kDebugMode) print('⚠️ Buddy $buddyId is in an active workout');
           return 'BUDDY_IN_WORKOUT';
         }
       }
       final userInWorkout = await isUserInActiveWorkout(currentUserId);
       if (userInWorkout) {
-        if (kDebugMode) print('⚠️ Current user is already in an active workout');
+        if (kDebugMode) debugLog('⚠️ Current user is already in an active workout');
         return 'USER_IN_WORKOUT';
       }
       final dateStr = date.toIso8601String().split('T')[0];
@@ -370,11 +350,11 @@ class WorkoutService {
         'buddy_id': buddyId,
         'buddy_status': buddyId != null ? 'pending' : null,
       }).select().single();
-      if (kDebugMode) print('✅ Workout created: ${response['id']}');
+      if (kDebugMode) debugLog('✅ Workout created: ${response['id']}');
       return null;
     } catch (e) {
-      if (kDebugMode) print('❌ Error creating workout: $e');
-      return e.toString();
+      if (kDebugMode) debugLog('❌ Error creating workout: $e');
+      return 'Could not save workout. Please try again.';
     }
   }
 
@@ -387,10 +367,10 @@ class WorkoutService {
         'started_by_user_id': currentUserId,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', workoutId);
-      if (kDebugMode) print('✅ Workout started');
+      if (kDebugMode) debugLog('✅ Workout started');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error starting workout: $e');
+      if (kDebugMode) debugLog('❌ Error starting workout: $e');
       return false;
     }
   }
@@ -411,7 +391,7 @@ class WorkoutService {
           ? (workout['creator_cancelled'] ?? false)
           : (workout['buddy_cancelled'] ?? false);
       if (thisUserCancelled) {
-        if (kDebugMode) print('⚠️ User already cancelled — cannot complete');
+        if (kDebugMode) debugLog('⚠️ User already cancelled — cannot complete');
         return false;
       }
       int? actualDuration;
@@ -431,10 +411,9 @@ class WorkoutService {
         }).eq('id', workoutId);
       }
       await _supabase.from('active_checkin_sessions').delete().eq('user_id', currentUserId);
-      if (kDebugMode) print('✅ Workout completed by user $currentUserId');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error completing workout: $e');
+      if (kDebugMode) debugLog('❌ Error completing workout: $e');
       return false;
     }
   }
@@ -445,10 +424,10 @@ class WorkoutService {
         'buddy_status': 'declined',
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', workoutId);
-      if (kDebugMode) print('✅ Workout invitation declined');
+      if (kDebugMode) debugLog('✅ Workout invitation declined');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error declining invitation: $e');
+      if (kDebugMode) debugLog('❌ Error declining invitation: $e');
       return false;
     }
   }
@@ -466,9 +445,8 @@ class WorkoutService {
       final buddyId = workout['buddy_id'] as String?;
       final isCreator = currentUserId == creatorId;
       final isBuddy = currentUserId == buddyId;
-      if (kDebugMode) print('🗑️ User $currentUserId cancelling workout $workoutId (isCreator: $isCreator)');
       await _supabase.from('active_checkin_sessions').delete().eq('user_id', currentUserId);
-      if (kDebugMode) print('✅ Deleted session for current user');
+      if (kDebugMode) debugLog('✅ Deleted session for current user');
       final otherCancelled = isCreator
           ? (workout['buddy_cancelled'] ?? false)
           : (workout['creator_cancelled'] ?? false);
@@ -479,25 +457,25 @@ class WorkoutService {
           'buddy_cancelled': isBuddy ? true : (workout['buddy_cancelled'] ?? false),
           'updated_at': DateTime.now().toIso8601String(),
         }).eq('id', workoutId);
-        if (kDebugMode) print('✅ Both users cancelled — workout fully cancelled');
+        if (kDebugMode) debugLog('✅ Both users cancelled — workout fully cancelled');
       } else if (buddyId == null) {
         await _supabase.from('workouts').update({
           'status': 'cancelled',
           'creator_cancelled': true,
           'updated_at': DateTime.now().toIso8601String(),
         }).eq('id', workoutId);
-        if (kDebugMode) print('✅ Solo workout cancelled');
+        if (kDebugMode) debugLog('✅ Solo workout cancelled');
       } else {
         await _supabase.from('workouts').update({
           'creator_cancelled': isCreator ? true : (workout['creator_cancelled'] ?? false),
           'buddy_cancelled': isBuddy ? true : (workout['buddy_cancelled'] ?? false),
           'updated_at': DateTime.now().toIso8601String(),
         }).eq('id', workoutId);
-        if (kDebugMode) print('✅ User cancelled their part — other user can still complete');
+        if (kDebugMode) debugLog('✅ User cancelled their part — other user can still complete');
       }
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error cancelling workout: $e');
+      if (kDebugMode) debugLog('❌ Error cancelling workout: $e');
       return false;
     }
   }
@@ -505,10 +483,10 @@ class WorkoutService {
   Future<bool> deleteWorkout(String workoutId) async {
     try {
       await _supabase.from('workouts').delete().eq('id', workoutId);
-      if (kDebugMode) print('✅ Workout deleted');
+      if (kDebugMode) debugLog('✅ Workout deleted');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error deleting workout: $e');
+      if (kDebugMode) debugLog('❌ Error deleting workout: $e');
       return false;
     }
   }
@@ -519,10 +497,10 @@ class WorkoutService {
         'status': status,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', workoutId);
-      if (kDebugMode) print('✅ Workout status updated to: $status');
+      if (kDebugMode) debugLog('✅ Workout status updated to: $status');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error updating workout: $e');
+      if (kDebugMode) debugLog('❌ Error updating workout: $e');
       return false;
     }
   }
@@ -543,10 +521,10 @@ class WorkoutService {
           .or('user_id.eq.$currentUserId,buddy_id.eq.$currentUserId')
           .lt('workout_started_at', threeHoursAgo.toIso8601String());
       if (timedOutWorkouts.isEmpty) {
-        if (kDebugMode) print('✅ No timed-out workouts found');
+        if (kDebugMode) debugLog('✅ No timed-out workouts found');
         return;
       }
-      if (kDebugMode) print('⏰ Found ${timedOutWorkouts.length} timed-out workouts, auto-completing...');
+      if (kDebugMode) debugLog('⏰ Found ${timedOutWorkouts.length} timed-out workouts, auto-completing...');
       for (final workout in timedOutWorkouts) {
         final startedAt = DateTime.parse(workout['workout_started_at']);
         final existingNotes = workout['notes'] as String? ?? '';
@@ -559,10 +537,10 @@ class WorkoutService {
               ? '(Auto-completed after 3 hours)'
               : '$existingNotes (Auto-completed after 3 hours)',
         }).eq('id', workout['id']);
-        if (kDebugMode) print('✅ Auto-completed workout: ${workout['id']}');
+        if (kDebugMode) debugLog('✅ Auto-completed workout: ${workout['id']}');
       }
     } catch (e) {
-      if (kDebugMode) print('❌ Error auto-completing workouts: $e');
+      if (kDebugMode) debugLog('❌ Error auto-completing workouts: $e');
     }
   }
 
@@ -586,11 +564,11 @@ class WorkoutService {
             workout['status'] == 'cancelled' ||
             workout['status'] == 'completed') {
           await _supabase.from('active_checkin_sessions').delete().eq('id', session['id']);
-          if (kDebugMode) print('🧹 Cleaned up orphaned session: ${session['id']}');
+          if (kDebugMode) debugLog('🧹 Cleaned up orphaned session: ${session['id']}');
         }
       }
     } catch (e) {
-      if (kDebugMode) print('⚠️ Error cleaning up sessions: $e');
+      if (kDebugMode) debugLog('⚠️ Error cleaning up sessions: $e');
     }
   }
 
@@ -606,10 +584,10 @@ class WorkoutService {
           .or('user_id.eq.$currentUserId,buddy_id.eq.$currentUserId')
           .lt('workout_started_at', threeHoursAgo.toIso8601String());
       if (staleWorkouts.isEmpty) {
-        if (kDebugMode) print('✅ No stale workouts to clean up');
+        if (kDebugMode) debugLog('✅ No stale workouts to clean up');
         return;
       }
-      if (kDebugMode) print('🧹 Found ${staleWorkouts.length} stale workouts, auto-completing...');
+      if (kDebugMode) debugLog('🧹 Found ${staleWorkouts.length} stale workouts, auto-completing...');
       for (final workout in staleWorkouts) {
         await _supabase.from('workouts').update({
           'status': 'completed',
@@ -622,10 +600,10 @@ class WorkoutService {
             .from('active_checkin_sessions')
             .delete()
             .eq('workout_id', workout['id']);
-        if (kDebugMode) print('✅ Auto-completed stale workout: ${workout['id']}');
+        if (kDebugMode) debugLog('✅ Auto-completed stale workout: ${workout['id']}');
       }
     } catch (e) {
-      if (kDebugMode) print('❌ Error cleaning up stale workouts: $e');
+      if (kDebugMode) debugLog('❌ Error cleaning up stale workouts: $e');
     }
   }
 
@@ -672,15 +650,24 @@ class WorkoutService {
 
       result.removeWhere((w) {
         final iAmCreator = w['user_id'] == currentUserId;
+
+        // ── Scheduled: any cancel or decline kills it for BOTH sides ──
+        if (w['status'] == 'scheduled') {
+          return (w['creator_cancelled'] ?? false) ||
+              (w['buddy_cancelled'] ?? false) ||
+              w['buddy_status'] == 'declined';
+        }
+
+        // ── In progress: fair cancel — only hide from whoever cancelled ──
         return iAmCreator
             ? (w['creator_cancelled'] ?? false)
             : (w['buddy_cancelled'] ?? false);
       });
 
-      if (kDebugMode) print('📋 Found ${result.length} upcoming workouts');
+      if (kDebugMode) debugLog('📋 Found ${result.length} upcoming workouts');
       return result;
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting upcoming workouts: $e');
+      if (kDebugMode) debugLog('❌ Error getting upcoming workouts: $e');
       return [];
     }
   }
@@ -700,10 +687,10 @@ class WorkoutService {
           .or('user_id.eq.$currentUserId,buddy_id.eq.$currentUserId')
           .eq('workout_date', today)
           .order('workout_time', ascending: true);
-      if (kDebugMode) print('📋 Found ${response.length} workouts for today');
+      if (kDebugMode) debugLog('📋 Found ${response.length} workouts for today');
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting today\'s workouts: $e');
+      if (kDebugMode) debugLog('❌ Error getting today\'s workouts: $e');
       return [];
     }
   }
@@ -723,10 +710,10 @@ class WorkoutService {
           .eq('status', 'completed')
           .order('workout_completed_at', ascending: false)
           .limit(limit);
-      if (kDebugMode) print('📋 Found ${response.length} completed workouts');
+      if (kDebugMode) debugLog('📋 Found ${response.length} completed workouts');
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting completed workouts: $e');
+      if (kDebugMode) debugLog('❌ Error getting completed workouts: $e');
       return [];
     }
   }
@@ -744,7 +731,7 @@ class WorkoutService {
           .single();
       return response;
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting workout: $e');
+      if (kDebugMode) debugLog('❌ Error getting workout: $e');
       return null;
     }
   }
@@ -763,10 +750,10 @@ class WorkoutService {
           .or('user_id.eq.$currentUserId,buddy_id.eq.$currentUserId')
           .eq('status', 'in_progress')
           .order('workout_started_at', ascending: false);
-      if (kDebugMode) print('📋 Found ${response.length} in-progress workouts');
+      if (kDebugMode) debugLog('📋 Found ${response.length} in-progress workouts');
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting in-progress workouts: $e');
+      if (kDebugMode) debugLog('❌ Error getting in-progress workouts: $e');
       return [];
     }
   }
@@ -787,7 +774,7 @@ class WorkoutService {
           .order('workout_time', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting all workouts: $e');
+      if (kDebugMode) debugLog('❌ Error getting all workouts: $e');
       return [];
     }
   }
@@ -829,7 +816,7 @@ class WorkoutService {
         'avg_duration': avgDuration,
       };
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting workout stats: $e');
+      if (kDebugMode) debugLog('❌ Error getting workout stats: $e');
       return {'total_workouts': 0, 'this_week': 0, 'this_month': 0, 'total_minutes': 0, 'avg_duration': 0};
     }
   }

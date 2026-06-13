@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 class CoachMaxService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -15,19 +16,18 @@ class CoachMaxService {
   /// Create Coach Max team for a new user (call this after signup/onboarding)
   Future<bool> initializeCoachMaxForUser(String userId) async {
     try {
-      if (kDebugMode) print('🤖 Initializing Coach Max for user: $userId');
 
       // Check if user already has a Coach Max team
       final existingTeam = await _getCoachMaxTeam(userId);
       if (existingTeam != null) {
-        if (kDebugMode) print('✅ Coach Max team already exists');
+        if (kDebugMode) debugLog('✅ Coach Max team already exists');
         return true;
       }
 
       // Step 1: Create the buddy team
       final teamId = await _createCoachMaxTeam(userId);
       if (teamId == null) {
-        if (kDebugMode) print('❌ Failed to create Coach Max team');
+        if (kDebugMode) debugLog('❌ Failed to create Coach Max team');
         return false;
       }
 
@@ -40,10 +40,10 @@ class CoachMaxService {
       // Step 4: Schedule first Coach Max check-in
       await scheduleCoachMaxCheckIn(userId);
 
-      if (kDebugMode) print('✅ Coach Max initialized successfully!');
+      if (kDebugMode) debugLog('✅ Coach Max initialized successfully!');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error initializing Coach Max: $e');
+      if (kDebugMode) debugLog('❌ Error initializing Coach Max: $e');
       return false;
     }
   }
@@ -60,7 +60,7 @@ class CoachMaxService {
 
       return response?['team_id'];
     } catch (e) {
-      if (kDebugMode) print('Error getting Coach Max team: $e');
+      if (kDebugMode) debugLog('Error getting Coach Max team: $e');
       return null;
     }
   }
@@ -80,10 +80,10 @@ class CoachMaxService {
           .select('id')
           .single();
 
-      if (kDebugMode) print('✅ Created Coach Max team: ${response['id']}');
+      if (kDebugMode) debugLog('✅ Created Coach Max team: ${response['id']}');
       return response['id'] as String;
     } catch (e) {
-      if (kDebugMode) print('❌ Error creating Coach Max team: $e');
+      if (kDebugMode) debugLog('❌ Error creating Coach Max team: $e');
       return null;
     }
   }
@@ -105,9 +105,9 @@ class CoachMaxService {
         'role': 'coach_max',
       });
 
-      if (kDebugMode) print('✅ Added team members (user + Coach Max)');
+      if (kDebugMode) debugLog('✅ Added team members (user + Coach Max)');
     } catch (e) {
-      if (kDebugMode) print('❌ Error adding team members: $e');
+      if (kDebugMode) debugLog('❌ Error adding team members: $e');
     }
   }
 
@@ -121,9 +121,9 @@ class CoachMaxService {
         'is_active': true,
       });
 
-      if (kDebugMode) print('✅ Created initial streak record');
+      if (kDebugMode) debugLog('✅ Created initial streak record');
     } catch (e) {
-      if (kDebugMode) print('❌ Error creating streak: $e');
+      if (kDebugMode) debugLog('❌ Error creating streak: $e');
     }
   }
 
@@ -146,7 +146,7 @@ class CoachMaxService {
           .maybeSingle();
 
       if (existing != null) {
-        if (kDebugMode) print('✅ Coach Max already scheduled for today');
+        if (kDebugMode) debugLog('✅ Coach Max already scheduled for today');
         
         // If scheduled but hasn't checked in, execute check-in if time has passed
         if (existing['has_checked_in'] == false) {
@@ -167,7 +167,7 @@ class CoachMaxService {
       });
 
       if (kDebugMode) {
-        print('✅ Scheduled Coach Max check-in for $randomTime');
+        debugLog('✅ Scheduled Coach Max check-in for $randomTime');
       }
 
       // If the scheduled time has already passed today, check in immediately
@@ -183,7 +183,7 @@ class CoachMaxService {
         await checkInCoachMax(userId);
       }
     } catch (e) {
-      if (kDebugMode) print('❌ Error scheduling Coach Max: $e');
+      if (kDebugMode) debugLog('❌ Error scheduling Coach Max: $e');
     }
   }
 
@@ -220,7 +220,7 @@ class CoachMaxService {
         await checkInCoachMax(userId);
       }
     } catch (e) {
-      if (kDebugMode) print('❌ Error executing scheduled check-in: $e');
+      if (kDebugMode) debugLog('❌ Error executing scheduled check-in: $e');
     }
   }
 
@@ -231,12 +231,12 @@ class CoachMaxService {
   /// Check in Coach Max for the user's team
   Future<bool> checkInCoachMax(String userId) async {
     try {
-      if (kDebugMode) print('🤖 Coach Max checking in...');
+      if (kDebugMode) debugLog('🤖 Coach Max checking in...');
 
       // Get user's Coach Max team
       final teamId = await _getCoachMaxTeam(userId);
       if (teamId == null) {
-        if (kDebugMode) print('❌ No Coach Max team found');
+        if (kDebugMode) debugLog('❌ No Coach Max team found');
         return false;
       }
 
@@ -249,7 +249,7 @@ class CoachMaxService {
           .maybeSingle();
 
       if (streak == null) {
-        if (kDebugMode) print('❌ No active streak found');
+        if (kDebugMode) debugLog('❌ No active streak found');
         return false;
       }
 
@@ -266,7 +266,7 @@ class CoachMaxService {
           .maybeSingle();
 
       if (existingCheckIn != null) {
-        if (kDebugMode) print('✅ Coach Max already checked in today');
+        if (kDebugMode) debugLog('✅ Coach Max already checked in today');
         return true;
       }
 
@@ -302,14 +302,14 @@ class CoachMaxService {
             .eq('scheduled_date', today);
       }
 
-      if (kDebugMode) print('✅ Coach Max checked in successfully!');
+      if (kDebugMode) debugLog('✅ Coach Max checked in successfully!');
       
       // Check if both have checked in and update streak
       await _checkAndUpdateStreak(streakId, teamId, today);
 
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error checking in Coach Max: $e');
+      if (kDebugMode) debugLog('❌ Error checking in Coach Max: $e');
       return false;
     }
   }
@@ -337,7 +337,7 @@ class CoachMaxService {
       final checkedInMembers = checkIns.length;
 
       if (kDebugMode) {
-        print('📊 Team status: $checkedInMembers/$totalMembers members checked in');
+        debugLog('📊 Team status: $checkedInMembers/$totalMembers members checked in');
       }
 
       // If all members checked in, update streak
@@ -345,7 +345,7 @@ class CoachMaxService {
         await _updateStreak(streakId, today);
       }
     } catch (e) {
-      if (kDebugMode) print('❌ Error checking streak status: $e');
+      if (kDebugMode) debugLog('❌ Error checking streak status: $e');
     }
   }
 
@@ -397,10 +397,10 @@ class CoachMaxService {
       }).eq('id', streakId);
 
       if (kDebugMode) {
-        print('✅ Streak updated! Current: $newStreak, Longest: $newLongest');
+        debugLog('✅ Streak updated! Current: $newStreak, Longest: $newLongest');
       }
     } catch (e) {
-      if (kDebugMode) print('❌ Error updating streak: $e');
+      if (kDebugMode) debugLog('❌ Error updating streak: $e');
     }
   }
 

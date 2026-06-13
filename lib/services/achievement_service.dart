@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 // ══════════════════════════════════════════════════════════════
 // MODELS
@@ -111,7 +112,7 @@ class AchievementService {
               ))
           .toList();
     } catch (e) {
-      if (kDebugMode) print('❌ AchievementService.getAll: $e');
+      if (kDebugMode) debugLog('❌ AchievementService.getAll: $e');
       return [];
     }
   }
@@ -196,7 +197,7 @@ class AchievementService {
             .eq('id', uid);
       }
 
-      if (kDebugMode) print('🏆 Unlocked: ${def['name']} (+$xp XP, +$coins coins)');
+      if (kDebugMode) debugLog('🏆 Unlocked: ${def['name']} (+$xp XP, +$coins coins)');
 
       return AchievementUnlockResult(
         achievement: Achievement.fromRow(def, {
@@ -207,7 +208,7 @@ class AchievementService {
         coinsAwarded: coins,
       );
     } catch (e) {
-      if (kDebugMode) print('❌ AchievementService._upsertProgress ($achievementId): $e');
+      if (kDebugMode) debugLog('❌ AchievementService._upsertProgress ($achievementId): $e');
       return null;
     }
   }
@@ -427,7 +428,7 @@ class AchievementService {
         if (r != null) results.add(r);
       }
     } catch (e) {
-      if (kDebugMode) print('❌ checkLoyaltyAchievements: $e');
+      if (kDebugMode) debugLog('❌ checkLoyaltyAchievements: $e');
     }
     return results;
   }

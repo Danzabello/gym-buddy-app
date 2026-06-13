@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 class FriendService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -7,15 +8,14 @@ class FriendService {
   // Search for users by USERNAME (not display name)
   Future<List<Map<String, dynamic>>> searchUsers(String query) async {
     try {
-      if (kDebugMode) print('🔎 searchUsers called with: "$query"');
+      if (kDebugMode) debugLog('🔎 searchUsers called with: "$query"');
       
       if (query.isEmpty) return [];
       
       final currentUserId = _supabase.auth.currentUser?.id;
-      if (kDebugMode) print('👤 Current user ID: $currentUserId');
       
       if (currentUserId == null) {
-        if (kDebugMode) print('❌ No user logged in!');
+        if (kDebugMode) debugLog('❌ No user logged in!');
         return [];
       }
 
@@ -32,13 +32,12 @@ class FriendService {
           .limit(20);
 
       if (kDebugMode) {
-        print('✅ Database returned ${response.length} results');
-        print('📄 Results: $response');
+        debugLog('✅ Database returned ${response.length} results');
       }
       
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      if (kDebugMode) print('❌ Error searching users: $e');
+      if (kDebugMode) debugLog('❌ Error searching users: $e');
       return [];
     }
   }
@@ -48,11 +47,10 @@ class FriendService {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) {
-        if (kDebugMode) print('❌ No user logged in');
+        if (kDebugMode) debugLog('❌ No user logged in');
         return false;
       }
 
-      if (kDebugMode) print('📤 Sending friend request from $currentUserId to $friendId');
 
       // Check if friendship already exists (either direction)
       final existing = await _supabase
@@ -62,7 +60,7 @@ class FriendService {
           .maybeSingle();
 
       if (existing != null) {
-        if (kDebugMode) print('⚠️ Friendship already exists: ${existing['status']}');
+        if (kDebugMode) debugLog('⚠️ Friendship already exists: ${existing['status']}');
         return false;
       }
 
@@ -73,11 +71,10 @@ class FriendService {
         'status': 'pending',
       }).select();  // ✅ ADD .select() to get the created record back
 
-      if (kDebugMode) print('✅ Friend request created: $response');
 
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error sending friend request: $e');
+      if (kDebugMode) debugLog('❌ Error sending friend request: $e');
       return false;
     }
   }
@@ -88,7 +85,7 @@ class FriendService {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return false;
 
-      if (kDebugMode) print('✅ Accepting friend request: $requestId');
+      if (kDebugMode) debugLog('✅ Accepting friend request: $requestId');
 
       // Get the friendship details BEFORE updating
       final friendship = await _supabase
@@ -104,7 +101,7 @@ class FriendService {
         'status': 'accepted',
       }).eq('id', requestId);
 
-      if (kDebugMode) print('✅ Friendship accepted');
+      if (kDebugMode) debugLog('✅ Friendship accepted');
 
       // 🔥 Create a team and get the team ID back
       final teamData = await _createTeamStreakAndGetIds(currentUserId, friendUserId);
@@ -112,7 +109,7 @@ class FriendService {
       // 🔥 BACKFILL: If users have already checked in today, apply it to new team
       if (teamData != null && teamData['teamId'] != null && teamData['streakId'] != null) {
         // Add a small delay to ensure database consistency
-        if (kDebugMode) print('⏳ Waiting for database consistency...');
+        if (kDebugMode) debugLog('⏳ Waiting for database consistency...');
         await Future.delayed(const Duration(milliseconds: 100));
         
         await _backfillTodaysCheckIns(
@@ -125,7 +122,7 @@ class FriendService {
 
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error accepting friend request: $e');
+      if (kDebugMode) debugLog('❌ Error accepting friend request: $e');
       return false;
     }
   }
@@ -133,7 +130,6 @@ class FriendService {
   // 🔥 Modified: Create team streak and return both team and streak IDs
   Future<Map<String, String>?> _createTeamStreakAndGetIds(String userId1, String userId2) async {
     try {
-      if (kDebugMode) print('🔥 Creating team for $userId1 and $userId2');
 
       // Get both users' display names
       final user1Profile = await _supabase
@@ -161,7 +157,7 @@ class FriendService {
       }).select().single();
 
       final teamId = team['id'] as String;
-      if (kDebugMode) print('✅ Team created: $teamId');
+      if (kDebugMode) debugLog('✅ Team created: $teamId');
 
       // Add both members to the team
       await _supabase.from('team_members').insert([
@@ -177,7 +173,7 @@ class FriendService {
         },
       ]);
 
-      if (kDebugMode) print('✅ Team members added');
+      if (kDebugMode) debugLog('✅ Team members added');
 
       // Create team streak
       final teamStreak = await _supabase.from('team_streaks').insert({
@@ -188,14 +184,14 @@ class FriendService {
       }).select().single();
 
       final streakId = teamStreak['id'] as String;
-      if (kDebugMode) print('✅ Team streak created: $streakId');
+      if (kDebugMode) debugLog('✅ Team streak created: $streakId');
 
       return {
         'teamId': teamId,
         'streakId': streakId,
       };
     } catch (e) {
-      if (kDebugMode) print('❌ Error creating team streak: $e');
+      if (kDebugMode) debugLog('❌ Error creating team streak: $e');
       return null;
     }
   }
@@ -214,16 +210,13 @@ class FriendService {
       final today = todayUtc.toIso8601String().split('T')[0];
       
       if (kDebugMode) {
-        print('🔄 Checking for today\'s check-ins to backfill (date: $today)...');
-        print('   👤 User1 ID: $userId1');
-        print('   👤 User2 ID: $userId2');
+        debugLog('🔄 Checking for today\'s check-ins to backfill (date: $today)...');
       }
 
       // ADD THIS DEBUG BLOCK HERE - BEFORE USER1 QUERY
       if (kDebugMode) {
-        print('   🔍 Querying for user1 check-in:');
-        print('      - user_id: $userId1');
-        print('      - check_in_date: $today');
+        debugLog('   🔍 Querying for user1 check-in:');
+        debugLog('      - check_in_date: $today');
       }
 
       // Check if user1 has checked in today (in ANY team)
@@ -237,9 +230,8 @@ class FriendService {
 
       // ADD THIS DEBUG BLOCK HERE - BEFORE USER2 QUERY
       if (kDebugMode) {
-        print('   🔍 Querying for user2 check-in:');
-        print('      - user_id: $userId2');
-        print('      - check_in_date: $today');
+        debugLog('   🔍 Querying for user2 check-in:');
+        debugLog('      - check_in_date: $today');
       }
 
       // Check if user2 has checked in today (in ANY team)  
@@ -253,18 +245,18 @@ class FriendService {
 
       // ADD THIS DEBUG BLOCK HERE - AFTER BOTH QUERIES
       if (kDebugMode) {
-        print('   📊 User1 query result: $user1CheckIn');
-        print('   📊 User2 query result: $user2CheckIn');
+        debugLog('   📊 User1 query result: $user1CheckIn');
+        debugLog('   📊 User2 query result: $user2CheckIn');
       }
 
-      print('🔍 User1 check-in found: ${user1CheckIn != null ? "YES" : "NO"}');
-      print('🔍 User2 check-in found: ${user2CheckIn != null ? "YES" : "NO"}');
+      debugLog('🔍 User1 check-in found: ${user1CheckIn != null ? "YES" : "NO"}');
+      debugLog('🔍 User2 check-in found: ${user2CheckIn != null ? "YES" : "NO"}');
 
       if (user1CheckIn != null) {
-        print('   User1 check-in time: ${user1CheckIn['check_in_time']}');
+        debugLog('   User1 check-in time: ${user1CheckIn['check_in_time']}');
       }
       if (user2CheckIn != null) {
-        print('   User2 check-in time: ${user2CheckIn['check_in_time']}');
+        debugLog('   User2 check-in time: ${user2CheckIn['check_in_time']}');
       }
 
 
@@ -279,7 +271,6 @@ class FriendService {
           'check_in_time': user1CheckIn['check_in_time'],
         });
         backfilledCount++;
-        if (kDebugMode) print('✅ Backfilled check-in for user $userId1');
       }
 
       // Backfill user2's check-in if they checked in today
@@ -291,12 +282,11 @@ class FriendService {
           'check_in_time': user2CheckIn['check_in_time'],
         });
         backfilledCount++;
-        if (kDebugMode) print('✅ Backfilled check-in for user $userId2');
       }
 
       // If both users had checked in today, update the streak immediately
       if (backfilledCount == 2) {
-        if (kDebugMode) print('🔥 Both users had checked in - updating streak!');
+        if (kDebugMode) debugLog('🔥 Both users had checked in - updating streak!');
         
         // Set the streak to 1 and update the last_workout_date to today
         await _supabase.from('team_streaks').update({
@@ -306,16 +296,16 @@ class FriendService {
           'updated_at': DateTime.now().toUtc().toIso8601String(),
         }).eq('id', streakId);
 
-        if (kDebugMode) print('✅ Streak updated to 1 for new team with date: $today');
+        if (kDebugMode) debugLog('✅ Streak updated to 1 for new team with date: $today');
       } else if (backfilledCount == 1) {
-        if (kDebugMode) print('⏳ Only one user had checked in - waiting for the other');
+        if (kDebugMode) debugLog('⏳ Only one user had checked in - waiting for the other');
         // Don't update the streak, but the check-in is recorded
       } else {
-        if (kDebugMode) print('🆕 Neither user had checked in yet today');
+        if (kDebugMode) debugLog('🆕 Neither user had checked in yet today');
       }
 
     } catch (e) {
-      if (kDebugMode) print('❌ Error backfilling check-ins: $e');
+      if (kDebugMode) debugLog('❌ Error backfilling check-ins: $e');
     }
   }
 
@@ -329,7 +319,7 @@ class FriendService {
 
       return true;
     } catch (e) {
-      if (kDebugMode) print('Error declining friend request: $e');
+      if (kDebugMode) debugLog('Error declining friend request: $e');
       return false;
     }
   }
@@ -339,11 +329,10 @@ class FriendService {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) {
-        if (kDebugMode) print('❌ No user logged in');
+        if (kDebugMode) debugLog('❌ No user logged in');
         return [];
       }
 
-      if (kDebugMode) print('📥 Getting pending requests for $currentUserId');
 
       // Get pending friend requests WHERE YOU ARE THE RECIPIENT
       final response = await _supabase
@@ -367,15 +356,14 @@ class FriendService {
           .order('created_at', ascending: false);
 
       if (kDebugMode) {
-        print('✅ Found ${response.length} pending requests');
+        debugLog('✅ Found ${response.length} pending requests');
         for (var req in response) {
-          print('  - From: ${req['user_profiles']?['display_name']} (@${req['user_profiles']?['username']})');
         }
       }
 
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting pending requests: $e');
+      if (kDebugMode) debugLog('❌ Error getting pending requests: $e');
       return [];
     }
   }
@@ -386,7 +374,6 @@ class FriendService {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return [];
 
-      if (kDebugMode) print('👥 getFriends() called for user: $currentUserId');
 
       // Get all accepted friendships where user is either user_id or friend_id
       final response = await _supabase
@@ -395,7 +382,7 @@ class FriendService {
           .eq('status', 'accepted')
           .or('user_id.eq.$currentUserId,friend_id.eq.$currentUserId');
 
-      if (kDebugMode) print('📊 Found ${response.length} accepted friendships');
+      if (kDebugMode) debugLog('📊 Found ${response.length} accepted friendships');
 
       // Extract friend IDs
       final friendIds = <String>[];
@@ -407,7 +394,6 @@ class FriendService {
         }
       }
 
-      if (kDebugMode) print('👤 Friend IDs: $friendIds');
 
       if (friendIds.isEmpty) return [];
 
@@ -417,11 +403,11 @@ class FriendService {
           .select('id, username, display_name, avatar_id, avatar_border, fitness_level, looking_for_buddy, workout_days_per_week') // 🔒 explicit, no age/gender
           .inFilter('id', friendIds);
 
-      if (kDebugMode) print('✅ Loaded ${profiles.length} friend profiles');
+      if (kDebugMode) debugLog('✅ Loaded ${profiles.length} friend profiles');
 
       return List<Map<String, dynamic>>.from(profiles);
     } catch (e) {
-      if (kDebugMode) print('❌ Error getting friends: $e');
+      if (kDebugMode) debugLog('❌ Error getting friends: $e');
       return [];
     }
   }
@@ -468,11 +454,10 @@ class FriendService {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) {
-        if (kDebugMode) print('❌ No user logged in');
+        if (kDebugMode) debugLog('❌ No user logged in');
         return false;
       }
 
-      if (kDebugMode) print('🗑️ Removing friend: $friendId');
 
       // Step 1: Find the team between these two users (excluding Coach Max teams)
       final teamData = await _findTeamBetweenUsers(currentUserId, friendId);
@@ -481,7 +466,7 @@ class FriendService {
         final teamId = teamData['id'] as String;
         final teamName = teamData['team_name'] as String;
         
-        if (kDebugMode) print('🗑️ Found team to delete: $teamName ($teamId)');
+        if (kDebugMode) debugLog('🗑️ Found team to delete: $teamName ($teamId)');
         
         // Step 2: Delete all check-ins for this team's streak
         try {
@@ -501,10 +486,10 @@ class FriendService {
                 .delete()
                 .eq('team_streak_id', streakId);
             
-            if (kDebugMode) print('✅ Deleted check-ins for streak: $streakId');
+            if (kDebugMode) debugLog('✅ Deleted check-ins for streak: $streakId');
           }
         } catch (e) {
-          if (kDebugMode) print('⚠️ Error deleting check-ins: $e');
+          if (kDebugMode) debugLog('⚠️ Error deleting check-ins: $e');
         }
         
         // Step 3: Delete the team streak
@@ -514,9 +499,9 @@ class FriendService {
               .delete()
               .eq('team_id', teamId);
           
-          if (kDebugMode) print('✅ Deleted team streak');
+          if (kDebugMode) debugLog('✅ Deleted team streak');
         } catch (e) {
-          if (kDebugMode) print('⚠️ Error deleting team streak: $e');
+          if (kDebugMode) debugLog('⚠️ Error deleting team streak: $e');
         }
         
         // Step 4: Delete team members
@@ -526,9 +511,9 @@ class FriendService {
               .delete()
               .eq('team_id', teamId);
           
-          if (kDebugMode) print('✅ Deleted team members');
+          if (kDebugMode) debugLog('✅ Deleted team members');
         } catch (e) {
-          if (kDebugMode) print('⚠️ Error deleting team members: $e');
+          if (kDebugMode) debugLog('⚠️ Error deleting team members: $e');
         }
         
         // Step 5: Delete the buddy team itself
@@ -538,12 +523,12 @@ class FriendService {
               .delete()
               .eq('id', teamId);
           
-          if (kDebugMode) print('✅ Deleted buddy team: $teamName');
+          if (kDebugMode) debugLog('✅ Deleted buddy team: $teamName');
         } catch (e) {
-          if (kDebugMode) print('⚠️ Error deleting buddy team: $e');
+          if (kDebugMode) debugLog('⚠️ Error deleting buddy team: $e');
         }
       } else {
-        if (kDebugMode) print('ℹ️ No team found between users (may already be deleted)');
+        if (kDebugMode) debugLog('ℹ️ No team found between users (may already be deleted)');
       }
 
       // Step 6: Delete the friendship record
@@ -552,10 +537,10 @@ class FriendService {
           .delete()
           .or('and(user_id.eq.$currentUserId,friend_id.eq.$friendId),and(user_id.eq.$friendId,friend_id.eq.$currentUserId)');
 
-      if (kDebugMode) print('✅ Friendship removed successfully');
+      if (kDebugMode) debugLog('✅ Friendship removed successfully');
       return true;
     } catch (e) {
-      if (kDebugMode) print('❌ Error removing friend: $e');
+      if (kDebugMode) debugLog('❌ Error removing friend: $e');
       return false;
     }
   }
@@ -594,7 +579,7 @@ class FriendService {
 
       return null;
     } catch (e) {
-      if (kDebugMode) print('❌ Error finding team between users: $e');
+      if (kDebugMode) debugLog('❌ Error finding team between users: $e');
       return null;
     }
   }
