@@ -17,6 +17,9 @@ class WorkoutCard extends StatefulWidget {
   final VoidCallback? onDecline;
   final VoidCallback? onJoin;
   final VoidCallback? onOpenTimer;
+  final VoidCallback? onReady;
+  final VoidCallback? onCancelReady;
+  final VoidCallback? onStartTogether;
 
   const WorkoutCard({
     super.key,
@@ -33,6 +36,9 @@ class WorkoutCard extends StatefulWidget {
     this.onDecline,
     this.onJoin,
     this.onOpenTimer,
+    this.onReady,
+    this.onCancelReady,
+    this.onStartTogether,
   });
 
   @override
@@ -113,6 +119,34 @@ class _WorkoutCardState extends State<WorkoutCard> {
     return 'scheduled';
   }
 
+  // ── Mutual ready check helpers ──────────────────────────────────────────
+  bool get _isBuddyWorkout => widget.workout['buddy_id'] != null;
+
+  bool get _readyActive {
+    if (widget.workout['creator_ready'] != true) return false;
+    final expires = widget.workout['ready_expires_at'];
+    if (expires == null) return false;
+    try {
+      return DateTime.parse(expires).isAfter(DateTime.now().toUtc());
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Creator pressed I'm Ready — waiting for buddy to start
+  bool get _creatorWaitingReady =>
+      widget.isCreator &&
+      widget.workoutStatus == 'scheduled' &&
+      widget.buddyStatus == 'accepted' &&
+      _readyActive;
+
+  // Buddy sees partner ready — can start together
+  bool get _buddyCanStartTogether =>
+      widget.isBuddy &&
+      widget.workoutStatus == 'scheduled' &&
+      widget.buddyStatus == 'accepted' &&
+      _readyActive;
+
   @override
   Widget build(BuildContext context) {
     final appColors = AppColors.of(context);
@@ -185,6 +219,8 @@ class _WorkoutCardState extends State<WorkoutCard> {
               ],
             ),
           ),
+          if (_creatorWaitingReady) _buildWaitingReadySection(appColors),
+          if (_buddyCanStartTogether) _buildPartnerReadySection(appColors),
           if (creatorState == 'waiting_to_join') _buildJoinWindowSection(appColors),
           if (creatorState == 'window_expired') _buildWindowExpiredSection(appColors),
           if (creatorState == 'buddy_completed') _buildBuddyCompletedSection(),
@@ -307,7 +343,15 @@ class _WorkoutCardState extends State<WorkoutCard> {
         label = '✅ Done';
         break;
       default:
-        if (widget.isBuddy && widget.buddyStatus == 'pending') {
+        if (_creatorWaitingReady) {
+          bgColor = Colors.orange.withOpacity(0.15);
+          textColor = Colors.orange[300]!;
+          label = '⏳ Waiting';
+        } else if (_buddyCanStartTogether) {
+          bgColor = Colors.green.withOpacity(0.15);
+          textColor = Colors.green[400]!;
+          label = '🟢 Partner ready';
+        } else if (widget.isBuddy && widget.buddyStatus == 'pending') {
           bgColor = Colors.blue.withOpacity(0.15);
           textColor = Colors.blue[300]!;
           label = '📨 Invite';
@@ -624,6 +668,82 @@ class _WorkoutCardState extends State<WorkoutCard> {
     );
   }
 
+  // ── Ready check sections ────────────────────────────────────────────────
+
+  Widget _buildWaitingReadySection(AppColors appColors) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF7C3AED).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF7C3AED).withOpacity(0.25)),
+      ),
+      child: Row(
+        children: [
+          const Text('🟣', style: TextStyle(fontSize: 14)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Waiting for ${widget.partnerName}…',
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF7C3AED)),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  "They'll get a notification to confirm",
+                  style: TextStyle(fontSize: 11, color: appColors.subtleText),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPartnerReadySection(AppColors appColors) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.local_fire_department, color: Colors.green[400], size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${widget.partnerName} is ready to go!',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.green[400]),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Confirm to start the timer together',
+                  style: TextStyle(fontSize: 11, color: appColors.subtleText),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildWorkoutActions(String? creatorState, AppColors appColors) {
     if (creatorState == 'window_expired' || creatorState == 'buddy_completed') {
       return const SizedBox.shrink();
@@ -633,19 +753,28 @@ class _WorkoutCardState extends State<WorkoutCard> {
     if (creatorState == 'waiting_to_join') {
       return Container(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () { HapticFeedback.heavyImpact(); widget.onJoin?.call(); },
-            icon: const Icon(Icons.play_arrow, size: 22),
-            label: const Text('Join Workout'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange[500],
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        child: Column(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () { HapticFeedback.heavyImpact(); widget.onJoin?.call(); },
+                icon: const Icon(Icons.play_arrow, size: 22),
+                label: const Text('Join Workout'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange[500],
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
             ),
-          ),
+            TextButton.icon(
+              onPressed: () { HapticFeedback.lightImpact(); widget.onCancel?.call(); },
+              icon: Icon(Icons.stop_circle_outlined, color: Colors.red[400], size: 16),
+              label: Text('Not joining', style: TextStyle(color: Colors.red[400], fontSize: 13)),
+            ),
+          ],
         ),
       );
     }
@@ -688,8 +817,116 @@ class _WorkoutCardState extends State<WorkoutCard> {
       );
     }
 
-    // Scheduled — start + cancel
+// Creator waiting for buddy — cancel ready option
+    if (_creatorWaitingReady) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () { HapticFeedback.lightImpact(); widget.onCancelReady?.call(); },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: appColors.subtleText,
+              side: BorderSide(color: appColors.cardBorder),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            child: const Text('Cancel ready'),
+          ),
+        ),
+      );
+    }
+
+    // Buddy — partner is ready, start together
+    if (_buddyCanStartTogether) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () { HapticFeedback.heavyImpact(); widget.onStartTogether?.call(); },
+            icon: const Icon(Icons.play_arrow, size: 22),
+            label: const Text('Start Together'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green[500],
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Scheduled
     if (widget.workoutStatus == 'scheduled') {
+      // ── Buddy workout, creator view ──
+      if (_isBuddyWorkout && widget.isCreator) {
+        final accepted = widget.buddyStatus == 'accepted';
+        return Container(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: accepted
+                    ? GestureDetector(
+                        onTap: () { HapticFeedback.heavyImpact(); widget.onReady?.call(); },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
+                            ),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.check, color: Colors.white, size: 20),
+                              SizedBox(width: 8),
+                              Text("I'm Ready",
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700)),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Text(
+                        'Waiting for ${widget.partnerName} to accept…',
+                        style: TextStyle(fontSize: 13, color: appColors.subtleText),
+                      ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: IconButton(
+                  onPressed: () { HapticFeedback.lightImpact(); widget.onCancel?.call(); },
+                  icon: Icon(Icons.close, color: Colors.red[400]),
+                  tooltip: 'Cancel',
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
+      // ── Buddy workout, buddy view, creator not ready yet ──
+      if (_isBuddyWorkout && widget.isBuddy && widget.buddyStatus == 'accepted') {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Text(
+            "You're in! Waiting for ${widget.partnerName} to get ready…",
+            style: TextStyle(fontSize: 13, color: appColors.subtleText),
+          ),
+        );
+      }
+
+      // ── Solo workout — unchanged ──
       return Container(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Row(

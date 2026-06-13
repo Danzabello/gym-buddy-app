@@ -24,9 +24,11 @@ class CustomStreakSelector extends StatefulWidget {
 class _CustomStreakSelectorState extends State<CustomStreakSelector>
     with SingleTickerProviderStateMixin {
   late List<TeamStreak> _available;
-  TeamStreak? _leftSlot;
-  TeamStreak? _centerSlot;
-  TeamStreak? _rightSlot;
+
+  // ✅ 4 ordered wheel slots — Coach Max rides along automatically as #5
+  final List<TeamStreak?> _slots = List<TeamStreak?>.filled(4, null);
+  static const List<String> _ordinals = ['1st', '2nd', '3rd', '4th'];
+
   String _searchQuery = '';
 
   late AnimationController _animController;
@@ -35,7 +37,10 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
   @override
   void initState() {
     super.initState();
-    _available = List.from(widget.availableStreaks);
+    // Coach Max is never pickable — he always gets the last wheel slot
+    _available = widget.availableStreaks
+        .where((s) => !s.isCoachMaxTeam)
+        .toList();
 
     _animController = AnimationController(
       vsync: this,
@@ -48,14 +53,18 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
         parent: _animController, curve: Curves.easeOutCubic));
     _animController.forward();
 
-    if (widget.currentSelection?.length == 3) {
-      _leftSlot   = widget.currentSelection![0];
-      _centerSlot = widget.currentSelection![1];
-      _rightSlot  = widget.currentSelection![2];
-      _available.removeWhere((s) =>
-          s.teamId == _leftSlot?.teamId ||
-          s.teamId == _centerSlot?.teamId ||
-          s.teamId == _rightSlot?.teamId);
+    // ✅ Restore any previous selection (1–4 picks, old 3-pick saves included)
+    final restore = widget.currentSelection;
+    if (restore != null && restore.isNotEmpty) {
+      final picks = restore
+          .where((s) => !s.isCoachMaxTeam)
+          .take(4)
+          .toList();
+      for (var i = 0; i < picks.length; i++) {
+        _slots[i] = picks[i];
+      }
+      _available.removeWhere(
+          (s) => picks.any((p) => p.teamId == s.teamId));
     }
   }
 
@@ -90,30 +99,34 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
               .contains(_searchQuery.toLowerCase()))
           .toList();
 
-  bool get _allFilled =>
-      _leftSlot != null &&
-      _centerSlot != null &&
-      _rightSlot != null;
+  bool get _allSlotsFilled => _slots.every((s) => s != null);
 
-  List<TeamStreak> get _assigned => [
-        if (_leftSlot != null) _leftSlot!,
-        if (_centerSlot != null) _centerSlot!,
-        if (_rightSlot != null) _rightSlot!,
-      ];
+  List<TeamStreak> get _assigned =>
+      _slots.whereType<TeamStreak>().toList();
+
+  // ✅ Save when all 4 filled OR every available buddy is assigned
+  bool get _canSave =>
+      _assigned.isNotEmpty && (_allSlotsFilled || _available.isEmpty);
+
+  String? _slotLabel(TeamStreak streak) {
+    final i =
+        _slots.indexWhere((s) => s?.teamId == streak.teamId);
+    return i == -1 ? null : _ordinals[i];
+  }
+
+  // ── Next slot name for hint text ──────────────────────
+  String get _nextSlotHint {
+    final i = _slots.indexWhere((s) => s == null);
+    return i == -1 ? '' : _ordinals[i];
+  }
 
   // ── Tap to assign: fills next empty slot ──────────────
   void _assign(TeamStreak streak) {
     HapticFeedback.selectionClick();
     setState(() {
-      if (_leftSlot == null) {
-        _leftSlot = streak;
-      } else if (_centerSlot == null) {
-        _centerSlot = streak;
-      } else if (_rightSlot == null) {
-        _rightSlot = streak;
-      } else {
-        return; // all full
-      }
+      final i = _slots.indexWhere((s) => s == null);
+      if (i == -1) return; // all full
+      _slots[i] = streak;
       _available.remove(streak);
     });
   }
@@ -121,26 +134,13 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
   void _unassign(TeamStreak streak) {
     HapticFeedback.selectionClick();
     setState(() {
-      if (_leftSlot?.teamId == streak.teamId)   _leftSlot   = null;
-      if (_centerSlot?.teamId == streak.teamId) _centerSlot = null;
-      if (_rightSlot?.teamId == streak.teamId)  _rightSlot  = null;
-      _available.add(streak);
+      final i =
+          _slots.indexWhere((s) => s?.teamId == streak.teamId);
+      if (i != -1) {
+        _slots[i] = null;
+        _available.add(streak);
+      }
     });
-  }
-
-  String? _slotLabel(TeamStreak streak) {
-    if (_leftSlot?.teamId == streak.teamId)   return 'Left';
-    if (_centerSlot?.teamId == streak.teamId) return 'Centre';
-    if (_rightSlot?.teamId == streak.teamId)  return 'Right';
-    return null;
-  }
-
-  // ── Next slot name for hint text ──────────────────────
-  String get _nextSlotHint {
-    if (_leftSlot == null)   return 'Left';
-    if (_centerSlot == null) return 'Centre';
-    if (_rightSlot == null)  return 'Right';
-    return '';
   }
 
   @override
@@ -169,19 +169,17 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
                 color: Colors.white, size: 18),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text('Pick your 3',
+          title: const Text('Pick your top 4',
               style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.w800)),
           actions: [
-            if (_allFilled)
+            if (_canSave)
               Padding(
                 padding: const EdgeInsets.only(right: 12),
                 child: GestureDetector(
-                  onTap: () => Navigator.pop(
-                      context,
-                      [_leftSlot!, _centerSlot!, _rightSlot!]),
+                  onTap: () => Navigator.pop(context, _assigned),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 6),
@@ -223,35 +221,30 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _previewSlot('Left', _leftSlot,
-                          size: 52, appColors: appColors, cs: cs),
-                      Container(
-                          width: 20,
-                          height: 2,
-                          color: appColors.divider,
-                          margin: const EdgeInsets.only(bottom: 20)),
-                      _previewSlot('Centre', _centerSlot,
-                          size: 68,
-                          isCenter: true,
-                          appColors: appColors,
-                          cs: cs),
-                      Container(
-                          width: 20,
-                          height: 2,
-                          color: appColors.divider,
-                          margin: const EdgeInsets.only(bottom: 20)),
-                      _previewSlot('Right', _rightSlot,
-                          size: 52, appColors: appColors, cs: cs),
+                      for (var i = 0; i < 4; i++) ...[
+                        _previewSlot(_ordinals[i], _slots[i],
+                            size: 46,
+                            isPrimary: i == 0,
+                            appColors: appColors,
+                            cs: cs),
+                        const SizedBox(width: 10),
+                      ],
+                      _coachMaxPreview(appColors),
                     ],
                   ),
-                  if (!_allFilled) ...[
-                    const SizedBox(height: 6),
+                  const SizedBox(height: 6),
+                  if (!_allSlotsFilled && _available.isNotEmpty)
                     Text(
                       'Tap a buddy below → fills $_nextSlotHint slot',
                       style: TextStyle(
                           fontSize: 10, color: appColors.subtleText),
+                    )
+                  else
+                    Text(
+                      '🤖 Coach Max joins automatically',
+                      style: TextStyle(
+                          fontSize: 10, color: appColors.subtleText),
                     ),
-                  ],
                 ],
               ),
             ),
@@ -345,7 +338,7 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
 
   Widget _previewSlot(String label, TeamStreak? streak,
       {required double size,
-      bool isCenter = false,
+      bool isPrimary = false,
       required AppColors appColors,
       required ColorScheme cs}) {
     final filled = streak != null;
@@ -357,30 +350,24 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: filled
-                ? (isCenter
+                ? (isPrimary
                     ? const Color(0xFF7C3AED).withOpacity(0.12)
                     : const Color(0xFF3B82F6).withOpacity(0.10))
                 : appColors.sectionBackground,
             border: Border.all(
               color: filled
-                  ? (isCenter
+                  ? (isPrimary
                       ? const Color(0xFF7C3AED)
                       : const Color(0xFF3B82F6))
                   : appColors.cardBorder,
               width: filled ? 2 : 1.5,
-              style: filled ? BorderStyle.solid : BorderStyle.solid,
             ),
           ),
           child: filled
               ? ClipOval(
-                  child: streak.isCoachMaxTeam
-                      ? Center(
-                          child: Text('🤖',
-                              style: TextStyle(
-                                  fontSize: size * 0.45)))
-                      : UserAvatar(
-                          avatarId: _friendAvatar(streak),
-                          size: size))
+                  child: UserAvatar(
+                      avatarId: _friendAvatar(streak),
+                      size: size))
               : Icon(Icons.add,
                   size: size * 0.35, color: appColors.subtleText),
         ),
@@ -389,9 +376,39 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
             style: TextStyle(
                 fontSize: 9,
                 fontWeight: FontWeight.w600,
-                color: isCenter && filled
+                color: isPrimary && filled
                     ? const Color(0xFF7C3AED)
                     : appColors.subtleText)),
+      ],
+    );
+  }
+
+  // ✅ Locked 5th circle — Coach Max is always in the wheel
+  Widget _coachMaxPreview(AppColors appColors) {
+    return Column(
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
+            ),
+            border: Border.all(
+              color: appColors.cardBorder,
+              width: 1.5,
+            ),
+          ),
+          child: const Center(
+              child: Text('🤖', style: TextStyle(fontSize: 20))),
+        ),
+        const SizedBox(height: 4),
+        Text('Max',
+            style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: appColors.subtleText)),
       ],
     );
   }
@@ -432,7 +449,8 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
         ? 'Coach Max'
         : _friendName(streak);
     final slotLbl = _slotLabel(streak);
-    final canAssign = !assigned && !_allFilled;
+    final canAssign = !assigned && !_allSlotsFilled;
+    final isPrimaryLbl = slotLbl == '1st';
 
     return Opacity(
       opacity: assigned ? 0.6 : 1.0,
@@ -491,7 +509,7 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
                         padding: const EdgeInsets.symmetric(
                             horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
-                          color: slotLbl == 'Centre'
+                          color: isPrimaryLbl
                               ? const Color(0xFF7C3AED)
                                   .withOpacity(0.12)
                               : const Color(0xFF3B82F6)
@@ -502,7 +520,7 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
                             style: TextStyle(
                                 fontSize: 8,
                                 fontWeight: FontWeight.w700,
-                                color: slotLbl == 'Centre'
+                                color: isPrimaryLbl
                                     ? const Color(0xFF7C3AED)
                                     : const Color(0xFF3B82F6))),
                       ),
