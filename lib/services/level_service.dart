@@ -4,7 +4,7 @@ import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 // ============================================================
 // LEVEL UP RESULT
-// Returned by awardCheckInXP so the UI can react to level-ups
+// Returned by awardWorkoutXP so the UI can react to level-ups
 // ============================================================
 class LevelUpResult {
   final int xpAwarded;
@@ -71,68 +71,6 @@ class LevelService {
   static const int xpMilestone30    = 50;
   static const int xpMilestone100   = 50;
   static const int xpWorkout        = 15;
-
-  // ============================================================
-  // AWARD CHECK-IN XP
-  // Called from team_streak_service.dart after streak update
-  // ============================================================
-  Future<LevelUpResult?> awardCheckInXP({
-    required String streakId,
-    required int currentStreak,
-    required bool partnerAlsoCheckedIn,
-  }) async {
-    try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return null;
-
-      final today = DateTime.now().toIso8601String().split('T')[0];
-
-      // Deduplication: only award once per streak per day
-      final existing = await _supabase
-          .from('xp_transactions')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('reference_id', 'checkin_$streakId')
-          .gte('created_at', '${today}T00:00:00Z')
-          .maybeSingle();
-
-      if (existing != null) {
-        if (kDebugMode) debugLog('⏭️ XP already awarded today for streak $streakId');
-        return null;
-      }
-
-      int totalXp = xpDailyCheckIn;
-      final List<String> reasons = ['+$xpDailyCheckIn XP daily check-in 💪'];
-
-      // Co-op bonus
-      if (partnerAlsoCheckedIn) {
-        totalXp += xpCoopBonus;
-        reasons.add('+$xpCoopBonus XP partner bonus 🤝');
-      }
-
-      // Milestone bonuses
-      if (currentStreak == 7) {
-        totalXp += xpMilestone7;
-        reasons.add('+$xpMilestone7 XP 7-day milestone! 🔥');
-      } else if (currentStreak == 30) {
-        totalXp += xpMilestone30;
-        reasons.add('+$xpMilestone30 XP 30-day milestone! 💪');
-      } else if (currentStreak == 100) {
-        totalXp += xpMilestone100;
-        reasons.add('+$xpMilestone100 XP 100-day milestone! 🏆');
-      }
-
-      return await _applyXp(
-        userId: userId,
-        amount: totalXp,
-        reason: 'checkin_$streakId',
-        reasons: reasons,
-      );
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error awarding check-in XP: $e');
-      return null;
-    }
-  }
 
   // ============================================================
   // AWARD WORKOUT XP

@@ -304,51 +304,17 @@ function _generateActiveWindowTime(notifSettings: any): string {
 
 // ── Update streak when both have checked in ───────────────────────────────
 async function _updateStreak(supabase: any, streakId: string, today: string) {
-  const { data: streakData } = await supabase
-    .from('team_streaks')
-    .select('current_streak, longest_streak, last_workout_date')
-    .eq('id', streakId)
-    .single()
+  const { data, error } = await supabase.rpc('recompute_team_streak', {
+    p_streak_id: streakId,
+    p_check_in_date: today,
+  })
 
-  if (!streakData) return
-
-  const currentStreak = streakData.current_streak ?? 0
-  const longestStreak = streakData.longest_streak ?? 0
-  const lastWorkoutDate = streakData.last_workout_date
-
-  let newStreak = currentStreak
-  let newLongest = longestStreak
-
-  if (!lastWorkoutDate) {
-    newStreak = 1
-    newLongest = 1
-  } else {
-    const lastDate = new Date(lastWorkoutDate)
-    const todayDate = new Date(today)
-    const daysDiff = Math.round(
-      (todayDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)
-    )
-
-    if (daysDiff === 0) return
-    if (daysDiff === 1) {
-      newStreak = currentStreak + 1
-      if (newStreak > longestStreak) newLongest = newStreak
-    } else {
-      newStreak = 1
-    }
+  if (error) {
+    console.error('❌ recompute_team_streak failed:', error)
+    return
   }
 
-  await supabase
-    .from('team_streaks')
-    .update({
-      current_streak: newStreak,
-      longest_streak: newLongest,
-      last_workout_date: today,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', streakId)
-
-  console.log(`🔥 Streak updated → current: ${newStreak}, longest: ${newLongest}`)
+  console.log(`🔥 Streak updated via recompute_team_streak →`, data)
 }
 
 // ── Motivational messages ─────────────────────────────────────────────────

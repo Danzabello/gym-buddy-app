@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'break_day_service.dart';
 import 'workout_history_service.dart';
-import 'coin_service.dart';
 import 'level_service.dart';
 import 'dart:async' show unawaited;
 import 'achievement_service.dart';
@@ -675,218 +674,75 @@ class TeamStreakService {
   /// Increment streak when all members check in
   Future<LevelUpResult?> _incrementStreak(String streakId, String teamId, String today, {bool isCoachMaxTeam = false}) async {
     try {
-      // Get current streak data
-      final streakData = await _supabase
-          .from('team_streaks')
-          .select()
-          .eq('id', streakId)
-          .single();
+      // Streak math now lives server-side (recompute_team_streak RPC)
+      // — single source of truth shared with the Coach Max cron,
+      // CoachMaxService, and TeamSyncService. Replaces the local
+      // date-diff/break-day logic that used to live here.
+      final result = await _supabase.rpc('recompute_team_streak', params: {
+        'p_streak_id': streakId,
+        'p_check_in_date': today,
+      }) as Map<String, dynamic>?;
 
-      final currentStreak = (streakData['current_streak'] as int?) ?? 0;
-      final longestStreak = (streakData['longest_streak'] as int?) ?? 0;
-      final totalWorkouts = (streakData['total_workouts'] as int?) ?? 0; 
-      final bestStreak = (streakData['best_streak'] as int?) ?? 0;
-      final lastWorkoutDate = streakData['last_workout_date'] as String?;
-
-      // Get all team members (excluding Coach Max)
-      final membersResponse = await _supabase
-          .from('team_members')
-          .select('user_id')
-          .eq('team_id', teamId)
-          .neq('user_id', coachMaxId);
-      
-      final memberIds = membersResponse.map((m) => m['user_id'] as String).toList();
-
-      int newStreak = currentStreak;
-      int newLongest = longestStreak;
-
-      if (lastWorkoutDate == null || lastWorkoutDate == today) {
-        // ✅ CASE 1: First workout ever OR already updated today
-        if (lastWorkoutDate == today && currentStreak > 0) {
-          // Already incremented today, don't double-increment
-          // BUT: if currentStreak is 0, we should still increment (fresh start)
-          if (kDebugMode) debugLog('ℹ️ Streak already incremented today');
-          return null;
-        }
-        // First workout ever OR restarting from 0
-        newStreak = 1;
-        newLongest = currentStreak > 0 ? longestStreak : 1;
-        if (kDebugMode) debugLog('🎉 ${currentStreak == 0 ? "Starting fresh from 0" : "First workout"} - Streak: 1');
-      }else {
-        final lastDate = DateTime.parse(lastWorkoutDate);
-        final todayDate = DateTime.parse(today);
-        final daysDifference = todayDate.difference(lastDate).inDays;
-
-        if (daysDifference == 1) {
-          // ✅ CASE 2: CONSECUTIVE DAY - CHECK BREAK DAY LOGIC
-          // Get today's check-ins
-          final checkInsResponse = await _supabase
-              .from('daily_team_checkins')
-              .select('user_id')
-              .eq('team_streak_id', streakId)
-              .eq('check_in_date', today)
-              .neq('user_id', coachMaxId);
-          
-          final checkedInUsers = checkInsResponse.map((c) => c['user_id'] as String).toSet();
-          
-          // Get break day status for all members
-          final breakDayStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, today);
-          
-          if (kDebugMode) {
-            debugLog('📊 Break day analysis for $today:');
-            for (var userId in memberIds) {
-              final onBreak = breakDayStatus[userId] ?? false;
-              final checkedIn = checkedInUsers.contains(userId);
-            }
-          }
-          
-          // Check if at least one person worked out (checked in and NOT on break)
-          final someoneWorkedOut = memberIds.any((userId) {
-            final onBreak = breakDayStatus[userId] ?? false;
-            final checkedIn = checkedInUsers.contains(userId);
-            return checkedIn && !onBreak;
-          });
-          
-          if (someoneWorkedOut) {
-            // ✅ At least one person worked out - streak continues and increments
-            newStreak = currentStreak + 1;
-            if (newStreak > longestStreak) {
-              newLongest = newStreak;
-            }
-            if (kDebugMode) debugLog('🔥 Streak incremented! Someone worked out.');
-          } else {
-            // ❌ Everyone took a break - streak stays same (doesn't increment but doesn't break)
-            newStreak = currentStreak; // Stay the same
-            if (kDebugMode) debugLog('😴 Everyone on break - streak stays at $currentStreak');
-          }
-        } else if (daysDifference > 1) {
-          // ✅ CASE 3: MORE THAN 1 DAY GAP - CHECK IF GAP IS FILLED WITH BREAK DAYS
-          if (kDebugMode) debugLog('⏰ Gap detected: $daysDifference days since last workout');
-          
-          // ✅ FIX: If current streak is already 0, don't bother checking the gap
-          // Just start fresh at 1
-          if (currentStreak == 0) {
-            newStreak = 1;
-            newLongest = longestStreak > 0 ? longestStreak : 1;
-            if (kDebugMode) debugLog('🆕 Starting fresh from 0 - Streak: 1');
-          } else {
-            // Check if the gap is filled with break days
-            bool gapIsValid = true;
-            
-            // Check each day in the gap
-            for (int i = 1; i < daysDifference; i++) {
-              final checkDate = lastDate.add(Duration(days: i));
-              final checkDateStr = DateTime(checkDate.year, checkDate.month, checkDate.day)
-                  .toIso8601String()
-                  .split('T')[0];
-              
-              // Get break day status for that day
-              final breakStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, checkDateStr);
-              
-              // If everyone was on break that day, the gap is valid
-              final everyoneOnBreak = memberIds.every((userId) => breakStatus[userId] ?? false);
-              
-              if (!everyoneOnBreak) {
-                // Someone wasn't on break but didn't check in - streak broken
-                gapIsValid = false;
-                break;
-              }
-            }
-            
-            if (gapIsValid) {
-              // Gap was all break days - treat as consecutive
-              newStreak = currentStreak + 1;
-              if (newStreak > longestStreak) {
-                newLongest = newStreak;
-              }
-              if (kDebugMode) debugLog('🔥 Gap filled by break days - streak continues!');
-            } else {
-              // Streak broken - reset to 1
-              newStreak = 1;
-              if (kDebugMode) debugLog('💔 Streak broken - resetting to 1');
-            }
-          }
-        } else if (daysDifference == 0) {
-          // Same day as last workout - should not happen, but handle it
-          if (kDebugMode) debugLog('ℹ️ Already counted today, skipping');
-          return null;
-        }
+      if (result == null || result['updated'] != true) {
+        if (kDebugMode) debugLog('ℹ️ Streak not updated: ${result?['reason']}');
+        return null;
       }
 
-      // Update streak
-      await _supabase.from('team_streaks').update({
-        'current_streak': newStreak,
-        'longest_streak': newLongest,
-        'total_workouts': totalWorkouts + 1,
-        'best_streak': newStreak > bestStreak ? newStreak : bestStreak, 
-        'last_workout_date': today,
-        'last_interaction_at': DateTime.now().toUtc().toIso8601String(), 
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', streakId);
-      
-      // Award coins after streak update
-      final coinService = CoinService();
+      final newStreak = result['new_streak'] as int;
+      final oldBestStreak = (result['old_best_streak'] as int?) ?? 0;
+      final newBestStreak = (result['new_best_streak'] as int?) ?? newStreak;
+
+      // Award rewards after streak update — server-validated and atomic.
+      // Replaces CoinService.awardDailyCheckIn/awardRetroactivePartnerBonus
+      // + LevelService.awardCheckInXP (S2/S3 audit fix). Also fixes a
+      // pre-existing double-XP-on-checkin bug from a since-removed
+      // DB trigger.
       final currentUserId = _supabase.auth.currentUser?.id;
+      bool didLevelUp = false;
+      int newLevelAfterCheckin = 1;
       if (currentUserId != null) {
-        final checkInsForCoins = await _supabase
+        try {
+          final rewardResult = await _supabase.rpc('award_checkin_rewards', params: {
+            'p_streak_id': streakId,
+            'p_check_in_date': today,
+          }) as Map<String, dynamic>?;
+
+          if (rewardResult != null && rewardResult['already_awarded'] != true) {
+            didLevelUp = rewardResult['did_level_up'] as bool? ?? false;
+            newLevelAfterCheckin = rewardResult['new_level'] as int? ?? 1;
+          }
+        } catch (e) {
+          debugLog('❌ Error awarding check-in rewards: $e');
+        }
+
+        // Recomputed only to gate the co-op achievement check below — NOT
+        // used for any reward payout (those are server-side now).
+        final coopCheckIns = await _supabase
             .from('daily_team_checkins')
             .select('user_id')
             .eq('team_streak_id', streakId)
             .eq('check_in_date', today)
             .neq('user_id', coachMaxId);
-
-        final partnerAlsoCheckedIn = checkInsForCoins.length >= 2;
-
-        // Award current user
-        await coinService.awardDailyCheckIn(
-          streakId: streakId,
-          currentStreak: newStreak,
-          partnerAlsoCheckedIn: partnerAlsoCheckedIn,
-        );
-
-        // If partner just completed the team, retroactively award
-        // partner bonus to anyone who checked in earlier solo
-        if (partnerAlsoCheckedIn) {
-          for (final checkIn in checkInsForCoins) {
-            final uid = checkIn['user_id'] as String;
-            if (uid != currentUserId) {
-              await coinService.awardRetroactivePartnerBonus(
-                userId: uid,
-                streakId: streakId,
-              );
-            }
-          }
-        }
-
-        // Award XP alongside coins
-        final levelResult = await levelService.awardCheckInXP(
-          streakId: streakId,
-          currentStreak: newStreak,
-          partnerAlsoCheckedIn: partnerAlsoCheckedIn,
-        );
+        final partnerAlsoCheckedIn = coopCheckIns.length >= 2;
 
         // 🏆 Achievement checks — fire-and-forget
         unawaited(() async {
           final achievementService = AchievementService();
 
-          // Streak achievements
           await achievementService.checkStreakAchievements(
             currentStreak: newStreak,
-            bestStreak: newStreak > bestStreak ? newStreak : bestStreak,
-            previousBest: bestStreak,
+            bestStreak: newBestStreak,
+            previousBest: oldBestStreak,
             isRealBuddy: !isCoachMaxTeam,
             teamStreakId: streakId,
           );
 
-          // Level achievements (if levelled up)
-          if (levelResult != null && levelResult.didLevelUp) {
-            await achievementService.checkLevelAchievements(levelResult.newLevel);
+          if (didLevelUp) {
+            await achievementService.checkLevelAchievements(newLevelAfterCheckin);
           }
 
-          // Coin achievements
           await achievementService.checkCoinAchievements();
 
-          // Co-op achievements (only for real buddy teams, both checked in)
           if (!isCoachMaxTeam && partnerAlsoCheckedIn) {
             final checkins = await _supabase
                 .from('daily_team_checkins')
@@ -920,11 +776,11 @@ class TeamStreakService {
           levelService.grantMilestoneUnlock(milestoneKey: milestoneKey); // fire-and-forget
         }
 
-        return levelResult;
+        return null;
       }
 
       if (kDebugMode) {
-        debugLog('✅ Streak updated! Current: $newStreak, Longest: $newLongest');
+        debugLog('✅ Streak updated! Current: $newStreak, Longest: ${result['longest_streak']}');
       }
 
       return null;
@@ -932,9 +788,7 @@ class TeamStreakService {
       if (kDebugMode) debugLog('❌ Error incrementing streak: $e');
       return null;
     }
-
-    
-  }  
+  }
 
   // ============================================
   // CHECK IF USER HAS CHECKED IN TODAY
@@ -1215,105 +1069,22 @@ class TeamStreakService {
     }
   }
 
-  Future<int> checkInAllTeamsForUser(String userId) async {
-    
-    int checkedInCount = 0;
-    int skippedNoStreak = 0;
-    int skippedAlreadyCheckedIn = 0;
-    
+  /// Check in [userId] (a co-op partner) across all their active teams.
+  /// Validated server-side against the real [workoutId] session that
+  /// proves they're a genuine participant — replaces the old
+  /// friend-on-shared-team client insert (S3 audit fix).
+  Future<int> checkInAllTeamsForUser(String userId, {required String workoutId}) async {
     try {
-      // Use database function to get ALL team IDs for this user (bypasses RLS)
-      final teamIdsResponse = await _supabase
-          .rpc('get_user_team_ids', params: {'target_user_id': userId});
-      
-      final List<dynamic> teamIds = teamIdsResponse as List<dynamic>;
-      debugLog('   📊 Found ${teamIds.length} teams for user (via RPC)');
-      
-      if (teamIds.isEmpty) {
-        debugLog('   ⚠️ No teams found for user');
-        return 0;
-      }
-      
-      // Get today's date
-      final now = DateTime.now();
-      final todayStr = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
-      
-      // Process each team
-      for (final teamData in teamIds) {
-        final teamId = teamData['team_id'] as String;
-        
-        try {
-          // Get team info
-          final teamResponse = await _supabase
-              .from('buddy_teams')
-              .select('team_name')
-              .eq('id', teamId)
-              .maybeSingle();
-          
-          final teamName = teamResponse?['team_name'] ?? 'Unknown Team';
-          debugLog('   🔍 Processing team: $teamName ($teamId)');
-          
-          // Get the active streak for this team
-          final streakResponse = await _supabase
-              .from('team_streaks')
-              .select('id, current_streak')
-              .eq('team_id', teamId)
-              .eq('is_active', true)
-              .maybeSingle();
-          
-          if (streakResponse == null) {
-            debugLog('      ⏭️ Skipped (no active streak)');
-            skippedNoStreak++;
-            continue;
-          }
-          
-          final streakId = streakResponse['id'] as String;
-          
-          // Check if user already checked in today
-          // ✅ FIX: Use 'team_streak_id' not 'streak_id'
-          final existingCheckin = await _supabase
-              .from('daily_team_checkins')
-              .select('id')
-              .eq('team_streak_id', streakId)  // ← FIXED
-              .eq('user_id', userId)
-              .eq('check_in_date', todayStr)
-              .maybeSingle();
-          
-          if (existingCheckin != null) {
-            debugLog('      ⏭️ Skipped (already checked in)');
-            skippedAlreadyCheckedIn++;
-            continue;
-          }
-          
-          // Create the check-in
-          // ✅ FIX: Use 'team_streak_id' and add 'check_in_time'
-          await _supabase.from('daily_team_checkins').insert({
-            'team_streak_id': streakId,  // ← FIXED
-            'user_id': userId,
-            'check_in_date': todayStr,
-            'check_in_time': DateTime.now().toUtc().toIso8601String(),  // ← ADDED
-          });
-          
-          debugLog('      ✅ Checked in to $teamName');
-          checkedInCount++;
-          
-          // Check if all team members have checked in and increment streak
-          await _checkTeamStreakAfterBuddyCheckin(teamId, streakId, todayStr);
-          
-        } catch (e) {
-          debugLog('      ❌ Error processing team $teamId: $e');
-        }
-      }
-      
+      final count = await _supabase.rpc('checkin_team_for_user', params: {
+        'p_target_user_id': userId,
+        'p_workout_id': workoutId,
+      });
+      debugLog('✅ Proxy check-in: $count teams for $userId');
+      return count as int? ?? 0;
     } catch (e) {
-      debugLog('   ❌ Error getting teams: $e');
+      debugLog('❌ Error in checkInAllTeamsForUser: $e');
+      return 0;
     }
-    
-    debugLog('   - Checked in: $checkedInCount');
-    debugLog('   - Skipped (no streak): $skippedNoStreak');
-    debugLog('   - Skipped (already checked in): $skippedAlreadyCheckedIn');
-    
-    return checkedInCount;
   }
 
   Future<void> _checkTeamStreakAfterBuddyCheckin(String teamId, String streakId, String todayStr) async {

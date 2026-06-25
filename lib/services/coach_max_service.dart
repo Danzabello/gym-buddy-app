@@ -349,55 +349,19 @@ class CoachMaxService {
     }
   }
 
-  /// Update the streak when both members have checked in
+  /// Update the streak when both team members have checked in
   Future<void> _updateStreak(String streakId, String today) async {
     try {
-      final streakData = await _supabase
-          .from('team_streaks')
-          .select('current_streak, longest_streak, last_workout_date')
-          .eq('id', streakId)
-          .single();
-
-      final currentStreak = (streakData['current_streak'] as int?) ?? 0;
-      final longestStreak = (streakData['longest_streak'] as int?) ?? 0;
-      final lastWorkoutDate = streakData['last_workout_date'] as String?;
-
-      int newStreak = currentStreak;
-      int newLongest = longestStreak;
-
-      if (lastWorkoutDate == null) {
-        // First workout
-        newStreak = 1;
-        newLongest = 1;
-      } else {
-        final lastDate = DateTime.parse(lastWorkoutDate);
-        final todayDate = DateTime.parse(today);
-        final daysDifference = todayDate.difference(lastDate).inDays;
-
-        if (daysDifference == 0) {
-          // Already counted today
-          return;
-        } else if (daysDifference == 1) {
-          // Consecutive day
-          newStreak = currentStreak + 1;
-          if (newStreak > longestStreak) {
-            newLongest = newStreak;
-          }
-        } else {
-          // Streak broken
-          newStreak = 1;
-        }
-      }
-
-      await _supabase.from('team_streaks').update({
-        'current_streak': newStreak,
-        'longest_streak': newLongest,
-        'last_workout_date': today,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', streakId);
+      // Streak math now lives server-side (recompute_team_streak RPC)
+      // — single source of truth shared with TeamStreakService, the
+      // Coach Max cron, and TeamSyncService.
+      final result = await _supabase.rpc('recompute_team_streak', params: {
+        'p_streak_id': streakId,
+        'p_check_in_date': today,
+      });
 
       if (kDebugMode) {
-        debugLog('✅ Streak updated! Current: $newStreak, Longest: $newLongest');
+        debugLog('✅ Streak updated via recompute_team_streak → $result');
       }
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error updating streak: $e');

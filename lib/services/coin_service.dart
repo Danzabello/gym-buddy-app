@@ -10,15 +10,6 @@ class CoinService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
   // ============================================================
-  // COIN AMOUNTS
-  // ============================================================
-  static const int dailyCheckIn = 10;
-  static const int partnerBonus = 5;
-  static const int milestone7Days = 50;
-  static const int milestone30Days = 100;
-  static const int milestone100Days = 250;
-
-  // ============================================================
   // GET BALANCE
   // ============================================================
   Future<int> getBalance() async {
@@ -38,210 +29,10 @@ class CoinService {
   }
 
   // ============================================================
-  // AWARD COINS
-  // ============================================================
-  Future<int> awardCoins({
-    required int amount,
-    required String transactionType,
-    required String description,
-    String? referenceId,
-  }) async {
-    try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return 0;
-
-      final current = await getBalance();
-      final newBalance = current + amount;
-
-      await _supabase.from('user_profiles').update({
-        'coin_balance': newBalance,
-      }).eq('id', userId);
-
-      await _supabase.from('coin_transactions').insert({
-        'user_id': userId,
-        'amount': amount,
-        'transaction_type': transactionType,
-        'description': description,
-        'reference_id': referenceId,
-      });
-
-      if (kDebugMode) debugLog('🪙 Awarded $amount coins ($transactionType) → Balance: $newBalance');
-      return newBalance;
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error awarding coins: $e');
-      return 0;
-    }
-  }
-
-  // ============================================================
-  // AWARD DAILY CHECK-IN COINS
-  // ============================================================
-  Future<CoinAwardResult?> awardDailyCheckIn({
-    required String streakId,
-    required int currentStreak,
-    required bool partnerAlsoCheckedIn,
-  }) async {
-    try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return null;
-
-      final today = DateTime.now().toIso8601String().split('T')[0];
-
-      // Check if already awarded daily check-in today (globally, not per-streak)
-      final existing = await _supabase
-          .from('coin_transactions')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('transaction_type', 'daily_checkin')
-          .gte('created_at', '${today}T00:00:00Z')
-          .maybeSingle();
-
-      if (existing != null) {
-        if (kDebugMode) debugLog('⏭️ Already awarded daily check-in coins today');
-        return null;
-      }
-
-      int totalAwarded = 0;
-      List<String> reasons = [];
-
-      // Base daily check-in coins
-      await awardCoins(
-        amount: dailyCheckIn,
-        transactionType: 'daily_checkin',
-        description: 'Daily check-in 💪',
-        referenceId: streakId,
-      );
-      totalAwarded += dailyCheckIn;
-      reasons.add('+$dailyCheckIn daily check-in');
-
-      // Partner bonus — only once per day globally
-      if (partnerAlsoCheckedIn) {
-        final existingPartnerBonus = await _supabase
-            .from('coin_transactions')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('transaction_type', 'partner_bonus')
-            .gte('created_at', '${today}T00:00:00Z')
-            .maybeSingle();
-
-        if (existingPartnerBonus == null) {
-          await awardCoins(
-            amount: partnerBonus,
-            transactionType: 'partner_bonus',
-            description: 'Partner checked in too! 🤝',
-            referenceId: streakId,
-          );
-          totalAwarded += partnerBonus;
-          reasons.add('+$partnerBonus partner bonus');
-        }
-      }
-
-      // Milestone bonuses
-      if (currentStreak == 7) {
-        await awardCoins(
-          amount: milestone7Days,
-          transactionType: 'streak_milestone',
-          description: '7-day streak milestone! 🔥',
-          referenceId: streakId,
-        );
-        totalAwarded += milestone7Days;
-        reasons.add('+$milestone7Days 7-day milestone!');
-      } else if (currentStreak == 30) {
-        await awardCoins(
-          amount: milestone30Days,
-          transactionType: 'streak_milestone',
-          description: '30-day streak milestone! 💪',
-          referenceId: streakId,
-        );
-        totalAwarded += milestone30Days;
-        reasons.add('+$milestone30Days 30-day milestone!');
-      } else if (currentStreak == 100) {
-        await awardCoins(
-          amount: milestone100Days,
-          transactionType: 'streak_milestone',
-          description: '100-day streak milestone! 🏆',
-          referenceId: streakId,
-        );
-        totalAwarded += milestone100Days;
-        reasons.add('+$milestone100Days 100-day milestone!');
-      }
-
-      final newBalance = await getBalance();
-      return CoinAwardResult(
-        totalAwarded: totalAwarded,
-        newBalance: newBalance,
-        reasons: reasons,
-      );
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error awarding check-in coins: $e');
-      return null;
-    }
-  }
-
-  // ============================================================
-  // RETROACTIVE PARTNER BONUS
-  // Awards partner bonus to a user who checked in solo earlier
-  // but whose partner has now also checked in
-  // ============================================================
-  Future<bool> awardRetroactivePartnerBonus({
-    required String userId,
-    required String streakId,
-  }) async {
-    try {
-      final today = DateTime.now().toIso8601String().split('T')[0];
-
-      // Check they got daily_checkin today
-      final checkin = await _supabase
-          .from('coin_transactions')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('transaction_type', 'daily_checkin')
-          .gte('created_at', '${today}T00:00:00Z')
-          .maybeSingle();
-
-      if (checkin == null) return false;
-
-      // Check they haven't already received partner_bonus today
-      final existing = await _supabase
-          .from('coin_transactions')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('transaction_type', 'partner_bonus')
-          .gte('created_at', '${today}T00:00:00Z')
-          .maybeSingle();
-
-      if (existing != null) return false;
-
-      final profile = await _supabase
-          .from('user_profiles')
-          .select('coin_balance')
-          .eq('id', userId)
-          .single();
-
-      final currentBalance = profile['coin_balance'] as int? ?? 0;
-      final newBalance = currentBalance + partnerBonus;
-
-      await _supabase.from('user_profiles').update({
-        'coin_balance': newBalance,
-      }).eq('id', userId);
-
-      await _supabase.from('coin_transactions').insert({
-        'user_id': userId,
-        'amount': partnerBonus,
-        'transaction_type': 'partner_bonus',
-        'description': 'Partner checked in too! 🤝',
-        'reference_id': streakId,
-      });
-
-      return true;
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error awarding retroactive partner bonus: $e');
-      return false;
-    }
-  }
-
-  // ============================================================
   // SPEND COINS (SHOP PURCHASE)
+  // Server validates funds + ownership atomically via the
+  // purchase_shop_item RPC (S2 audit fix — was a direct
+  // coin_balance write before).
   // ============================================================
   Future<bool> purchaseItem({
     required String itemId,
@@ -249,46 +40,19 @@ class CoinService {
     required String itemName,
   }) async {
     try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return false;
+      final result = await _supabase.rpc('purchase_shop_item', params: {
+        'p_shop_item_id': itemId,
+      });
 
-      final balance = await getBalance();
-      if (balance < cost) {
-        if (kDebugMode) debugLog('❌ Insufficient coins: $balance < $cost');
+      final success = result?['success'] as bool? ?? false;
+      if (!success) {
+        if (kDebugMode) debugLog('❌ Purchase failed: ${result?['reason']}');
         return false;
       }
 
-      final existing = await _supabase
-          .from('user_inventory')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('shop_item_id', itemId)
-          .maybeSingle();
-
-      if (existing != null) {
-        if (kDebugMode) debugLog('❌ Item already owned');
-        return false;
+      if (kDebugMode) {
+        debugLog('✅ Purchased $itemName for $cost coins → Balance: ${result?['new_balance']}');
       }
-
-      final newBalance = balance - cost;
-      await _supabase.from('user_profiles').update({
-        'coin_balance': newBalance,
-      }).eq('id', userId);
-
-      await _supabase.from('coin_transactions').insert({
-        'user_id': userId,
-        'amount': -cost,
-        'transaction_type': 'shop_purchase',
-        'description': 'Purchased: $itemName',
-        'reference_id': itemId,
-      });
-
-      await _supabase.from('user_inventory').insert({
-        'user_id': userId,
-        'shop_item_id': itemId,
-      });
-
-      if (kDebugMode) debugLog('✅ Purchased $itemName for $cost coins → Balance: $newBalance');
       return true;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error purchasing item: $e');
@@ -385,18 +149,6 @@ class CoinService {
 // ============================================================
 // DATA MODELS
 // ============================================================
-
-class CoinAwardResult {
-  final int totalAwarded;
-  final int newBalance;
-  final List<String> reasons;
-
-  CoinAwardResult({
-    required this.totalAwarded,
-    required this.newBalance,
-    required this.reasons,
-  });
-}
 
 class ShopItem {
   final String id;

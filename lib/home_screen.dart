@@ -217,6 +217,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   
   TeamStreak? _highestStreak;
+  Set<String> _myCheckInDates = {}; // real check-in dates, fixes heatmap fabrication bug
   List<TeamStreak> _allStreaks = [];
   List<Map<String, dynamic>> _todaysWorkouts = [];
   bool _hasCheckedInToday = false;
@@ -2273,6 +2274,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         .toIso8601String()
         .split('T')[0];
   
+    final sevenDaysAgoStr = DateTime.now().toUtc()
+        .subtract(const Duration(days: 7))
+        .toIso8601String()
+        .split('T')[0];
+
     final results = await Future.wait([
       // [0] completion status for each streak
       Future.wait(uniqueStreaks.map((s) => _isStreakCompleteToday(s))),
@@ -2286,6 +2292,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       FriendService().getFriends(),
       // [5] all workouts (for completed count)
       _workoutService.getAllWorkouts(),
+      // [6] real check-in dates for the heatmap (last 7 days, this user)
+      // — fixes the bug where days were painted as "done" purely from
+      // arithmetic on current_streak rather than real check-in history.
+      currentUserId == null
+          ? Future.value(<Map<String, dynamic>>[])
+          : Supabase.instance.client
+              .from('daily_team_checkins')
+              .select('check_in_date')
+              .eq('user_id', currentUserId)
+              .gte('check_in_date', sevenDaysAgoStr),
     ]);
   
     final completionList   = results[0] as List<bool>;
@@ -2294,6 +2310,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final pendingFriends   = results[3] as List;
     final friends          = results[4] as List;
     final allWorkouts      = results[5] as List<Map<String, dynamic>>;
+    final checkInDateRows  = results[6] as List<Map<String, dynamic>>;
+    final myCheckInDates   = checkInDateRows
+        .map((r) => r['check_in_date'] as String)
+        .toSet();
   
     final completionStatus = <String, bool>{};
     for (int i = 0; i < uniqueStreaks.length; i++) {
@@ -2326,6 +2346,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _nicknames             = nicknames;
       _streakCompletionStatus = completionStatus;
       _highestStreak         = highestStreak;
+      _myCheckInDates        = myCheckInDates;
       _hasCheckedInToday     = hasCheckedIn;
       _todaysWorkouts        = todaysWorkouts;
       _pendingRequests       = pendingFriends.length + pendingWorkouts;
@@ -3874,20 +3895,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   bool _isDateCheckedIn(DateTime date) {
-    if (_highestStreak == null) return false;
-    
     if (_isSameDay(date, DateTime.now())) {
       return _hasCheckedInToday;
     }
-    
-    final today = DateTime.now();
-    final daysDiff = today.difference(date).inDays;
-    
-    if (daysDiff <= _highestStreak!.currentStreak && daysDiff >= 0) {
-      return true;
-    }
-    
-    return false;
+
+    final dateStr = DateTime(date.year, date.month, date.day)
+        .toIso8601String()
+        .split('T')[0];
+    return _myCheckInDates.contains(dateStr);
   }
 
   bool _isSameDay(DateTime date1, DateTime date2) {
@@ -5576,7 +5591,7 @@ class _SchedulePageState extends State<SchedulePage> {
             final userResult = await teamStreakService.checkInAllTeams();
             debugLog('✅ Creator (current user) check-in: ${userResult['message']}');
           } else {
-            final result = await teamStreakService.checkInAllTeamsForUser(creatorId);
+            final result = await teamStreakService.checkInAllTeamsForUser(creatorId, workoutId: workoutId);
             debugLog('✅ Creator check-in: Checked in to $result teams');
           }
         } else if (creatorCancelled) {
@@ -5593,7 +5608,7 @@ class _SchedulePageState extends State<SchedulePage> {
             final userResult = await teamStreakService.checkInAllTeams();
             debugLog('✅ Buddy (current user) check-in: ${userResult['message']}');
           } else {
-            final result = await teamStreakService.checkInAllTeamsForUser(workoutBuddyId);
+            final result = await teamStreakService.checkInAllTeamsForUser(workoutBuddyId, workoutId: workoutId);
             debugLog('✅ Buddy check-in: Checked in to $result teams');
           }
         } else if (buddyCancelled) {

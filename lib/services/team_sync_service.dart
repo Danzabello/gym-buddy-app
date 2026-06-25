@@ -179,49 +179,20 @@ class TeamSyncService {
       if (checkedInMembers >= totalMembers) {
         if (kDebugMode) debugLog('🎉 SYNC: All members checked in! Updating streak...');
         
-        // Get current streak data
-        final streakData = await _supabase
-            .from('team_streaks')
-            .select('current_streak, longest_streak, last_workout_date')
-            .eq('id', streakId)
-            .single();
-
-        // Only update if not already updated today
-        if (streakData['last_workout_date'] != today) {
-          final currentStreak = (streakData['current_streak'] as int?) ?? 0;
-          final longestStreak = (streakData['longest_streak'] as int?) ?? 0;
-          final lastWorkoutDate = streakData['last_workout_date'] as String?;
-
-          int newStreak = 1;
-          int newLongest = longestStreak;
-
-          if (lastWorkoutDate != null) {
-            final lastDate = DateTime.parse(lastWorkoutDate);
-            final todayDate = DateTime.parse(today);
-            final daysDifference = todayDate.difference(lastDate).inDays;
-
-            if (daysDifference == 1) {
-              // Consecutive day - increment
-              newStreak = currentStreak + 1;
-              if (newStreak > longestStreak) {
-                newLongest = newStreak;
-              }
-            }
-          } else {
-            // First workout ever
-            newLongest = 1;
-          }
-
-          await _supabase.from('team_streaks').update({
-            'current_streak': newStreak,
-            'longest_streak': newLongest,
-            'last_workout_date': today,
-            'updated_at': DateTime.now().toIso8601String(),
-          }).eq('id', streakId);
-
+        // Streak math now lives server-side (recompute_team_streak RPC)
+        // — single source of truth shared with TeamStreakService, the
+        // Coach Max cron, and CoachMaxService. The RPC itself checks
+        // last_workout_date and no-ops if already updated today.
+        try {
+          final result = await _supabase.rpc('recompute_team_streak', params: {
+            'p_streak_id': streakId,
+            'p_check_in_date': today,
+          });
           if (kDebugMode) {
-            debugLog('✅ SYNC: Streak updated! Current: $newStreak, Longest: $newLongest');
+            debugLog('✅ SYNC: Streak updated via recompute_team_streak → $result');
           }
+        } catch (e) {
+          if (kDebugMode) debugLog('❌ SYNC: Error updating team streak: $e');
         }
       }
     } catch (e) {

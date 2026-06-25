@@ -159,42 +159,16 @@ class AchievementService {
       final xp    = def['xp_reward'] as int;
       final coins = def['coin_reward'] as int;
 
-      // ── FIX: correct column names for xp_transactions ───────
-      if (xp > 0) {
-        await _supabase.from('xp_transactions').insert({
-          'user_id':          uid,
-          'amount':           xp,
-          'transaction_type': 'achievement',
-          'description':      'Achievement: ${def['name']}',
-          'reference_id':     'achievement_$achievementId',
+      // Server looks up the correct xp_reward/coin_reward itself and
+      // pays out atomically — replaces the manual ledger writes + direct
+      // coin_balance update (S2 audit fix: client could previously pass
+      // any amount, not just the real reward value).
+      try {
+        await _supabase.rpc('award_achievement_rewards', params: {
+          'p_achievement_id': achievementId,
         });
-        await _supabase.rpc('award_xp', params: {
-          'p_user_id': uid,
-          'p_amount':  xp,
-          'p_source':  'achievement',
-          'p_ref_id':  achievementId,
-        });
-      }
-
-      // ── FIX: correct column name for coin_transactions ───────
-      if (coins > 0) {
-        await _supabase.from('coin_transactions').insert({
-          'user_id':          uid,
-          'amount':           coins,
-          'transaction_type': 'earn',
-          'description':      'Achievement: ${def['name']}',
-        });
-        // Direct balance update — no RPC exists for coins
-        final profile = await _supabase
-            .from('user_profiles')
-            .select('coin_balance')
-            .eq('id', uid)
-            .single();
-        final current = (profile['coin_balance'] as int?) ?? 0;
-        await _supabase
-            .from('user_profiles')
-            .update({'coin_balance': current + coins})
-            .eq('id', uid);
+      } catch (e) {
+        debugLog('❌ Error awarding achievement rewards ($achievementId): $e');
       }
 
       if (kDebugMode) debugLog('🏆 Unlocked: ${def['name']} (+$xp XP, +$coins coins)');
