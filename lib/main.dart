@@ -107,10 +107,21 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   void _handleInviteLink(Uri uri) {
     final code = uri.queryParameters['code'];
-    if (code != null && code.isNotEmpty) {
+    if (code != null && code.isNotEmpty && _isValidInviteCode(code)) {
       if (kDebugMode) debugLog('🔗 Invite code received via deep link: $code');
       unawaited(InviteService().storePendingInviteCode(code));
+    } else if (code != null && code.isNotEmpty) {
+      if (kDebugMode) debugLog('⚠️ Rejected malformed invite code from deep link');
     }
+  }
+
+  // S11 audit fix: basic format validation before persisting an
+  // unauthenticated deep-link value to local storage. Real validation
+  // still happens server-side on lookup -- this just stops obviously
+  // malformed/oversized values from ever being written to disk.
+  bool _isValidInviteCode(String code) {
+    if (code.length > 32) return false;
+    return RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(code);
   }
 
   // ─── App initialisation ────────────────────────────────────────────────────

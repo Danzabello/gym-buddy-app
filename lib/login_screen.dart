@@ -3,8 +3,10 @@
 // Drop-in replacement for the LoginScreen class in main.dart
 // ═══════════════════════════════════════════════════════════════════════════
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'services/auth_service.dart';
 import 'services/coach_max_service.dart';
 import 'services/notification_service.dart';
@@ -40,6 +42,18 @@ class _LoginScreenState extends State<LoginScreen>
   int _failedAttempts = 0;
   bool _isLockedOut = false;
   String? _errorMessage;
+  Timer? _lockoutTimer;
+  int _lockoutSecondsRemaining = 0;
+
+  // S5 audit fix (follow-up): the lockout used to live purely in this
+  // State object, so navigating away and back created a fresh
+  // instance and silently wiped it (confirmed live during testing).
+  // Persisting the lockout deadline means normal in-app navigation no
+  // longer bypasses it. Still UX-only, not real security -- clearing
+  // app data or calling the auth API directly still bypasses this
+  // entirely. Real protection must come from Supabase Auth's
+  // server-side rate limiting.
+  static const _kLockoutUntilKey = 'login_lockout_until_ms';
 
   @override
   void initState() {
@@ -51,6 +65,27 @@ class _LoginScreenState extends State<LoginScreen>
             begin: const Offset(0, 0.08), end: Offset.zero)
         .animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut));
     _animCtrl.forward();
+    _restoreLockoutState();
+  }
+
+  Future<void> _restoreLockoutState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lockoutUntilMs = prefs.getInt(_kLockoutUntilKey);
+    if (lockoutUntilMs == null) return;
+
+    final remainingMs = lockoutUntilMs - DateTime.now().millisecondsSinceEpoch;
+    if (remainingMs <= 0) {
+      await prefs.remove(_kLockoutUntilKey);
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isLockedOut = true;
+      _lockoutSecondsRemaining = (remainingMs / 1000).ceil();
+      _errorMessage = '🔒 Too many attempts. Try again in ${_lockoutSecondsRemaining}s.';
+    });
+    _runLockoutTimer();
   }
 
   @override
@@ -58,6 +93,7 @@ class _LoginScreenState extends State<LoginScreen>
     _animCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _lockoutTimer?.cancel();
     super.dispose();
   }
 
@@ -149,8 +185,17 @@ class _LoginScreenState extends State<LoginScreen>
         _failedAttempts++;
         _isLoading = false;
         if (_failedAttempts >= 5) {
+          // S5 audit fix: this is a client-side UX deterrent only, NOT
+          // a real security control -- it resets on app restart and
+          // can be bypassed entirely by calling the auth service
+          // directly. Real brute-force protection must come from
+          // Supabase Auth's server-side rate limiting (verify/configure
+          // in the Supabase dashboard -- not fixable from this file).
+          // A time-based cooldown with no bypass instructions is still
+          // strictly better than the old message, which literally told
+          // the user (and any attacker) to restart the app to clear it.
           _isLockedOut = true;
-          _errorMessage = '🔒 Too many attempts. Please restart the app.';
+          _startLockoutCountdown();
         } else {
           final remaining = 5 - _failedAttempts;
           _errorMessage = _failedAttempts >= 4
@@ -159,6 +204,45 @@ class _LoginScreenState extends State<LoginScreen>
         }
       });
     }
+  }
+
+  void _startLockoutCountdown() {
+    _lockoutSecondsRemaining = 60;
+    _errorMessage = '🔒 Too many attempts. Try again in ${_lockoutSecondsRemaining}s.';
+    _persistLockoutUntil(DateTime.now().add(const Duration(seconds: 60)));
+    _runLockoutTimer();
+  }
+
+  Future<void> _persistLockoutUntil(DateTime until) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kLockoutUntilKey, until.millisecondsSinceEpoch);
+  }
+
+  Future<void> _clearPersistedLockout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kLockoutUntilKey);
+  }
+
+  void _runLockoutTimer() {
+    _lockoutTimer?.cancel();
+    _lockoutTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _lockoutSecondsRemaining--;
+        if (_lockoutSecondsRemaining <= 0) {
+          _isLockedOut = false;
+          _failedAttempts = 0;
+          _errorMessage = null;
+          timer.cancel();
+          _clearPersistedLockout();
+        } else {
+          _errorMessage = '🔒 Too many attempts. Try again in ${_lockoutSecondsRemaining}s.';
+        }
+      });
+    });
   }
 
   Future<bool> _checkOnboardingStatus(String userId) async {

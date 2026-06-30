@@ -64,42 +64,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return;
     }
 
-    // Check if email is already registered before entering the long onboarding flow
-    setState(() => _isLoading = true);
-
-    try {
-      // Attempt signup just to check — we'll delete the session immediately
-      final response = await Supabase.instance.client.auth.signUp(
-        email: _emailCtrl.text.trim(),
-        password: _passwordCtrl.text,
-      );
-
-      if (response.user != null) {
-        // Email was free — sign back out immediately, account creation
-        // happens properly at the end of onboarding (step 5)
-        await Supabase.instance.client.auth.signOut();
-      }
-    } on AuthException catch (e) {
-      setState(() => _isLoading = false);
-      if (e.message.contains('User already registered') ||
-          e.code == 'user_already_exists') {
-        setState(() => _emailError = 'This email is already registered. Please sign in.');
-      } else {
-        setState(() => _generalError = 'Something went wrong. Please try again.');
-      }
-      return;
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _generalError = 'Something went wrong. Please try again.';
-      });
-      return;
-    }
-
-    setState(() => _isLoading = false);
-    if (!mounted) return;
-
-    // Email is free — proceed to onboarding
+    // S4 audit fix: the early signUp()-then-signOut() probe that used to
+    // live here created a real orphaned auth account on every attempt
+    // (the existing orphan-cleanup logic in main.dart can't find these,
+    // since it only runs for accounts with an active session, and this
+    // probe always signs out immediately) AND let anyone enumerate
+    // registered emails via the distinct "already registered" message.
+    // The real signUp() call already lives in OnboardingBasicInfoNew's
+    // _finish() (the actual last step) and handles the duplicate-email
+    // case there -- no need to probe up front.
     Navigator.of(context).pushReplacement(
       FadeSlideRoute(
         page: OnboardingBasicInfoNew(

@@ -187,6 +187,43 @@ class AchievementService {
     }
   }
 
+  // ── SERVER-VERIFIED UNLOCK ──────────────────────────────────────
+  // Calls verify_achievement_progress, which independently re-derives
+  // real progress from the actual underlying tables server-side — the
+  // client never supplies a progress number for these IDs. Closes the
+  // same vulnerability class as the old S2 coin/XP bug, but for
+  // achievements (found live: a past streak-data corruption bug
+  // permanently unlocked 10 achievements with target values the real
+  // data never met).
+  Future<AchievementUnlockResult?> _verifyAndUnlock(String achievementId) async {
+    try {
+      final result = await _supabase.rpc('verify_achievement_progress', params: {
+        'p_achievement_id': achievementId,
+      }) as Map<String, dynamic>?;
+
+      if (result == null || result['unlocked'] != true) return null;
+
+      final def = await _supabase
+          .from('achievements')
+          .select()
+          .eq('id', achievementId)
+          .maybeSingle();
+      if (def == null) return null;
+
+      return AchievementUnlockResult(
+        achievement: Achievement.fromRow(def, {
+          'progress': def['target_value'],
+          'unlocked_at': DateTime.now().toIso8601String(),
+        }),
+        xpAwarded: result['xp_awarded'] as int? ?? 0,
+        coinsAwarded: result['coins_awarded'] as int? ?? 0,
+      );
+    } catch (e) {
+      if (kDebugMode) debugLog('❌ verify_achievement_progress ($achievementId): $e');
+      return null;
+    }
+  }
+
   // ══════════════════════════════════════════════════════════════
   // PUBLIC CHECK METHODS
   // ══════════════════════════════════════════════════════════════
@@ -200,31 +237,25 @@ class AchievementService {
   }) async {
     final results = <AchievementUnlockResult>[];
 
-    final r1 = await _upsertProgress('first_flame', 1);
-    if (r1 != null) results.add(r1);
-
-    for (final entry in {
-      'week_warrior':      7,
-      'two_weeks_strong':  14,
-      'month_machine':     30,
-      'unstoppable':       60,
-      'century_club':      100,
-      'half_year_hero':    180,
-      'year_of_the_beast': 365,
-    }.entries) {
-      final r = await _upsertProgress(
-          entry.key, currentStreak >= entry.value ? entry.value : currentStreak);
-      if (r != null) results.add(r);
-    }
-
-    if (currentStreak > previousBest) {
-      final r = await _upsertProgress('personal_best', 1);
+    // Server-verified — re-derives real best_streak from team_streaks
+    // itself rather than trusting currentStreak/bestStreak params.
+    for (final id in [
+      'first_flame',
+      'week_warrior',
+      'two_weeks_strong',
+      'month_machine',
+      'unstoppable',
+      'century_club',
+      'half_year_hero',
+      'year_of_the_beast',
+      'personal_best',
+    ]) {
+      final r = await _verifyAndUnlock(id);
       if (r != null) results.add(r);
     }
 
     if (!isRealBuddy) {
-      final count = await _getCoachMaxCheckinCount();
-      final r = await _upsertProgress('coach_max_grad', count);
+      final r = await _verifyAndUnlock('coach_max_grad');
       if (r != null) results.add(r);
     }
 
@@ -237,36 +268,25 @@ class AchievementService {
     required DateTime partnerCheckInTime,
   }) async {
     final results = <AchievementUnlockResult>[];
-
-    final r1 = await _upsertProgress('dynamic_duo', 1);
-    if (r1 != null) results.add(r1);
-
-    final diff = myCheckInTime.difference(partnerCheckInTime).inMinutes.abs();
-    if (diff <= 30) {
-      final r = await _upsertProgress('in_sync', 1);
+    // Fully server-verified — re-derives mutual check-in days, timing
+    // overlap, and time-of-day directly from daily_team_checkins.
+    // Note: early_bird/night_owl now use UTC server-side rather than
+    // phone-local time (the server has no concept of the caller's
+    // timezone) — a deliberate, documented simplification for a
+    // low-stakes flavor achievement. Params kept for call-site
+    // compatibility, no longer used here.
+    for (final id in [
+      'dynamic_duo',
+      'in_sync',
+      'reliable_partner',
+      'ride_or_die',
+      'power_couple',
+      'early_bird',
+      'night_owl',
+    ]) {
+      final r = await _verifyAndUnlock(id);
       if (r != null) results.add(r);
     }
-
-    final coopCount = await _getMutualCoopCount(teamStreakId);
-    for (final entry in {
-      'reliable_partner': 7,
-      'ride_or_die':      30,
-      'power_couple':     100,
-    }.entries) {
-      final r = await _upsertProgress(entry.key, coopCount);
-      if (r != null) results.add(r);
-    }
-
-    final hour = myCheckInTime.toLocal().hour;
-    if (hour < 8) {
-      final r = await _upsertProgress('early_bird', 1);
-      if (r != null) results.add(r);
-    }
-    if (hour >= 22) {
-      final r = await _upsertProgress('night_owl', 1);
-      if (r != null) results.add(r);
-    }
-
     return results;
   }
 
@@ -278,53 +298,39 @@ class AchievementService {
     final uid = _userId;
     if (uid == null) return results;
 
-    final total = await _getTotalWorkouts();
-    for (final entry in {
-      'first_rep':      1,
-      'warm_up_done':   5,
-      'ten_strong':     10,
-      'fifty_club':     50,
-      'century_lifter': 100,
-    }.entries) {
-      final r = await _upsertProgress(entry.key, total);
+    // Fully server-verified — re-derives workout count, duration,
+    // distinct types, and consecutive days from the workouts table
+    // itself. durationMinutes/workoutType params kept for signature
+    // compatibility, no longer used for the unlock decision.
+    for (final id in [
+      'first_rep',
+      'warm_up_done',
+      'ten_strong',
+      'fifty_club',
+      'century_lifter',
+      'marathon',
+      'mixed_bag',
+      'iron_will',
+    ]) {
+      final r = await _verifyAndUnlock(id);
       if (r != null) results.add(r);
     }
-
-    if (durationMinutes > 90) {
-      final r = await _upsertProgress('marathon', 1);
-      if (r != null) results.add(r);
-    }
-
-    final distinctTypes = await _getDistinctWorkoutTypes();
-    final r = await _upsertProgress('mixed_bag', distinctTypes);
-    if (r != null) results.add(r);
-
-    final consecutive = await _getConsecutiveWorkoutDays();
-    final r2 = await _upsertProgress('iron_will', consecutive);
-    if (r2 != null) results.add(r2);
 
     return results;
   }
 
   Future<List<AchievementUnlockResult>> checkSocialAchievements() async {
     final results = <AchievementUnlockResult>[];
-    final friendCount = await _getFriendCount();
-
-    for (final entry in {
-      'first_friend':     1,
-      'squad_goals':      3,
-      'social_butterfly': 5,
-      'influencer':       10,
-    }.entries) {
-      final r = await _upsertProgress(entry.key, friendCount);
+    // Server-verified — re-derives friend count from friendships itself.
+    for (final id in ['first_friend', 'squad_goals', 'social_butterfly', 'influencer']) {
+      final r = await _verifyAndUnlock(id);
       if (r != null) results.add(r);
     }
     return results;
   }
 
   Future<List<AchievementUnlockResult>> checkConnectorAchievement() async {
-    final count = await _getSentRequestCount();
-    final r = await _upsertProgress('connector', count);
+    final r = await _verifyAndUnlock('connector');
     return r != null ? [r] : [];
   }
 
@@ -335,15 +341,11 @@ class AchievementService {
 
   Future<List<AchievementUnlockResult>> checkLevelAchievements(int newLevel) async {
     final results = <AchievementUnlockResult>[];
-    for (final entry in {
-      'level_5':  5,
-      'level_10': 10,
-      'level_25': 25,
-      'level_50': 50,
-      'level_99': 99,
-    }.entries) {
-      final r = await _upsertProgress(
-          entry.key, newLevel >= entry.value ? entry.value : newLevel);
+    // Server-verified — re-reads level from user_profiles directly
+    // (already server-authoritative since tonight's S2 fix). newLevel
+    // param kept for call-site compatibility, no longer used here.
+    for (final id in ['level_5', 'level_10', 'level_25', 'level_50', 'level_99']) {
+      final r = await _verifyAndUnlock(id);
       if (r != null) results.add(r);
     }
     return results;
@@ -351,13 +353,11 @@ class AchievementService {
 
   Future<List<AchievementUnlockResult>> checkCoinAchievements() async {
     final results = <AchievementUnlockResult>[];
-    final lifetime = await _getLifetimeCoins();
-    for (final entry in {
-      'coin_collector': 500,
-      'rich_in_spirit': 2000,
-      'loaded':         10000,
-    }.entries) {
-      final r = await _upsertProgress(entry.key, lifetime);
+    // Server-verified — sums all positive coin_transactions directly
+    // (also fixes SB-7's 'earn'-only filter bug, which previously
+    // missed daily_checkin/partner_bonus/achievement-type earnings).
+    for (final id in ['coin_collector', 'rich_in_spirit', 'loaded']) {
+      final r = await _verifyAndUnlock(id);
       if (r != null) results.add(r);
     }
     return results;
@@ -365,13 +365,9 @@ class AchievementService {
 
   Future<List<AchievementUnlockResult>> checkPrestigeAchievements() async {
     final results = <AchievementUnlockResult>[];
-    final count = await _getCosmeticCount();
-    for (final entry in {
-      'collector':     5,
-      'hoarder':       15,
-      'full_wardrobe': 30,
-    }.entries) {
-      final r = await _upsertProgress(entry.key, count);
+    // Server-verified — counts user_inventory directly.
+    for (final id in ['collector', 'hoarder', 'full_wardrobe']) {
+      final r = await _verifyAndUnlock(id);
       if (r != null) results.add(r);
     }
     return results;
@@ -382,27 +378,11 @@ class AchievementService {
     final uid = _userId;
     if (uid == null) return results;
 
-    try {
-      final profile = await _supabase
-          .from('user_profiles')
-          .select('created_at')
-          .eq('id', uid)
-          .single();
-
-      final created   = DateTime.parse(profile['created_at'] as String);
-      final daysSince = DateTime.now().difference(created).inDays;
-
-      for (final entry in {
-        'day_one':   7,
-        'veteran':   30,
-        'og_member': 90,
-      }.entries) {
-        final r = await _upsertProgress(
-            entry.key, daysSince >= entry.value ? entry.value : daysSince);
-        if (r != null) results.add(r);
-      }
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ checkLoyaltyAchievements: $e');
+    // Server-verified — re-derives account age from
+    // user_profiles.created_at directly.
+    for (final id in ['day_one', 'veteran', 'og_member']) {
+      final r = await _verifyAndUnlock(id);
+      if (r != null) results.add(r);
     }
     return results;
   }
@@ -480,7 +460,7 @@ class AchievementService {
       final uid = _userId;
       if (uid == null) return 0;
       final res = await _supabase
-          .from('friends')
+          .from('friendships')
           .select('id')
           .eq('status', 'accepted')
           .or('user_id.eq.$uid,friend_id.eq.$uid');
@@ -493,7 +473,7 @@ class AchievementService {
       final uid = _userId;
       if (uid == null) return 0;
       final res = await _supabase
-          .from('friends')
+          .from('friendships')
           .select('id')
           .eq('user_id', uid);
       return (res as List).length;
@@ -520,18 +500,24 @@ class AchievementService {
     try {
       final uid = _userId;
       if (uid == null) return 0;
-      final teams = await _supabase
-          .from('buddy_teams')
+      final teamRows = await _supabase
+          .from('team_members')
+          .select('team_id, buddy_teams!inner(is_coach_max_team)')
+          .eq('user_id', uid)
+          .eq('buddy_teams.is_coach_max_team', true);
+      if ((teamRows as List).isEmpty) return 0;
+      final teamIds = teamRows.map((t) => t['team_id'] as String).toList();
+      final streakRows = await _supabase
+          .from('team_streaks')
           .select('id')
-          .eq('is_coach_max_team', true)
-          .or('user1_id.eq.$uid,user2_id.eq.$uid');
-      if ((teams as List).isEmpty) return 0;
-      final teamIds = teams.map((t) => t['id'] as String).toList();
+          .inFilter('team_id', teamIds);
+      final streakIds = (streakRows as List).map((s) => s['id'] as String).toList();
+      if (streakIds.isEmpty) return 0;
       final res = await _supabase
           .from('daily_team_checkins')
           .select('id')
           .eq('user_id', uid)
-          .inFilter('team_streak_id', teamIds);
+          .inFilter('team_streak_id', streakIds);
       return (res as List).length;
     } catch (_) { return 0; }
   }

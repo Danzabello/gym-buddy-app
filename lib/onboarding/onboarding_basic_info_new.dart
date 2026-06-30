@@ -809,7 +809,12 @@ Future<void> _finish() async {
           password: widget.password,
         );
         if (signInError != null) {
-          throw Exception('Account already exists. Please sign in.');
+          // S4 audit fix: was 'Account already exists. Please sign in.',
+          // which directly confirms the email's existence to whoever is
+          // typing (the classic email-enumeration signal). This message
+          // is now identical to other signup failures below, regardless
+          // of the real reason -- it doesn't confirm or deny anything.
+          throw Exception('We could not complete your signup. Please check your details and try again, or sign in if you already have an account.');
         }
         // Check if this is an orphaned account (signed in but never finished onboarding)
         final existingUser = Supabase.instance.client.auth.currentUser;
@@ -835,7 +840,10 @@ Future<void> _finish() async {
           }
         }
       } else {
-        throw Exception(signUpError);
+        // S4 audit fix: was throwing the raw Supabase error message
+        // directly. Generic message for consistency -- matches the
+        // duplicate-email branch above, doesn't leak internals.
+        throw Exception('Something went wrong creating your account. Please try again.');
       }
     }
 

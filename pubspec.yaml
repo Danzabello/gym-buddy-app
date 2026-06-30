@@ -75,6 +75,10 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # ⚠️ .env ships inside the compiled APK/AAB as a readable asset.
+  # ONLY ever put public-safe values here (Supabase URL, anon key).
+  # NEVER add a service-role key, API secret, or any server credential
+  # to this file — it would be extractable from the installed app.
   assets:
     - .env
 

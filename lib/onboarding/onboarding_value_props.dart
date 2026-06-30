@@ -166,10 +166,16 @@ class _Slide1State extends State<_Slide1> {
     try {
       final clean =
           query.startsWith('@') ? query.substring(1) : query;
+      // Escape % and _ so they're treated as literal characters, not
+      // SQL LIKE wildcards (S10 audit fix).
+      final escapedClean = clean
+          .replaceAll('\\', '\\\\')
+          .replaceAll('%', '\\%')
+          .replaceAll('_', '\\_');
       final res = await Supabase.instance.client
           .from('user_profiles')
           .select('id, username, display_name, avatar_id')
-          .ilike('username', '%$clean%')
+          .ilike('username', '%$escapedClean%')
           .not('username', 'is', null)
           .limit(10);
       if (mounted) {

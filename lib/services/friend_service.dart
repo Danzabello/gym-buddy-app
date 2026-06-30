@@ -22,11 +22,19 @@ class FriendService {
       // Remove @ symbol if user typed it
       final cleanQuery = query.startsWith('@') ? query.substring(1) : query;
 
+      // Escape % and _ so they're treated as literal characters, not
+      // SQL LIKE wildcards (S10 audit fix — prevents broad enumeration
+      // via wildcard-typed search queries).
+      final escapedQuery = cleanQuery
+          .replaceAll('\\', '\\\\')
+          .replaceAll('%', '\\%')
+          .replaceAll('_', '\\_');
+
       // Search by USERNAME (unique identifier for finding friends)
       final response = await _supabase
           .from('user_profiles')
           .select('id, username, display_name, fitness_level, avatar_id') // 🔒 removed age
-          .ilike('username', '%$cleanQuery%')
+          .ilike('username', '%$escapedQuery%')
           .neq('id', currentUserId)
           .not('username', 'is', null)
           .limit(20);

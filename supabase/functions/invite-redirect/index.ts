@@ -65,6 +65,24 @@ serve(async (req) => {
   })
 })
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function escapeJsString(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
+    .replace(/</g, '\\u003C')
+    .replace(/\r?\n/g, '\\n')
+}
+
 function renderPage(inviterName: string | null, code: string | null, errorMsg: string | null): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -132,7 +150,7 @@ function renderPage(inviterName: string | null, code: string | null, errorMsg: s
     .error { color: #ff6b35; font-size: 15px; }
   </style>
   ${code ? `<script>
-    try { localStorage.setItem('gym_buddy_invite_code', '${code}'); } catch(e) {}
+    try { localStorage.setItem('gym_buddy_invite_code', '${escapeJsString(code)}'); } catch(e) {}
   </script>` : ''}
 </head>
 <body>
@@ -144,9 +162,9 @@ function renderPage(inviterName: string | null, code: string | null, errorMsg: s
       <p>Ask your buddy to send you a fresh invite link.</p>
     ` : `
       <span class="emoji">&#x1F4AA;</span>
-      <h1><span>${inviterName}</span> wants to be your Gym Buddy!</h1>
+      <h1><span>${escapeHtml(inviterName)}</span> wants to be your Gym Buddy!</h1>
       <p>Stay accountable together. You both check in daily &mdash; miss a day and the streak dies. No solo streaks. That's the point.</p>
-      ${code ? `<div class="code-pill">INVITE: ${code}</div>` : ''}
+      ${code ? `<div class="code-pill">INVITE: ${escapeHtml(code)}</div>` : ''}
       <a class="btn" href="https://play.google.com/store/apps/details?id=com.gymbuddy.app">
         Download Gym Buddy &#x1F3CB;&#xFE0F;
       </a>
