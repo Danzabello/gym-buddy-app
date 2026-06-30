@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:gym_buddy_app/login_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -35,8 +36,6 @@ import 'services/level_service.dart';
 import 'pages/achievements_page.dart' as achievements_page;
 import 'widgets/achievement_toast.dart';
 import 'services/achievement_service.dart';
-import 'package:share_plus/share_plus.dart';
-import 'services/invite_service.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
@@ -253,12 +252,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   List<TeamStreak> _customSelection = [];
   StreakSortMode _streakSortMode = StreakSortMode.highestCurrent;
 
-  bool _showInviteNudge = false;
-  static const _inviteNudgeKey = 'invite_nudge_dismissed';
 
   late List<int> _trayOrder;
   int _trayIndex = 0;
   late PageController _trayController;
+  Timer? _countdownTimer;
 
   final PresenceService _presenceService = PresenceService();
   Map<String, Map<String, dynamic>> _presenceState = {};
@@ -299,9 +297,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       curve: Curves.easeOutBack,
     );
     
-    _initializeHomePage(); 
+    _initializeHomePage();
     _updateCountdown();
-    Future.delayed(const Duration(minutes: 1), _updateCountdown);
+    _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _updateCountdown());
     _confettiController = ConfettiController(duration: const Duration(seconds: 3));
     _confettiControllerRight = ConfettiController(duration: const Duration(seconds: 3));
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -340,6 +338,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _carouselEntranceController.dispose();
     _appLifecycleListener?.dispose();
     _trayController.dispose();
+    _countdownTimer?.cancel();
     _presenceService.leave();
     super.dispose();
   }
@@ -708,14 +707,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: () {
-        // Navigate to Buddies tab
+        // Navigate to Buddies tab. Was only mutating _selectedIndex
+        // directly, which re-highlights the bottom nav bar but never
+        // moves the PageView -- _onTabChanged() is the method that
+        // actually does both (confirmed via _GymBuddyNavBar's own
+        // onTabSelected wiring).
         HapticFeedback.selectionClick();
         final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-        if (homeState != null) {
-          homeState.setState(() {
-            homeState._selectedIndex = 1; // Switch to Buddies tab
-          });
-        }
+        homeState?._onTabChanged(1); // Switch to Buddies tab
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
@@ -1791,115 +1790,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
   }
 
-  Future<void> _checkInviteNudge() async {
-    final prefs = await SharedPreferences.getInstance();
-    //final dismissed = prefs.getBool(_inviteNudgeKey) ?? false;
-    //if (dismissed) return;
-
-    // Only show if user has zero real friends (no non-CoachMax streaks)
-    final hasRealBuddy = _allStreaks.any((s) => !s.isCoachMaxTeam);
-    if (!hasRealBuddy && mounted) {
-      setState(() => _showInviteNudge = true);
-    }
-  }
-
-  Future<void> _dismissInviteNudge() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_inviteNudgeKey, true);
-    setState(() => _showInviteNudge = false);
-  }
-
-  Widget _buildInviteButton() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.blue[700]!, Colors.purple[600]!],
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            const Text('👋', style: TextStyle(fontSize: 28)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Invite your first buddy!',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Streaks are better together. Send a link and get paired instantly.',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
-                      fontSize: 12,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  GestureDetector(
-                    onTap: () async {
-                      HapticFeedback.mediumImpact();
-                      _dismissInviteNudge();
-                      final link = await InviteService().createInviteLink();
-                      if (link == null || !mounted) return;
-                      await SharePlus.instance.share(
-                        ShareParams(
-                          text: '💪 Join me on Gym Buddy! We\'ll keep each other accountable and build streaks together.\n\n$link',
-                          subject: 'Join me on Gym Buddy!',
-                        ),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '🔗 Send Invite',
-                        style: TextStyle(
-                          color: Colors.blue[700],
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            GestureDetector(
-              onTap: _dismissInviteNudge,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: Icon(Icons.close, color: Colors.white.withOpacity(0.7), size: 20),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildStreakInfo(TeamStreak streak) {
     final appColors = AppColors.of(context);
     final checkedInCount = streak.todayCheckIns.length;
@@ -2038,8 +1928,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     setState(() {
       _timeUntilMidnight = '${hours}h ${minutes}m';
     });
-    
-    Future.delayed(const Duration(minutes: 1), _updateCountdown);
   }
 
   void _showCustomModeSelector() async {
@@ -2380,8 +2268,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       achievements:    achievements,
     );
 
-    // Check if we should show the one-time invite nudge
-    _checkInviteNudge();
   }
 
   List<TeamStreak> _sortStreaks(List<TeamStreak> streaks, StreakSortMode mode) {
@@ -2662,7 +2548,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                           ],
                         ),
                         const SizedBox(height: 8),
-                        if (_showInviteNudge) _buildInviteButton(),
                         // ── Streak card ──
                         Expanded(child: _buildStreakCarousel()),
                       ],
