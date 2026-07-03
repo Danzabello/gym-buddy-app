@@ -6,79 +6,139 @@ const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 const COACH_MAX_ID = '00000000-0000-0000-0000-000000000001'
 
-const DEFAULT_ACTIVE_START = 5
-const DEFAULT_ACTIVE_END = 15
+// Coach Max fires between 07:00 and 17:00 in EACH HUMAN MEMBER'S OWN
+// timezone (user_profiles.timezone — trigger-validated IANA name; fallback
+// Europe/Dublin, matching the DB-side safe_user_tz()). DST-correct via the
+// IANA tz database — never a hardcoded UTC offset.
+const DEFAULT_ACTIVE_START = 7
+const DEFAULT_ACTIVE_END = 17
+const FALLBACK_TZ = 'Europe/Dublin'
+
+function tzParts(d: Date, tz: string): Record<string, string> {
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+  return Object.fromEntries(fmt.formatToParts(d).map((x) => [x.type, x.value]))
+}
+
+// Wall-clock "HH:MM:SS" in the given zone.
+function localTimeOfDay(d: Date, tz: string): string {
+  const p = tzParts(d, tz)
+  const hh = p.hour === '24' ? '00' : p.hour // en-GB midnight edge
+  return `${hh}:${p.minute}:${p.second}`
+}
+
+// Calendar date "YYYY-MM-DD" in the given zone — matches the per-user
+// check_in_date labels (safe_user_tz frame) used by the streak RPCs.
+function localDateStr(d: Date, tz: string): string {
+  const p = tzParts(d, tz)
+  return `${p.year}-${p.month}-${p.day}`
+}
 
 serve(async () => {
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
     const now = new Date()
+    // UTC date is used ONLY by PART 3 (streak danger, deliberately UTC) and
+    // as a lower bound for range queries. scheduled_date / check_in_date are
+    // per-user local dates (the human member's own tz), matching the
+    // safe_user_tz labels the streak RPCs use.
     const todayStr = now.toISOString().split('T')[0]
-    const currentTime = now.toTimeString().split(' ')[0]
+    const recentDateStr = new Date(now.getTime() - 2 * 86400000).toISOString().split('T')[0]
+    // PART 3 (streak danger) intentionally still keys off UTC — see below.
     const currentHour = now.getUTCHours()
 
-    console.log(`⏰ Coach Max cron running at ${todayStr} ${currentTime}`)
+    console.log(`⏰ Coach Max cron: UTC ${todayStr} ${now.toISOString().split('T')[1].slice(0, 8)}`)
 
-    // ── PART 1: Create today's schedules for users who don't have one yet ──
-    const { data: allUsers } = await supabase
-      .from('coach_max_schedule')
-      .select('user_id')
-      .eq('scheduled_date', todayStr)
-
-    const scheduledUserIds = new Set((allUsers ?? []).map((r: any) => r.user_id))
-
+    // ── PART 1: Create today's schedule per member, in THEIR local today ──
     const { data: coachMaxTeamMembers } = await supabase
       .from('team_members')
       .select('user_id, buddy_teams!inner(is_coach_max_team)')
       .eq('buddy_teams.is_coach_max_team', true)
       .neq('user_id', COACH_MAX_ID)
 
-    if (coachMaxTeamMembers) {
-      for (const member of coachMaxTeamMembers) {
-        const userId = member.user_id
-        if (scheduledUserIds.has(userId)) continue
+    const memberIds = [...new Set((coachMaxTeamMembers ?? []).map((m: any) => m.user_id))]
 
-        const { data: notifSettings } = await supabase
-          .from('notification_settings')
-          .select('quiet_hours_enabled, quiet_hours_start, quiet_hours_end')
-          .eq('user_id', userId)
-          .maybeSingle()
+    // One tz lookup for everyone (column is trigger-validated; fallback
+    // mirrors safe_user_tz).
+    const { data: tzRows } = await supabase
+      .from('user_profiles')
+      .select('id, timezone')
+      .in('id', memberIds)
+    const tzByUser = new Map<string, string>(
+      (tzRows ?? []).map((r: any) => [r.id, r.timezone || FALLBACK_TZ]),
+    )
 
-        const scheduledTime = _generateActiveWindowTime(notifSettings)
+    // Existing schedules near today — a date range covers every tz's "today"
+    // (the old single-date .eq can't, now that dates are per-user).
+    const { data: allSchedules } = await supabase
+      .from('coach_max_schedule')
+      .select('user_id, scheduled_date')
+      .gte('scheduled_date', recentDateStr)
+    const scheduledKeys = new Set(
+      (allSchedules ?? []).map((r: any) => `${r.user_id}:${r.scheduled_date}`),
+    )
 
-        await supabase.from('coach_max_schedule').insert({
-          user_id: userId,
-          scheduled_date: todayStr,
-          scheduled_time: scheduledTime,
-          has_checked_in: false,
-        })
+    for (const userId of memberIds) {
+      const tz = tzByUser.get(userId) ?? FALLBACK_TZ
+      const userToday = localDateStr(now, tz)
+      if (scheduledKeys.has(`${userId}:${userToday}`)) continue
 
-        console.log(`📅 Scheduled Coach Max for user ${userId} at ${scheduledTime}`)
-      }
+      const { data: notifSettings } = await supabase
+        .from('notification_settings')
+        .select('quiet_hours_enabled, quiet_hours_start, quiet_hours_end')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      const scheduledTime = _generateActiveWindowTime(notifSettings)
+
+      await supabase.from('coach_max_schedule').insert({
+        user_id: userId,
+        scheduled_date: userToday,
+        scheduled_time: scheduledTime,
+        has_checked_in: false,
+      })
+
+      console.log(`📅 Scheduled Coach Max for user ${userId} at ${scheduledTime} (${tz} ${userToday})`)
     }
 
     // ── PART 2: Process pending check-ins where time has passed ──
+    // Fire when the schedule's date is the member's CURRENT local date and
+    // the wall-clock time has passed in the member's own zone. (Stale
+    // schedules from previous local days are ignored, as before.)
     const { data: pendingSchedules, error: fetchError } = await supabase
       .from('coach_max_schedule')
-      .select('id, user_id, scheduled_time')
-      .eq('scheduled_date', todayStr)
+      .select('id, user_id, scheduled_date, scheduled_time')
       .eq('has_checked_in', false)
-      .lte('scheduled_time', currentTime)
+      .gte('scheduled_date', recentDateStr)
 
     if (fetchError) {
       console.error('❌ Error fetching schedules:', fetchError)
       return new Response(JSON.stringify({ error: fetchError.message }), { status: 500 })
     }
 
+    const dueSchedules = (pendingSchedules ?? []).filter((s: any) => {
+      const tz = tzByUser.get(s.user_id) ?? FALLBACK_TZ
+      return s.scheduled_date === localDateStr(now, tz) &&
+             s.scheduled_time <= localTimeOfDay(now, tz)
+    })
+
     let processed = 0
     let failed = 0
 
-    if (pendingSchedules && pendingSchedules.length > 0) {
-      console.log(`📋 Found ${pendingSchedules.length} pending check-ins`)
+    if (dueSchedules.length > 0) {
+      console.log(`📋 Found ${dueSchedules.length} due check-ins`)
 
-      for (const schedule of pendingSchedules) {
-        const { user_id, id: scheduleId } = schedule
+      for (const schedule of dueSchedules) {
+        const { user_id, id: scheduleId, scheduled_date: userToday } = schedule
 
         try {
           const { data: teamMember } = await supabase
@@ -110,12 +170,15 @@ serve(async () => {
           const streakId = streak.id
           const currentStreak = streak.current_streak ?? 0
 
+          // Coach Max's row is dated in the HUMAN member's local today
+          // (userToday = the schedule's per-user date), so it lands on the
+          // same label as the human's own check-in.
           const { data: existingCheckIn } = await supabase
             .from('daily_team_checkins')
             .select('id')
             .eq('team_streak_id', streakId)
             .eq('user_id', COACH_MAX_ID)
-            .eq('check_in_date', todayStr)
+            .eq('check_in_date', userToday)
             .maybeSingle()
 
           if (existingCheckIn) {
@@ -130,7 +193,7 @@ serve(async () => {
           await supabase.from('daily_team_checkins').insert({
             team_streak_id: streakId,
             user_id: COACH_MAX_ID,
-            check_in_date: todayStr,
+            check_in_date: userToday,
             check_in_time: now.toISOString(),
           })
 
@@ -143,12 +206,12 @@ serve(async () => {
             .from('daily_team_checkins')
             .select('id')
             .eq('team_streak_id', streakId)
-            .eq('check_in_date', todayStr)
+            .eq('check_in_date', userToday)
             .neq('user_id', COACH_MAX_ID)
             .maybeSingle()
 
           if (userCheckIn) {
-            await _updateStreak(supabase, streakId, todayStr)
+            await _updateStreak(supabase, streakId, userToday)
           }
 
           const message = _getMotivationalMessage(currentStreak)
@@ -164,7 +227,7 @@ serve(async () => {
               title: '🤖 Coach Max',
               body: message,
               type: 'coach_max_motivational',
-              batch_key: `coach_max_daily_${todayStr}_${user_id}`,
+              batch_key: `coach_max_daily_${userToday}_${user_id}`,
             }),
           })
 
@@ -177,10 +240,13 @@ serve(async () => {
         }
       }
     } else {
-      console.log('✅ No pending Coach Max check-ins right now')
+      console.log('✅ No due Coach Max check-ins right now')
     }
 
     // ── PART 3: Streak danger notifications at 18:00 UTC ──
+    // NOTE: separate from Coach Max's per-user firing window and deliberately
+    // still UTC-framed (todayStr) — localizing danger alerts per member is a
+    // future follow-up, out of this step's scope.
     if (currentHour === 18) {
       console.log('🚨 Running streak danger check...')
 
@@ -266,7 +332,7 @@ serve(async () => {
     }
 
     return new Response(
-      JSON.stringify({ processed, failed, total: pendingSchedules?.length ?? 0 }),
+      JSON.stringify({ processed, failed, total: dueSchedules.length }),
       { status: 200 }
     )
 
@@ -277,6 +343,9 @@ serve(async () => {
 })
 
 // ── Generate random time within user's active (non-quiet) hours ──────────
+// Hours are the USER'S OWN local wall-clock (default 07:00–17:00); the
+// scheduled_time is later compared against localTimeOfDay(now, userTz), so
+// generation and firing share the same per-user frame.
 function _generateActiveWindowTime(notifSettings: any): string {
   let activeStart = DEFAULT_ACTIVE_START
   let activeEnd = DEFAULT_ACTIVE_END
