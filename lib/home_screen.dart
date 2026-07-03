@@ -217,6 +217,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   
   TeamStreak? _highestStreak;
   Set<String> _myCheckInDates = {}; // real check-in dates, fixes heatmap fabrication bug
+  Set<String> _myBreakDates = {};   // own uncancelled break_day_usage dates (local-labelled)
+  bool _isOnBreakToday = false;     // signed-in user on break for their local today
+  Map<String, bool> _buddyOnBreakToday = {}; // buddy id -> on break in THEIR local today
   List<TeamStreak> _allStreaks = [];
   List<Map<String, dynamic>> _todaysWorkouts = [];
   bool _hasCheckedInToday = false;
@@ -555,26 +558,49 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             // ✅ NAME & STREAK COUNT
             Column(
               children: [
-                Text(
-                  _getDisplayName(displayItems[_currentCarouselIndex]),
-                  style: TextStyle(
-                    fontSize: 16,  // ✅ Was 18
-                    fontWeight: FontWeight.bold,
-                    color: displayItems[_currentCarouselIndex] != null 
-                        ? Theme.of(context).colorScheme.onSurface
-                        : appColors.subtleText,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _getDisplayName(displayItems[_currentCarouselIndex]),
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 16,  // ✅ Was 18
+                          fontWeight: FontWeight.bold,
+                          color: displayItems[_currentCarouselIndex] != null
+                              ? Theme.of(context).colorScheme.onSurface
+                              : appColors.subtleText,
+                        ),
+                      ),
+                    ),
+                    if (_isBuddyOnBreak(displayItems[_currentCarouselIndex])) ...[
+                      const SizedBox(width: 6),
+                      _buildOnBreakBadge(),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 4),  // ✅ Was 8
                 // Just show streak count - removed progress bar
                 if (displayItems[_currentCarouselIndex] != null)
-                  Text(
-                    '${(displayItems[_currentCarouselIndex] as TeamStreak).currentStreak} Day Streak',
-                    style: TextStyle(
-                      fontSize: 24,  // ✅ Was 28
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '${(displayItems[_currentCarouselIndex] as TeamStreak).currentStreak} Day Streak',
+                        style: TextStyle(
+                          fontSize: 24,  // ✅ Was 28
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                      if (_isOnBreakToday) ...[
+                        const SizedBox(width: 8),
+                        _buildOnBreakBadge(),
+                      ],
+                    ],
                   )
                 else
                   Text(
@@ -585,6 +611,27 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       color: appColors.subtleText,
                     ),
                   ),
+                if (_isOnBreakToday) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.shield,
+                        size: 13,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Your streak is protected today.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: appColors.subtleText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
             
@@ -674,6 +721,46 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         ),
       ),
     );
+  }
+
+  // Shield + accent pill, same grammar as the app's other status chips
+  // (tinted bg, radius 12, icon + label — never color alone).
+  Widget _buildOnBreakBadge() {
+    final accent = Theme.of(context).colorScheme.primary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: accent.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.shield, size: 12, color: accent),
+          const SizedBox(width: 4),
+          Text(
+            'On break',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: accent,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Whether the focused carousel item's buddy is on break in THEIR local
+  // today (server-resolved). Coach Max never takes breaks.
+  bool _isBuddyOnBreak(dynamic item) {
+    if (item is! TeamStreak || item.isCoachMaxTeam) return false;
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final buddy = item.members.firstWhere(
+      (m) => m.userId != currentUserId,
+      orElse: () => item.members.first,
+    );
+    return _buddyOnBreakToday[buddy.userId] == true;
   }
 
   // ✅ HELPER METHOD: Get display name
@@ -1340,8 +1427,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               // _hasCheckedInToday special-case caused the boundary-hour
               // double-🔥 (see _isDateCheckedIn).
               final checked = !date.isAfter(today) && _isDateCheckedIn(date);
+              // Checked-in wins over break: a real workout is the stronger signal.
+              final onBreak = !checked && !date.isAfter(today) && _isDateOnBreak(date);
               final isToday = _isSameDay(date, today);
               final isFuture = date.isAfter(today);
+              final accent = Theme.of(context).colorScheme.primary;
 
               return Column(
                 children: [
@@ -1352,17 +1442,23 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       shape: BoxShape.circle,
                       color: checked
                           ? Colors.orange[600]
-                          : isToday
-                              ? Colors.orange.withOpacity(0.15)
-                              : appColors.divider,
+                          : onBreak
+                              ? accent.withOpacity(0.15)
+                              : isToday
+                                  ? Colors.orange.withOpacity(0.15)
+                                  : appColors.divider,
                       border: isToday
                           ? Border.all(color: Colors.orange, width: 2)
-                          : null,
+                          : onBreak
+                              ? Border.all(color: accent.withOpacity(0.5))
+                              : null,
                     ),
                     child: Center(
                       child: checked
                           ? const Text('🔥', style: TextStyle(fontSize: 14))
-                          : Text(
+                          : onBreak
+                              ? Icon(Icons.shield, size: 13, color: accent)
+                              : Text(
                               '${date.day}',
                               style: TextStyle(
                                 fontSize: 10,
@@ -1622,12 +1718,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     // break_day_service and safe_user_tz() server-side.
     final today = localTodayString();
 
-    // Check if already took break today
+    // Check if already took break today (uncancelled — a cancelled break
+    // can be legitimately re-declared through the capped RPC)
     final existingBreak = await Supabase.instance.client
         .from('break_day_usage')  // ✅ FIXED: Changed from 'break_days'
         .select()
         .eq('user_id', currentUserId)
         .eq('break_date', today)
+        .isFilter('cancelled_at', null)
         .maybeSingle();
 
     if (existingBreak != null) {
@@ -1766,29 +1864,36 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
 
     if (confirmed == true) {
-      // Take the break day
-      await Supabase.instance.client.from('break_day_usage').insert({  // ✅ FIXED: Changed from 'break_days'
-        'user_id': currentUserId,
-        'break_date': today,
-      });
-      
+      // Server-authoritative: the declare_break_day RPC enforces the weekly
+      // cap and the today-only rule (direct inserts are closed by RLS).
+      final declared = await _breakDayService.declareBreakDay();
+
       if (!mounted) return;
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.bedtime, color: Colors.white),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text('Break day taken! Your streak is safe 💤'),
-              ),
-            ],
+
+      if (declared) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.bedtime, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text('Break day taken! Your streak is safe 💤'),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.blue[700],
           ),
-          backgroundColor: Colors.blue[700],
-        ),
-      );
-      
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Couldn\'t take a break day — you may have used this week\'s allowance.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+
       _loadStreakData();
     }
   }
@@ -2194,6 +2299,15 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               .select('check_in_date')
               .eq('user_id', currentUserId)
               .gte('check_in_date', sevenDaysAgoStr),
+      // [7] own uncancelled break days — heatmap third state + today badge
+      currentUserId == null
+          ? Future.value(<Map<String, dynamic>>[])
+          : Supabase.instance.client
+              .from('break_day_usage')
+              .select('break_date')
+              .eq('user_id', currentUserId)
+              .gte('break_date', sevenDaysAgoStr)
+              .isFilter('cancelled_at', null),
     ]);
   
     final completionList   = results[0] as List<bool>;
@@ -2206,6 +2320,30 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final myCheckInDates   = checkInDateRows
         .map((r) => r['check_in_date'] as String)
         .toSet();
+    final myBreakDates     = (results[7] as List<Map<String, dynamic>>)
+        .map((r) => r['break_date'] as String)
+        .toSet();
+
+    // Buddy break badges: a buddy's break is dated in THEIR own local today
+    // (per-user tz), so resolution happens server-side via is_on_break_today
+    // (safe_user_tz) — never with the viewer's local date. Failures degrade
+    // to no badge.
+    final buddyIds = uniqueStreaks
+        .where((s) => !s.isCoachMaxTeam)
+        .expand((s) => s.members)
+        .map((m) => m.userId)
+        .where((id) => id != currentUserId)
+        .toSet();
+    final buddyOnBreak = <String, bool>{};
+    await Future.wait(buddyIds.map((id) async {
+      try {
+        final res = await Supabase.instance.client
+            .rpc('is_on_break_today', params: {'p_user_id': id});
+        buddyOnBreak[id] = res == true;
+      } catch (_) {
+        buddyOnBreak[id] = false;
+      }
+    }));
   
     final completionStatus = <String, bool>{};
     for (int i = 0; i < uniqueStreaks.length; i++) {
@@ -2239,6 +2377,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _streakCompletionStatus = completionStatus;
       _highestStreak         = highestStreak;
       _myCheckInDates        = myCheckInDates;
+      _myBreakDates          = myBreakDates;
+      _isOnBreakToday        = myBreakDates.contains(localTodayString());
+      _buddyOnBreakToday     = buddyOnBreak;
       _hasCheckedInToday     = hasCheckedIn;
       _todaysWorkouts        = todaysWorkouts;
       _pendingRequests       = pendingFriends.length + pendingWorkouts;
@@ -3792,8 +3933,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: last7Days.map((date) {
             final isCheckedIn = _isDateCheckedIn(date);
+            // Checked-in wins over break: a real workout is the stronger signal.
+            final onBreak = !isCheckedIn && _isDateOnBreak(date);
             final isToday = _isSameDay(date, today);
-            
+            final accent = Theme.of(context).colorScheme.primary;
+
             return Column(
               children: [
                 Container(
@@ -3801,12 +3945,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   height: 32,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: isCheckedIn 
-                        ? Colors.green 
-                        : (isToday ? Colors.orange.withOpacity(0.2) : appColors.divider),
-                    border: isToday 
+                    color: isCheckedIn
+                        ? Colors.green
+                        : onBreak
+                            ? accent.withOpacity(0.15)
+                            : (isToday ? Colors.orange.withOpacity(0.2) : appColors.divider),
+                    border: isToday
                         ? Border.all(color: Colors.orange, width: 2)
-                        : null,
+                        : onBreak
+                            ? Border.all(color: accent.withOpacity(0.5))
+                            : null,
                   ),
                   child: Center(
                     child: isCheckedIn
@@ -3815,7 +3963,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                             color: Colors.white,
                             size: 18,
                           )
-                        : Text(
+                        : onBreak
+                            ? Icon(Icons.shield, size: 15, color: accent)
+                            : Text(
                             '${date.day}',
                             style: TextStyle(
                               fontSize: 12,
@@ -3852,6 +4002,15 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         .toIso8601String()
         .split('T')[0];
     return _myCheckInDates.contains(dateStr);
+  }
+
+  // Break-day lookup mirrors _isDateCheckedIn: break_date labels are the
+  // user's own local dates, so a local date-string compare is exact.
+  bool _isDateOnBreak(DateTime date) {
+    final dateStr = DateTime(date.year, date.month, date.day)
+        .toIso8601String()
+        .split('T')[0];
+    return _myBreakDates.contains(dateStr);
   }
 
   bool _isSameDay(DateTime date1, DateTime date2) {

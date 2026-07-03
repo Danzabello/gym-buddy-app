@@ -84,43 +84,24 @@ class BreakDayService {
     return remaining;
   }
 
-  /// Declare a break day for today
+  /// Declare a break day for today — server-authoritative.
+  /// The weekly cap, the "today" date (user's own tz frame), and the
+  /// reactivation rules are all enforced inside the declare_break_day RPC;
+  /// direct inserts into break_day_usage are closed by RLS.
   Future<bool> declareBreakDay() async {
-    final userId = _supabase.auth.currentUser!.id;
-    // The user's own local date key — matches safe_user_tz() server-side.
-    final todayStr = localTodayString();
-
-    // Check if user has break days remaining
-    final remaining = await getRemainingBreakDays();
-    if (remaining <= 0) {
-      debugLog('❌ No break days remaining for this week');
+    try {
+      final result = await _supabase.rpc('declare_break_day');
+      final success = result is Map && result['success'] == true;
+      if (success) {
+        debugLog('✅ Break day declared (${result['used']}/${result['max']} this week)');
+      } else {
+        debugLog('❌ Break day rejected: ${result is Map ? result['reason'] : result}');
+      }
+      return success;
+    } catch (e) {
+      debugLog('❌ Error declaring break day: $e');
       return false;
     }
-
-    // Check if already declared for today
-    final existing = await _supabase
-        .from('break_day_usage')
-        .select()
-        .eq('user_id', userId)
-        .eq('break_date', todayStr)
-        .maybeSingle();
-
-    if (existing != null && existing['cancelled_at'] == null) {
-      debugLog('⚠️ Break day already declared for today');
-      return false;
-    }
-
-    debugLog('🛌 Declaring break day for $todayStr');
-
-    await _supabase.from('break_day_usage').upsert({
-      'user_id': userId,
-      'break_date': todayStr,
-      'declared_at': DateTime.now().toIso8601String(),
-      'cancelled_at': null,
-    });
-
-    debugLog('✅ Break day declared successfully');
-    return true;
   }
 
   /// Cancel a break day (user decided to work out after all)
