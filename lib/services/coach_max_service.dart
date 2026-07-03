@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'package:gym_buddy_app/utils/app_dates.dart';
 
 class CoachMaxService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -131,11 +132,14 @@ class CoachMaxService {
   // COACH MAX DAILY CHECK-IN SCHEDULING
   // ============================================
 
-  /// Schedule Coach Max's check-in for today (random time between 3am-9pm)
+  /// Schedule Coach Max's check-in for today (random time between 7am–5pm in
+  /// THIS USER's local time — the device's zone IS the user's zone). This is
+  /// a best-effort early-fire; the authoritative per-user scheduler is the
+  /// coach-max-cron edge function.
   Future<void> scheduleCoachMaxCheckIn(String userId) async {
     try {
-      final today = DateTime.now();
-      final todayStr = today.toIso8601String().split('T')[0];
+      // The user's own local date key — matches the cron's per-user scheduled_date.
+      final todayStr = localTodayString();
 
       // Check if already scheduled for today
       final existing = await _supabase
@@ -155,7 +159,7 @@ class CoachMaxService {
         return;
       }
 
-      // Generate random check-in time between 3am (03:00) and 9pm (21:00)
+      // Generate random check-in time in the 7am–5pm local window
       final randomTime = _generateRandomCheckInTime();
 
       // Schedule the check-in
@@ -170,16 +174,20 @@ class CoachMaxService {
         debugLog('✅ Scheduled Coach Max check-in for $randomTime');
       }
 
-      // If the scheduled time has already passed today, check in immediately
+      // If the scheduled wall-clock time has already passed today, check in
+      // immediately. scheduled_time is the user's local wall-clock, and
+      // DateTime.now() is the same device-local frame, so the comparison is
+      // DST-correct. The cron is the authority when the app isn't open.
+      final nowLocal = DateTime.now();
       final scheduledDateTime = DateTime(
-        today.year,
-        today.month,
-        today.day,
+        nowLocal.year,
+        nowLocal.month,
+        nowLocal.day,
         int.parse(randomTime.split(':')[0]),
         int.parse(randomTime.split(':')[1]),
       );
 
-      if (DateTime.now().isAfter(scheduledDateTime)) {
+      if (nowLocal.isAfter(scheduledDateTime)) {
         await checkInCoachMax(userId);
       }
     } catch (e) {
@@ -187,13 +195,15 @@ class CoachMaxService {
     }
   }
 
-  /// Generate random check-in time between 3am and 9pm
+  /// Generate a random check-in time between 07:00 and 17:00 in the user's
+  /// own local time. Matches the coach-max-cron per-user window; the stored
+  /// value is interpreted as the user's wall-clock by client and cron alike.
   String _generateRandomCheckInTime() {
     final random = Random();
-    // 7am–1pm UTC (07:00–13:00)
-    // Irish time: 8am–2pm (GMT+1 winter) / 9am–3pm (IST/GMT+2 summer)
-    final hour = 7 + random.nextInt(6); // 7, 8, 9, 10, 11, 12
-    final minute = random.nextInt(60);
+    // 07:00–16:59 → any minute in the 10-hour [07:00, 17:00) local window.
+    final minutesIntoWindow = random.nextInt(10 * 60);
+    final hour = 7 + (minutesIntoWindow ~/ 60);
+    final minute = minutesIntoWindow % 60;
     return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}:00';
   }
 
@@ -254,7 +264,8 @@ class CoachMaxService {
       }
 
       final streakId = streak['id'] as String;
-      final today = DateTime.now().toIso8601String().split('T')[0];
+      // The user's own local date key — matches safe_user_tz() server-side.
+      final today = localTodayString();
 
       // Check if Coach Max already checked in today
       final existingCheckIn = await _supabase

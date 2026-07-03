@@ -42,6 +42,7 @@ import 'theme/theme_provider.dart';
 import 'data/coach_tips.dart';
 import 'services/presence_service.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'package:gym_buddy_app/utils/app_dates.dart';
 
 
 
@@ -1335,9 +1336,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: week.map((date) {
-              final checked = _isSameDay(date, today) 
-                  ? _hasCheckedInToday 
-                  : (!date.isAfter(today) && _isDateCheckedIn(date));
+              // Straight row lookup for every column, today included — the
+              // _hasCheckedInToday special-case caused the boundary-hour
+              // double-🔥 (see _isDateCheckedIn).
+              final checked = !date.isAfter(today) && _isDateCheckedIn(date);
               final isToday = _isSameDay(date, today);
               final isFuture = date.isAfter(today);
 
@@ -1616,8 +1618,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
     if (currentUserId == null) return;
 
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
+    // The user's own local date key for the break_date write — matches
+    // break_day_service and safe_user_tz() server-side.
+    final today = localTodayString();
 
     // Check if already took break today
     final existingBreak = await Supabase.instance.client
@@ -1649,9 +1652,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
 
 
-    // Count breaks taken this week
-    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-    final startOfWeekStr = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day)
+    // Count breaks taken this week. Local week boundary (via getWeekStart),
+    // same frame as the now-local break_date keys.
+    final startOfWeekStr = _breakDayService
+        .getWeekStart(DateTime.now())
         .toIso8601String()
         .split('T')[0];
 
@@ -2031,10 +2035,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final realMembers = streak.members.where((m) => !m.isCoachMax).toList();
     final memberIds = realMembers.map((m) => m.userId).toList();
     
-    // Get today's date
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
-    
+    // The user's own local date key — matches the break_date rows and check_in_date.
+    final today = localTodayString();
+
     // Get break day status
     final breakDayStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, today);
 
@@ -2161,7 +2164,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         .toIso8601String()
         .split('T')[0];
   
-    final sevenDaysAgoStr = DateTime.now().toUtc()
+    // Local frame: check_in_date labels are the user's own local dates now,
+    // so the heatmap's 7-day lower bound must be local too (was .toUtc()).
+    final sevenDaysAgoStr = DateTime.now()
         .subtract(const Duration(days: 7))
         .toIso8601String()
         .split('T')[0];
@@ -3778,11 +3783,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
+  // Pure lookup against real server rows. No _hasCheckedInToday special-case:
+  // that cached bool is keyed to the server's notion of "today" and painting
+  // it onto whatever column the device thought was today double-marked the
+  // boundary hour (one 🔥 from the real row + one fabricated). check_in_date
+  // labels are the user's own local dates (per-user tz rework), so a local
+  // date-string compare is exact.
   bool _isDateCheckedIn(DateTime date) {
-    if (_isSameDay(date, DateTime.now())) {
-      return _hasCheckedInToday;
-    }
-
     final dateStr = DateTime(date.year, date.month, date.day)
         .toIso8601String()
         .split('T')[0];

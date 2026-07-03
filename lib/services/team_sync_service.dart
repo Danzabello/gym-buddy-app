@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'package:gym_buddy_app/utils/app_dates.dart';
 
 /// Service to sync check-ins across all teams
 /// This ensures that when a user checks in, ALL their teams get the check-in
@@ -18,11 +19,10 @@ class TeamSyncService {
       }
 
 
-      // Get today's date (local time)
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
-      
-      if (kDebugMode) debugLog('📅 SYNC: Checking for date: $today');
+      // The user's own local date key — matches safe_user_tz() server-side.
+      final today = localTodayString();
+
+      if (kDebugMode) debugLog('📅 SYNC: Checking for date: $today (user-local)');
 
       // Step 1: Check if user has checked in today (in ANY team)
       final userCheckIn = await _supabase

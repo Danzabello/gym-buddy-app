@@ -6,6 +6,7 @@ import 'level_service.dart';
 import 'dart:async' show unawaited;
 import 'achievement_service.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'package:gym_buddy_app/utils/app_dates.dart';
 
 
 
@@ -439,11 +440,10 @@ class TeamStreakService {
         await _breakDayService.cancelBreakDay();
       }
 
-      // ✅ FIX: Use UTC date consistently
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
-      
-      if (kDebugMode) debugLog('🔄 Check-in date: $today (UTC)');
+      // The user's own local date key — matches safe_user_tz() server-side.
+      final today = localTodayString();
+
+      if (kDebugMode) debugLog('🔄 Check-in date: $today (user-local)');
       
       // Get all user's teams
       final streaks = await getAllUserStreaks();
@@ -800,9 +800,8 @@ class TeamStreakService {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return false;
 
-      // ✅ FIX: Use UTC date
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
+      // The user's own local date key — matches safe_user_tz() server-side.
+      final today = localTodayString();
 
       final response = await _supabase
           .from('daily_team_checkins')

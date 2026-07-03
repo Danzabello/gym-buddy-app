@@ -1,13 +1,19 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'package:gym_buddy_app/utils/app_dates.dart';
 
 class BreakDayService {
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  /// Get the start of the current week (Monday)
+  /// Monday of the week containing [date], as the user's LOCAL calendar date.
+  ///
+  /// Local frame (per-user tz rework): break_date / check_in_date keys are
+  /// the user's own local dates, so the weekly break-cap window is the user's
+  /// local Monday–Sunday too — one frame end-to-end, no UTC holdout.
   DateTime getWeekStart(DateTime date) {
-    final daysFromMonday = (date.weekday - DateTime.monday) % 7;
-    return DateTime(date.year, date.month, date.day).subtract(Duration(days: daysFromMonday));
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    final daysFromMonday = (dateOnly.weekday - DateTime.monday) % 7;
+    return dateOnly.subtract(Duration(days: daysFromMonday));
   }
 
   /// Set the weekly break day plan (called on Monday or during onboarding)
@@ -81,8 +87,8 @@ class BreakDayService {
   /// Declare a break day for today
   Future<bool> declareBreakDay() async {
     final userId = _supabase.auth.currentUser!.id;
-    final today = DateTime.now();
-    final todayStr = DateTime(today.year, today.month, today.day).toIso8601String().split('T')[0];
+    // The user's own local date key — matches safe_user_tz() server-side.
+    final todayStr = localTodayString();
 
     // Check if user has break days remaining
     final remaining = await getRemainingBreakDays();
@@ -120,8 +126,8 @@ class BreakDayService {
   /// Cancel a break day (user decided to work out after all)
   Future<bool> cancelBreakDay() async {
     final userId = _supabase.auth.currentUser!.id;
-    final today = DateTime.now();
-    final todayStr = DateTime(today.year, today.month, today.day).toIso8601String().split('T')[0];
+    // The user's own local date key — must match the break_date written by declareBreakDay.
+    final todayStr = localTodayString();
 
     debugLog('🔄 Cancelling break day for $todayStr');
 
@@ -138,8 +144,8 @@ class BreakDayService {
 
   /// Check if user is on a break today
   Future<bool> isOnBreakToday(String userId) async {
-    final today = DateTime.now();
-    final todayStr = DateTime(today.year, today.month, today.day).toIso8601String().split('T')[0];
+    // The user's own local date key — matches safe_user_tz() server-side.
+    final todayStr = localTodayString();
 
     final breakDay = await _supabase
         .from('break_day_usage')
