@@ -2427,18 +2427,33 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       setState(() => _isCheckingIn = true);
       try {
       // ✅ NEW: Check if there's an active workout session first
-      final activeSession = await WorkoutCheckInSheet.getActiveSession();
-      
+      final existingSession = await WorkoutCheckInSheet.getActiveSession();
+
+      // A shared workout can be live without this device holding a session —
+      // setBuddyReady only creates one for whoever tapped Start Together.
+      // Adopt it so this button resumes the shared timer instead of falling
+      // through to a detached solo workout.
+      final activeSession =
+          existingSession ?? await _adoptLiveBuddyWorkoutSession();
+
       if (activeSession != null && activeSession['started_at'] != null) {
         // ✅ Active workout exists - go directly to timer with saved details
         if (!mounted) return;
-        
+
+        final linkedWorkoutId = activeSession['workout_id'] as String?;
+
         final completed = await WorkoutCheckInSheet.show(
           context,
           workoutType: activeSession['workout_type'] ?? 'Workout',
           workoutEmoji: activeSession['workout_emoji'] ?? '💪',
           plannedDuration: activeSession['planned_duration'] ?? 30,
           onCheckInComplete: () async {
+            // A session linked to a workouts row must complete that row too —
+            // otherwise it hangs in_progress until the 3-hour sweep, blocking
+            // both users and losing the partner-completion credit.
+            if (linkedWorkoutId != null) {
+              await _workoutService.completeWorkoutWithDuration(linkedWorkoutId);
+            }
             final result = await _teamStreakService.checkInAllTeams(
               workoutName: activeSession['workout_type'] ?? 'Workout',
               workoutEmoji: activeSession['workout_emoji'] ?? '💪',
@@ -2489,6 +2504,49 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         if (mounted) setState(() => _isCheckingIn = false);
       }
     }
+
+  /// A live buddy workout involving this user may have no local session
+  /// (setBuddyReady only creates one for the tapper). Create one anchored
+  /// to the workout's real start time so the dashboard resumes it.
+  Future<Map<String, dynamic>?> _adoptLiveBuddyWorkoutSession() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return null;
+    try {
+      final workout = await Supabase.instance.client
+          .from('workouts')
+          .select(
+              'id, user_id, workout_type, planned_duration_minutes, workout_started_at, creator_cancelled, buddy_cancelled')
+          .eq('status', 'in_progress')
+          .or('user_id.eq.$userId,buddy_id.eq.$userId')
+          .not('workout_started_at', 'is', null)
+          .order('workout_started_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+      if (workout == null) return null;
+
+      // A participant who cancelled their part must not be pulled back in.
+      final cancelledOwnPart = workout['user_id'] == userId
+          ? (workout['creator_cancelled'] ?? false)
+          : (workout['buddy_cancelled'] ?? false);
+      if (cancelledOwnPart == true) return null;
+
+      final session = {
+        'user_id': userId,
+        'started_at': workout['workout_started_at'],
+        'planned_duration': workout['planned_duration_minutes'] ?? 30,
+        'workout_type': workout['workout_type'] ?? 'Workout',
+        'workout_emoji': '💪',
+        'workout_id': workout['id'],
+      };
+      await Supabase.instance.client
+          .from('active_checkin_sessions')
+          .upsert(session, onConflict: 'user_id');
+      return session;
+    } catch (e) {
+      debugLog('⚠️ Could not adopt live buddy workout session: $e');
+      return null;
+    }
+  }
 
   Future<void> _checkForActiveWorkout() async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
@@ -5291,6 +5349,29 @@ class _SchedulePageState extends State<SchedulePage> {
       buddyName = workout['creator']['display_name'];
     }
 
+    // Link + anchor this user's session to the workout row before opening
+    // the sheet: the timer then resumes the real clock (not zero), and the
+    // sheet's cancel path takes the fair cancelWorkout logic instead of the
+    // solo sweep.
+    try {
+      final fresh = await Supabase.instance.client
+          .from('workouts')
+          .select('workout_started_at')
+          .eq('id', workoutId)
+          .single();
+      await Supabase.instance.client.from('active_checkin_sessions').upsert({
+        'user_id': currentUserId,
+        'started_at': fresh['workout_started_at'] ??
+            DateTime.now().toUtc().toIso8601String(),
+        'planned_duration': plannedDuration,
+        'workout_type': workoutType,
+        'workout_emoji': workoutEmoji,
+        'workout_id': workoutId,
+      }, onConflict: 'user_id');
+    } catch (e) {
+      debugLog('⚠️ Could not link session to workout: $e');
+    }
+
     if (!mounted) return;
 
     // ✅ Open the WorkoutCheckInSheet timer!
@@ -5786,6 +5867,7 @@ class _SchedulePageState extends State<SchedulePage> {
             workoutStatus: workoutStatus,
             onStart: () => _startWorkout(workout['id']),
             onComplete: () => _completeWorkout(workout['id']),
+            onOpenTimer: () => _completeWorkout(workout['id']),
             onCancel: () => _cancelWorkout(workout['id']),
             onAccept: () => _acceptInvitation(workout['id']),
             onDecline: () => _declineInvitation(workout['id']),

@@ -369,13 +369,17 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
             .delete()
             .eq('user_id', userId);
 
-        // Also cancel any in_progress workout records
+        // Also cancel the user's own solo in_progress workout records.
+        // buddy_id must be null: this sheet has no workout_id, so it can
+        // only speak for solo workouts — shared workouts are cancelled
+        // through cancelWorkout's fair logic, never swept from here.
         try {
           await Supabase.instance.client
               .from('workouts')
-              .update({'status': 'cancelled', 'workout_started_at': null})
+              .update({'status': 'cancelled', 'creator_cancelled': true})
               .eq('user_id', userId)
-              .eq('status', 'in_progress');
+              .eq('status', 'in_progress')
+              .isFilter('buddy_id', null);
         } catch (e) {
           debugLog('⚠️ Could not cancel workout record: $e');
         }
