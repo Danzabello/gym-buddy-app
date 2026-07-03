@@ -457,138 +457,21 @@ class FriendService {
     }
   }
 
-  // 🆕 Remove a friend (deletes friendship and team streak)
+  // 🆕 Remove a friend — atomic, server-side (SB-6 / DI-3 fix).
+  //
+  // Delegates the whole teardown to the remove_friend SECURITY DEFINER RPC,
+  // which validates the caller is actually in the friendship, then deletes the
+  // shared team's check-ins, streak, members, team row, and the friendship in a
+  // single transaction. Replaces the old 5 sequential client deletes that could
+  // orphan rows on a partial failure.
   Future<bool> removeFriend(String friendId) async {
     try {
-      final currentUserId = _supabase.auth.currentUser?.id;
-      if (currentUserId == null) {
-        if (kDebugMode) debugLog('❌ No user logged in');
-        return false;
-      }
-
-
-      // Step 1: Find the team between these two users (excluding Coach Max teams)
-      final teamData = await _findTeamBetweenUsers(currentUserId, friendId);
-      
-      if (teamData != null) {
-        final teamId = teamData['id'] as String;
-        final teamName = teamData['team_name'] as String;
-        
-        if (kDebugMode) debugLog('🗑️ Found team to delete: $teamName ($teamId)');
-        
-        // Step 2: Delete all check-ins for this team's streak
-        try {
-          // First get the streak ID
-          final streakResponse = await _supabase
-              .from('team_streaks')
-              .select('id')
-              .eq('team_id', teamId)
-              .maybeSingle();
-          
-          if (streakResponse != null) {
-            final streakId = streakResponse['id'] as String;
-            
-            // Delete check-ins
-            await _supabase
-                .from('daily_team_checkins')
-                .delete()
-                .eq('team_streak_id', streakId);
-            
-            if (kDebugMode) debugLog('✅ Deleted check-ins for streak: $streakId');
-          }
-        } catch (e) {
-          if (kDebugMode) debugLog('⚠️ Error deleting check-ins: $e');
-        }
-        
-        // Step 3: Delete the team streak
-        try {
-          await _supabase
-              .from('team_streaks')
-              .delete()
-              .eq('team_id', teamId);
-          
-          if (kDebugMode) debugLog('✅ Deleted team streak');
-        } catch (e) {
-          if (kDebugMode) debugLog('⚠️ Error deleting team streak: $e');
-        }
-        
-        // Step 4: Delete team members
-        try {
-          await _supabase
-              .from('team_members')
-              .delete()
-              .eq('team_id', teamId);
-          
-          if (kDebugMode) debugLog('✅ Deleted team members');
-        } catch (e) {
-          if (kDebugMode) debugLog('⚠️ Error deleting team members: $e');
-        }
-        
-        // Step 5: Delete the buddy team itself
-        try {
-          await _supabase
-              .from('buddy_teams')
-              .delete()
-              .eq('id', teamId);
-          
-          if (kDebugMode) debugLog('✅ Deleted buddy team: $teamName');
-        } catch (e) {
-          if (kDebugMode) debugLog('⚠️ Error deleting buddy team: $e');
-        }
-      } else {
-        if (kDebugMode) debugLog('ℹ️ No team found between users (may already be deleted)');
-      }
-
-      // Step 6: Delete the friendship record
-      await _supabase
-          .from('friendships')
-          .delete()
-          .or('and(user_id.eq.$currentUserId,friend_id.eq.$friendId),and(user_id.eq.$friendId,friend_id.eq.$currentUserId)');
-
+      await _supabase.rpc('remove_friend', params: {'p_friend_id': friendId});
       if (kDebugMode) debugLog('✅ Friendship removed successfully');
       return true;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error removing friend: $e');
       return false;
-    }
-  }
-
-  /// Helper: Find the team between two users (excluding Coach Max teams)
-  Future<Map<String, dynamic>?> _findTeamBetweenUsers(String userId1, String userId2) async {
-    try {
-      // Get all teams that userId1 is in (excluding Coach Max)
-      final user1Teams = await _supabase
-          .from('team_members')
-          .select('team_id, buddy_teams!inner(id, team_name, is_coach_max_team)')
-          .eq('user_id', userId1);
-
-      for (final teamData in user1Teams) {
-        final team = teamData['buddy_teams'];
-        if (team == null) continue;
-        
-        // Skip Coach Max teams
-        if (team['is_coach_max_team'] == true) continue;
-
-        final teamId = team['id'] as String;
-
-        // Check if userId2 is also in this team
-        final user2InTeam = await _supabase
-            .from('team_members')
-            .select('id')
-            .eq('team_id', teamId)
-            .eq('user_id', userId2)
-            .maybeSingle();
-
-        if (user2InTeam != null) {
-          // Found the team between these two users
-          return team;
-        }
-      }
-
-      return null;
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error finding team between users: $e');
-      return null;
     }
   }
 }
