@@ -558,28 +558,15 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             // ✅ NAME & STREAK COUNT
             Column(
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        _getDisplayName(displayItems[_currentCarouselIndex]),
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 16,  // ✅ Was 18
-                          fontWeight: FontWeight.bold,
-                          color: displayItems[_currentCarouselIndex] != null
-                              ? Theme.of(context).colorScheme.onSurface
-                              : appColors.subtleText,
-                        ),
-                      ),
-                    ),
-                    if (_isBuddyOnBreak(displayItems[_currentCarouselIndex])) ...[
-                      const SizedBox(width: 6),
-                      _buildOnBreakBadge(),
-                    ],
-                  ],
+                Text(
+                  _getDisplayName(displayItems[_currentCarouselIndex]),
+                  style: TextStyle(
+                    fontSize: 16,  // ✅ Was 18
+                    fontWeight: FontWeight.bold,
+                    color: displayItems[_currentCarouselIndex] != null
+                        ? Theme.of(context).colorScheme.onSurface
+                        : appColors.subtleText,
+                  ),
                 ),
                 const SizedBox(height: 4),  // ✅ Was 8
                 // Just show streak count - removed progress bar
@@ -587,6 +574,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
                     children: [
                       Text(
                         '${(displayItems[_currentCarouselIndex] as TeamStreak).currentStreak} Day Streak',
@@ -596,10 +585,15 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                           color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
-                      if (_isOnBreakToday) ...[
-                        const SizedBox(width: 8),
-                        _buildOnBreakBadge(),
-                      ],
+                      if (_isBuddyOnBreak(displayItems[_currentCarouselIndex]))
+                        Text(
+                          ' · on break today',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
                     ],
                   )
                 else
@@ -719,34 +713,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             _buildInfoTray(),
           ],
         ),
-      ),
-    );
-  }
-
-  // Shield + accent pill, same grammar as the app's other status chips
-  // (tinted bg, radius 12, icon + label — never color alone).
-  Widget _buildOnBreakBadge() {
-    final accent = Theme.of(context).colorScheme.primary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: accent.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.shield, size: 12, color: accent),
-          const SizedBox(width: 4),
-          Text(
-            'On break',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: accent,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1599,6 +1565,34 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     color: streak.isFavorite ? Colors.white : Colors.grey[400],
                     size: 16,  // ✅ Was likely 18-20
                   ),
+                ),
+              ),
+            ),
+
+          // 🛡 On-break status dot — human buddies only (friendMember is
+          // null for Coach Max). Server-resolved for THEIR local today.
+          if (friendMember != null &&
+              _buddyOnBreakToday[friendMember.userId] == true)
+            Positioned(
+              bottom: -2,
+              right: -2,
+              child: Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  // Opaque accent tint: a translucent fill over the avatar
+                  // art would be illegible, so blend the 15% tint onto the
+                  // card color instead.
+                  color: Color.alphaBlend(
+                    Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                    AppColors.of(context).cardBackground,
+                  ),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: Icon(
+                  Icons.shield,
+                  size: 13,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
               ),
             ),
