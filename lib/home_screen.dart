@@ -46,7 +46,6 @@ import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 
 
-// import 'services/streak_service.dart'; Not using it anymore
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
