@@ -280,26 +280,40 @@ class WorkoutService {
       // Fetch workout for active session details
       final workout = await _supabase
           .from('workouts')
-          .select('planned_duration_minutes, workout_type')
+          .select('planned_duration_minutes, workout_type, status, workout_started_at')
           .eq('id', workoutId)
           .single();
 
       final plannedDuration = workout['planned_duration_minutes'] ?? 30;
       final workoutType = workout['workout_type'] ?? 'Workout';
+      final existingStartedAt = workout['workout_started_at'] as String?;
 
-      // Transition to in_progress — creator_joined:true skips join window on creator's card
+      // Start the clock exactly once. A re-invocation (double-tap, stale card
+      // after backgrounding, popup re-show) must never rewrite
+      // workout_started_at — that reset every timer and zeroed the computed
+      // duration. The .neq status filter makes the guard atomic server-side.
+      await _supabase
+          .from('workouts')
+          .update({
+            'status': 'in_progress',
+            'workout_started_at': now,
+            'started_by_user_id': currentUserId,
+          })
+          .eq('id', workoutId)
+          .neq('status', 'in_progress');
+
+      // Flag sync stays unguarded so re-taps still converge UI state.
+      // creator_joined:true skips the join window on the creator's card.
       await _supabase.from('workouts').update({
         'buddy_ready': true,
-        'status': 'in_progress',
-        'workout_started_at': now,
-        'started_by_user_id': currentUserId,
         'creator_joined': true,
       }).eq('id', workoutId);
 
-      // Create active session for the buddy
+      // Create active session for the buddy — anchored to the ORIGINAL start
+      // when the workout was already running, so the session timer matches.
       await _supabase.from('active_checkin_sessions').upsert({
         'user_id': currentUserId,
-        'started_at': now,
+        'started_at': existingStartedAt ?? now,
         'planned_duration': plannedDuration,
         'workout_type': workoutType,
         'workout_emoji': _getWorkoutEmoji(workoutType),
@@ -361,12 +375,18 @@ class WorkoutService {
   Future<bool> startWorkout(String workoutId) async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
-      await _supabase.from('workouts').update({
-        'workout_started_at': DateTime.now().toUtc().toIso8601String(),
-        'status': 'in_progress',
-        'started_by_user_id': currentUserId,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', workoutId);
+      // .neq guard: never restart the clock on a workout that is already
+      // running (same Bug-1 protection as setBuddyReady).
+      await _supabase
+          .from('workouts')
+          .update({
+            'workout_started_at': DateTime.now().toUtc().toIso8601String(),
+            'status': 'in_progress',
+            'started_by_user_id': currentUserId,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', workoutId)
+          .neq('status', 'in_progress');
       if (kDebugMode) debugLog('✅ Workout started');
       return true;
     } catch (e) {
@@ -402,7 +422,9 @@ class WorkoutService {
       await _supabase.from('workouts').update({
         'status': 'completed',
         'actual_duration_minutes': actualDuration,
-        'workout_completed_at': DateTime.now().toIso8601String(),
+        // UTC with 'Z' suffix — a naive local string gets branded UTC by
+        // timestamptz and then shifted again on display (double offset).
+        'workout_completed_at': DateTime.now().toUtc().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', workoutId);
       if (!isCreator && buddyId != null) {
@@ -509,41 +531,6 @@ class WorkoutService {
   // CLEANUP
   // ============================================================
 
-  Future<void> autoCompleteTimedOutWorkouts() async {
-    try {
-      final currentUserId = _supabase.auth.currentUser?.id;
-      if (currentUserId == null) return;
-      final threeHoursAgo = DateTime.now().subtract(const Duration(hours: 3));
-      final timedOutWorkouts = await _supabase
-          .from('workouts')
-          .select('id, workout_started_at, notes')
-          .eq('status', 'in_progress')
-          .or('user_id.eq.$currentUserId,buddy_id.eq.$currentUserId')
-          .lt('workout_started_at', threeHoursAgo.toIso8601String());
-      if (timedOutWorkouts.isEmpty) {
-        if (kDebugMode) debugLog('✅ No timed-out workouts found');
-        return;
-      }
-      if (kDebugMode) debugLog('⏰ Found ${timedOutWorkouts.length} timed-out workouts, auto-completing...');
-      for (final workout in timedOutWorkouts) {
-        final startedAt = DateTime.parse(workout['workout_started_at']);
-        final existingNotes = workout['notes'] as String? ?? '';
-        await _supabase.from('workouts').update({
-          'status': 'completed',
-          'workout_completed_at': startedAt.add(const Duration(hours: 3)).toIso8601String(),
-          'actual_duration_minutes': 180,
-          'updated_at': DateTime.now().toIso8601String(),
-          'notes': existingNotes.isEmpty
-              ? '(Auto-completed after 3 hours)'
-              : '$existingNotes (Auto-completed after 3 hours)',
-        }).eq('id', workout['id']);
-        if (kDebugMode) debugLog('✅ Auto-completed workout: ${workout['id']}');
-      }
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error auto-completing workouts: $e');
-    }
-  }
-
   Future<void> cleanupOrphanedSessions() async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
@@ -576,7 +563,10 @@ class WorkoutService {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return;
-      final threeHoursAgo = DateTime.now().subtract(const Duration(hours: 3));
+      // Bound must be UTC: a naive local string is read as UTC by timestamptz,
+      // shrinking the 3h window by the device offset (a Latvia phone swept a
+      // 5-minute-old workout as "exceeded 3 hours").
+      final threeHoursAgo = DateTime.now().toUtc().subtract(const Duration(hours: 3));
       final staleWorkouts = await _supabase
           .from('workouts')
           .select('id, workout_started_at')
@@ -589,10 +579,14 @@ class WorkoutService {
       }
       if (kDebugMode) debugLog('🧹 Found ${staleWorkouts.length} stale workouts, auto-completing...');
       for (final workout in staleWorkouts) {
+        final completedAt = DateTime.now().toUtc();
+        final startedAt = DateTime.parse(workout['workout_started_at'] as String);
         await _supabase.from('workouts').update({
           'status': 'completed',
-          'actual_duration_minutes': 180,
-          'workout_completed_at': DateTime.now().toIso8601String(),
+          'actual_duration_minutes': completedAt.difference(startedAt).inMinutes,
+          // UTC with 'Z' suffix — see completeWorkout; naive local gets
+          // branded UTC by timestamptz and double-shifted on display.
+          'workout_completed_at': completedAt.toIso8601String(),
           'notes': '(Auto-completed — workout exceeded 3 hour limit)',
           'updated_at': DateTime.now().toIso8601String(),
         }).eq('id', workout['id']);

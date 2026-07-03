@@ -131,7 +131,8 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
   String _date(String? s) {
     if (s == null) return '';
     try {
-      final d = DateTime.parse(s);
+      // .toLocal() so Today/Yesterday uses the device day, same frame as _time.
+      final d = DateTime.parse(s).toLocal();
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       final day = DateTime(d.year, d.month, d.day);
