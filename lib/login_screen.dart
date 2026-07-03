@@ -15,6 +15,7 @@ import 'signup_screen.dart';
 import 'onboarding/onboarding_theme.dart';
 import 'onboarding/splash_screen.dart';
 import 'utils/input_validators.dart';
+import 'utils/timezone_sync.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 
@@ -174,6 +175,7 @@ class _LoginScreenState extends State<LoginScreen>
           return;
         }
 
+        unawaited(syncDeviceTimezone());
         await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
         Navigator.of(context).pushAndRemoveUntil(
           FadeSlideRoute(page: const HomeScreen()),

@@ -8,6 +8,7 @@ import '../services/coach_max_service.dart';
 import '../services/friend_service.dart';
 import '../services/auth_service.dart';
 import '../utils/input_validators.dart';
+import '../utils/timezone_sync.dart';
 import 'package:flutter/foundation.dart';
 import '../services/invite_service.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
@@ -868,6 +869,9 @@ Future<void> _finish() async {
       'onboarding_completed': true,
       'updated_at': DateTime.now().toIso8601String(),
     });
+
+    // Capture the device timezone for this brand-new profile.
+    await syncDeviceTimezone();
 
     // ── Step 3: Initialize Coach Max ───────────────────────────────────────
     await _coachMaxService.initializeCoachMaxForUser(user.id);

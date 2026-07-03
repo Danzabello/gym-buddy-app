@@ -18,6 +18,7 @@ import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'package:gym_buddy_app/utils/timezone_sync.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -132,6 +133,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
       await NotificationService().initialize();
       final onboardingStatus = await _checkOnboardingStatus(user.id);
       if (onboardingStatus) {
+        // Refresh the stored device timezone every launch (people travel /
+        // swap devices) — feeds per-user "today" resolution server-side.
+        unawaited(syncDeviceTimezone());
         await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
         unawaited(AchievementService().checkLoyaltyAchievements());
       } else {
