@@ -31,6 +31,9 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
 
   // Which friend IDs have been checked in today
   Set<String> _checkedInToday = {};
+  // Which friend IDs are on an uncancelled break for THEIR local today
+  // (server-resolved via is_on_break_today; non-partners resolve to false)
+  Set<String> _onBreakToday = {};
   // Which friend IDs have already been nudged today
   Set<String> _nudgedToday = {};
   // Friend IDs currently being nudged (loading state)
@@ -71,12 +74,14 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     final checkedIn = await _getCheckedInToday(friendIds);
     final nudged = await _nudgeService.getNudgedTodaySet(friendIds);
     final buddyStreaks = await _loadBuddyStreaks();
+    final onBreak = await _getOnBreakToday(friendIds);
 
     if (!mounted) return;
     setState(() {
       _friends = friends;
       _pendingRequests = pending;
       _checkedInToday = checkedIn;
+      _onBreakToday = onBreak;
       _nudgedToday = nudged;
       _buddyStreaks = buddyStreaks;
       _isLoading = false;
@@ -118,6 +123,22 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     } catch (_) {
       return {};
     }
+  }
+
+  // Break status is resolved server-side (is_on_break_today RPC) so each
+  // buddy's own local "today" applies, same as the dashboard carousel.
+  Future<Set<String>> _getOnBreakToday(List<String> friendIds) async {
+    final result = <String>{};
+    await Future.wait(friendIds.map((id) async {
+      try {
+        final res = await Supabase.instance.client
+            .rpc('is_on_break_today', params: {'p_user_id': id});
+        if (res == true) result.add(id);
+      } catch (_) {
+        // no badge on failure — decoration only
+      }
+    }));
+    return result;
   }
 
   // ── Separated buddy lists ─────────────────────────────────
@@ -793,6 +814,27 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     final borderColor = _borderColor(friend['avatar_border'] as String?);
     final hasNudged = _nudgedToday.contains(id);
     final isNudging = _nudging.contains(id);
+    final onBreak = _onBreakToday.contains(id);
+
+    // Chip precedence: checked-in wins, then break, then at-risk.
+    // "Streak at risk" on someone whose streak is protected is misleading.
+    final Color chipBg = !dimmed
+        ? const Color(0xFFF97316).withOpacity(0.12)
+        : onBreak
+            ? cs.primary.withOpacity(0.12)
+            : appColors.sectionBackground;
+    final Color chipBorderColor = !dimmed
+        ? const Color(0xFFF97316).withOpacity(0.2)
+        : onBreak
+            ? cs.primary.withOpacity(0.2)
+            : appColors.cardBorder;
+    final Color chipTextColor = !dimmed
+        ? const Color(0xFFF97316)
+        : onBreak
+            ? cs.primary
+            : appColors.subtleText;
+    final String chipLabel =
+        !dimmed ? 'On streak 🔥' : (onBreak ? 'On break' : 'Streak at risk');
 
     return Opacity(
       opacity: dimmed ? 0.5 : 1.0,
@@ -818,11 +860,20 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name,
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: cs.onSurface)),
+                    Row(children: [
+                      Flexible(
+                        child: Text(name,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: cs.onSurface)),
+                      ),
+                      if (onBreak) ...[
+                        const SizedBox(width: 4),
+                        Icon(Icons.shield, size: 11, color: cs.primary),
+                      ],
+                    ]),
                     const SizedBox(height: 2),
                     Text(
                       dimmed ? 'Not checked in today' : 'Checked in today',
@@ -836,25 +887,17 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: dimmed
-                            ? appColors.sectionBackground
-                            : const Color(0xFFF97316).withOpacity(0.12),
+                        color: chipBg,
                         borderRadius: BorderRadius.circular(5),
                         border: Border.all(
-                            color: dimmed
-                                ? appColors.cardBorder
-                                : const Color(0xFFF97316)
-                                    .withOpacity(0.2),
-                            width: 0.5),
+                            color: chipBorderColor, width: 0.5),
                       ),
                       child: Text(
-                        dimmed ? 'Streak at risk' : 'On streak 🔥',
+                        chipLabel,
                         style: TextStyle(
                             fontSize: 9,
                             fontWeight: FontWeight.w600,
-                            color: dimmed
-                                ? appColors.subtleText
-                                : const Color(0xFFF97316)),
+                            color: chipTextColor),
                       ),
                     ),
                   ],
