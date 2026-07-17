@@ -40,56 +40,26 @@ class InviteService {
     return buildInviteLink(code);
   }
 
-  // ─── Look up an invite by code (used during onboarding) ───────────────────
-  Future<Map<String, dynamic>?> getInviteByCode(String code) async {
-    try {
-      final result = await _supabase
-          .from('invites')
-          .select('id, code, inviter_id, status, user_profiles!invites_inviter_id_fkey(username, display_name)')
-          .eq('code', code.toUpperCase())
-          .eq('status', 'pending')
-          .maybeSingle();
-
-      return result;
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ InviteService.getInviteByCode: $e');
-      return null;
-    }
-  }
-
   // ─── Accept an invite — marks it accepted + returns inviter's user_id ──────
   Future<String?> acceptInvite(String code) async {
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return null;
 
-      // First fetch the invite so we know the inviter
-      final invite = await getInviteByCode(code);
-      if (invite == null) {
-        if (kDebugMode) debugLog('⚠️ InviteService.acceptInvite: invite not found or already used');
-        return null;
-      }
+      // Server-side accept: the accept_invite RPC looks up by code, validates
+      // state, and marks accepted atomically inside a SECURITY DEFINER function.
+      // The client no longer has direct UPDATE on invites (Group C / LIVE-12).
+      final inviterId = await _supabase.rpc(
+        'accept_invite',
+        params: {'p_code': code.toUpperCase()},
+      );
 
-      // Don't let someone accept their own invite
-      if (invite['inviter_id'] == userId) {
-        if (kDebugMode) debugLog('⚠️ InviteService.acceptInvite: user tried to accept own invite');
-        return null;
-      }
-
-      // Mark as accepted
-      await _supabase
-          .from('invites')
-          .update({
-            'status': 'accepted',
-            'accepted_by': userId,
-            'accepted_at': DateTime.now().toUtc().toIso8601String(),
-          })
-          .eq('code', code.toUpperCase())
-          .eq('status', 'pending');
-
-      return invite['inviter_id'] as String?;
+      return inviterId as String?;
     } catch (e) {
-      if (kDebugMode) debugLog('❌ InviteService.acceptInvite: $e');
+      // Named RPC failures (invite_not_found / invite_already_accepted /
+      // invite_expired / cannot_accept_own_invite / unauthenticated) all land
+      // here and, as before, resolve to a null return -> onboarding skips pairing.
+      if (kDebugMode) debugLog('⚠️ InviteService.acceptInvite: $e');
       return null;
     }
   }
