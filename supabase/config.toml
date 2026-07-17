@@ -12,7 +12,11 @@ entrypoint = "./functions/coach-max-cron/index.ts"
 
 [functions.invite-redirect]
 enabled = true
-verify_jwt = true
+# Public endpoint: hit directly from browsers/Snapchat/email with no JWT.
+# It authenticates nothing from the caller — it looks the invite up with the
+# service-role key and 302-redirects. verify_jwt MUST stay false or the
+# platform gateway 401s every real link click (LIVE-13 / audit Group G).
+verify_jwt = false
 import_map = "./functions/invite-redirect/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
