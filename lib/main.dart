@@ -154,7 +154,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<void> _cleanupOrphanedAccount() async {
     try {
-      await Supabase.instance.client.rpc('delete_own_account');
+      await Supabase.instance.client.functions.invoke('delete-account');
     } catch (e) {
       if (kDebugMode) debugLog('⚠️ Could not delete orphaned account: $e');
     } finally {

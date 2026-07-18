@@ -154,7 +154,7 @@ class _LoginScreenState extends State<LoginScreen>
         if (!onboardingComplete) {
           // Orphaned account — clean it up and send back to splash
           try {
-            await Supabase.instance.client.rpc('delete_own_account');
+            await Supabase.instance.client.functions.invoke('delete-account');
           } catch (e) {
             if (kDebugMode) debugPrint('⚠️ cleanup: $e');
           } finally {

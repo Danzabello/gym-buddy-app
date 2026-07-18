@@ -10,6 +10,13 @@ entrypoint = "./functions/coach-max-cron/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/coach-max-cron/*.html" ]
 
+[functions.delete-account]
+enabled = true
+# Caller must be authenticated: the function deletes the JWT owner's own
+# account (auth.users + user_profiles) via the Admin API. verify_jwt gates it.
+verify_jwt = true
+entrypoint = "./functions/delete-account/index.ts"
+
 [functions.invite-redirect]
 enabled = true
 # Public endpoint: hit directly from browsers/Snapchat/email with no JWT.

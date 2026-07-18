@@ -81,8 +81,11 @@ GRANT  EXECUTE ON FUNCTION public.<fn>(<args>) TO authenticated;   -- add anon o
 ```
 Also pin `SET search_path = public` on every `SECURITY DEFINER` function at creation.
 
-### Onboarding / orphaned-account cleanup
-If a user authenticates but never completes onboarding (`onboarding_completed = false`), `AuthWrapper` calls the `delete_own_account` RPC and signs them out, allowing re-registration with the same email.
+### Account deletion
+Deleting a user (self-serve delete, or orphaned-account cleanup when `onboarding_completed = false`) goes through the **`delete-account` Edge Function** (service_role → deletes `user_profiles`, then `auth.admin.deleteUser`; no manual FK clearing — `workouts.started_by_user_id` / `cancel_requested_by` are `ON DELETE SET NULL`, and all inbound FKs to `user_profiles` are `CASCADE`/`SET NULL`, migrations `20260718110000` + `20260718113000`). A postgres-owned `SECURITY DEFINER` RPC **cannot** delete `auth.users` when called via the `authenticated` role, so the old `delete_own_account` RPC only ever removed `user_profiles` — never the auth user. Call sites: `AuthWrapper._cleanupOrphanedAccount`, `login_screen` orphan cleanup, onboarding retry.
+
+### Testing DB permissions — avoid plan-cache false-positives
+Permission-check tests must run **clean**: no prior call from a more-privileged role in the **same session/transaction** before the call whose result you trust. PL/pgSQL caches query plans per session — a first call as `postgres` warms the plan and a later `SET ROLE authenticated` call can wrongly succeed. This is exactly why `delete_own_account` looked fixed when it wasn't. Verify with a fresh, authenticated-only call.
 
 ## Rules
 

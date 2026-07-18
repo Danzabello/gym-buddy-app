@@ -829,7 +829,7 @@ Future<void> _finish() async {
           if (!completed) {
             // Orphaned — delete and let signup continue fresh
             try {
-              await Supabase.instance.client.rpc('delete_own_account');
+              await Supabase.instance.client.functions.invoke('delete-account');
             } catch (_) {}
             await Supabase.instance.client.auth.signOut();
             // Retry signup

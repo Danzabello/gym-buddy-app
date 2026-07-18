@@ -1,0 +1,15 @@
+-- Retire the delete_own_account RPC for client callers.
+--
+-- Account deletion now runs through the `delete-account` Edge Function
+-- (service_role + auth.admin.deleteUser). A postgres-owned SECURITY DEFINER
+-- RPC cannot delete auth.users when invoked via the authenticated role
+-- (verified: "permission denied for table users"), so it never actually
+-- removed the auth user -- only user_profiles. The 3 client callers
+-- (AuthWrapper orphan-cleanup, login_screen orphan-cleanup, onboarding retry)
+-- now call the Edge Function instead.
+--
+-- Keep the function body for now (do not drop) -- just remove EXECUTE from the
+-- client-reachable roles so nothing calls the broken path. It still has a
+-- PUBLIC grant, so revoke that too (see CLAUDE.md: default grants include
+-- PUBLIC).
+REVOKE EXECUTE ON FUNCTION public.delete_own_account() FROM PUBLIC, anon, authenticated;
