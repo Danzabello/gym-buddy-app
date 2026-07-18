@@ -73,6 +73,14 @@ Custom colours live in `AppColors` (a `ThemeExtension`). Access them with `AppCo
 ### Environment
 Secrets are in `.env` (bundled as a Flutter asset via `flutter_dotenv`). Required keys: `SUPABASE_URL`, `SUPABASE_ANON_KEY`. Edge Functions read `SUPABASE_SERVICE_ROLE_KEY` from the Supabase secrets vault.
 
+### Supabase function EXECUTE grants (must be explicit)
+New functions in `public` are PUBLIC-executable by default. `ALTER DEFAULT PRIVILEGES ... REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` does **not** suppress this on the live instance (verified on PG17.6, with the REVOKE correctly targeting `postgres` — the same role that creates migration functions), so the default cannot be relied on to lock functions down. Every new client-facing or `SECURITY DEFINER` function must, in its own migration, explicitly:
+```sql
+REVOKE EXECUTE ON FUNCTION public.<fn>(<args>) FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION public.<fn>(<args>) TO authenticated;   -- add anon only if unauthenticated access is truly needed
+```
+Also pin `SET search_path = public` on every `SECURITY DEFINER` function at creation.
+
 ### Onboarding / orphaned-account cleanup
 If a user authenticates but never completes onboarding (`onboarding_completed = false`), `AuthWrapper` calls the `delete_own_account` RPC and signs them out, allowing re-registration with the same email.
 
