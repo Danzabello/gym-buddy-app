@@ -118,13 +118,15 @@ CREATE POLICY "Users can update their own sessions or linked buddy sessions" ON 
   );
 
 -- ── break_day_usage ──
+-- NOTE (reconciled 2026-07-20 to match live): break declaration is now
+-- server-authoritative via declare_break_day() -- the direct-INSERT policy was
+-- dropped and the UPDATE policy narrowed to cancel-only (WITH CHECK requires
+-- cancelled_at IS NOT NULL). Applied live by server_enforced_weekly_break_limit
+-- (a Category-D live-only migration, not yet in repo). Snapshot updated so a
+-- replay of this file is a no-op against current live.
 DROP POLICY IF EXISTS "Users can delete their own break days" ON public.break_day_usage;
 CREATE POLICY "Users can delete their own break days" ON public.break_day_usage
   FOR DELETE TO public USING (auth.uid() = user_id);
-
-DROP POLICY IF EXISTS "Users can insert their own break days" ON public.break_day_usage;
-CREATE POLICY "Users can insert their own break days" ON public.break_day_usage
-  FOR INSERT TO public WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can view their own break days" ON public.break_day_usage;
 CREATE POLICY "Users can view their own break days" ON public.break_day_usage
@@ -140,9 +142,10 @@ CREATE POLICY "Users can view their partners' break days" ON public.break_day_us
       WHERE (ts.is_active = true))
   );
 
-DROP POLICY IF EXISTS "Users can update their own break days" ON public.break_day_usage;
-CREATE POLICY "Users can update their own break days" ON public.break_day_usage
-  FOR UPDATE TO public USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can cancel their own break days" ON public.break_day_usage;
+CREATE POLICY "Users can cancel their own break days" ON public.break_day_usage
+  FOR UPDATE TO public USING (auth.uid() = user_id)
+  WITH CHECK ((auth.uid() = user_id) AND (cancelled_at IS NOT NULL));
 
 -- ── buddy_nudges ──
 DROP POLICY IF EXISTS "Users can insert own nudges" ON public.buddy_nudges;
@@ -314,21 +317,19 @@ CREATE POLICY "Users can update friendships they're part of" ON public.friendshi
   FOR UPDATE TO public USING (auth.uid() = friend_id);
 
 -- ── invites ──
+-- NOTE (reconciled 2026-07-20 to match live): the permissive "look up by code"
+-- SELECT and "accept invites" UPDATE policies were dropped by Group C (commit
+-- 0baf96d, migration group_c_invite_accept_rpc) -- accepts now go through the
+-- accept_invite(p_code) RPC and reads are owner-scoped. Snapshot updated so a
+-- replay of this file is a no-op against current live (does not re-open the
+-- invite enumerate/hijack hole).
 DROP POLICY IF EXISTS "Users can create own invites" ON public.invites;
 CREATE POLICY "Users can create own invites" ON public.invites
   FOR INSERT TO public WITH CHECK (auth.uid() = inviter_id);
 
-DROP POLICY IF EXISTS "Authenticated users can look up invite by code" ON public.invites;
-CREATE POLICY "Authenticated users can look up invite by code" ON public.invites
-  FOR SELECT TO public USING (auth.role() = 'authenticated'::text);
-
 DROP POLICY IF EXISTS "Users can view own invites" ON public.invites;
 CREATE POLICY "Users can view own invites" ON public.invites
   FOR SELECT TO public USING ((auth.uid() = inviter_id) OR (auth.uid() = accepted_by));
-
-DROP POLICY IF EXISTS "Authenticated users can accept invites" ON public.invites;
-CREATE POLICY "Authenticated users can accept invites" ON public.invites
-  FOR UPDATE TO public USING (auth.role() = 'authenticated'::text) WITH CHECK (status = 'accepted'::text);
 
 -- ── level_definitions ──
 DROP POLICY IF EXISTS "Anyone reads level_definitions" ON public.level_definitions;
@@ -359,11 +360,15 @@ DROP POLICY IF EXISTS "System can insert Coach Max" ON public.team_members;
 CREATE POLICY "System can insert Coach Max" ON public.team_members
   FOR INSERT TO public WITH CHECK (user_id = '00000000-0000-0000-0000-000000000001'::uuid);
 
+-- NOTE (reconciled 2026-07-20 to match live): the WITH CHECK was moved from an
+-- inline EXISTS subquery on buddy_teams to the SECURITY DEFINER helper
+-- user_created_team(team_id), which breaks a team_members<->buddy_teams RLS
+-- recursion cycle (42P17). Applied live by fix_team_members_rls_infinite_recursion
+-- (a Category-D live-only migration, not yet in repo; the helper it depends on
+-- is created there). Snapshot updated so a replay is a no-op against live.
 DROP POLICY IF EXISTS "Team creators can add members" ON public.team_members;
 CREATE POLICY "Team creators can add members" ON public.team_members
-  FOR INSERT TO authenticated WITH CHECK (
-    EXISTS ( SELECT 1 FROM buddy_teams WHERE ((buddy_teams.id = team_members.team_id) AND (buddy_teams.created_by = auth.uid())))
-  );
+  FOR INSERT TO authenticated WITH CHECK (user_created_team(team_id));
 
 DROP POLICY IF EXISTS "Users can insert themselves" ON public.team_members;
 CREATE POLICY "Users can insert themselves" ON public.team_members
@@ -427,9 +432,12 @@ DROP POLICY IF EXISTS "Users can view own profile" ON public.user_profiles;
 CREATE POLICY "Users can view own profile" ON public.user_profiles
   FOR SELECT TO public USING (auth.uid() = id);
 
+-- NOTE (reconciled 2026-07-20 to match live): a WITH CHECK (auth.uid() = id) was
+-- added by the Group A onboarding-upsert regression fix so a row's id can't be
+-- reassigned on UPDATE. Snapshot updated so a replay is a no-op against live.
 DROP POLICY IF EXISTS "Users can update own profile" ON public.user_profiles;
 CREATE POLICY "Users can update own profile" ON public.user_profiles
-  FOR UPDATE TO public USING (auth.uid() = id);
+  FOR UPDATE TO public USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
 -- NOTE: column-level REVOKE on xp/level/coin_balance (from the S2/S3
 -- migration) is a separate, additional restriction layered on top of
