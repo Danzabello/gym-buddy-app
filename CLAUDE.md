@@ -81,6 +81,9 @@ GRANT  EXECUTE ON FUNCTION public.<fn>(<args>) TO authenticated;   -- add anon o
 ```
 Also pin `SET search_path = public` on every `SECURITY DEFINER` function at creation.
 
+### Known security gaps (accepted for now — revisit before public launch)
+- **Leaked-password protection is OFF** (advisor WARN `auth_leaked_password_protection` stays active). It requires the Supabase **Pro plan**; the project is on Free tier. Before public launch: upgrade plan, then enable in Dashboard → Authentication → Sign In / Providers → Email → "Prevent the use of leaked passwords" (checks new/changed passwords against HaveIBeenPwned). Decided 2026-07-20 (Group E).
+
 ### Account deletion
 Deleting a user (self-serve delete, or orphaned-account cleanup when `onboarding_completed = false`) goes through the **`delete-account` Edge Function** (service_role → deletes `user_profiles`, then `auth.admin.deleteUser`; no manual FK clearing — `workouts.started_by_user_id` / `cancel_requested_by` are `ON DELETE SET NULL`, and all inbound FKs to `user_profiles` are `CASCADE`/`SET NULL`, migrations `20260718110000` + `20260718113000`). A postgres-owned `SECURITY DEFINER` RPC **cannot** delete `auth.users` when called via the `authenticated` role, so the old `delete_own_account` RPC only ever removed `user_profiles` — never the auth user. Call sites: `AuthWrapper._cleanupOrphanedAccount`, `login_screen` orphan cleanup, onboarding retry.
 
