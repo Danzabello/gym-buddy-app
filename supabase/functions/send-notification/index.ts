@@ -82,6 +82,40 @@ serve(async (req) => {
     }
 
     // ============================================
+    // INPUT GUARD — title/body render on the target's device (Group G)
+    // Strip HTML tags/comments and control/invisible chars (bidi overrides,
+    // zero-width space, BOM). Keep emoji, accents, ZWJ/ZWNJ — compound emoji
+    // (❤️‍🔥) and RTL scripts must survive; every legit caller uses emoji.
+    // Over-cap is rejected, not truncated: real payloads top out ~30/~90
+    // (display_name is client-capped at 40), so bigger means bug or abuse.
+    // Caps count code points, not UTF-16 units, so emoji aren't double-billed.
+    // ============================================
+    const sanitize = (s: string) => s
+      .replace(/<\/?[a-zA-Z][^>]*>|<!--[\s\S]*?-->/g, '')
+      .replace(/[\u0000-\u001F\u007F-\u009F\u200B\u200E\u200F\u2028-\u202E\u2060-\u206F\uFEFF]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (typeof title !== 'string' || typeof body !== 'string') {
+      return new Response(JSON.stringify({ error: 'bad_request' }), { status: 400 })
+    }
+    const cleanTitle = sanitize(title)
+    const cleanBody = sanitize(body)
+    if (!cleanTitle || !cleanBody || [...cleanTitle].length > 100 || [...cleanBody].length > 300) {
+      return new Response(JSON.stringify({ error: 'bad_request' }), { status: 400 })
+    }
+
+    // type / reference_id / batch_key aren't rendered but are stored
+    // (notification_log, unbounded text columns) and forwarded (FCM data) —
+    // cap them so they can't be a free-text channel. Legit max ≈ 84 chars
+    // (nudge batch_key: two UUIDs + date).
+    for (const [k, v] of Object.entries({ type, reference_id, batch_key })) {
+      if (v != null && (typeof v !== 'string' || v.length > 128)) {
+        console.log(`⛔ send-notification: oversized/non-string ${k}`)
+        return new Response(JSON.stringify({ error: 'bad_request' }), { status: 400 })
+      }
+    }
+
+    // ============================================
     // AUTHORIZATION
     // Trusted server-to-server callers (cron) present the service-role key
     // and may notify anyone. Every other caller must be the verified target's
@@ -212,7 +246,7 @@ serve(async (req) => {
         body: JSON.stringify({
           message: {
             token,
-            notification: { title, body },
+            notification: { title: cleanTitle, body: cleanBody },
             data: { type, reference_id: reference_id ?? '' },
             android: {
               priority: 'high',
