@@ -22,12 +22,19 @@
 --     turns this into ordered, executable migrations and resolves the baseline
 --     ordering conflict (user_created_team) as part of its own scope.
 --
--- REDACTION: the four notify_* trigger functions hardcode the project anon JWT
--- in their net.http_post Authorization header. That key is gitignored (.env)
--- and appears in no committed file, so it is replaced here with
--- <ANON_KEY_REDACTED_see_.env> to avoid committing it. The live function
--- bodies are unchanged. (Separately flagged: hardcoding the anon bearer in
--- these triggers is a latent issue -- see session notes.)
+-- REDACTION: the four notify_* trigger functions (notify_friend_request,
+-- notify_friend_accepted, notify_workout_invite, notify_workout_invite_response)
+-- hardcoded the project anon JWT in their net.http_post Authorization header.
+-- That key is gitignored (.env) and appears in no committed file, so it is
+-- replaced here with <ANON_KEY_REDACTED_see_.env> to avoid committing it.
+--
+-- SUPERSEDED 2026-07-22: the anon bearer was a real bug -- send-notification
+-- rejected those calls 401, so friend-request/accepted and workout-invite/
+-- response notifications were silently failing. Fixed by migration
+-- 20260722221100_fix_notify_triggers_use_vault_service_role.sql (switches all 4
+-- to the Vault service-role pattern; verified 200 on live). The pre-fix bodies
+-- below are kept as the historical pre-VC record ONLY -- the live functions no
+-- longer match them.
 --
 -- Coverage: every live function/trigger/table is represented either in a
 -- committed migration OR in this file. Verified 2026-07-20.
