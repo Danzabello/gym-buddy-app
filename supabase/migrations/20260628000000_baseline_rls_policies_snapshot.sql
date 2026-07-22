@@ -8,8 +8,32 @@
 -- it lives in production today (including all of the S1/S2/S3/SB-4
 -- changes from the migrations immediately preceding this one).
 --
--- This is idempotent (DROP IF EXISTS + CREATE for every policy) so
--- it's both documentation AND a working rebuild script.
+-- This is idempotent (DROP IF EXISTS + CREATE for every policy) and, as of
+-- the 2026-07-20 reconciliation, matches current live exactly -- re-running
+-- it against the live database is a verified no-op.
+-- ============================================================
+--
+-- ⚠ REPLAY / ORDERING NOTICE (Group F, 2026-07-20) -- read before any
+-- `supabase db reset` or from-scratch schema work:
+--
+--  * `supabase db reset` does NOT work from this migration history today.
+--    Every base table (team_members, buddy_teams, break_day_usage,
+--    user_profiles, friendships, team_streaks, ...) predates version control
+--    and is created by NO migration -- a fresh replay fails at the very first
+--    migration (INSERT INTO coin_transactions against a table nothing
+--    created). Confirmed 2026-07-20.
+--  * This file was reconciled to match CURRENT live, so its team_members
+--    policy now forward-references user_created_team(), created later by
+--    20260628215741. A strict timestamp-ordered replay would fail here
+--    (verified) -- but such a replay is impossible today for the reason
+--    above, so this is inert.
+--  * If a from-scratch schema initiative is ever undertaken (writing real
+--    migrations for the pre-VC base tables), resolving this ordering conflict
+--    is part of THAT project's scope -- it cannot be fixed in isolation
+--    beforehand. See CLAUDE.md (Group F) and docs/pre_vc_schema_baseline_*.
+--  * The baseline IS safe on the two paths that matter today: `db push` skips
+--    it (already recorded applied), and a manual replay against live is a
+--    verified no-op (it matches live).
 -- ============================================================
 
 -- ============================================================

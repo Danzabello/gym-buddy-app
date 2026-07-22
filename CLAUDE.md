@@ -90,6 +90,14 @@ Deleting a user (self-serve delete, or orphaned-account cleanup when `onboarding
 ### Testing DB permissions — avoid plan-cache false-positives
 Permission-check tests must run **clean**: no prior call from a more-privileged role in the **same session/transaction** before the call whose result you trust. PL/pgSQL caches query plans per session — a first call as `postgres` warms the plan and a later `SET ROLE authenticated` call can wrongly succeed. This is exactly why `delete_own_account` looked fixed when it wasn't. Verify with a fresh, authenticated-only call.
 
+### Migration history & schema baseline (Group F, reconciled 2026-07-20)
+`supabase/migrations/` and live `supabase_migrations.schema_migrations` are fully reconciled (40 aligned, 0 drift). But **`supabase db reset` / a from-scratch replay does NOT work** and must not be relied on:
+- **All base tables predate version control** (`team_members`, `buddy_teams`, `break_day_usage`, `user_profiles`, `friendships`, `team_streaks`, and more) — created by **no migration**. A fresh replay fails at the very first migration (`INSERT INTO coin_transactions` against a table nothing created). Their DDL + the ~18 pre-VC functions and 10 triggers live **only** in the reference doc [`docs/pre_vc_schema_baseline_20260720.sql`](docs/pre_vc_schema_baseline_20260720.sql) — **REFERENCE ONLY, never a migration, never applied**.
+- The reconciled RLS baseline `20260628000000` was updated to match current live, so its `team_members` policy now **forward-references `user_created_team()`** (created later by `20260628215741`). A strict timestamp-ordered replay would fail there (verified) — inert today because such a replay is already impossible per the point above.
+- **Do not** try to "fix" the ordering by retiming the baseline: it just relocates the failure (`server_enforced_weekly_break_limit` bare-`DROP`s a policy the reconciled baseline no longer creates). Resolving ordering is in-scope only for a real from-scratch-migrations initiative that also writes the pre-VC base-table DDL.
+- The baseline is safe on the two paths that matter: `db push` skips it (recorded applied) and a manual replay against live is a verified no-op.
+- `migration repair <version> --status applied|reverted` is **metadata-only** (updates the tracking table, never runs SQL) — the tool used to reconcile version-stamp drift.
+
 ## Rules
 
 - **Brand gradient** is `Color(0xFF1D4ED8)` → `Color(0xFF7C3AED)`. Never change this. Warm/orange tones are only for the primary CTA button.
