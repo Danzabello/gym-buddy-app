@@ -1,0 +1,21 @@
+-- Drop public.friend_requests — unauthenticated data leak, zero callers.
+--
+-- The view was:
+--   SELECT id, user_id, friend_id, status, created_at
+--   FROM friendships WHERE status = 'pending';
+--
+-- It was created WITHOUT security_invoker, so it ran as its owner (postgres)
+-- and bypassed RLS on friendships entirely. `anon` held arwdDxtm on it, which
+-- made every pending friend request in the system readable with no auth at all
+-- (verified live: SET LOCAL ROLE anon; SELECT count(*) -> returned rows).
+-- information_schema reported is_updatable/is_insertable_into = YES and there
+-- was no WITH CHECK OPTION, so the write path (forge a friendship, flip status
+-- to 'accepted') was structurally open on the same grants.
+--
+-- Nothing reads it: zero references in lib/ or supabase/, zero rows in
+-- pg_depend, and a bare DROP (no CASCADE) succeeds — Postgres itself confirms
+-- no dependent object. Deleting it is the whole fix; no replacement is needed.
+--
+-- Audit: Fable 5 / Opus 5, 2026-07-27.
+
+DROP VIEW IF EXISTS public.friend_requests;
