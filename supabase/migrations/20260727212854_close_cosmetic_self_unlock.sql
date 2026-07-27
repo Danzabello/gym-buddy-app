@@ -1,0 +1,34 @@
+-- Close the self-unlock gap left open by 20260727211730 (finding 2.6).
+--
+-- That migration dropped the mis-scoped always-true INSERT policy, which
+-- stopped a user granting cosmetics to OTHER users. It deliberately kept
+-- "Users can insert own unlocked cosmetics" (WITH CHECK auth.uid() = user_id)
+-- because LevelService.grantMilestoneUnlock inserts directly from the client.
+-- That left a user able to self-grant any cosmetic, bypassing shop_items.cost
+-- (e.g. Diamond Frame, 1500 coins) and shop_items.unlock_level (9).
+--
+-- Why no accompanying client change is needed:
+-- grantMilestoneUnlock selects from cosmetic_unlock_conditions where
+-- unlock_type='milestone', then loops over the result inserting a row per
+-- match. That table is EMPTY on live -- 0 rows total, 0 milestone, 0 level --
+-- and no migration has ever seeded it (the only migration naming it is the
+-- RLS baseline snapshot, which creates policies, not data). The loop body has
+-- therefore never executed, and user_unlocked_cosmetics has never held a row.
+-- Revoking INSERT changes no observable behaviour: the path inserts nothing
+-- before this migration and inserts nothing after it.
+--
+-- The cosmetic-unlock feature is scaffolding, not a shipped flow. When it is
+-- actually built, milestone unlocks must go through a SECURITY DEFINER RPC
+-- that verifies team membership and the streak threshold server-side, with
+-- SET search_path = public and explicit REVOKE/GRANT per the convention in
+-- CLAUDE.md. Tracked separately; deliberately not written now, because the
+-- milestone-to-cosmetic mapping is an unmade product decision -- which is
+-- precisely why cosmetic_unlock_conditions is empty.
+--
+-- After this, user_unlocked_cosmetics matches xp_transactions and
+-- coin_transactions: a SELECT policy only, all writes via SECURITY DEFINER
+-- (definer functions are owned by postgres, which owns the table and so
+-- bypasses RLS -- relforcerowsecurity is false).
+
+DROP POLICY IF EXISTS "Users can insert own unlocked cosmetics" ON public.user_unlocked_cosmetics;
+REVOKE INSERT ON public.user_unlocked_cosmetics FROM PUBLIC, anon, authenticated;
