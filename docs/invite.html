@@ -75,6 +75,18 @@
   </div>
 
   <script>
+    // Both values below come from the query string, so they are attacker
+    // controlled and must be escaped before they reach innerHTML.
+    // Same implementation as escapeHtml() in the invite-redirect Edge Fn.
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const inviter = params.get('inviter');
@@ -99,9 +111,9 @@
       const name = inviter || 'Someone';
       content.innerHTML = `
         <span class="emoji">&#x1F4AA;</span>
-        <h1><span>${name}</span> wants to be your Gym Buddy!</h1>
+        <h1><span>${escapeHtml(name)}</span> wants to be your Gym Buddy!</h1>
         <p>Stay accountable together. You both check in daily &mdash; miss a day and the streak dies. No solo streaks. That's the point.</p>
-        <div class="code-pill">INVITE: ${code}</div>
+        <div class="code-pill">INVITE: ${escapeHtml(code)}</div>
         <a class="btn" href="https://play.google.com/store/apps/details?id=com.gymbuddy.app">
           Download Gym Buddy &#x1F3CB;&#xFE0F;
         </a>
