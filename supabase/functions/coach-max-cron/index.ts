@@ -42,8 +42,24 @@ function localDateStr(d: Date, tz: string): string {
   return `${p.year}-${p.month}-${p.day}`
 }
 
-serve(async () => {
+serve(async (req) => {
   try {
+    // ============================================
+    // AUTHORIZATION (same pattern as send-notification)
+    // This is a scheduled service job, never called by a user. verify_jwt=true
+    // is NOT a gate on its own: the anon key is a valid project JWT and ships
+    // in plaintext inside the APK's bundled .env, so anyone with the APK could
+    // invoke this and force Coach Max check-ins, create schedule rows, and (at
+    // 18:00 UTC) fan out streak-danger pushes. Only the service-role key may
+    // run it. pg_cron sends exactly that -- see cron.job id 1, which reads
+    // vault.decrypted_secrets 'service_role_key'.
+    // ============================================
+    const bearer = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim()
+    if (bearer !== SUPABASE_SERVICE_KEY) {
+      console.log('⛔ coach-max-cron: caller is not the service role')
+      return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 })
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
     const now = new Date()
