@@ -1,6 +1,39 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+// ── Tunables ────────────────────────────────────────────────────────────────
+
+// An invite stops working 7 days after created_at. Enforced here at read time
+// only -- this function never writes, so no row is ever moved to
+// status='expired'. Note that the app itself never reaches this function (the
+// Android App Link intercepts the URL first), so real expiry also needs the
+// same cutoff inside the accept_invite RPC.
+const INVITE_TTL_DAYS = 7
+
+// Public endpoint with no JWT, so the only caller identity available is the IP.
+const RL_MAX_REQUESTS = 20
+const RL_WINDOW_MINUTES = 10
+
+// 2xx so the branded card actually renders: the edge gateway serves non-2xx
+// bodies as text/plain under a sandbox CSP, which shows this page as raw
+// source. Flip to 404 if the status matters more than the styling.
+const INVALID_STATUS = 200
+
+const LANDING_PAGE = 'https://danzabello.github.io/gym-buddy-app/invite.html'
+
+// One message for every outcome that depends on a real lookup: no such code,
+// already accepted, or past its TTL. A caller must not be able to tell those
+// apart -- the old 404-vs-410 split let anyone confirm that a code existed.
+const GENERIC_INVALID = 'This invite link is invalid, expired, or has already been used.'
+
+// Service-role client: this endpoint authenticates nothing about the caller,
+// it just looks the invite up. <any> because there are no generated DB types
+// in this repo, so the table/column shapes are unchecked either way.
+const supabase = createClient<any>(
+  Deno.env.get('SUPABASE_URL')!,
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+)
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -19,44 +52,53 @@ serve(async (req) => {
   const url = new URL(req.url)
   const code = url.searchParams.get('code')?.toUpperCase()
 
+  // A missing param is a malformed request, not a lookup result: it says
+  // nothing about which codes exist, so it keeps its own status.
   if (!code) {
-    return new Response(renderPage(null, null, 'Invalid invite link.'), {
-      headers: htmlHeaders,
-      status: 400,
-    })
+    return htmlResponse('Invalid invite link.', 400)
   }
 
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  )
+  if (await isRateLimited(req)) {
+    return new Response('Too many requests. Try again shortly.\n', {
+      status: 429,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Retry-After': String(RL_WINDOW_MINUTES * 60),
+      },
+    })
+  }
 
   const { data: invite, error } = await supabase
     .from('invites')
-    .select('id, code, status, inviter_id, user_profiles!invites_inviter_id_fkey(username, display_name)')
+    .select('status, created_at, user_profiles!invites_inviter_id_fkey(username, display_name)')
     .eq('code', code)
     .maybeSingle()
 
-  if (error || !invite) {
-    return new Response(renderPage(null, null, 'This invite link is invalid or has expired.'), {
-      headers: htmlHeaders,
-      status: 404,
-    })
+  const ttlCutoff = Date.now() - INVITE_TTL_DAYS * 86_400_000
+  const usable =
+    !error &&
+    !!invite &&
+    invite.status === 'pending' &&
+    new Date(invite.created_at as string).getTime() >= ttlCutoff
+
+  // Every unusable case leaves through this one door, with one status and one
+  // body. Do not add a reason to this response.
+  if (!usable) {
+    return htmlResponse(GENERIC_INVALID, INVALID_STATUS)
   }
 
-  if (invite.status !== 'pending') {
-    return new Response(renderPage(null, null, 'This invite has already been used.'), {
-      headers: htmlHeaders,
-      status: 410,
-    })
-  }
+  // PostgREST types a to-one embed as an array; at runtime it is a single
+  // object (verified against live). Cast through unknown to say so.
+  const profile = invite.user_profiles as unknown as
+    { username: string; display_name: string } | null
+  // display_name only, no username fallback: a handle is a stronger
+  // identifier than a first name, and anyone holding a valid code gets this
+  // from an unauthenticated request.
+  const inviterName = profile?.display_name || 'Someone'
 
-  const profile = invite.user_profiles as { username: string; display_name: string } | null
-  const inviterName = profile?.display_name || profile?.username || 'Someone'
+  const pageUrl =
+    `${LANDING_PAGE}?code=${encodeURIComponent(code)}&inviter=${encodeURIComponent(inviterName)}`
 
-  // Redirect to GitHub Pages with inviter name + code as params
-  const pageUrl = `https://danzabello.github.io/gym-buddy-app/invite.html?code=${code}&inviter=${encodeURIComponent(inviterName)}`
-  
   return new Response(null, {
     headers: {
       'Location': pageUrl,
@@ -65,25 +107,60 @@ serve(async (req) => {
   })
 })
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
+// ── Rate limiting ───────────────────────────────────────────────────────────
+
+// Cloudflare sets cf-connecting-ip and the client cannot spoof it;
+// x-forwarded-for is the fallback. A caller we cannot identify goes into one
+// shared bucket, which errs toward limiting rather than passing unmetered.
+function callerIp(req: Request): string {
+  return (
+    req.headers.get('cf-connecting-ip') ??
+    req.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
+    '0.0.0.0'
+  )
 }
 
-function escapeJsString(str: string): string {
-  return str
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/"/g, '\\"')
-    .replace(/</g, '\\u003C')
-    .replace(/\r?\n/g, '\\n')
+// ponytail: count-then-insert, so two concurrent requests can both pass at the
+// boundary. Irrelevant at 20 per 10 min; swap in a DB-side atomic counter only
+// if the threshold ever gets tight.
+async function isRateLimited(req: Request): Promise<boolean> {
+  const windowStart = new Date(Date.now() - RL_WINDOW_MINUTES * 60_000).toISOString()
+  const ip = callerIp(req)
+
+  try {
+    // Rows outside the window can no longer affect any decision. Pruning here
+    // keeps the table permanently small without a cron sweep.
+    await supabase.from('invite_lookup_attempts').delete().lt('attempted_at', windowStart)
+
+    const { count, error } = await supabase
+      .from('invite_lookup_attempts')
+      .select('*', { count: 'exact', head: true })
+      .eq('ip', ip)
+      .gte('attempted_at', windowStart)
+    if (error) throw error
+
+    if ((count ?? 0) >= RL_MAX_REQUESTS) return true
+
+    await supabase.from('invite_lookup_attempts').insert({ ip })
+    return false
+  } catch (e) {
+    // Fail open. A limiter outage must not take the invite funnel down with
+    // it: knowing which codes exist is worth less than every real click
+    // working.
+    console.error('invite-redirect: rate limit check failed, allowing request:', e)
+    return false
+  }
 }
 
-function renderPage(inviterName: string | null, code: string | null, errorMsg: string | null): string {
+// ── Error page ──────────────────────────────────────────────────────────────
+
+function htmlResponse(message: string, status: number): Response {
+  return new Response(renderPage(message), { headers: htmlHeaders, status })
+}
+
+// Takes fixed literals only -- there is no escaping here. If you ever pass
+// caller-supplied text into this, escape it first.
+function renderPage(message: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -121,55 +198,15 @@ function renderPage(inviterName: string | null, code: string | null, errorMsg: s
       background-clip: text;
     }
     p { color: #6b6b85; font-size: 15px; line-height: 1.6; margin-bottom: 32px; }
-    .btn {
-      display: block;
-      background: linear-gradient(135deg, #00ff88, #4d9fff);
-      color: #0a0a0f;
-      font-family: 'Syne', sans-serif;
-      font-weight: 700;
-      font-size: 16px;
-      padding: 16px 24px;
-      border-radius: 14px;
-      text-decoration: none;
-      margin-bottom: 16px;
-      transition: opacity 0.2s;
-    }
-    .btn:hover { opacity: 0.9; }
-    .code-pill {
-      display: inline-block;
-      background: rgba(0,255,136,0.08);
-      border: 1px solid rgba(0,255,136,0.2);
-      color: #00ff88;
-      font-size: 13px;
-      padding: 6px 14px;
-      border-radius: 100px;
-      letter-spacing: 0.15em;
-      font-family: monospace;
-      margin-bottom: 24px;
-    }
     .error { color: #ff6b35; font-size: 15px; }
   </style>
-  ${code ? `<script>
-    try { localStorage.setItem('gym_buddy_invite_code', '${escapeJsString(code)}'); } catch(e) {}
-  </script>` : ''}
 </head>
 <body>
   <div class="card">
-    ${errorMsg ? `
-      <span class="emoji">&#x1F62C;</span>
-      <h1>Invite <span>Not Found</span></h1>
-      <p class="error">${errorMsg}</p>
-      <p>Ask your buddy to send you a fresh invite link.</p>
-    ` : `
-      <span class="emoji">&#x1F4AA;</span>
-      <h1><span>${escapeHtml(inviterName)}</span> wants to be your Gym Buddy!</h1>
-      <p>Stay accountable together. You both check in daily &mdash; miss a day and the streak dies. No solo streaks. That's the point.</p>
-      ${code ? `<div class="code-pill">INVITE: ${escapeHtml(code)}</div>` : ''}
-      <a class="btn" href="https://play.google.com/store/apps/details?id=com.gymbuddy.app">
-        Download Gym Buddy &#x1F3CB;&#xFE0F;
-      </a>
-      <p style="font-size:13px; margin-bottom:0;">Already have the app? Open it and your invite will be waiting.</p>
-    `}
+    <span class="emoji">&#x1F62C;</span>
+    <h1>Invite <span>Not Found</span></h1>
+    <p class="error">${message}</p>
+    <p>Ask your buddy to send you a fresh invite link.</p>
   </div>
 </body>
 </html>`
