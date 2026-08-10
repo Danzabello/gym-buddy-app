@@ -14,17 +14,19 @@ const INVITE_TTL_DAYS = 7
 const RL_MAX_REQUESTS = 20
 const RL_WINDOW_MINUTES = 10
 
-// 2xx so the branded card actually renders: the edge gateway serves non-2xx
-// bodies as text/plain under a sandbox CSP, which shows this page as raw
-// source. Flip to 404 if the status matters more than the styling.
-const INVALID_STATUS = 200
-
 const LANDING_PAGE = 'https://danzabello.github.io/gym-buddy-app/invite.html'
 
-// One message for every outcome that depends on a real lookup: no such code,
-// already accepted, or past its TTL. A caller must not be able to tell those
-// apart -- the old 404-vs-410 split let anyone confirm that a code existed.
-const GENERIC_INVALID = 'This invite link is invalid, expired, or has already been used.'
+// One destination for every outcome that depends on a real lookup: no such
+// code, already accepted, past its TTL, or a DB error. A caller must not be
+// able to tell those apart -- the old 404-vs-410 split let anyone confirm that
+// a code existed.
+//
+// It has to be a redirect rather than an inline page. The edge gateway
+// rewrites any HTML body this function returns to text/plain under a sandbox
+// CSP, so an inline card only ever reached users as raw source -- a GET shows
+// this, HEAD hides it by having no body. invite.html renders the same "Invite
+// Not Found" card from this param, and GitHub Pages does not rewrite it.
+const INVALID_REDIRECT = `${LANDING_PAGE}?error=1`
 
 // Service-role client: this endpoint authenticates nothing about the caller,
 // it just looks the invite up. <any> because there are no generated DB types
@@ -39,11 +41,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const htmlHeaders = {
-  'Content-Type': 'text/html; charset=utf-8',
-  'X-Content-Type-Options': 'nosniff',
-}
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -53,9 +50,14 @@ serve(async (req) => {
   const code = url.searchParams.get('code')?.toUpperCase()
 
   // A missing param is a malformed request, not a lookup result: it says
-  // nothing about which codes exist, so it keeps its own status.
+  // nothing about which codes exist, so it keeps its own status rather than
+  // joining the uniform redirect. Plain text because the gateway would force
+  // text/plain on any HTML here anyway.
   if (!code) {
-    return htmlResponse('Invalid invite link.', 400)
+    return new Response('Invalid invite link.\n', {
+      status: 400,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    })
   }
 
   if (await isRateLimited(req)) {
@@ -81,10 +83,10 @@ serve(async (req) => {
     invite.status === 'pending' &&
     new Date(invite.created_at as string).getTime() >= ttlCutoff
 
-  // Every unusable case leaves through this one door, with one status and one
-  // body. Do not add a reason to this response.
+  // Every unusable case leaves through this one door, to one URL. Do not add
+  // a reason to this redirect.
   if (!usable) {
-    return htmlResponse(GENERIC_INVALID, INVALID_STATUS)
+    return redirect(INVALID_REDIRECT)
   }
 
   // PostgREST types a to-one embed as an array; at runtime it is a single
@@ -96,16 +98,16 @@ serve(async (req) => {
   // from an unauthenticated request.
   const inviterName = profile?.display_name || 'Someone'
 
-  const pageUrl =
+  return redirect(
     `${LANDING_PAGE}?code=${encodeURIComponent(code)}&inviter=${encodeURIComponent(inviterName)}`
-
-  return new Response(null, {
-    headers: {
-      'Location': pageUrl,
-    },
-    status: 302,
-  })
+  )
 })
+
+// Both outcomes are 302s to the same host, so a caller cannot learn anything
+// from the response shape -- only from the query string of a valid one.
+function redirect(location: string): Response {
+  return new Response(null, { status: 302, headers: { 'Location': location } })
+}
 
 // ── Rate limiting ───────────────────────────────────────────────────────────
 
@@ -152,62 +154,3 @@ async function isRateLimited(req: Request): Promise<boolean> {
   }
 }
 
-// ── Error page ──────────────────────────────────────────────────────────────
-
-function htmlResponse(message: string, status: number): Response {
-  return new Response(renderPage(message), { headers: htmlHeaders, status })
-}
-
-// Takes fixed literals only -- there is no escaping here. If you ever pass
-// caller-supplied text into this, escape it first.
-function renderPage(message: string): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gym Buddy Invite</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&display=swap');
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: #0a0a0f;
-      color: #f0f0f8;
-      font-family: 'Syne', sans-serif;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-    .card {
-      background: #13131a;
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 24px;
-      padding: 48px 32px;
-      max-width: 400px;
-      width: 100%;
-      text-align: center;
-    }
-    .emoji { font-size: 64px; margin-bottom: 24px; display: block; }
-    h1 { font-size: 28px; font-weight: 800; margin-bottom: 12px; line-height: 1.2; }
-    h1 span {
-      background: linear-gradient(135deg, #00ff88, #4d9fff);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    p { color: #6b6b85; font-size: 15px; line-height: 1.6; margin-bottom: 32px; }
-    .error { color: #ff6b35; font-size: 15px; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <span class="emoji">&#x1F62C;</span>
-    <h1>Invite <span>Not Found</span></h1>
-    <p class="error">${message}</p>
-    <p>Ask your buddy to send you a fresh invite link.</p>
-  </div>
-</body>
-</html>`
-}
