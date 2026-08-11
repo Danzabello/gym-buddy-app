@@ -41,6 +41,7 @@ import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
 import 'data/coach_tips.dart';
 import 'services/presence_service.dart';
+import 'services/notification_service.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
 
@@ -7157,6 +7158,10 @@ class _ProfilePageState extends State<ProfilePage>
     return GestureDetector(
       onTap: () async {
         HapticFeedback.mediumImpact();
+        // Release this handset's FCM token before the session goes away —
+        // removeToken() scopes its delete to auth.uid(), so it has to run
+        // while the user is still signed in.
+        await NotificationService().removeToken();
         await Supabase.instance.client.auth.signOut();
         if (!mounted) return;
         Navigator.of(context).pushAndRemoveUntil(

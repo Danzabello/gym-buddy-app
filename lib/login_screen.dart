@@ -152,7 +152,10 @@ class _LoginScreenState extends State<LoginScreen>
         setState(() => _isLoading = false);
 
         if (!onboardingComplete) {
-          // Orphaned account — clean it up and send back to splash
+          // Orphaned account — clean it up and send back to splash.
+          // Token first: the delete-account failure below is swallowed, and in
+          // that path the auth user survives with its token row intact.
+          await NotificationService().removeToken();
           try {
             await Supabase.instance.client.functions.invoke('delete-account');
           } catch (e) {

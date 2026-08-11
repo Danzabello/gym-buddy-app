@@ -11,6 +11,7 @@ import '../utils/input_validators.dart';
 import '../utils/timezone_sync.dart';
 import 'package:flutter/foundation.dart';
 import '../services/invite_service.dart';
+import '../services/notification_service.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -827,7 +828,10 @@ Future<void> _finish() async {
               .maybeSingle();
           final completed = hasProfile?['onboarding_completed'] == true;
           if (!completed) {
-            // Orphaned — delete and let signup continue fresh
+            // Orphaned — delete and let signup continue fresh.
+            // Token first: the delete-account failure below is swallowed, and
+            // in that path the auth user survives with its token row intact.
+            await NotificationService().removeToken();
             try {
               await Supabase.instance.client.functions.invoke('delete-account');
             } catch (_) {}
@@ -872,6 +876,14 @@ Future<void> _finish() async {
 
     // Capture the device timezone for this brand-new profile.
     await syncDeviceTimezone();
+
+    // Register this handset for push. Sign-up is the one entry point that
+    // never ran NotificationService.initialize() — main.dart only calls it
+    // when a session already exists at launch, and login_screen only on
+    // sign-in — so without this a newly-registered account had no
+    // device_tokens row (and no _fcm, which made removeToken() a no-op on
+    // its first sign-out) until the next cold start.
+    await NotificationService().initialize();
 
     // ── Step 3: Initialize Coach Max ───────────────────────────────────────
     await _coachMaxService.initializeCoachMaxForUser(user.id);

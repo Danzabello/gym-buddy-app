@@ -107,15 +107,17 @@ class NotificationService {
       final token = await _fcm?.getToken();
       if (token == null) return;
 
+      // Server-authoritative: register_device_token releases this token from
+      // any other account before claiming it for the caller. The client cannot
+      // do that itself — RLS scopes every write to auth.uid() = user_id, so a
+      // previous owner's row is unreachable from here. device_tokens is now
+      // UNIQUE (token), so one handset maps to exactly one account.
+      await _supabase.rpc('register_device_token', params: {
+        'p_token': token,
+        'p_platform': 'android',
+      });
 
-      await _supabase.from('device_tokens').upsert({
-        'user_id': userId,
-        'token': token,
-        'platform': 'android',
-        'updated_at': DateTime.now().toIso8601String(),
-      }, onConflict: 'user_id, token');
-
-      debugLog('✅ FCM token saved to Supabase');
+      debugLog('✅ FCM token registered to Supabase');
     } catch (e) {
       debugLog('❌ Error saving token: $e');
     }

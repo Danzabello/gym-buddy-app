@@ -153,6 +153,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _cleanupOrphanedAccount() async {
+    // Before delete-account, which destroys the auth user. A successful delete
+    // would cascade the token row away anyway, but the failure below is
+    // swallowed — in that path the user survives and the row would linger.
+    await NotificationService().removeToken();
     try {
       await Supabase.instance.client.functions.invoke('delete-account');
     } catch (e) {
