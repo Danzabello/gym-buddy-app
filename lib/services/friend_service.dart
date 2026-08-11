@@ -50,15 +50,25 @@ class FriendService {
     }
   }
 
-  // Send friend request
-  Future<bool> sendFriendRequest(String friendId) async {
+  /// Sends a friend request to [friendId].
+  /// Returns a [FriendRequestResult] describing what happened — callers need
+  /// to tell "nothing to do" apart from "it failed, retry", which a bool
+  /// could not express.
+  Future<FriendRequestResult> sendFriendRequest(String friendId) async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) {
         if (kDebugMode) debugLog('❌ No user logged in');
-        return false;
+        return FriendRequestResult.notSignedIn;
       }
 
+      // Defensive only: both callers filter self out upstream (searchUsers
+      // applies .neq('id', currentUserId)), and there is no DB-level guard,
+      // so don't rely on every future caller remembering.
+      if (friendId == currentUserId) {
+        if (kDebugMode) debugLog('❌ Cannot send a friend request to yourself');
+        return FriendRequestResult.error;
+      }
 
       // Check if friendship already exists (either direction)
       final existing = await _supabase
@@ -68,22 +78,32 @@ class FriendService {
           .maybeSingle();
 
       if (existing != null) {
-        if (kDebugMode) debugLog('⚠️ Friendship already exists: ${existing['status']}');
-        return false;
+        final status = existing['status'] as String?;
+        final requestedBy = existing['user_id'] as String?;
+        if (kDebugMode) debugLog('⚠️ Friendship already exists: $status');
+        if (status == 'accepted') return FriendRequestResult.alreadyFriends;
+        // A pending row the *other* party created means they asked first —
+        // the useful action is to accept theirs, not to wait on them.
+        return requestedBy != null && requestedBy != currentUserId
+            ? FriendRequestResult.theyRequestedYou
+            : FriendRequestResult.requestPending;
       }
 
       // Create friend request
-      final response = await _supabase.from('friendships').insert({
+      await _supabase.from('friendships').insert({
         'user_id': currentUserId,
         'friend_id': friendId,
         'status': 'pending',
-      }).select();  // ✅ ADD .select() to get the created record back
+      });
 
-
-      return true;
+      return FriendRequestResult.sent;
     } catch (e) {
+      // Covers the 23505 duplicate race that the bidirectional
+      // unique_friendship index catches, FK violations from a target deleted
+      // between search and tap, RLS rejections and plain network failure.
+      // Deliberately not split further: every one of them means "try again".
       if (kDebugMode) debugLog('❌ Error sending friend request: $e');
-      return false;
+      return FriendRequestResult.error;
     }
   }
 
@@ -474,4 +494,13 @@ class FriendService {
       return false;
     }
   }
+}
+
+enum FriendRequestResult {
+  sent,
+  alreadyFriends,
+  requestPending,
+  theyRequestedYou,
+  notSignedIn,
+  error,
 }

@@ -1517,34 +1517,69 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
     });
   }
 
-  Future<void> _sendFriendRequest(String friendId) async {
+  Future<void> _sendFriendRequest(String friendId, String displayName) async {
     setState(() => _sendingRequestTo = friendId);
-    final success = await _friendService.sendFriendRequest(friendId);
+    final result = await _friendService.sendFriendRequest(friendId);
     if (!mounted) return;
     setState(() => _sendingRequestTo = null);
 
-    if (success) {
-      HapticFeedback.mediumImpact();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Row(children: [
-          Icon(Icons.check_circle, color: Colors.white),
-          SizedBox(width: 12),
-          Text('Friend request sent! 🎉'),
-        ]),
-        backgroundColor: Color(0xFF10B981),
-        behavior: SnackBarBehavior.floating,
-      ));
-      _searchController.clear();
-      setState(() => _searchResults = []);
-      final results =
-          await AchievementService().checkConnectorAchievement();
-      if (mounted) AchievementToast.show(context, results);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Already friends or request pending'),
-        backgroundColor: Color(0xFFF97316),
-        behavior: SnackBarBehavior.floating,
-      ));
+    final neutral = AppColors.of(context).subtleText;
+
+    switch (result) {
+      case FriendRequestResult.sent:
+        HapticFeedback.mediumImpact();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Row(children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 12),
+            Text('Friend request sent! 🎉'),
+          ]),
+          backgroundColor: Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+        ));
+        _searchController.clear();
+        setState(() => _searchResults = []);
+        final results =
+            await AchievementService().checkConnectorAchievement();
+        if (mounted) AchievementToast.show(context, results);
+        break;
+      case FriendRequestResult.alreadyFriends:
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text("You're already buddies with $displayName"),
+          backgroundColor: neutral,
+          behavior: SnackBarBehavior.floating,
+        ));
+        break;
+      case FriendRequestResult.requestPending:
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Request already sent — waiting on them'),
+          backgroundColor: neutral,
+          behavior: SnackBarBehavior.floating,
+        ));
+        break;
+      case FriendRequestResult.theyRequestedYou:
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('They already requested you — check your requests'),
+          backgroundColor: neutral,
+          behavior: SnackBarBehavior.floating,
+        ));
+        break;
+      case FriendRequestResult.notSignedIn:
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Sign in again to add buddies'),
+          backgroundColor: neutral,
+          behavior: SnackBarBehavior.floating,
+        ));
+        break;
+      case FriendRequestResult.error:
+        // Distinct from the informational cases above: this one means the
+        // request did not land and retrying is worthwhile.
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Couldn\'t send request — try again'),
+          backgroundColor: Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+        ));
+        break;
     }
   }
 
@@ -1770,7 +1805,8 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
                 child: CircularProgressIndicator(
                     strokeWidth: 2, color: cs.primary))
             : GestureDetector(
-                onTap: () => _sendFriendRequest(user['id']),
+                onTap: () => _sendFriendRequest(
+                    user['id'], user['display_name'] ?? 'them'),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 12, vertical: 7),

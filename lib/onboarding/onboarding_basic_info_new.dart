@@ -905,12 +905,31 @@ Future<void> _finish() async {
     }
 
     // ── Step 5: Fire pending friend invites (from onboarding search) ──────
+    // One summary snackbar for the batch, not one per request. Previously the
+    // results were discarded and exceptions swallowed, so a user who picked
+    // buddies here had no way to know none of them landed.
     if (widget.pendingInvites.isNotEmpty) {
       final friendService = FriendService();
+      var sent = 0;
+      var failed = 0;
       for (final invite in widget.pendingInvites) {
-        try {
-          await friendService.sendFriendRequest(invite['id']);
-        } catch (_) {}
+        final result = await friendService.sendFriendRequest(invite['id']);
+        if (result == FriendRequestResult.sent) {
+          sent++;
+        } else {
+          failed++;
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(failed == 0
+              ? '$sent buddy request${sent == 1 ? '' : 's'} sent'
+              : "$sent sent, $failed couldn't be sent"),
+          backgroundColor:
+              failed == 0 ? const Color(0xFF10B981) : const Color(0xFFF97316),
+          behavior: SnackBarBehavior.floating,
+        ));
       }
     }
 
