@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy &mdash; Gym Buddy</title>
+  <meta name="description" content="How Gym Buddy collects, uses, and protects your information.">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0f;
+      color: #d8d8e4;
+      font-family: 'Syne', sans-serif;
+      font-size: 17px;
+      line-height: 1.7;
+      padding: 24px 20px 64px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .doc {
+      background: #13131a;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 24px;
+      max-width: 680px;
+      margin: 24px auto 0;
+      padding: 44px 40px 40px;
+    }
+
+    /* ── Header / nav ─────────────────────────────────────────── */
+    .doc-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+      align-items: baseline;
+      padding-bottom: 28px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      margin-bottom: 36px;
+    }
+    .brand {
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: 0.02em;
+      background: linear-gradient(135deg, #00ff88, #4d9fff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-right: auto;
+    }
+    .doc-nav a {
+      font-size: 13px;
+      color: #6b6b85;
+      text-decoration: none;
+      border-bottom: none;
+    }
+    .doc-nav a:hover { color: #4d9fff; }
+    .doc-nav a[aria-current="page"] { color: #f0f0f8; font-weight: 700; }
+
+    /* ── Typography ───────────────────────────────────────────── */
+    h1 {
+      font-size: 34px;
+      font-weight: 800;
+      line-height: 1.15;
+      color: #f0f0f8;
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    h1 span {
+      background: linear-gradient(135deg, #00ff88, #4d9fff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .meta {
+      color: #6b6b85;
+      font-size: 14px;
+      margin-bottom: 36px;
+    }
+    .meta strong { color: #9a9ab0; font-weight: 700; }
+    .lede p { margin-bottom: 18px; }
+    h2 {
+      font-size: 23px;
+      font-weight: 800;
+      color: #f0f0f8;
+      line-height: 1.25;
+      margin-top: 44px;
+      padding-top: 34px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      margin-bottom: 18px;
+      scroll-margin-top: 24px;
+      letter-spacing: -0.01em;
+    }
+    h3 {
+      font-size: 17px;
+      font-weight: 700;
+      color: #f0f0f8;
+      margin-top: 28px;
+      margin-bottom: 10px;
+      scroll-margin-top: 24px;
+    }
+    p { margin-bottom: 18px; }
+    ul { margin: 0 0 20px; padding-left: 22px; }
+    li { margin-bottom: 9px; }
+    li::marker { color: #4d9fff; }
+    strong { color: #f0f0f8; font-weight: 700; }
+    a {
+      color: #4d9fff;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(77,159,255,0.35);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    a:hover { border-bottom-color: #4d9fff; }
+
+    /* ── Footer ───────────────────────────────────────────────── */
+    .doc-foot {
+      margin-top: 48px;
+      padding-top: 28px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      font-size: 14px;
+      color: #6b6b85;
+    }
+    .doc-foot p { margin-bottom: 8px; }
+
+    @media (max-width: 600px) {
+      body { font-size: 16px; padding: 16px 14px 48px; }
+      .doc { padding: 32px 22px 28px; border-radius: 20px; margin-top: 12px; }
+      h1 { font-size: 27px; }
+      h2 { font-size: 20px; margin-top: 36px; padding-top: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="doc">
+    <div class="doc-nav">
+      <span class="brand">Gym Buddy</span>
+      <a href="privacy-policy.html" aria-current="page">Privacy Policy</a>
+      <a href="terms.html">Terms of Service</a>
+    </div>
+
+    <h1>Privacy Policy for <span>Gym Buddy</span></h1>
+    <p class="meta"><strong>Last updated:</strong> August 12, 2026</p>
+
+    <div class="lede">
+      <p>Gym Buddy ("the App", "we", "us") is developed by Keep Going! ("the Developer"). This Privacy Policy explains what information the App collects, how it's used, who can see it, and what choices you have.</p>
+      <p>Gym Buddy is completely free to use. We do not sell your data, and we do not run ads.</p>
+      <p>If you have questions about this policy or want to exercise any of the rights described below, contact us at <strong><a href="mailto:danzabello@gmail.com">danzabello@gmail.com</a></strong>.</p>
+    </div>
+
+    <h2 id="1-information-we-collect">1. Information We Collect</h2>
+
+    <h3>Account information</h3>
+    <p>When you sign up, we collect an <strong>email address</strong> and <strong>password</strong> to create your account (handled securely by our authentication provider, Supabase &mdash; we never see or store your plain-text password).</p>
+
+    <h3>Profile information</h3>
+    <p>During onboarding, we collect:</p>
+    <ul>
+      <li><strong>Display name</strong> and <strong>username</strong> (required)</li>
+      <li><strong>Age</strong> (required, minimum 16 &mdash; see <a href="#7-childrens-privacy">Children's Privacy</a> below)</li>
+      <li><strong>Fitness goals</strong> and <strong>fitness level</strong> (required/self-selected)</li>
+      <li><strong>Gender</strong> (optional)</li>
+      <li><strong>Avatar</strong> and cosmetic preferences (a preset image you choose &mdash; we do not access your camera or photo library)</li>
+      <li><strong>Timezone</strong>, detected automatically from your device, used to determine your daily streak and check-in windows correctly</li>
+    </ul>
+
+    <h3>Activity data</h3>
+    <p>As you use the App, we store the fitness activity you log: workout type, category, date, time, planned and actual duration, check-in history, streak counts, and break days you take. If you write anything in an optional notes field, whatever you type there is stored as-is &mdash; please avoid including sensitive personal information (such as health conditions) in free-text fields, since we do not ask for or process that kind of data.</p>
+    <p>We do <strong>not</strong> collect weight, height, heart rate, calories, sleep, nutrition, or any medical or health-measurement data. Gym Buddy tracks activity scheduling and consistency, not health metrics.</p>
+
+    <h3>Social data</h3>
+    <p>Information related to your buddy connections: friend requests and friendships, buddy teams, invite codes you send or receive, and nudges sent between buddies.</p>
+
+    <h3>Device and notification data</h3>
+    <p>To send you push notifications (like a buddy checking in or a streak reminder), we store a <strong>device token</strong> issued by Firebase Cloud Messaging (see <a href="#3-third-party-services">Third-Party Services</a> below). This token is tied to your account and is removed when you sign out.</p>
+
+    <h3>Automatically collected data</h3>
+    <p>When you use an invite link, our system briefly logs the <strong>IP address</strong> making the request, solely to prevent abuse (automated guessing of invite codes). This data is automatically deleted within approximately 10 minutes and is never used for any other purpose.</p>
+
+    <h3>What we don't collect</h3>
+    <p>We do not access your device's location, camera, photo library, or contacts. We do not use any analytics, advertising, or crash-reporting services &mdash; Gym Buddy has no third-party tracking of any kind beyond what's described in this policy.</p>
+
+    <h2 id="2-how-we-use-your-information">2. How We Use Your Information</h2>
+    <p>We use the information above to:</p>
+    <ul>
+      <li>Create and maintain your account</li>
+      <li>Operate the App's core features (streaks, check-ins, buddy pairing, teams)</li>
+      <li>Send push notifications you'd expect (buddy activity, streak status, friend requests)</li>
+      <li>Prevent abuse of features like invite links</li>
+      <li>Provide customer support if you contact us</li>
+    </ul>
+    <p>We do not use your data for advertising, and we do not sell or rent your information to anyone.</p>
+
+    <h2 id="3-third-party-services">3. Third-Party Services</h2>
+    <p>Gym Buddy uses two infrastructure providers to operate:</p>
+    <p><strong>Firebase Cloud Messaging (Google)</strong> delivers push notifications. To do this, Google receives your device's notification token, the notification text (which may include a buddy's display name and activity, such as "Alex wants to be your gym buddy!"), and a general event type. Google does not receive your email address, password, or internal account ID.</p>
+    <p><strong>Supabase</strong> hosts our database, authentication, and backend logic. All of your account and activity data described in this policy is stored on Supabase's infrastructure, located in the United Kingdom (London region).</p>
+    <p>Because Gym Buddy is distributed through the Google Play Store, Google Play Services also operate on your device as part of standard app distribution and installation &mdash; this is governed by Google's own policies, separate from Gym Buddy.</p>
+    <p>We do not use any other third-party SDKs, analytics platforms, or advertising networks.</p>
+
+    <h2 id="4-coach-max">4. Coach Max</h2>
+    <p>Coach Max is an automated in-app character that sends motivational tips and check-in reminders. Coach Max is <strong>not</strong> powered by artificial intelligence, and no data is sent to any AI service, external or otherwise &mdash; its messages are pre-written content selected and delivered automatically by our own systems. Notifications from Coach Max reach you through the same push notification system described above.</p>
+
+    <h2 id="5-who-can-see-your-information">5. Who Can See Your Information</h2>
+    <p>Gym Buddy is a social fitness app, and some information is visible to other users by design:</p>
+    <ul>
+      <li><strong>Your profile</strong> (display name, age, gender if provided, fitness goals, fitness level, and activity stats) is visible to any other signed-in user of the App, to support finding and connecting with workout buddies.</li>
+      <li><strong>Check-in activity, streak status, and break days</strong> are visible to your confirmed buddies and teammates.</li>
+      <li><strong>Team check-in history</strong> is visible to your teammates and your accepted (mutual) friends.</li>
+      <li><strong>Live workout status</strong> (e.g., that you're mid-workout right now) is visible to a buddy you're actively paired with for that session.</li>
+      <li>Information you set privately &mdash; such as nicknames you give friends, or friend requests you've sent &mdash; is visible only to you.</li>
+    </ul>
+    <p>We do not share your information with anyone outside the App except as described in <a href="#3-third-party-services">Third-Party Services</a>.</p>
+
+    <h2 id="6-data-retention-and-deletion">6. Data Retention and Deletion</h2>
+    <p>You can delete your account at any time from within the App. When you do, we permanently delete:</p>
+    <ul>
+      <li>Your profile and account credentials</li>
+      <li>Your activity data (workouts, check-ins, streaks, break days)</li>
+      <li>Your social data (friendships, nicknames, nudges, sent invites)</li>
+      <li>Your device token and notification settings</li>
+    </ul>
+    <p>Some information does <strong>not</strong> get deleted, because it belongs to shared, ongoing records rather than to you individually:</p>
+    <ul>
+      <li><strong>Shared team streak history</strong> (e.g., your team's current or longest streak) is retained for the benefit of remaining team members, though it is no longer linked to your personal account.</li>
+      <li>If you were paired with a buddy on a shared workout, that workout record is retained on your former buddy's account, with your identifying information removed from it.</li>
+    </ul>
+    <p>If you have questions about what happens to your data after deletion, contact us at <a href="mailto:danzabello@gmail.com">danzabello@gmail.com</a>.</p>
+
+    <h2 id="7-childrens-privacy">7. Children's Privacy</h2>
+    <p>Gym Buddy is not intended for anyone under the age of 16. We require users to confirm they are 16 or older during sign-up, and our systems enforce this minimum. We do not knowingly collect information from anyone under 16. If you believe a user under 16 has created an account, please contact us and we will investigate and remove the account if confirmed.</p>
+
+    <h2 id="8-your-rights">8. Your Rights</h2>
+    <p>Depending on where you live, you may have rights over your personal information, which can include the right to:</p>
+    <ul>
+      <li><strong>Access</strong> the information we hold about you</li>
+      <li><strong>Correct</strong> inaccurate information</li>
+      <li><strong>Delete</strong> your account and associated data (available directly in the App)</li>
+      <li><strong>Object to or restrict</strong> certain processing</li>
+      <li><strong>Data portability</strong>, where applicable</li>
+    </ul>
+    <p>To exercise any of these rights, contact us at <a href="mailto:danzabello@gmail.com">danzabello@gmail.com</a>. We will respond within a reasonable timeframe and in accordance with applicable law (including, where relevant, the UK/EU General Data Protection Regulation and other regional privacy laws).</p>
+
+    <h2 id="9-security">9. Security</h2>
+    <p>We take reasonable technical and organizational measures to protect your information, including encrypted data storage, access controls, and regular security review. However, no method of transmission or storage is 100% secure, and we cannot guarantee absolute security.</p>
+
+    <h2 id="10-changes-to-this-policy">10. Changes to This Policy</h2>
+    <p>We may update this Privacy Policy from time to time. If we make material changes, we will update the "Last updated" date above. Continued use of the App after changes take effect constitutes acceptance of the updated policy.</p>
+
+    <h2 id="11-contact-us">11. Contact Us</h2>
+    <p>If you have any questions about this Privacy Policy or how we handle your information, contact us at:</p>
+    <p><strong><a href="mailto:danzabello@gmail.com">danzabello@gmail.com</a></strong></p>
+
+    <div class="doc-foot">
+      <p>See also: <a href="terms.html">Terms of Service</a></p>
+      <p>Gym Buddy is developed by Keep Going!</p>
+    </div>
+  </main>
+</body>
+</html>

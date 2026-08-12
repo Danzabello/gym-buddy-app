@@ -1,11 +1,18 @@
 import 'package:gym_buddy_app/login_screen.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'onboarding/onboarding_theme.dart';
 import 'onboarding/onboarding_basic_info_new.dart';
 import 'onboarding/splash_screen.dart';
 import 'main.dart';
 import 'utils/input_validators.dart';
+
+// Hosted on GitHub Pages from docs/ -- same origin as invite.html.
+const String _kTermsUrl =
+    'https://danzabello.github.io/gym-buddy-app/terms.html';
+const String _kPrivacyUrl =
+    'https://danzabello.github.io/gym-buddy-app/privacy-policy.html';
 
 
 class SignUpScreen extends StatefulWidget {
@@ -31,12 +38,46 @@ class _SignUpScreenState extends State<SignUpScreen> {
   String? _confirmError;
   String? _generalError;
 
+  // Held as fields (not built inline) so they can be disposed -- a
+  // TapGestureRecognizer leaks if it outlives the widget without disposal.
+  late final TapGestureRecognizer _termsTap;
+  late final TapGestureRecognizer _privacyTap;
+
+  @override
+  void initState() {
+    super.initState();
+    _termsTap = TapGestureRecognizer()
+      ..onTap = () => _openLegalPage(_kTermsUrl);
+    _privacyTap = TapGestureRecognizer()
+      ..onTap = () => _openLegalPage(_kPrivacyUrl);
+  }
+
   @override
   void dispose() {
+    _termsTap.dispose();
+    _privacyTap.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
     super.dispose();
+  }
+
+  /// Opens a legal page in the device browser. Failure surfaces as an inline
+  /// message rather than an exception -- a dead link must never block signup.
+  Future<void> _openLegalPage(String url) async {
+    var launched = false;
+    try {
+      launched = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      launched = false;
+    }
+    if (!launched && mounted) {
+      setState(() =>
+          _generalError = 'Could not open that page. Please try again.');
+    }
   }
 
   bool _validate() {
@@ -60,7 +101,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Future<void> _next() async {
     if (!_validate()) return;
     if (!_acceptTerms) {
-      setState(() => _generalError = 'Please accept the Terms of Service.');
+      setState(() => _generalError =
+          'Please accept the Terms of Service and Privacy Policy.');
       return;
     }
 
@@ -203,16 +245,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
                           onTap: () =>
                               setState(() => _acceptTerms = !_acceptTerms),
                           child: RichText(
-                            text: const TextSpan(
-                              style: TextStyle(
+                            text: TextSpan(
+                              style: const TextStyle(
                                   fontSize: 13, color: Color(0xFF374151)),
                               children: [
-                                TextSpan(text: 'I accept the '),
+                                const TextSpan(text: 'I accept the '),
                                 TextSpan(
                                   text: 'Terms of Service',
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                       color: kObBlue,
                                       fontWeight: FontWeight.w600),
+                                  recognizer: _termsTap,
+                                ),
+                                const TextSpan(text: ' and '),
+                                TextSpan(
+                                  text: 'Privacy Policy',
+                                  style: const TextStyle(
+                                      color: kObBlue,
+                                      fontWeight: FontWeight.w600),
+                                  recognizer: _privacyTap,
                                 ),
                               ],
                             ),
