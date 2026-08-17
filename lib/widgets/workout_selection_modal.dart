@@ -2,7 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/workout_history_service.dart';
-import '../utils/input_validators.dart';
+import '../theme/app_theme.dart';
 import 'dart:async' show unawaited;
 import '../services/achievement_service.dart';
 
@@ -24,7 +24,23 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
 
   List<WorkoutTemplate>? _templates;
   bool _isLoading = true;
-  String _selectedCategory = 'all';
+
+  // Which category is drilled into. null = showing the category grid.
+  String? _drillCategory;
+
+  // Category grid definitions: (db key, label, icon).
+  List<(String, String, IconData)> get _categoryDefs => const [
+        ('strength', 'Strength', Icons.fitness_center),
+        ('cardio', 'Cardio', Icons.directions_run),
+        ('hiit', 'HIIT', Icons.bolt),
+        ('yoga', 'Yoga / stretch', Icons.self_improvement),
+        ('outside', 'Outside', Icons.park),
+        ('sports', 'Sports', Icons.sports_tennis),
+        ('swimming', 'Swimming', Icons.pool),
+        ('cycling', 'Cycling', Icons.directions_bike),
+        ('martial_arts', 'Martial arts', Icons.sports_mma),
+        ('recovery', 'Recovery', Icons.spa),
+      ];
 
   // ── Randomiser state ──────────────────────────────────────────
   bool _showRandomResult = false;
@@ -72,11 +88,14 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
     });
   }
 
-  List<WorkoutTemplate> get _filteredTemplates {
+  List<WorkoutTemplate> _templatesFor(String category) {
     if (_templates == null) return [];
-    if (_selectedCategory == 'all') return _templates!;
-    return _templates!.where((t) => t.category == _selectedCategory).toList();
+    return _templates!.where((t) => t.category == category).toList();
   }
+
+  String _labelFor(String category) => _categoryDefs
+      .firstWhere((c) => c.$1 == category, orElse: () => (category, category, Icons.category))
+      .$2;
 
   // ── Randomiser logic ──────────────────────────────────────────
   void _randomise() {
@@ -122,197 +141,210 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
     widget.onWorkoutSelected(_randomTemplate!, _randomDuration, null, results);
   }
 
-  // ── Quick select (existing flow) ──────────────────────────────
-  void _quickSelectTemplate(WorkoutTemplate template) {
-    HapticFeedback.lightImpact();
-    Navigator.pop(context);
-    widget.onWorkoutSelected(template, template.defaultDurationMinutes, null, []);
-  }
+  // ── Duration picker ───────────────────────────────────────────
+  // Categorized workouts enforce a 20-minute minimum.
+  static const int _minCategoryDuration = 20;
 
   void _showCustomDurationDialog(WorkoutTemplate template) {
     HapticFeedback.lightImpact();
-    int customDuration = template.defaultDurationMinutes;
-    final notesController = TextEditingController();
+    final colors = AppColors.of(context);
+    int customDuration = max(_minCategoryDuration, template.defaultDurationMinutes);
 
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setDialogState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Row(
-            children: [
-              Text(template.emoji, style: const TextStyle(fontSize: 28)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(template.name,
-                        style: const TextStyle(fontSize: 18)),
-                    Text(
-                      template.category.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+        builder: (dialogContext, setDialogState) {
+          // Dynamic colour by duration band (shared pattern with the
+          // schedule sheets — see _durationColor).
+          final dialColor = _durationColor(customDuration);
+          return AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.orange[50],
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.orange[200]!),
-                  ),
+                Text(template.emoji, style: const TextStyle(fontSize: 28)),
+                const SizedBox(width: 12),
+                Expanded(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Duration',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w600, fontSize: 15)),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _buildDurationButton(
-                            icon: Icons.remove,
-                            onTap: customDuration > 15
-                                ? () => setDialogState(
-                                    () => customDuration -= 5)
-                                : null,
-                          ),
-                          const SizedBox(width: 20),
-                          Text(
-                            '$customDuration min',
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.orange[700],
-                            ),
-                          ),
-                          const SizedBox(width: 20),
-                          _buildDurationButton(
-                            icon: Icons.add,
-                            onTap: customDuration < 180
-                                ? () => setDialogState(
-                                    () => customDuration += 5)
-                                : null,
-                            isAdd: true,
-                          ),
-                        ],
+                      Text(template.name,
+                          style: const TextStyle(fontSize: 18)),
+                      Text(
+                        _labelFor(template.category).toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.subtleText,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: notesController,
-                  inputFormatters: InputFormatters.workoutNotes,
-                  maxLines: 2,
-                  maxLength: InputLimits.notesMax,
-                  decoration: InputDecoration(
-                    hintText: 'Add notes (optional)',
-                    hintStyle: TextStyle(color: Colors.grey[400]),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey[300]!),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.orange[400]!, width: 2),
-                    ),
-                    contentPadding: const EdgeInsets.all(14),
-                    prefixIcon: Icon(Icons.notes, color: Colors.grey[400]),
-                    counterStyle: TextStyle(color: Colors.grey[400], fontSize: 11),
-                  ),
-                ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('Cancel',
-                  style: TextStyle(color: Colors.grey[600])),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final notesError = InputValidators.workoutNotes(notesController.text);
-                if (notesError != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(notesError),
-                      backgroundColor: Colors.red[600],
-                      behavior: SnackBarBehavior.floating,
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Big readout — colour tracks the duration band.
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 32, vertical: 20),
+                    decoration: BoxDecoration(
+                      color: dialColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                          color: dialColor.withOpacity(0.4), width: 2),
                     ),
-                  );
-                  return;
-                }
-                Navigator.pop(dialogContext);
-                Navigator.pop(context);
-                final notes = InputValidators.truncate(
-                  notesController.text, InputLimits.notesMax,
-                );
-                widget.onWorkoutSelected(template, customDuration, notes, []);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange[600],
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        _formatDuration(customDuration),
+                        style: TextStyle(
+                          fontSize: 52,
+                          fontWeight: FontWeight.bold,
+                          color: dialColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SliderTheme(
+                    data: SliderTheme.of(dialogContext).copyWith(
+                      activeTrackColor: dialColor,
+                      inactiveTrackColor: colors.cardBorder,
+                      thumbColor: dialColor,
+                      overlayColor: dialColor.withOpacity(0.2),
+                      trackHeight: 10,
+                      thumbShape:
+                          const RoundSliderThumbShape(enabledThumbRadius: 16),
+                      overlayShape:
+                          const RoundSliderOverlayShape(overlayRadius: 28),
+                    ),
+                    child: Slider(
+                      value: customDuration.toDouble(),
+                      min: _minCategoryDuration.toDouble(),
+                      max: 180,
+                      divisions: (180 - _minCategoryDuration) ~/ 5,
+                      onChanged: (value) {
+                        final rounded = (value / 5).round() * 5;
+                        HapticFeedback.selectionClick();
+                        setDialogState(() => customDuration = rounded);
+                      },
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('20 min',
+                            style: TextStyle(
+                                color: colors.subtleText, fontSize: 13)),
+                        Text('3 hours',
+                            style: TextStyle(
+                                color: colors.subtleText, fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.center,
+                    children: [30, 60, 90, 120].map((mins) {
+                      final isSelected = customDuration == mins;
+                      final chipColor = _durationColor(mins);
+                      return GestureDetector(
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          setDialogState(() => customDuration = mins);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 18, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? chipColor.withOpacity(0.15)
+                                : colors.sectionBackground,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color:
+                                  isSelected ? chipColor : colors.cardBorder,
+                              width: isSelected ? 2 : 1,
+                            ),
+                          ),
+                          child: Text(
+                            _formatDuration(mins),
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: isSelected
+                                  ? chipColor
+                                  : Theme.of(dialogContext)
+                                      .colorScheme
+                                      .onSurface,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
               ),
-              child: const Text('Start Workout',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text('Cancel',
+                    style: TextStyle(color: colors.subtleText)),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  Navigator.pop(context);
+                  widget.onWorkoutSelected(template, customDuration, null, []);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colors.streakOrange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Start Workout',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildDurationButton({
-    required IconData icon,
-    required VoidCallback? onTap,
-    bool isAdd = false,
-  }) {
-    final isEnabled = onTap != null;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isEnabled
-              ? (isAdd ? Colors.orange[100] : Colors.grey[200])
-              : Colors.grey[100],
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          icon,
-          size: 24,
-          color: isEnabled
-              ? (isAdd ? Colors.orange[700] : Colors.grey[700])
-              : Colors.grey[300],
-        ),
-      ),
-    );
+  // Duration band colour + label — copied from schedule_workout_sheet.dart /
+  // quick_schedule_sheet.dart to reuse their duration-picker visual language.
+  // (Candidate for extraction to a shared util; kept local to stay surgical.)
+  Color _durationColor(int minutes) {
+    if (minutes <= 20) return Colors.grey[500]!;
+    if (minutes <= 30) return Colors.blue[600]!;
+    if (minutes <= 45) return Colors.green[600]!;
+    if (minutes <= 60) return Colors.teal[600]!;
+    if (minutes <= 75) return Colors.purple[600]!;
+    if (minutes <= 90) return Colors.deepPurple[600]!;
+    return Colors.red[600]!;
+  }
+
+  String _formatDuration(int minutes) {
+    if (minutes < 60) return '${minutes}m';
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    return m > 0 ? '${h}h ${m}m' : '${h}h';
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -320,13 +352,15 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
   // ══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+    final inGrid = _drillCategory == null;
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
-      decoration: const BoxDecoration(
-        color: Color(0xFFF8F9FC),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: colors.sectionBackground,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         children: [
@@ -337,7 +371,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey[300],
+                color: colors.divider,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -346,15 +380,26 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
           // ── Header ────────────────────────────────────────────
           Padding(
             padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             child: Row(
               children: [
+                if (inGrid)
+                  const SizedBox(width: 8)
+                else
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    tooltip: 'Back to categories',
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      setState(() => _drillCategory = null);
+                    },
+                  ),
                 Text(
-                  'Choose Workout',
+                  inGrid ? 'Choose Workout' : _labelFor(_drillCategory!),
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade800,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 const Spacer(),
@@ -366,37 +411,26 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
             ),
           ),
 
-          // ── Randomiser section ────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: _showRandomResult
-                ? _buildRandomResult()
-                : _buildRandomiserButton(),
-          ),
+          // ── Randomiser section (grid step only) ───────────────
+          if (inGrid) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: _showRandomResult
+                  ? _buildRandomResult()
+                  : _buildRandomiserButton(),
+            ),
+            Divider(color: colors.divider, height: 1),
+          ],
 
-          Divider(color: Colors.grey[200], height: 1),
-
-          // ── Category filter ───────────────────────────────────
-          _buildCategoryFilter(),
-          const SizedBox(height: 8),
-          Divider(color: Colors.grey[200], height: 1),
-
-          // ── Template list ─────────────────────────────────────
+          // ── Body ──────────────────────────────────────────────
           if (_isLoading)
             const Expanded(
               child: Center(child: CircularProgressIndicator()),
             )
+          else if (inGrid)
+            Expanded(child: _buildCategoryGrid(bottomPadding))
           else
-            Expanded(
-              child: ListView.builder(
-                padding:
-                    EdgeInsets.fromLTRB(16, 12, 16, bottomPadding + 16),
-                itemCount: _filteredTemplates.length,
-                itemBuilder: (context, index) {
-                  return _buildTemplateCard(_filteredTemplates[index]);
-                },
-              ),
-            ),
+            Expanded(child: _buildSubcategoryList(bottomPadding)),
         ],
       ),
     );
@@ -484,6 +518,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
   // ── Random result card (after rolling) ───────────────────────
   Widget _buildRandomResult() {
     if (_randomTemplate == null) return const SizedBox.shrink();
+    final colors = AppColors.of(context);
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 350),
@@ -502,11 +537,9 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: colors.cardBackground,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-              color: const Color(0xFF4B6EF5).withOpacity(0.3),
-              width: 2),
+          border: Border.all(color: colors.cardBorder, width: 2),
           boxShadow: [
             BoxShadow(
               color: const Color(0xFF4B6EF5).withOpacity(0.08),
@@ -556,7 +589,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                   onTap: () =>
                       setState(() => _showRandomResult = false),
                   child: Icon(Icons.close,
-                      size: 18, color: Colors.grey[400]),
+                      size: 18, color: colors.subtleText),
                 ),
               ],
             ),
@@ -585,10 +618,10 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                     children: [
                       Text(
                         _randomTemplate!.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1A1A2E),
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -596,13 +629,13 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                         children: [
                           Icon(Icons.timer_outlined,
                               size: 14,
-                              color: Colors.grey[500]),
+                              color: colors.subtleText),
                           const SizedBox(width: 4),
                           Text(
                             '$_randomDuration minutes',
                             style: TextStyle(
                               fontSize: 13,
-                              color: Colors.grey[600],
+                              color: colors.subtleText,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -627,10 +660,10 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                       padding:
                           const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
-                        color: Colors.grey[100],
+                        color: colors.sectionBackground,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                            color: Colors.grey[300]!, width: 1.5),
+                            color: colors.cardBorder, width: 1.5),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -649,7 +682,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: Colors.grey[700],
+                              color: Theme.of(context).colorScheme.onSurface,
                             ),
                           ),
                         ],
@@ -714,74 +747,87 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
     );
   }
 
-  // ── Category filter ───────────────────────────────────────────
-  Widget _buildCategoryFilter() {
-    final categories = [
-      ('all', 'All', '🏆'),
-      ('strength', 'Strength', '💪'),
-      ('cardio', 'Cardio', '🏃'),
-      ('hiit', 'HIIT', '⚡'),
-      ('yoga', 'Yoga', '🧘'),
-      ('sports', 'Sports', '⚽'),
-      ('other', 'Other', '✨'),
-    ];
+  // ── Category grid (drill-in step 1) ───────────────────────────
+  Widget _buildCategoryGrid(double bottomPadding) {
+    return GridView.count(
+      crossAxisCount: 2,
+      childAspectRatio: 2.4,
+      mainAxisSpacing: 10,
+      crossAxisSpacing: 10,
+      padding: EdgeInsets.fromLTRB(16, 12, 16, bottomPadding + 16),
+      children: [
+        for (final (key, label, icon) in _categoryDefs)
+          _buildCategoryTile(key, label, icon),
+      ],
+    );
+  }
 
-    return SizedBox(
-      height: 50,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: categories.length,
-        itemBuilder: (context, index) {
-          final (value, label, emoji) = categories[index];
-          final isSelected = _selectedCategory == value;
-
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilterChip(
-              label: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(emoji, style: const TextStyle(fontSize: 16)),
-                  const SizedBox(width: 6),
-                  Text(label),
-                ],
-              ),
-              selected: isSelected,
-              onSelected: (_) =>
-                  setState(() => _selectedCategory = value),
-              backgroundColor: Colors.grey[100],
-              selectedColor: Colors.orange[100],
-              checkmarkColor: Colors.orange[800],
-              side: BorderSide(
-                color: isSelected
-                    ? Colors.orange[400]!
-                    : Colors.grey[300]!,
-              ),
-              labelStyle: TextStyle(
-                fontSize: 13,
-                color: isSelected
-                    ? Colors.orange[900]
-                    : Colors.grey[700],
-                fontWeight: isSelected
-                    ? FontWeight.w600
-                    : FontWeight.normal,
-              ),
-            ),
-          );
+  Widget _buildCategoryTile(String key, String label, IconData icon) {
+    final colors = AppColors.of(context);
+    return Material(
+      color: colors.cardBackground,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () {
+          HapticFeedback.lightImpact();
+          setState(() => _drillCategory = key);
         },
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: colors.cardBorder),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: colors.streakOrange.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: colors.streakOrange, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
+    );
+  }
+
+  // ── Subcategory list (drill-in step 2) ────────────────────────
+  Widget _buildSubcategoryList(double bottomPadding) {
+    final templates = _templatesFor(_drillCategory!);
+    return ListView.builder(
+      padding: EdgeInsets.fromLTRB(16, 12, 16, bottomPadding + 16),
+      itemCount: templates.length,
+      itemBuilder: (context, index) => _buildTemplateCard(templates[index]),
     );
   }
 
   // ── Template card ─────────────────────────────────────────────
   Widget _buildTemplateCard(WorkoutTemplate template) {
+    final colors = AppColors.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colors.cardBackground,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(color: colors.cardBorder),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.03),
@@ -793,8 +839,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => _quickSelectTemplate(template),
-          onLongPress: () => _showCustomDurationDialog(template),
+          onTap: () => _showCustomDurationDialog(template),
           borderRadius: BorderRadius.circular(14),
           child: Padding(
             padding: const EdgeInsets.all(14),
@@ -804,7 +849,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                   width: 50,
                   height: 50,
                   decoration: BoxDecoration(
-                    color: Colors.orange[50],
+                    color: colors.streakOrange.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
@@ -830,7 +875,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                           template.description!,
                           style: TextStyle(
                             fontSize: 13,
-                            color: Colors.grey[600],
+                            color: colors.subtleText,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -840,35 +885,24 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                   ),
                 ),
                 const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.orange[50],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${template.defaultDurationMinutes}m',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.orange[700],
-                        ),
-                      ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: colors.streakOrange.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${template.defaultDurationMinutes}m',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: colors.streakOrange,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'hold to customise',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey[400],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
+                const SizedBox(width: 6),
+                Icon(Icons.chevron_right, size: 20, color: colors.subtleText),
               ],
             ),
           ),
