@@ -6,6 +6,7 @@ import 'services/friend_service.dart';
 import 'services/workout_service.dart';
 import 'services/team_streak_service.dart';
 import 'widgets/coach_max_widget.dart';
+import 'widgets/ai_disclosure_tag.dart';
 import 'package:confetti/confetti.dart';
 import 'package:flutter/services.dart';
 import 'widgets/user_avatar.dart';
@@ -559,15 +560,27 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             // ✅ NAME & STREAK COUNT
             Column(
               children: [
-                Text(
-                  _getDisplayName(displayItems[_currentCarouselIndex]),
-                  style: TextStyle(
-                    fontSize: 16,  // ✅ Was 18
-                    fontWeight: FontWeight.bold,
-                    color: displayItems[_currentCarouselIndex] != null
-                        ? Theme.of(context).colorScheme.onSurface
-                        : appColors.subtleText,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _getDisplayName(displayItems[_currentCarouselIndex]),
+                        style: TextStyle(
+                          fontSize: 16,  // ✅ Was 18
+                          fontWeight: FontWeight.bold,
+                          color: displayItems[_currentCarouselIndex] != null
+                              ? Theme.of(context).colorScheme.onSurface
+                              : appColors.subtleText,
+                        ),
+                      ),
+                    ),
+                    if (_isCoachMaxItem(displayItems[_currentCarouselIndex])) ...[
+                      const SizedBox(width: 6),
+                      const AiInlinePill(),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 4),  // ✅ Was 8
                 // Just show streak count - removed progress bar
@@ -729,6 +742,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
     return _buddyOnBreakToday[buddy.userId] == true;
   }
+
+  // 🤖 Coach Max needs an AI tag wherever he's shown as a buddy.
+  bool _isCoachMaxItem(dynamic item) =>
+      item is TeamStreak && item.isCoachMaxTeam;
 
   // ✅ HELPER METHOD: Get display name
   String _getDisplayName(dynamic item) {
@@ -1283,16 +1300,40 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: appColors.sectionBackground,
-              shape: BoxShape.circle,
-            ),
-            child: const Center(
-              child: Text('🤖', style: TextStyle(fontSize: 20)),
-            ),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  // Matches the Coach Max carousel avatar in _buildCarouselAvatar.
+                  gradient: LinearGradient(
+                    colors: [Colors.blue[400]!, Colors.purple[400]!],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  // Same glow as the carousel, scaled for 38px (20/2 → 8/1).
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.orange.withOpacity(0.4),
+                      blurRadius: 8,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Text('🤖', style: TextStyle(fontSize: 20)),
+                ),
+              ),
+              // 🤖 AI disclosure on the avatar, alongside the inline pill by the label.
+              Positioned(
+                bottom: -2,
+                right: -8,
+                child: AiCornerBadge(scale: 0.85),
+              ),
+            ],
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1568,6 +1609,15 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   ),
                 ),
               ),
+            ),
+
+          // 🤖 AI disclosure — Coach Max shares this wheel with real buddies,
+          // so the tag has to ride on the avatar itself.
+          if (streak.isCoachMaxTeam)
+            Positioned(
+              bottom: 6,
+              right: 6,
+              child: AiCornerBadge(),
             ),
 
           // 🛡 On-break status dot — human buddies only (friendMember is
@@ -5191,31 +5241,43 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
         padding: const EdgeInsets.all(9),
         child: Row(children: [
           // Avatar
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: isCoach
-                    ? [
-                        const Color(0xFF1D4ED8),
-                        const Color(0xFF7C3AED)
-                      ]
-                    : [
-                        const Color(0xFFF97316),
-                        const Color(0xFFEA580C)
-                      ],
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: isCoach
+                        ? [
+                            const Color(0xFF1D4ED8),
+                            const Color(0xFF7C3AED)
+                          ]
+                        : [
+                            const Color(0xFFF97316),
+                            const Color(0xFFEA580C)
+                          ],
+                  ),
+                ),
+                child: isCoach
+                    ? const Center(
+                        child: Text('🤖',
+                            style: TextStyle(fontSize: 20)))
+                    : ClipOval(
+                        child: UserAvatar(
+                            avatarId: _buddyAvatar(streak),
+                            size: 40)),
               ),
-            ),
-            child: isCoach
-                ? const Center(
-                    child: Text('🤖',
-                        style: TextStyle(fontSize: 20)))
-                : ClipOval(
-                    child: UserAvatar(
-                        avatarId: _buddyAvatar(streak),
-                        size: 40)),
+              // 🤖 AI disclosure — this row sits in the same list as real buddies.
+              if (isCoach)
+                Positioned(
+                  bottom: -2,
+                  right: -6,
+                  child: AiCornerBadge(scale: 0.85),
+                ),
+            ],
           ),
           const SizedBox(width: 10),
           // Name + buddy
