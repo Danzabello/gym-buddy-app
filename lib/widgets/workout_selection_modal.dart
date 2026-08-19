@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/workout_history_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/accent_theme_provider.dart';
+import 'package:provider/provider.dart';
 import 'dart:async' show unawaited;
 import '../services/achievement_service.dart';
 
@@ -330,14 +332,12 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
   // Duration band colour + label — copied from schedule_workout_sheet.dart /
   // quick_schedule_sheet.dart to reuse their duration-picker visual language.
   // (Candidate for extraction to a shared util; kept local to stay surgical.)
+  // Two tiers, theme-driven: short sessions read as neutral, longer ones
+  // get the accent nod. (Was a 7-step rainbow duplicated across sheets.)
   Color _durationColor(int minutes) {
-    if (minutes <= 20) return Colors.grey[500]!;
-    if (minutes <= 30) return Colors.blue[600]!;
-    if (minutes <= 45) return Colors.green[600]!;
-    if (minutes <= 60) return Colors.teal[600]!;
-    if (minutes <= 75) return Colors.purple[600]!;
-    if (minutes <= 90) return Colors.deepPurple[600]!;
-    return Colors.red[600]!;
+    final appColors = AppColors.of(context);
+    if (minutes <= 30) return appColors.subtleText;
+    return appColors.streakOrange; // resolves to accentPalette.action
   }
 
   String _formatDuration(int minutes) {
@@ -438,6 +438,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
 
   // ── Randomiser button (before rolling) ───────────────────────
   Widget _buildRandomiserButton() {
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     return GestureDetector(
       onTap: _randomise,
       child: Container(
@@ -445,15 +446,11 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
         padding:
             const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF4B6EF5), Color(0xFF7B4FD4)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+          color: accentPalette.action,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF4B6EF5).withOpacity(0.3),
+              color: accentPalette.action.withOpacity(0.3),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -519,6 +516,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
   Widget _buildRandomResult() {
     if (_randomTemplate == null) return const SizedBox.shrink();
     final colors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 350),
@@ -542,7 +540,11 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
           border: Border.all(color: colors.cardBorder, width: 2),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF4B6EF5).withOpacity(0.08),
+              // Not tint(): that returns an opaque composite, and a shadow
+              // needs translucency for its blur falloff. Alpha raised from an
+              // invisible 0.08 to sit just above tint()'s computed fill alpha
+              // for this role (~0.26), since blur disperses it further.
+              color: accentPalette.statusInfo.withValues(alpha: 0.30),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -558,7 +560,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF4B6EF5).withOpacity(0.1),
+                    color: colors.tint(accentPalette.statusInfo),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -578,7 +580,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF4B6EF5),
+                          color: accentPalette.statusInfo,
                         ),
                       ),
                     ],
@@ -603,7 +605,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF4B6EF5).withOpacity(0.08),
+                    color: colors.tint(accentPalette.statusInfo),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Center(
@@ -702,19 +704,11 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                       padding:
                           const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [
-                            Color(0xFF4B6EF5),
-                            Color(0xFF7B4FD4)
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
+                        color: accentPalette.action,
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF4B6EF5)
-                                .withOpacity(0.3),
+                            color: accentPalette.action.withOpacity(0.3),
                             blurRadius: 8,
                             offset: const Offset(0, 3),
                           ),

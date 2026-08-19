@@ -158,6 +158,40 @@ class AppColors extends ThemeExtension<AppColors> {
     streakOrange,
   ];
 
+  /// A role colour composited over [surface] at the lowest alpha that still
+  /// reads as a distinct container — at least [floor] contrast against the
+  /// surface it sits on. Returns the finished opaque colour, so call sites can
+  /// drop it straight into `color:` with no further maths.
+  ///
+  /// Why this isn't a constant: a flat 12% tint lands at only ~1.1–1.3:1 on
+  /// *every* accent (light included), which is why tinted chips and icon tiles
+  /// were rendering near-invisible. The required alpha depends on both the role
+  /// and the surface, so it has to be computed, not hardcoded. Solving it here
+  /// means a new accent or a retuned surface can't silently break call sites.
+  ///
+  /// [surface] defaults to [cardBackground], the usual host for a tinted chip.
+  Color tint(Color role, {Color? surface, double floor = 1.5}) {
+    final bg = surface ?? cardBackground;
+    // ponytail: linear 1% scan, ~92 iterations worst case. Cheap enough at the
+    // handful of tints on screen; make it a binary search if it ever shows up
+    // in a frame profile.
+    for (var step = 8; step <= 100; step++) {
+      final candidate = Color.alphaBlend(role.withValues(alpha: step / 100), bg);
+      if (contrastRatio(candidate, bg) >= floor) return candidate;
+    }
+    return Color.alphaBlend(role.withValues(alpha: 1), bg);
+  }
+
+  /// WCAG relative-luminance contrast ratio between two opaque colours.
+  /// Same maths used to pick the per-accent status role values.
+  static double contrastRatio(Color a, Color b) {
+    final la = a.computeLuminance();
+    final lb = b.computeLuminance();
+    final hi = la > lb ? la : lb;
+    final lo = la > lb ? lb : la;
+    return (hi + 0.05) / (lo + 0.05);
+  }
+
   // ── Light tokens ──────────────────────────────────────────────
   static const light = AppColors(
     cardBackground:    Color(0xFFFFFFFF),

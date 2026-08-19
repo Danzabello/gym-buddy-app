@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../services/achievement_service.dart';
 import '../services/level_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/accent_theme_provider.dart';
+import 'package:provider/provider.dart';
 
 class AchievementsPage extends StatefulWidget {
   const AchievementsPage({super.key});
@@ -92,17 +94,39 @@ class _AchievementsPageState extends State<AchievementsPage>
 
   // ── Colours ────────────────────────────────────────────────
   Color _rarityColor(String rarity) {
+    // Called only during build (via _buildRow), so watch is safe here.
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
+    final appColors = AppColors.of(context);
     switch (rarity) {
-      case 'uncommon':  return const Color(0xFF10B981);
-      case 'rare':      return const Color(0xFF3B82F6);
-      case 'epic':      return const Color(0xFF7C3AED);
-      case 'legendary': return const Color(0xFFD97706);
-      default:          return const Color(0xFF6B7280);
+      case 'uncommon':  return accentPalette.statusInfo.withOpacity(0.55);
+      case 'rare':      return accentPalette.statusInfo.withOpacity(0.75);
+      case 'epic':      return accentPalette.statusInfo;
+      case 'legendary': return const Color(0xFFD97706); // top tier keeps a fixed hue, like _categoryAccent
+      default:          return appColors.subtleText;
     }
   }
 
-  Color _rarityBg(String rarity) =>
-      _rarityColor(rarity).withOpacity(0.13);
+  /// Rarity pill fill. The tier ramp now lives in the contrast floor rather
+  /// than a flat alpha: `withOpacity(0.13)` *overwrote* _rarityColor's
+  /// 0.55/0.75/1.0 ramp, so every tier rendered identically — and at ~1.2:1,
+  /// invisibly. tint() computes whatever alpha each floor needs on the
+  /// current accent, so higher tiers stay visibly bolder.
+  Color _rarityBg(String rarity) => AppColors.of(context).tint(
+        // opaque hue — the tier ramp is re-expressed as the floor below
+        _rarityColor(rarity).withValues(alpha: 1),
+        floor: _rarityFloor(rarity),
+      );
+
+  /// Mirrors the old 0.55 / 0.75 / 1.0 intent: rarer reads bolder.
+  /// Epic and legendary tie, as they did before (both were full-strength).
+  double _rarityFloor(String rarity) {
+    switch (rarity) {
+      case 'rare':      return 1.8;
+      case 'epic':      return 2.1;
+      case 'legendary': return 2.1;
+      default:          return 1.5; // common, uncommon
+    }
+  }
 
   Color _categoryAccent(String category) {
     switch (category) {
@@ -132,6 +156,7 @@ class _AchievementsPageState extends State<AchievementsPage>
 
   void _showOverallSheet(BuildContext context) {
     final appColors = AppColors.of(context);
+    final accentPalette = context.read<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
     final pct = _overallPct;
     final remaining = _all.length - _totalUnlocked;
@@ -161,7 +186,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                 value: pct,
                 minHeight: 10,
                 backgroundColor: appColors.divider,
-                valueColor: const AlwaysStoppedAnimation(Color(0xFF3B82F6)),
+                valueColor: AlwaysStoppedAnimation(accentPalette.statusInfo),
               ),
             ),
             const SizedBox(height: 8),
@@ -181,16 +206,16 @@ class _AchievementsPageState extends State<AchievementsPage>
             const SizedBox(height: 24),
             // Breakdown rows
             _SheetStatRow(label: 'Completed', value: '$_totalUnlocked',
-                color: const Color(0xFF10B981), appColors: appColors, cs: cs),
+                color: accentPalette.statusSuccess, appColors: appColors, cs: cs),
             const SizedBox(height: 10),
             _SheetStatRow(label: 'In progress', value: '$inProgressCount',
-                color: const Color(0xFFF97316), appColors: appColors, cs: cs),
+                color: accentPalette.action, appColors: appColors, cs: cs),
             const SizedBox(height: 10),
             _SheetStatRow(label: 'Locked', value: '$lockedCount',
                 color: appColors.subtleText, appColors: appColors, cs: cs),
             const SizedBox(height: 10),
             _SheetStatRow(label: 'Still to unlock', value: '$remaining',
-                color: const Color(0xFF3B82F6), appColors: appColors, cs: cs),
+                color: accentPalette.statusInfo, appColors: appColors, cs: cs),
             const SizedBox(height: 8),
           ],
         ),
@@ -200,6 +225,7 @@ class _AchievementsPageState extends State<AchievementsPage>
 
   void _showStreakSheet(BuildContext context) {
     final appColors = AppColors.of(context);
+    final accentPalette = context.read<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
     final streakAchs = _all
         .where((a) => a.category == 'streak')
@@ -248,7 +274,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                       height: 28,
                       decoration: BoxDecoration(
                         color: done
-                            ? const Color(0xFFF97316).withOpacity(0.15)
+                            ? accentPalette.action.withOpacity(0.15)
                             : appColors.sectionBackground,
                         shape: BoxShape.circle,
                       ),
@@ -256,7 +282,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                         done ? Icons.check : Icons.lock_outline,
                         size: 13,
                         color: done
-                            ? const Color(0xFFF97316)
+                            ? accentPalette.action
                             : appColors.subtleText,
                       ),
                     ),
@@ -280,8 +306,8 @@ class _AchievementsPageState extends State<AchievementsPage>
                                 value: a.progressPercent,
                                 minHeight: 3,
                                 backgroundColor: appColors.divider,
-                                valueColor: const AlwaysStoppedAnimation(
-                                    Color(0xFFF97316)),
+                                valueColor: AlwaysStoppedAnimation(
+                                    accentPalette.action),
                               ),
                             ),
                           ],
@@ -295,7 +321,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           color: done
-                              ? const Color(0xFFF97316)
+                              ? accentPalette.action
                               : appColors.subtleText),
                     ),
                   ],
@@ -311,6 +337,7 @@ class _AchievementsPageState extends State<AchievementsPage>
 
   void _showXpSheet(BuildContext context) {
     final appColors = AppColors.of(context);
+    final accentPalette = context.read<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
     final li = _levelInfo;
 
@@ -338,7 +365,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF7C3AED),
+                      color: accentPalette.statusInfo,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text('Lv ${li.level}',
@@ -355,8 +382,8 @@ class _AchievementsPageState extends State<AchievementsPage>
                         value: li.progressPercent,
                         minHeight: 8,
                         backgroundColor: appColors.divider,
-                        valueColor: const AlwaysStoppedAnimation(
-                            Color(0xFF7C3AED)),
+                        valueColor: AlwaysStoppedAnimation(
+                            accentPalette.statusInfo),
                       ),
                     ),
                   ),
@@ -398,42 +425,42 @@ class _AchievementsPageState extends State<AchievementsPage>
             _SheetStatRow(
                 label: 'Daily check-in',
                 value: '+10 XP',
-                color: const Color(0xFF10B981),
+                color: accentPalette.statusSuccess,
                 appColors: appColors,
                 cs: cs),
             const SizedBox(height: 8),
             _SheetStatRow(
                 label: 'Partner also checked in',
                 value: '+5 XP',
-                color: const Color(0xFF10B981),
+                color: accentPalette.statusSuccess,
                 appColors: appColors,
                 cs: cs),
             const SizedBox(height: 8),
             _SheetStatRow(
                 label: 'Workout logged',
                 value: '+15 XP',
-                color: const Color(0xFF3B82F6),
+                color: accentPalette.statusInfo,
                 appColors: appColors,
                 cs: cs),
             const SizedBox(height: 8),
             _SheetStatRow(
                 label: '7-day streak milestone',
                 value: '+50 XP',
-                color: const Color(0xFFF97316),
+                color: accentPalette.action,
                 appColors: appColors,
                 cs: cs),
             const SizedBox(height: 8),
             _SheetStatRow(
                 label: '30-day streak milestone',
                 value: '+50 XP',
-                color: const Color(0xFFF97316),
+                color: accentPalette.action,
                 appColors: appColors,
                 cs: cs),
             const SizedBox(height: 8),
             _SheetStatRow(
                 label: 'Achievement unlocked',
                 value: 'varies',
-                color: const Color(0xFF7C3AED),
+                color: accentPalette.statusInfo,
                 appColors: appColors,
                 cs: cs),
             const SizedBox(height: 8),
@@ -524,6 +551,7 @@ class _AchievementsPageState extends State<AchievementsPage>
   // ══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
@@ -542,7 +570,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                         _buildSectionHeader(context,
                             label: 'In progress',
                             count: _inProgress.length,
-                            color: const Color(0xFFF97316)),
+                            color: accentPalette.action),
                         _buildList(_inProgress, context,
                             showProgress: true, dimmed: false),
                       ],
@@ -558,7 +586,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                         _buildSectionHeader(context,
                             label: 'Completed',
                             count: _completed.length,
-                            color: const Color(0xFF10B981)),
+                            color: accentPalette.statusSuccess),
                         _buildList(_completed, context,
                             showProgress: false,
                             dimmed: false,
@@ -580,6 +608,7 @@ class _AchievementsPageState extends State<AchievementsPage>
   // ══════════════════════════════════════════════════════════════
   Widget _buildHeroHeader(BuildContext context) {
     final appColors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final level = _levelInfo?.level ?? 1;
@@ -609,17 +638,17 @@ class _AchievementsPageState extends State<AchievementsPage>
                   ),
                 ),
                 const SizedBox(width: 10),
-                const Text('GYM BUDDY',
+                Text('GYM BUDDY',
                     style: TextStyle(
                         fontSize: 9,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.2,
-                        color: Color(0xFFF97316))),
+                        color: accentPalette.action)),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Container(
                       height: 0.5,
-                      color: const Color(0xFFF97316).withOpacity(0.25)),
+                      color: accentPalette.action.withOpacity(0.25)),
                 ),
               ],
             ),
@@ -639,7 +668,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                     text: 'MENTS',
                     style: TextStyle(
                         color: isDark
-                            ? const Color(0xFF7C3AED)
+                            ? accentPalette.statusInfo
                             : const Color(0xFF6D28D9)),
                   ),
                 ],
@@ -652,7 +681,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                 GestureDetector(
                   onTap: () => _showXpSheet(context),
                   child: _heroBadge('Lv $level',
-                      bg: const Color(0xFF7C3AED), fg: Colors.white),
+                      bg: accentPalette.statusInfo, fg: Colors.white),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -660,9 +689,9 @@ class _AchievementsPageState extends State<AchievementsPage>
                         height: 0.5, color: appColors.divider)),
                 const SizedBox(width: 8),
                 _heroBadge('$pctDisplay complete',
-                    bg: const Color(0xFFF97316).withOpacity(0.14),
-                    fg: const Color(0xFFF97316),
-                    border: const Color(0xFFF97316).withOpacity(0.3)),
+                    bg: accentPalette.action.withOpacity(0.14),
+                    fg: accentPalette.action,
+                    border: accentPalette.action.withOpacity(0.3)),
               ],
             ),
             const SizedBox(height: 14),
@@ -695,6 +724,7 @@ class _AchievementsPageState extends State<AchievementsPage>
   // BENTO GRID
   // ══════════════════════════════════════════════════════════════
   Widget _buildBentoGrid(BuildContext context) {
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     return SliverToBoxAdapter(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
@@ -716,7 +746,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                         icon: '⚡',
                         value: _totalXpEarned.toString(),
                         label: 'XP Earned',
-                        color: const Color(0xFF10B981),
+                        color: accentPalette.statusSuccess,
                         onTap: () => _showXpSheet(context))),
                 const SizedBox(width: 6),
                 Expanded(
@@ -755,6 +785,7 @@ class _AchievementsPageState extends State<AchievementsPage>
 
   Widget _bentoProgress(BuildContext context) {
     final appColors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
     final pct = _overallPct;
     return _bentoTile(
@@ -810,8 +841,8 @@ class _AchievementsPageState extends State<AchievementsPage>
                 value: pct,
                 minHeight: 3,
                 backgroundColor: appColors.divider,
-                valueColor: const AlwaysStoppedAnimation(
-                    Color(0xFF3B82F6)),
+                valueColor: AlwaysStoppedAnimation(
+                    accentPalette.statusInfo),
               ),
             ),
           ],
@@ -822,6 +853,7 @@ class _AchievementsPageState extends State<AchievementsPage>
 
   Widget _bentoStreak(BuildContext context) {
     final appColors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
     final streakAch = _completed
         .where((a) => a.category == 'streak')
@@ -853,12 +885,12 @@ class _AchievementsPageState extends State<AchievementsPage>
               children: [
                 Row(
                   children: [
-                    const Text('BEST STREAK',
+                    Text('BEST STREAK',
                         style: TextStyle(
                             fontSize: 8,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.7,
-                            color: Color(0xFFF97316))),
+                            color: accentPalette.action)),
                     const Spacer(),
                     Icon(Icons.chevron_right,
                         size: 14, color: appColors.subtleText),
@@ -885,7 +917,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                       margin: const EdgeInsets.only(right: 3),
                       decoration: BoxDecoration(
                         color: i < dotsOn
-                            ? const Color(0xFFF97316)
+                            ? accentPalette.action
                             : appColors.divider,
                         shape: BoxShape.circle,
                       ),
@@ -1235,9 +1267,13 @@ class _AchievementsPageState extends State<AchievementsPage>
                                 style: TextStyle(
                                     fontSize: 8,
                                     fontWeight: FontWeight.w700,
+                                    // Not rColor: the pill fill is that same
+                                    // hue, so label-on-fill contrast collapsed
+                                    // once tint() made the fill visible.
+                                    // onSurface resolves to palette.primaryText.
                                     color: dimmed
                                         ? appColors.subtleText
-                                        : rColor),
+                                        : cs.onSurface),
                               ),
                             ),
                           ],
