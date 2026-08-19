@@ -39,12 +39,13 @@ import 'widgets/achievement_toast.dart';
 import 'services/achievement_service.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
-import 'theme/theme_provider.dart';
+import 'theme/accent_theme_provider.dart';
 import 'data/coach_tips.dart';
 import 'services/presence_service.dart';
 import 'services/notification_service.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
+import 'screens/home_screen_clay_preview.dart'; // TEMP: clay preview, delete with the FAB below
 
 
 
@@ -136,6 +137,18 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedIndex: _selectedIndex,
         onTabSelected: _onTabChanged,
       ),
+      // ── TEMP: CLAY PREVIEW entry point ──────────────────────────
+      // Delete this block + the import above + lib/screens/ to strip.
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'temp_clay_preview',
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const HomeScreenClayPreview()),
+        ),
+        icon: const Icon(Icons.brush_rounded, size: 18),
+        label: const Text('CLAY PREVIEW',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+      ),
+      // ── END TEMP ────────────────────────────────────────────────
     );
   }
 }
@@ -156,7 +169,27 @@ enum StreakSortMode {
   mostRecent,        // 🕐 Most recent workout
   favorites,         // ⭐ User favorites (future)
   custom,  // ✅ NEW!
+  mostUrgent,        // ⚠️ At-risk streaks first
+  alphabetical,      // 🔤 By team/buddy name
 }
+
+/// Order the sort grid renders in — deliberately NOT the enum's declaration
+/// order. `custom` is a manual-reorder mode rather than an automatic sort, so
+/// it sits last. The enum order itself is load-bearing (persisted by `.name`,
+/// switch statements) and must not be changed to achieve this.
+///
+/// Every StreakSortMode must appear here or it silently vanishes from the UI;
+/// the assert in _showSortBottomSheet catches that in debug.
+const List<StreakSortMode> _sortModeDisplayOrder = [
+  StreakSortMode.highestCurrent,
+  StreakSortMode.mostWorkouts,
+  StreakSortMode.bestAllTime,
+  StreakSortMode.mostRecent,
+  StreakSortMode.favorites,
+  StreakSortMode.mostUrgent,
+  StreakSortMode.alphabetical,
+  StreakSortMode.custom,
+];
 
 // ✅ ADD EXTENSION HERE - OUTSIDE THE CLASS!
 extension StreakSortModeExtension on StreakSortMode {
@@ -174,6 +207,10 @@ extension StreakSortModeExtension on StreakSortMode {
         return 'Favorites';
       case StreakSortMode.custom: 
         return 'Custom';  // ✅ NEW!
+      case StreakSortMode.mostUrgent:
+        return 'At Risk First';
+      case StreakSortMode.alphabetical:
+        return 'A to Z';
     }
   }
   
@@ -191,7 +228,10 @@ extension StreakSortModeExtension on StreakSortMode {
         return '⭐';
       case StreakSortMode.custom: 
         return '👤';  // ✅ NEW!
-
+      case StreakSortMode.mostUrgent:
+        return '⚠️';
+      case StreakSortMode.alphabetical:
+        return '🔤';
     }
   }
   
@@ -203,8 +243,79 @@ extension StreakSortModeExtension on StreakSortMode {
       case StreakSortMode.mostRecent: return 'Recently active';
       case StreakSortMode.favorites: return 'Your favorites';
       case StreakSortMode.custom: return 'Manual selection';  // ✅ NEW!
+      case StreakSortMode.mostUrgent: return 'Nobody checked in yet';
+      case StreakSortMode.alphabetical: return 'By name, A to Z';
     }
   }
+}
+
+/// Friends-only, ordered by [mode]. Coach Max is always excluded — it is an
+/// AI buddy, not a rankable streak. Top-level so both the dashboard and the
+/// profile page order the streak list identically.
+List<TeamStreak> sortStreaks(List<TeamStreak> streaks, StreakSortMode mode) {
+  debugLog('🔄 SORT: Mode = ${mode.displayName}');
+  debugLog('🔄 SORT: Input streaks count = ${streaks.length}');
+  
+  // Filter out Coach Max
+  final friendStreaks = streaks.where((s) => !s.isCoachMaxTeam).toList();
+  debugLog('🔄 SORT: After filtering Coach Max = ${friendStreaks.length}');
+  
+  // Sort based on mode
+  switch (mode) {
+    case StreakSortMode.highestCurrent:
+      friendStreaks.sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
+      debugLog('⚡ SORT: Highest Current - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.currentStreak})').join(', ')}');
+      break;
+      
+    case StreakSortMode.mostWorkouts:
+      friendStreaks.sort((a, b) => b.totalWorkouts.compareTo(a.totalWorkouts)); 
+      debugLog('💪 SORT: Most Workouts - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.totalWorkouts})').join(', ')}');
+      break;
+      
+    case StreakSortMode.bestAllTime:
+      friendStreaks.sort((a, b) => b.bestStreak.compareTo(a.bestStreak));  // ✅ Use real data!
+      debugLog('🏆 SORT: Best All-Time - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.bestStreak})').join(', ')}');
+      break;
+      
+    case StreakSortMode.mostRecent:
+      friendStreaks.sort((a, b) {
+        if (a.lastInteractionAt == null) return 1;  // ✅ Use real timestamps!
+        if (b.lastInteractionAt == null) return -1;
+        return b.lastInteractionAt!.compareTo(a.lastInteractionAt!);  // Most recent first
+      });
+      debugLog('🕐 SORT: Most Recent - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.lastInteractionAt})').join(', ')}');
+      break;
+      
+    case StreakSortMode.favorites:
+      // ✨ Filter to only favorites
+      final favorites = friendStreaks.where((s) => s.isFavorite).toList();
+      favorites.sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
+      debugLog('⭐ SORT: Favorites - Found ${favorites.length} favorite(s)');
+      return favorites; // ✅ Return empty list if no favorites
+      
+    case StreakSortMode.mostUrgent:
+      // At-risk first (nobody checked in today), longest streak as tiebreaker
+      // so the most valuable streak at risk sits at the top.
+      friendStreaks.sort((a, b) {
+        if (a.isAtRisk != b.isAtRisk) return a.isAtRisk ? -1 : 1;
+        return b.currentStreak.compareTo(a.currentStreak);
+      });
+      debugLog('⚠️ SORT: At Risk First - Order: ${friendStreaks.map((s) => '${s.teamName}(risk:${s.isAtRisk},${s.currentStreak})').join(', ')}');
+      break;
+
+    case StreakSortMode.alphabetical:
+      friendStreaks.sort((a, b) =>
+          a.teamName.toLowerCase().compareTo(b.teamName.toLowerCase()));
+      debugLog('🔤 SORT: A to Z - Order: ${friendStreaks.map((s) => s.teamName).join(', ')}');
+      break;
+
+    case StreakSortMode.custom:
+      // Don't need any code here for now
+      break;
+  }
+  
+  debugLog('✅ SORT: Returning ${friendStreaks.length} sorted streaks');
+  return friendStreaks;
 }
 
 class _DashboardPageState extends State<DashboardPage> with TickerProviderStateMixin {
@@ -223,6 +334,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   bool _isOnBreakToday = false;     // signed-in user on break for their local today
   Map<String, bool> _buddyOnBreakToday = {}; // buddy id -> on break in THEIR local today
   List<TeamStreak> _allStreaks = [];
+  /// What the "All Streaks" list shows: friends only, in the selected order.
+  /// In favourites mode this is a *filtered* subset — use [_streakCount] for
+  /// labels so a mode with no matches never reads as "no streaks".
+  List<TeamStreak> get _listStreaks => sortStreaks(_allStreaks, _streakSortMode);
+  /// Total sortable streaks (friends only), independent of sort/filter mode.
+  int get _streakCount => _allStreaks.where((s) => !s.isCoachMaxTeam).length;
   List<Map<String, dynamic>> _todaysWorkouts = [];
   bool _hasCheckedInToday = false;
   bool _isLoading = true;
@@ -366,7 +483,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   // Friends ordered by the selected sort mode (custom keeps stored order)
   final friendStreaks = _streakSortMode == StreakSortMode.custom
     ? _allStreaks.where((s) => !s.isCoachMaxTeam).toList()  // Just filter, don't sort
-    : _sortStreaks(_allStreaks, _streakSortMode);
+    : sortStreaks(_allStreaks, _streakSortMode);
 
   if (_streakSortMode == StreakSortMode.favorites && friendStreaks.isEmpty) {
     return _buildEmptyFavoritesCard();
@@ -390,6 +507,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   debugLog('  Current index: $_currentCarouselIndex');
 
     final appColors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
 
     // ✅ MERGED CARD: Carousel + Action Buttons in one! (PIXEL 7A OPTIMIZED)
     return Card(
@@ -398,7 +516,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
-          color: appColors.cardBackground,
+          color: accentPalette.heroBackground,
           borderRadius: BorderRadius.circular(24),
         ),
         child: Column(
@@ -414,13 +532,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: appColors.sectionBackground,
+                        color: accentPalette.heroText.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
                         Icons.more_vert,
                         size: 20,
-                        color: appColors.subtleText,
+                        color: accentPalette.heroTextMuted,
                       ),
                     ),
                   ),
@@ -434,7 +552,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: appColors.sectionBackground,
+                          color: accentPalette.heroText.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
@@ -443,11 +561,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                             // ✅ FIX: Use Flexible to prevent text overflow
                             Flexible(
                               child: Text(
-                                'Your Active Streaks (${_allStreaks.length})',
+                                'Your Active Streaks ($_streakCount)',
                                 style: TextStyle(
                                   fontSize: 14,  // ✅ Was 16
                                   fontWeight: FontWeight.w600,
-                                  color: appColors.subtleText,
+                                  color: accentPalette.heroTextMuted,
                                 ),
                                 overflow: TextOverflow.ellipsis,  // ✅ Safety net
                               ),
@@ -456,7 +574,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                             Icon(
                               Icons.chevron_right,
                               size: 18,  // ✅ Was 20
-                              color: appColors.subtleText,
+                              color: accentPalette.heroTextMuted,
                             ),
                           ],
                         ),
@@ -571,8 +689,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                           fontSize: 16,  // ✅ Was 18
                           fontWeight: FontWeight.bold,
                           color: displayItems[_currentCarouselIndex] != null
-                              ? Theme.of(context).colorScheme.onSurface
-                              : appColors.subtleText,
+                              ? accentPalette.heroText
+                              : accentPalette.heroTextMuted,
                         ),
                       ),
                     ),
@@ -596,7 +714,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                         style: TextStyle(
                           fontSize: 24,  // ✅ Was 28
                           fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.onSurface,
+                          color: accentPalette.heroText,
                         ),
                       ),
                       if (_isBuddyOnBreak(displayItems[_currentCarouselIndex]))
@@ -616,7 +734,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     style: TextStyle(
                       fontSize: 24,  // ✅ Was 28
                       fontWeight: FontWeight.bold,
-                      color: appColors.subtleText,
+                      color: accentPalette.heroTextMuted,
                     ),
                   ),
                 if (_isOnBreakToday) ...[
@@ -627,14 +745,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       Icon(
                         Icons.shield,
                         size: 13,
-                        color: Theme.of(context).colorScheme.primary,
+                        color: accentPalette.heroText,
                       ),
                       const SizedBox(width: 5),
                       Text(
                         'Your streak is protected today.',
                         style: TextStyle(
                           fontSize: 12,
-                          color: appColors.subtleText,
+                          color: accentPalette.heroTextMuted,
                         ),
                       ),
                     ],
@@ -654,7 +772,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _hasCheckedInToday 
                       ? Colors.green[600]
-                      : Colors.orange[600],
+                      : accentPalette.action,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),  // ✅ Was 18
                   shape: RoundedRectangleBorder(
@@ -707,13 +825,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.bedtime, size: 14, color: appColors.subtleText),
+                      Icon(Icons.bedtime, size: 14, color: accentPalette.heroTextMuted),
                       const SizedBox(width: 6),
                       Text(
                         'Take a break day',
                         style: TextStyle(
                           fontSize: 13,
-                          color: appColors.subtleText,
+                          color: accentPalette.heroTextMuted,
                         ),
                       ),
                     ],
@@ -722,7 +840,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ),
             Padding(
               padding: EdgeInsets.symmetric(vertical: 2),
-              child: Divider(height: 1, color: appColors.divider),
+              child: Divider(height: 1, color: accentPalette.heroText.withOpacity(0.2)),
             ),
             _buildInfoTray(),
           ],
@@ -2460,55 +2578,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   }
 
-  List<TeamStreak> _sortStreaks(List<TeamStreak> streaks, StreakSortMode mode) {
-    debugLog('🔄 SORT: Mode = ${mode.displayName}');
-    debugLog('🔄 SORT: Input streaks count = ${streaks.length}');
-    
-    // Filter out Coach Max
-    final friendStreaks = streaks.where((s) => !s.isCoachMaxTeam).toList();
-    debugLog('🔄 SORT: After filtering Coach Max = ${friendStreaks.length}');
-    
-    // Sort based on mode
-    switch (mode) {
-      case StreakSortMode.highestCurrent:
-        friendStreaks.sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
-        debugLog('⚡ SORT: Highest Current - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.currentStreak})').join(', ')}');
-        break;
-        
-      case StreakSortMode.mostWorkouts:
-        friendStreaks.sort((a, b) => b.totalWorkouts.compareTo(a.totalWorkouts)); 
-        debugLog('💪 SORT: Most Workouts - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.totalWorkouts})').join(', ')}');
-        break;
-        
-      case StreakSortMode.bestAllTime:
-        friendStreaks.sort((a, b) => b.bestStreak.compareTo(a.bestStreak));  // ✅ Use real data!
-        debugLog('🏆 SORT: Best All-Time - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.bestStreak})').join(', ')}');
-        break;
-        
-      case StreakSortMode.mostRecent:
-        friendStreaks.sort((a, b) {
-          if (a.lastInteractionAt == null) return 1;  // ✅ Use real timestamps!
-          if (b.lastInteractionAt == null) return -1;
-          return b.lastInteractionAt!.compareTo(a.lastInteractionAt!);  // Most recent first
-        });
-        debugLog('🕐 SORT: Most Recent - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.lastInteractionAt})').join(', ')}');
-        break;
-        
-      case StreakSortMode.favorites:
-        // ✨ Filter to only favorites
-        final favorites = friendStreaks.where((s) => s.isFavorite).toList();
-        favorites.sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
-        debugLog('⭐ SORT: Favorites - Found ${favorites.length} favorite(s)');
-        return favorites; // ✅ Return empty list if no favorites
-        
-      case StreakSortMode.custom:
-        // Don't need any code here for now
-        break;
-    }
-    
-    debugLog('✅ SORT: Returning ${friendStreaks.length} sorted streaks');
-    return friendStreaks;
-  }
 
   Future<void> _checkWeeklyPlan() async {
     if (_weeklyPlanCheckedThisSession) return; // once per app open
@@ -3930,7 +3999,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   void _showAllStreaks() {
     showDialog(
       context: context,
-      builder: (context) => _AllStreaksDialog(streaks: _allStreaks),
+      builder: (context) => _AllStreaksDialog(streaks: _listStreaks),
     );
   }
 
@@ -4236,6 +4305,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   Widget _buildEmptyWorkoutsState() {
     final appColors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -4258,13 +4328,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   child: Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.12),
+                      color: accentPalette.statusInfo.withOpacity(0.12),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       Icons.calendar_today,
                       size: 64,
-                      color: Colors.blue[400],
+                      color: accentPalette.statusInfo,
                     ),
                   ),
                 );
@@ -4382,23 +4452,27 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   void _showSortBottomSheet() {
+    assert(
+      _sortModeDisplayOrder.length == StreakSortMode.values.length,
+      'Every StreakSortMode must be listed in _sortModeDisplayOrder',
+    );
     final appColors = AppColors.of(context);
+    HapticFeedback.mediumImpact();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        minChildSize: 0.3,
-        maxChildSize: 0.8,
-        expand: false,
-        builder: (context, scrollController) => Container(
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => Container(
+        decoration: BoxDecoration(
           color: appColors.cardBackground,
-          padding: const EdgeInsets.all(24),
-          child: ListView(
-            controller: scrollController,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: EdgeInsets.fromLTRB(
+          24, 24, 24, MediaQuery.of(sheetContext).padding.bottom + 20,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               // Handle bar
               Center(
@@ -4447,7 +4521,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 mainAxisSpacing: 8,
                 childAspectRatio: 2.0,
                 physics: const NeverScrollableScrollPhysics(),
-                children: StreakSortMode.values.map((mode) {
+                children: _sortModeDisplayOrder.map((mode) {
                   final isSelected = mode == _streakSortMode;
                   
                   return GestureDetector(
@@ -4495,11 +4569,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? Colors.blue.withOpacity(0.15)
+                            ? appColors.avatarRing.withOpacity(0.12)
                             : appColors.sectionBackground,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: isSelected ? Colors.blue[400]! : appColors.cardBorder,
+                          color: isSelected ? appColors.avatarRing : appColors.cardBorder,
                           width: isSelected ? 2 : 1,
                         ),
                       ),
@@ -4518,7 +4592,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                                     fontSize: 13,
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                                     color: isSelected
-                                        ? Colors.blue[400]
+                                        ? appColors.avatarRing
                                         : Theme.of(context).colorScheme.onSurface,
                                   ),
                                 ),
@@ -4642,6 +4716,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       case StreakSortMode.custom:
         return 'Manual selection mode. Scroll to view specific buddies in any order. '
             'Activates automatically when you browse away from preset center.';
+      
+      case StreakSortMode.mostUrgent:
+        return 'Puts streaks nobody has checked into today at the top. '
+            'Ties break by longest current streak, so you protect the biggest one first.';
+      
+      case StreakSortMode.alphabetical:
+        return 'Orders buddies by name, A to Z. '
+            'Handy when you know who you\'re looking for and just want to find them fast.';
     }
   }
 
@@ -4664,6 +4746,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       
       case StreakSortMode.custom:
         return 'Scroll freely! Swipe left/right to browse all your workout partners.';
+      
+      case StreakSortMode.mostUrgent:
+        return 'Example: Sarah (12 days, nobody in yet) appears before Mike (30 days, done)';
+      
+      case StreakSortMode.alphabetical:
+        return 'Example: Alex appears before Mike, Mike before Sarah';
     }
   }
 
@@ -5971,22 +6059,11 @@ class _SchedulePageState extends State<SchedulePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        // Inherits transparent bg + foreground from appBarTheme
         title: const Text(
           'Workout Schedule',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white,
-        elevation: 0,
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showCreateWorkoutDialog,
@@ -6401,6 +6478,11 @@ class _ProfilePageState extends State<ProfilePage>
     with TickerProviderStateMixin {
   Map<String, dynamic>? _profile;
   List<TeamStreak> _allStreaks = [];
+  StreakSortMode _streakSortMode = StreakSortMode.highestCurrent;
+  /// Mirrors the dashboard's list so both entry points agree.
+  List<TeamStreak> get _listStreaks => sortStreaks(_allStreaks, _streakSortMode);
+  /// Total sortable streaks (friends only), independent of sort/filter mode.
+  int get _streakCount => _allStreaks.where((s) => !s.isCoachMaxTeam).length;
   LevelInfo? _levelInfo;
   int _totalWorkouts = 0;
   int _buddyCount = 0;
@@ -6444,7 +6526,7 @@ class _ProfilePageState extends State<ProfilePage>
 
       final profileFuture = Supabase.instance.client
           .from('user_profiles')
-          .select('avatar_id, display_name, created_at, xp, level')
+          .select('avatar_id, display_name, created_at, xp, level, preferred_streak_sort')
           .eq('id', uid)
           .single();
 
@@ -6468,6 +6550,10 @@ class _ProfilePageState extends State<ProfilePage>
       setState(() {
         _profile       = profile as Map<String, dynamic>;
         _allStreaks     = streaks;
+        _streakSortMode = StreakSortMode.values.firstWhere(
+          (e) => e.name == profile['preferred_streak_sort'],
+          orElse: () => StreakSortMode.highestCurrent,
+        );
         _levelInfo     = level;
         _totalWorkouts = (workouts as List).length;
         _buddyCount    = friends.length;
@@ -6567,10 +6653,10 @@ class _ProfilePageState extends State<ProfilePage>
                           emoji: '🔥',
                           color: appColors.sectionBackground,
                           label: 'All Streaks',
-                          sub: '${_allStreaks.length} active streaks',
+                          sub: '$_streakCount active streaks',
                           onTap: () => showDialog(
                             context: context,
-                            builder: (_) => _AllStreaksDialog(streaks: _allStreaks),
+                            builder: (_) => _AllStreaksDialog(streaks: _listStreaks),
                           ),
                         ),
                         _MenuItem(
@@ -6615,9 +6701,8 @@ class _ProfilePageState extends State<ProfilePage>
                             MaterialPageRoute(
                               builder: (_) => Scaffold(
                                 appBar: AppBar(
+                                  // Inherits transparent bg + foreground from appBarTheme
                                   title: const Text('Choose Avatar'),
-                                  backgroundColor: const Color(0xFF4B6EF5),
-                                  foregroundColor: Colors.white,
                                 ),
                                 body: AvatarPickerScreen(
                                   onComplete: () {
@@ -6631,11 +6716,11 @@ class _ProfilePageState extends State<ProfilePage>
                           ),
                         ),
                         _MenuItem(
-                          emoji: '🌙',
+                          emoji: '🌈',
                           color: appColors.sectionBackground,
-                          label: 'Dark Mode',
-                          sub: _themeModeLabel(context),
-                          onTap: () => _showThemePicker(context),
+                          label: 'Accent Theme',
+                          sub: _accentThemeLabel(context),
+                          onTap: () => _showAccentThemePicker(context),
                         ),
                         _MenuItem(
                           emoji: '❓',
@@ -6656,17 +6741,17 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  String _themeModeLabel(BuildContext context) {
-    final mode = context.watch<ThemeProvider>().themeMode;
-    return switch (mode) {
-      ThemeMode.dark   => 'Dark',
-      ThemeMode.light  => 'Light',
-      ThemeMode.system => 'Follow system',
+  String _accentThemeLabel(BuildContext context) {
+    final theme = context.watch<AccentThemeProvider>().accentTheme;
+    return switch (theme) {
+      AccentTheme.signalBlue => 'Signal blue',
+      AccentTheme.limeSpark  => 'Lime spark',
+      AccentTheme.emeraldInk => 'Emerald ink',
     };
   }
 
-  void _showThemePicker(BuildContext context) {
-    final provider = context.read<ThemeProvider>();
+  void _showAccentThemePicker(BuildContext context) {
+    final provider = context.read<AccentThemeProvider>();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -6691,7 +6776,7 @@ class _ProfilePageState extends State<ProfilePage>
               ),
               const SizedBox(height: 20),
               Text(
-                'Appearance',
+                'Accent Theme',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -6699,14 +6784,14 @@ class _ProfilePageState extends State<ProfilePage>
                 ),
               ),
               const SizedBox(height: 20),
-              _themeOption(ctx, provider, ThemeMode.system, '☀️🌙', 'Follow System',
-                  'Matches your phone setting'),
+              _accentOption(ctx, provider, AccentTheme.signalBlue, 'Signal blue',
+                  'Bold electric blue', const Color(0xFF0057FF)),
               const SizedBox(height: 10),
-              _themeOption(ctx, provider, ThemeMode.light, '☀️', 'Light',
-                  'Always use light mode'),
+              _accentOption(ctx, provider, AccentTheme.limeSpark, 'Lime spark',
+                  'Dark with lime accents', const Color(0xFFB6FF2E)),
               const SizedBox(height: 10),
-              _themeOption(ctx, provider, ThemeMode.dark, '🌙', 'Dark',
-                  'Always use dark mode'),
+              _accentOption(ctx, provider, AccentTheme.emeraldInk, 'Emerald ink',
+                  'Deep green with cream', const Color(0xFF064E3B)),
             ],
           ),
         );
@@ -6714,20 +6799,20 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  Widget _themeOption(
+  Widget _accentOption(
     BuildContext ctx,
-    ThemeProvider provider,
-    ThemeMode mode,
-    String emoji,
+    AccentThemeProvider provider,
+    AccentTheme theme,
     String label,
     String sub,
+    Color swatchColor,
   ) {
-    final isSelected = provider.themeMode == mode;
+    final isSelected = provider.accentTheme == theme;
     final appColors = AppColors.of(ctx);
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
-        provider.setThemeMode(mode);
+        provider.setAccentTheme(theme);
         Navigator.pop(ctx);
         setState(() {}); // refresh sub-label
       },
@@ -6736,17 +6821,25 @@ class _ProfilePageState extends State<ProfilePage>
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFF4B6EF5).withOpacity(0.1)
+              ? appColors.avatarRing.withOpacity(0.1)
               : appColors.sectionBackground,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? const Color(0xFF4B6EF5) : appColors.cardBorder,
+            color: isSelected ? appColors.avatarRing : appColors.cardBorder,
             width: isSelected ? 2 : 1,
           ),
         ),
         child: Row(
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 22)),
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: swatchColor,
+                border: Border.all(color: appColors.cardBorder),
+              ),
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -6758,7 +6851,7 @@ class _ProfilePageState extends State<ProfilePage>
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: isSelected
-                          ? const Color(0xFF4B6EF5)
+                          ? appColors.avatarRing
                           : Theme.of(ctx).colorScheme.onSurface,
                     ),
                   ),
@@ -6770,7 +6863,7 @@ class _ProfilePageState extends State<ProfilePage>
               ),
             ),
             if (isSelected)
-              const Icon(Icons.check_circle, color: Color(0xFF4B6EF5), size: 22),
+              Icon(Icons.check_circle, color: appColors.avatarRing, size: 22),
           ],
         ),
       ),
@@ -6784,14 +6877,11 @@ class _ProfilePageState extends State<ProfilePage>
     required String name, required String year,
     required String avatarId, required int level, required String title,
   }) {
-    // Hero gradient is always the brand purple — looks great in both modes
+    // Hero fill follows the active accent theme (was a fixed purple gradient)
+    final appColors = AppColors.of(context);
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF4B6EF5), Color(0xFF7B4FD4), Color(0xFF9B3FB5)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+      decoration: BoxDecoration(
+        color: appColors.cardBackground,
       ),
       child: SafeArea(
         bottom: false,
@@ -6952,13 +7042,14 @@ class _ProfilePageState extends State<ProfilePage>
   // ══════════════════════════════════════════════════════════════
   Widget _buildXpCard() {
     final appColors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     return Container(
       decoration: BoxDecoration(
         color: appColors.cardBackground,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF4B6EF5).withOpacity(0.1),
+            color: accentPalette.statusInfo.withOpacity(0.1),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -6979,11 +7070,7 @@ class _ProfilePageState extends State<ProfilePage>
                         width: 40, height: 40,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF4B6EF5), Color(0xFF7B4FD4)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+                          color: accentPalette.statusInfo,
                         ),
                         child: const Center(child: Text('⭐', style: TextStyle(fontSize: 20))),
                       ),
@@ -7013,15 +7100,15 @@ class _ProfilePageState extends State<ProfilePage>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF4B6EF5).withOpacity(0.12),
+                          color: accentPalette.statusInfo.withOpacity(0.12),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
                           '${_levelInfo!.currentXp} XP',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF4B6EF5),
+                            color: accentPalette.statusInfo,
                           ),
                         ),
                       ),
@@ -7036,7 +7123,7 @@ class _ProfilePageState extends State<ProfilePage>
                         value: _levelInfo!.progressPercent * _xpAnimation.value,
                         minHeight: 8,
                         backgroundColor: appColors.sectionBackground,
-                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4B6EF5)),
+                        valueColor: AlwaysStoppedAnimation<Color>(accentPalette.statusInfo),
                       ),
                     ),
                   ),
@@ -7265,12 +7352,9 @@ class _ProfilePageState extends State<ProfilePage>
         children: [
           Container(
             height: 220,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF4B6EF5), Color(0xFF9B3FB5)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+            // Matches _buildHero's fill so the load-flash stays invisible
+            decoration: BoxDecoration(
+              color: appColors.cardBackground,
             ),
             child: SafeArea(
               bottom: false,
