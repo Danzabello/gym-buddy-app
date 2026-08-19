@@ -16,7 +16,7 @@ import 'package:app_links/app_links.dart';
 import 'services/invite_service.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
-import 'theme/theme_provider.dart';
+import 'theme/accent_theme_provider.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/timezone_sync.dart';
 
@@ -39,14 +39,12 @@ class GymBuddyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
-      child: Consumer<ThemeProvider>(
-        builder: (context, themeProvider, _) {
+      create: (_) => AccentThemeProvider(),
+      child: Consumer<AccentThemeProvider>(
+        builder: (context, accentProvider, _) {
           return MaterialApp(
             title: 'Gym Buddy',
-            theme: AppTheme.light,
-            darkTheme: AppTheme.dark,
-            themeMode: themeProvider.themeMode,
+            theme: AppTheme.fromAccent(accentProvider.palette),
             home: const AuthWrapper(),
             debugShowCheckedModeBanner: false,
           );
