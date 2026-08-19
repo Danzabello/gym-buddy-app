@@ -196,6 +196,8 @@ class AccentPalette {
   final Color inputFill;
   final Color statusInfo;
   final Color statusSuccess;
+  final Color statusDanger;
+  final Color statusWarning;
   final Color action;
   final Color heroBackground;
   final Color heroText;
@@ -214,6 +216,8 @@ class AccentPalette {
     required this.inputFill,
     required this.statusInfo,
     required this.statusSuccess,
+    required this.statusDanger,
+    required this.statusWarning,
     required this.action,
     required this.heroBackground,
     required this.heroText,
@@ -233,6 +237,8 @@ class AccentPalette {
     inputFill: Color(0xFF123328),
     statusInfo: Color(0xFF5FA396),
     statusSuccess: Color(0xFF10B981),
+    statusDanger: Color(0xFFF87171),   // 6.20:1 on background
+    statusWarning: Color(0xFFFBBF24),  // 10.27:1 on background
     action: Color(0xFFEA580C),
     heroBackground: Color(0xFF064E3B),
     heroText: Color(0xFFF8E7C9),
@@ -252,6 +258,8 @@ class AccentPalette {
     inputFill: Color(0xFFF9FAFB),
     statusInfo: Color(0xFF0B84A5),
     statusSuccess: Color(0xFF10B981),
+    statusDanger: Color(0xFFDC2626),   // 4.51:1 on light background
+    statusWarning: Color(0xFFB45309),  // 4.69:1 — amber must go dark on light
     action: Color(0xFFEA580C),
     heroBackground: Color(0xFF0057FF),
     heroText: Color(0xFFF8F7F4),
@@ -271,6 +279,8 @@ class AccentPalette {
     inputFill: Color(0xFF23262F),
     statusInfo: Color(0xFF8B8FFF),
     statusSuccess: Color(0xFF4ADE80),
+    statusDanger: Color(0xFFF87171),   // 6.10:1 — red-400, matches 400 family
+    statusWarning: Color(0xFFFBBF24),  // 10.10:1 on background
     action: Color(0xFFEA580C),
     heroBackground: Color(0xFF23262F),
     heroText: Color(0xFFEDEEF0),

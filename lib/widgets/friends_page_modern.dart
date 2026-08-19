@@ -5,6 +5,8 @@ import '../services/friend_service.dart';
 import '../services/nudge_service.dart';
 import '../services/achievement_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/accent_theme_provider.dart';
+import 'package:provider/provider.dart';
 import 'user_avatar.dart';
 import 'profile_view_dialog.dart';
 import 'schedule_workout_sheet.dart';
@@ -167,12 +169,15 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
 
     if (!mounted) return;
 
+    final appColors = AppColors.of(context);
+    final palette = context.read<AccentThemeProvider>().palette;
+
     switch (result) {
       case NudgeResult.sent:
         HapticFeedback.mediumImpact();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Nudge sent to $name! 🔔'),
-          backgroundColor: const Color(0xFF10B981),
+          backgroundColor: appColors.successGreen,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10)),
@@ -188,16 +193,16 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
         ));
         break;
       case NudgeResult.tooEarly:
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Too early to nudge — try after 10am'),
-          backgroundColor: Color(0xFFF97316),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Too early to nudge — try after 10am'),
+          backgroundColor: palette.statusWarning,
           behavior: SnackBarBehavior.floating,
         ));
         break;
       case NudgeResult.error:
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Failed to send nudge'),
-          backgroundColor: Color(0xFFEF4444),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Failed to send nudge'),
+          backgroundColor: palette.statusDanger,
           behavior: SnackBarBehavior.floating,
         ));
         break;
@@ -207,6 +212,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   Future<void> _removeFriend(
       String friendId, String friendName) async {
     final appColors = AppColors.of(context);
+    final palette = context.read<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
 
     final confirmed = await showDialog<bool>(
@@ -219,11 +225,11 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFFF97316).withOpacity(0.12),
+              color: palette.statusWarning.withOpacity(0.12),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.warning_amber_rounded,
-                color: Color(0xFFF97316), size: 28),
+            child: Icon(Icons.warning_amber_rounded,
+                color: palette.statusWarning, size: 28),
           ),
           const SizedBox(height: 12),
           Text('Remove Buddy?',
@@ -242,18 +248,18 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFFEF4444).withOpacity(0.08),
+                color: palette.statusDanger.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                    color: const Color(0xFFEF4444).withOpacity(0.2),
+                    color: palette.statusDanger.withOpacity(0.2),
                     width: 0.5),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    const Icon(Icons.info_outline,
-                        size: 15, color: Color(0xFFEF4444)),
+                    Icon(Icons.info_outline,
+                        size: 15, color: palette.statusDanger),
                     const SizedBox(width: 6),
                     Text('This will:',
                         style: TextStyle(
@@ -301,7 +307,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444),
+                    color: palette.statusDanger,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Center(
@@ -325,7 +331,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Removed $friendName'),
-        backgroundColor: const Color(0xFF10B981),
+        backgroundColor: appColors.successGreen,
         behavior: SnackBarBehavior.floating,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -334,13 +340,13 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   }
 
   Widget _consequenceRow(IconData icon, String text) {
+    final danger = context.read<AccentThemeProvider>().palette.statusDanger;
     return Row(children: [
-      Icon(icon, size: 14, color: const Color(0xFFEF4444)),
+      Icon(icon, size: 14, color: danger),
       const SizedBox(width: 8),
       Expanded(
           child: Text(text,
-              style: const TextStyle(
-                  fontSize: 12, color: Color(0xFFEF4444)))),
+              style: TextStyle(fontSize: 12, color: danger))),
     ]);
   }
 
@@ -363,9 +369,9 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     if (link == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Failed to generate link. Try again!'),
-        backgroundColor: Color(0xFFEF4444),
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Failed to generate link. Try again!'),
+        backgroundColor: context.read<AccentThemeProvider>().palette.statusDanger,
         behavior: SnackBarBehavior.floating,
       ));
       return;
@@ -386,6 +392,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   // ══════════════════════════════════════════════════════════
   void _showBuddySheet(Map<String, dynamic> friend) {
     final appColors = AppColors.of(context);
+    final palette = context.read<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
     final id = friend['id'] as String;
     final name = friend['display_name'] as String? ?? 'Buddy';
@@ -442,13 +449,13 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: checkedIn
-                      ? const Color(0xFF10B981).withOpacity(0.12)
-                      : const Color(0xFFF97316).withOpacity(0.12),
+                      ? appColors.successGreen.withOpacity(0.12)
+                      : appColors.streakOrange.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                       color: checkedIn
-                          ? const Color(0xFF10B981).withOpacity(0.25)
-                          : const Color(0xFFF97316).withOpacity(0.25),
+                          ? appColors.successGreen.withOpacity(0.25)
+                          : appColors.streakOrange.withOpacity(0.25),
                       width: 0.5),
                 ),
                 child: Text(
@@ -457,8 +464,8 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
                       color: checkedIn
-                          ? const Color(0xFF10B981)
-                          : const Color(0xFFF97316)),
+                          ? appColors.successGreen
+                          : appColors.streakOrange),
                 ),
               ),
             ]),
@@ -466,8 +473,8 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
             // Action rows
             _sheetAction(
               icon: Icons.chat_bubble_outline,
-              iconBg: const Color(0xFF3B82F6).withOpacity(0.12),
-              iconColor: const Color(0xFF3B82F6),
+              iconBg: palette.statusInfo.withOpacity(0.12),
+              iconColor: palette.statusInfo,
               label: 'Message',
               subtitle: 'Open your chat',
               onTap: () {
@@ -480,8 +487,8 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
             _sheetDivider(appColors),
             _sheetAction(
               icon: Icons.fitness_center_outlined,
-              iconBg: const Color(0xFFF97316).withOpacity(0.12),
-              iconColor: const Color(0xFFF97316),
+              iconBg: appColors.streakOrange.withOpacity(0.12),
+              iconColor: appColors.streakOrange,
               label: 'Invite to workout',
               subtitle: 'Schedule a session together',
               onTap: () {
@@ -498,6 +505,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
             _sheetDivider(appColors),
             _sheetAction(
               icon: Icons.person_outline,
+              // Brand-adjacent accent, used sparingly — not a themed role
               iconBg: const Color(0xFF7C3AED).withOpacity(0.12),
               iconColor: const Color(0xFF7C3AED),
               label: 'View profile',
@@ -516,11 +524,11 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
             _sheetDivider(appColors),
             _sheetAction(
               icon: Icons.person_remove_outlined,
-              iconBg: const Color(0xFFEF4444).withOpacity(0.10),
-              iconColor: const Color(0xFFEF4444),
+              iconBg: palette.statusDanger.withOpacity(0.10),
+              iconColor: palette.statusDanger,
               label: 'Remove buddy',
               subtitle: 'Deletes your shared streak',
-              labelColor: const Color(0xFFEF4444),
+              labelColor: palette.statusDanger,
               onTap: () {
                 Navigator.pop(context);
                 _removeFriend(id, name);
@@ -595,27 +603,18 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   // ══════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
-    final appColors = AppColors.of(context);
+    final palette = context.watch<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
+        // Inherits transparent bg + foreground from appBarTheme
         elevation: 0,
-        backgroundColor: Colors.transparent,
         centerTitle: true,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
         // ── Left: search → opens dedicated finder page ──
         leading: IconButton(
-          icon: const Icon(Icons.search, color: Colors.white),
+          icon: const Icon(Icons.search),
           tooltip: 'Search buddies',
           onPressed: () {
             // Snapshot of who's working out right now — read only, never
@@ -640,7 +639,6 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
             style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
                 letterSpacing: -0.5)),
         // ── Right: add + requests (badge = pending count) ──
         actions: [
@@ -650,8 +648,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                     clipBehavior: Clip.none,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.person_add_outlined,
-                            color: Colors.white, size: 22),
+                        icon: const Icon(Icons.person_add_outlined, size: 22),
                         tooltip: 'Add buddies & requests',
                         onPressed: () async {
                           await Navigator.push(
@@ -671,10 +668,11 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                             constraints: const BoxConstraints(
                                 minWidth: 16, minHeight: 16),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFEF4444),
+                              color: palette.statusDanger,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                  color: const Color(0xFF5B3CC4),
+                                  color: Theme.of(context)
+                                      .scaffoldBackgroundColor,
                                   width: 1.5),
                             ),
                             child: Center(
@@ -706,6 +704,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   // ══════════════════════════════════════════════════════════
   Widget _buildBuddiesFeed() {
     if (_friends.isEmpty) return _buildEmptyBuddies();
+    final appColors = AppColors.of(context);
 
     final checkedIn = _checkedInFriends;
     final notChecked = _notCheckedInFriends;
@@ -721,14 +720,14 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                 child: _summaryTile(
               value: '${_checkedInFriends.length} / ${_friends.length}',
               label: 'Checked in today',
-              color: const Color(0xFF10B981),
+              color: appColors.successGreen,
             )),
             const SizedBox(width: 6),
             Expanded(
                 child: _summaryTile(
               value: '🔥 ${_bestStreak()}',
               label: 'Best streak',
-              color: const Color(0xFFF97316),
+              color: appColors.streakOrange,
             )),
           ]),
         ),
@@ -819,17 +818,17 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     // Chip precedence: checked-in wins, then break, then at-risk.
     // "Streak at risk" on someone whose streak is protected is misleading.
     final Color chipBg = !dimmed
-        ? const Color(0xFFF97316).withOpacity(0.12)
+        ? appColors.streakOrange.withOpacity(0.12)
         : onBreak
             ? cs.primary.withOpacity(0.12)
             : appColors.sectionBackground;
     final Color chipBorderColor = !dimmed
-        ? const Color(0xFFF97316).withOpacity(0.2)
+        ? appColors.streakOrange.withOpacity(0.2)
         : onBreak
             ? cs.primary.withOpacity(0.2)
             : appColors.cardBorder;
     final Color chipTextColor = !dimmed
-        ? const Color(0xFFF97316)
+        ? appColors.streakOrange
         : onBreak
             ? cs.primary
             : appColors.subtleText;
@@ -923,24 +922,24 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                           decoration: BoxDecoration(
                             color: hasNudged
                                 ? appColors.sectionBackground
-                                : const Color(0xFFF97316)
+                                : appColors.streakOrange
                                     .withOpacity(0.10),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                                 color: hasNudged
                                     ? appColors.cardBorder
-                                    : const Color(0xFFF97316)
+                                    : appColors.streakOrange
                                         .withOpacity(0.3),
                                 width: 0.5),
                           ),
                           child: Center(
                             child: isNudging
-                                ? const SizedBox(
+                                ? SizedBox(
                                     width: 14,
                                     height: 14,
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        color: Color(0xFFF97316)))
+                                        color: appColors.streakOrange))
                                 : Icon(
                                     hasNudged
                                         ? Icons.check
@@ -948,7 +947,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                                     size: 17,
                                     color: hasNudged
                                         ? appColors.subtleText
-                                        : const Color(0xFFF97316),
+                                        : appColors.streakOrange,
                                   ),
                           ),
                         ),
@@ -983,9 +982,9 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   }
 
   Color _borderColor(String? borderKey) {
-    if (borderKey == null) return const Color(0xFF6B7280).withOpacity(0.4);
-    return _borderColors[borderKey] ??
-        const Color(0xFF6B7280).withOpacity(0.4);
+    final fallback = AppColors.of(context).subtleText.withOpacity(0.4);
+    if (borderKey == null) return fallback;
+    return _borderColors[borderKey] ?? fallback;
   }
 
   int _bestStreak() {
@@ -1171,8 +1170,9 @@ class _SearchBuddiesPageState extends State<_SearchBuddiesPage> {
   }
 
   Color _borderColor(String? key) {
-    if (key == null) return const Color(0xFF6B7280).withOpacity(0.4);
-    return _borderColors[key] ?? const Color(0xFF6B7280).withOpacity(0.4);
+    final fallback = AppColors.of(context).subtleText.withOpacity(0.4);
+    if (key == null) return fallback;
+    return _borderColors[key] ?? fallback;
   }
 
   Widget _avatarWidget(
@@ -1199,23 +1199,10 @@ class _SearchBuddiesPageState extends State<_SearchBuddiesPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
+        // Inherits transparent bg + foreground from appBarTheme
         elevation: 0,
-        backgroundColor: Colors.transparent,
-        iconTheme: const IconThemeData(color: Colors.white),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
         title: const Text('Message a buddy',
-            style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: Colors.white)),
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
       ),
       body: ListView(
         padding: const EdgeInsets.all(12),
@@ -1287,6 +1274,8 @@ class _SearchBuddiesPageState extends State<_SearchBuddiesPage> {
 
     final out = <Widget>[];
     if (best.isNotEmpty) {
+      // Intentional tier styling, matches achievements' legendary color
+      // — not themed per accent
       out.add(_sectionLabel('⭐ BEST BUDDIES', const Color(0xFFFBBF24),
           appColors));
       out.addAll(best
@@ -1337,28 +1326,31 @@ class _SearchBuddiesPageState extends State<_SearchBuddiesPage> {
     final username = friend['username'] as String?;
     final streak = _streakOf(friend);
     final live = widget.workingOut.contains(friend['id'] as String);
+    final palette = context.watch<AccentThemeProvider>().palette;
     final borderColor = live
-        ? const Color(0xFF22C55E)
+        ? appColors.successGreen
+        // Intentional tier styling, matches achievements' legendary color
+        // — not themed per accent
         : isTop
             ? const Color(0xFFFBBF24)
             : _borderColor(friend['avatar_border'] as String?);
 
     Widget subline;
     if (live) {
-      subline = const Text('🟢 Working out now',
+      subline = Text('🟢 Working out now',
           style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF22C55E)));
+              color: appColors.successGreen));
     } else if (streak != null && streak.currentStreak > 0) {
       subline = Text(
         isTop
             ? '🔥 ${streak.currentStreak}-day streak · top buddy'
             : '🔥 ${streak.currentStreak}-day streak',
-        style: const TextStyle(
+        style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: Color(0xFFF97316)),
+            color: appColors.streakOrange),
       );
     } else {
       final ago = _lastTogether(streak);
@@ -1403,7 +1395,7 @@ class _SearchBuddiesPageState extends State<_SearchBuddiesPage> {
                       width: 12,
                       height: 12,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF22C55E),
+                        color: appColors.successGreen,
                         shape: BoxShape.circle,
                         border: Border.all(
                             color: appColors.cardBackground, width: 2.5),
@@ -1427,8 +1419,8 @@ class _SearchBuddiesPageState extends State<_SearchBuddiesPage> {
                 ],
               ),
             ),
-            const Icon(Icons.chat_bubble_outline,
-                size: 18, color: Color(0xFF3B82F6)),
+            Icon(Icons.chat_bubble_outline,
+                size: 18, color: palette.statusInfo),
           ]),
         ),
       ),
@@ -1521,6 +1513,8 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
     setState(() => _sendingRequestTo = friendId);
     final result = await _friendService.sendFriendRequest(friendId);
     if (!mounted) return;
+    final appColors = AppColors.of(context);
+    final palette = context.read<AccentThemeProvider>().palette;
     setState(() => _sendingRequestTo = null);
 
     final neutral = AppColors.of(context).subtleText;
@@ -1528,13 +1522,13 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
     switch (result) {
       case FriendRequestResult.sent:
         HapticFeedback.mediumImpact();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Row(children: [
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Row(children: [
             Icon(Icons.check_circle, color: Colors.white),
             SizedBox(width: 12),
             Text('Friend request sent! 🎉'),
           ]),
-          backgroundColor: Color(0xFF10B981),
+          backgroundColor: appColors.successGreen,
           behavior: SnackBarBehavior.floating,
         ));
         _searchController.clear();
@@ -1574,9 +1568,9 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
       case FriendRequestResult.error:
         // Distinct from the informational cases above: this one means the
         // request did not land and retrying is worthwhile.
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Couldn\'t send request — try again'),
-          backgroundColor: Color(0xFFEF4444),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Couldn\'t send request — try again'),
+          backgroundColor: palette.statusDanger,
           behavior: SnackBarBehavior.floating,
         ));
         break;
@@ -1587,17 +1581,18 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
     setState(() => _processingRequestId = requestId);
     final success = await _friendService.acceptFriendRequest(requestId);
     if (!mounted) return;
+    final appColors = AppColors.of(context);
     setState(() => _processingRequestId = null);
 
     if (success) {
       HapticFeedback.heavyImpact();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Row(children: [
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Row(children: [
           Icon(Icons.celebration, color: Colors.white),
           SizedBox(width: 12),
           Text('Buddy added! 🎉'),
         ]),
-        backgroundColor: Color(0xFF10B981),
+        backgroundColor: appColors.successGreen,
         behavior: SnackBarBehavior.floating,
       ));
       await _loadRequests();
@@ -1609,6 +1604,7 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
 
   Future<void> _declineRequest(String requestId) async {
     final appColors = AppColors.of(context);
+    final palette = context.read<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1629,8 +1625,8 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Decline',
-                style: TextStyle(color: Color(0xFFEF4444))),
+            child: Text('Decline',
+                style: TextStyle(color: palette.statusDanger)),
           ),
         ],
       ),
@@ -1653,23 +1649,10 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
+        // Inherits transparent bg + foreground from appBarTheme
         elevation: 0,
-        backgroundColor: Colors.transparent,
-        iconTheme: const IconThemeData(color: Colors.white),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
         title: const Text('Add buddies',
-            style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: Colors.white)),
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: cs.primary))
@@ -1753,7 +1736,7 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
           decoration: BoxDecoration(
-              color: const Color(0xFFF97316),
+              color: appColors.streakOrange,
               borderRadius: BorderRadius.circular(10)),
           child: Text('${_pendingRequests.length}',
               style: const TextStyle(
@@ -1766,6 +1749,7 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
 
   Widget _searchResultCard(Map<String, dynamic> user) {
     final appColors = AppColors.of(context);
+    final palette = context.watch<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
     final isSending = _sendingRequestTo == user['id'];
     return Container(
@@ -1787,9 +1771,9 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('@${user['username'] ?? 'unknown'}',
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF3B82F6),
+                    color: palette.statusInfo,
                     fontWeight: FontWeight.w500)),
             Text(
                 user['fitness_level']?.toString().toUpperCase() ??
@@ -1834,6 +1818,7 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
 
   Widget _requestCard(Map<String, dynamic> request) {
     final appColors = AppColors.of(context);
+    final palette = context.watch<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
     final profile = request['user_profiles'];
     final isProcessing = _processingRequestId == request['id'];
@@ -1844,7 +1829,7 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
         color: appColors.cardBackground,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-            color: const Color(0xFFF97316).withOpacity(0.25), width: 0.5),
+            color: appColors.streakOrange.withOpacity(0.25), width: 0.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -1880,7 +1865,7 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF10B981),
+                      color: appColors.successGreen,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Row(
@@ -1907,17 +1892,17 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
-                          color: const Color(0xFFEF4444), width: 0.5),
+                          color: palette.statusDanger, width: 0.5),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.close,
-                            size: 15, color: Color(0xFFEF4444)),
-                        SizedBox(width: 5),
+                            size: 15, color: palette.statusDanger),
+                        const SizedBox(width: 5),
                         Text('Decline',
                             style: TextStyle(
-                                color: Color(0xFFEF4444),
+                                color: palette.statusDanger,
                                 fontWeight: FontWeight.w700,
                                 fontSize: 13)),
                       ],

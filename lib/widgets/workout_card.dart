@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import '../theme/app_theme.dart';
+import '../theme/accent_theme_provider.dart';
+import 'package:provider/provider.dart';
 
 class WorkoutCard extends StatefulWidget {
   final Map<String, dynamic> workout;
@@ -150,6 +152,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
   @override
   Widget build(BuildContext context) {
     final appColors = AppColors.of(context);
+    final palette = context.watch<AccentThemeProvider>().palette;
     final isIncomingInvite = widget.isBuddy && widget.buddyStatus == 'pending';
     final creatorState = widget.isCreator ? _getCreatorState() : null;
 
@@ -199,13 +202,13 @@ class _WorkoutCardState extends State<WorkoutCard> {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(Icons.person, size: 14, color: Colors.blue[400]),
+                          Icon(Icons.person, size: 14, color: palette.statusInfo),
                           const SizedBox(width: 4),
                           Text(
                             'with ${widget.partnerName}',
                             style: TextStyle(
                               fontSize: 13,
-                              color: Colors.blue[400],
+                              color: palette.statusInfo,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -261,36 +264,36 @@ class _WorkoutCardState extends State<WorkoutCard> {
     );
   }
 
+  // Two tiers, theme-driven: short sessions read as neutral, longer ones
+  // get the accent nod. (Was a 7-step rainbow duplicated across sheets.)
   Color _durationColor(int? minutes) {
-    if (minutes == null) return AppColors.of(context).subtleText;
-    if (minutes <= 20)  return Colors.grey[500]!;
-    if (minutes <= 30)  return Colors.blue[600]!;
-    if (minutes <= 45)  return Colors.green[600]!;
-    if (minutes <= 60)  return Colors.teal[600]!;
-    if (minutes <= 75)  return Colors.purple[600]!;
-    if (minutes <= 90)  return Colors.deepPurple[600]!;
-    return Colors.red[600]!;
+    final appColors = AppColors.of(context);
+    if (minutes == null) return appColors.subtleText;
+    if (minutes <= 30) return appColors.subtleText;
+    return appColors.streakOrange; // resolves to accentPalette.action
   }
 
   Color _getCardShadowColor(String? state) {
+    final appColors = AppColors.of(context);
     switch (state) {
       case 'waiting_to_join':
-        return Colors.orange.withOpacity(0.25);
+        return appColors.streakOrange.withOpacity(0.25);
       case 'in_progress':
-        return Colors.green.withOpacity(0.25);
+        return appColors.successGreen.withOpacity(0.25);
       case 'window_expired':
         return Colors.black.withOpacity(0.15);
       case 'buddy_completed':
-        return Colors.green.withOpacity(0.15);
+        return appColors.successGreen.withOpacity(0.15);
       default:
         return Colors.black.withOpacity(0.15);
     }
   }
 
   Border? _getCardBorder(String? state, bool isInvite, AppColors appColors) {
-    if (state == 'waiting_to_join') return Border.all(color: Colors.orange.withOpacity(0.5), width: 2);
-    if (state == 'in_progress') return Border.all(color: Colors.green.withOpacity(0.4), width: 2);
-    if (isInvite) return Border.all(color: Colors.blue.withOpacity(0.4), width: 2);
+    final palette = context.watch<AccentThemeProvider>().palette;
+    if (state == 'waiting_to_join') return Border.all(color: appColors.streakOrange.withOpacity(0.5), width: 2);
+    if (state == 'in_progress') return Border.all(color: appColors.successGreen.withOpacity(0.4), width: 2);
+    if (isInvite) return Border.all(color: palette.statusInfo.withOpacity(0.4), width: 2);
     return Border.all(color: appColors.cardBorder, width: 0.5);
   }
 
@@ -317,19 +320,20 @@ class _WorkoutCardState extends State<WorkoutCard> {
   }
 
   Widget _buildStatusChip(String? state, AppColors appColors) {
+    final palette = context.watch<AccentThemeProvider>().palette;
     Color bgColor;
     Color textColor;
     String label;
 
     switch (state) {
       case 'waiting_to_join':
-        bgColor = Colors.orange.withOpacity(0.15);
-        textColor = Colors.orange[300]!;
+        bgColor = appColors.streakOrange.withOpacity(0.15);
+        textColor = appColors.streakOrange;
         label = '⏳ Waiting';
         break;
       case 'in_progress':
-        bgColor = Colors.green.withOpacity(0.15);
-        textColor = Colors.green[400]!;
+        bgColor = appColors.successGreen.withOpacity(0.15);
+        textColor = appColors.successGreen;
         label = '🔥 Active';
         break;
       case 'window_expired':
@@ -338,30 +342,30 @@ class _WorkoutCardState extends State<WorkoutCard> {
         label = '❌ Missed';
         break;
       case 'buddy_completed':
-        bgColor = Colors.green.withOpacity(0.15);
-        textColor = Colors.green[400]!;
+        bgColor = appColors.successGreen.withOpacity(0.15);
+        textColor = appColors.successGreen;
         label = '✅ Done';
         break;
       default:
         if (_creatorWaitingReady) {
-          bgColor = Colors.orange.withOpacity(0.15);
-          textColor = Colors.orange[300]!;
+          bgColor = appColors.streakOrange.withOpacity(0.15);
+          textColor = appColors.streakOrange;
           label = '⏳ Waiting';
         } else if (_buddyCanStartTogether) {
-          bgColor = Colors.green.withOpacity(0.15);
-          textColor = Colors.green[400]!;
+          bgColor = appColors.successGreen.withOpacity(0.15);
+          textColor = appColors.successGreen;
           label = '🟢 Partner ready';
         } else if (widget.isBuddy && widget.buddyStatus == 'pending') {
-          bgColor = Colors.blue.withOpacity(0.15);
-          textColor = Colors.blue[300]!;
+          bgColor = palette.statusInfo.withOpacity(0.15);
+          textColor = palette.statusInfo;
           label = '📨 Invite';
         } else if (widget.workoutStatus == 'in_progress') {
-          bgColor = Colors.green.withOpacity(0.15);
-          textColor = Colors.green[400]!;
+          bgColor = appColors.successGreen.withOpacity(0.15);
+          textColor = appColors.successGreen;
           label = '🔥 Active';
         } else {
-          bgColor = Colors.blue.withOpacity(0.1);
-          textColor = Colors.blue[300]!;
+          bgColor = palette.statusInfo.withOpacity(0.1);
+          textColor = palette.statusInfo;
           label = '📅 Scheduled';
         }
     }
@@ -411,6 +415,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
   }
 
   Widget _buildJoinWindowSection(AppColors appColors) {
+    final palette = context.watch<AccentThemeProvider>().palette;
     final joinMinutes = _joinWindowRemaining ~/ 60;
     final joinSeconds = _joinWindowRemaining % 60;
 
@@ -418,20 +423,20 @@ class _WorkoutCardState extends State<WorkoutCard> {
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.1),
+        color: appColors.streakOrange.withOpacity(0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+        border: Border.all(color: appColors.streakOrange.withOpacity(0.3)),
       ),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.timer, color: Colors.orange[400], size: 22),
+              Icon(Icons.timer, color: appColors.streakOrange, size: 22),
               const SizedBox(width: 8),
               Text(
                 'Waiting for you to join!',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.orange[400]),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: appColors.streakOrange),
               ),
             ],
           ),
@@ -447,7 +452,13 @@ class _WorkoutCardState extends State<WorkoutCard> {
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
-                color: _joinWindowRemaining < 60 ? Colors.red[400] : Colors.orange[400],
+                // Not a destructive action — borrowing statusDanger for its
+                // escalation grammar (orange -> red reads as urgency
+                // increasing; statusWarning's amber would read as urgency
+                // decreasing, which is backwards here).
+                color: _joinWindowRemaining < 60
+                    ? palette.statusDanger
+                    : appColors.streakOrange,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
@@ -483,23 +494,24 @@ class _WorkoutCardState extends State<WorkoutCard> {
   }
 
   Widget _buildBuddyCompletedSection() {
+    final appColors = AppColors.of(context);
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.green.withOpacity(0.1),
+        color: appColors.successGreen.withOpacity(0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.green.withOpacity(0.3)),
+        border: Border.all(color: appColors.successGreen.withOpacity(0.3)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.15),
+              color: appColors.successGreen.withOpacity(0.15),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.check, color: Colors.green[400], size: 20),
+            child: Icon(Icons.check, color: appColors.successGreen, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -508,10 +520,10 @@ class _WorkoutCardState extends State<WorkoutCard> {
               children: [
                 Text(
                   '${widget.partnerName} completed the workout!',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.green[400]),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: appColors.successGreen),
                 ),
                 const SizedBox(height: 2),
-                Text('Helped the streak grow 🎉', style: TextStyle(fontSize: 12, color: Colors.green[300])),
+                Text('Helped the streak grow 🎉', style: TextStyle(fontSize: 12, color: appColors.successGreen)),
               ],
             ),
           ),
@@ -521,6 +533,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
   }
 
   Widget _buildInProgressSection(AppColors appColors) {
+    final palette = context.watch<AccentThemeProvider>().palette;
     final plannedDuration = widget.workout['planned_duration_minutes'] ?? 30;
     final goalSeconds = plannedDuration * 60;
     final progress = (_workoutElapsed / goalSeconds).clamp(0.0, 1.0);
@@ -540,13 +553,13 @@ class _WorkoutCardState extends State<WorkoutCard> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: hasReachedGoal
-              ? Colors.green.withOpacity(0.1)
-              : Colors.blue.withOpacity(0.1),
+              ? appColors.successGreen.withOpacity(0.1)
+              : palette.statusInfo.withOpacity(0.1),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: hasReachedGoal
-                ? Colors.green.withOpacity(0.35)
-                : Colors.blue.withOpacity(0.3),
+                ? appColors.successGreen.withOpacity(0.35)
+                : palette.statusInfo.withOpacity(0.3),
           ),
         ),
         child: Column(
@@ -556,7 +569,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
               children: [
                 Icon(
                   hasReachedGoal ? Icons.check_circle : Icons.timer,
-                  color: hasReachedGoal ? Colors.green[400] : Colors.blue[400],
+                  color: hasReachedGoal ? appColors.successGreen : palette.statusInfo,
                   size: 24,
                 ),
                 const SizedBox(width: 10),
@@ -565,7 +578,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
-                    color: hasReachedGoal ? Colors.green[400] : Colors.blue[400],
+                    color: hasReachedGoal ? appColors.successGreen : palette.statusInfo,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
@@ -574,8 +587,8 @@ class _WorkoutCardState extends State<WorkoutCard> {
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: hasReachedGoal
-                        ? Colors.green.withOpacity(0.2)
-                        : Colors.blue.withOpacity(0.2),
+                        ? appColors.successGreen.withOpacity(0.2)
+                        : palette.statusInfo.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -583,7 +596,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: hasReachedGoal ? Colors.green[300] : Colors.blue[300],
+                      color: hasReachedGoal ? appColors.successGreen : palette.statusInfo,
                     ),
                   ),
                 ),
@@ -597,7 +610,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
                 minHeight: 8,
                 backgroundColor: appColors.divider,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  hasReachedGoal ? Colors.green[400]! : Colors.blue[400]!,
+                  hasReachedGoal ? appColors.successGreen : palette.statusInfo,
                 ),
               ),
             ),
@@ -609,7 +622,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: hasReachedGoal ? Colors.green[400] : appColors.subtleText,
+                color: hasReachedGoal ? appColors.successGreen : appColors.subtleText,
               ),
             ),
           ],
@@ -619,6 +632,8 @@ class _WorkoutCardState extends State<WorkoutCard> {
   }
 
   Widget _buildInviteActions() {
+    final appColors = AppColors.of(context);
+    final palette = context.watch<AccentThemeProvider>().palette;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       child: Column(
@@ -640,7 +655,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
                   icon: const Icon(Icons.check, size: 18),
                   label: const Text('Accept'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green[500],
+                    backgroundColor: appColors.successGreen,
                     foregroundColor: Colors.white,
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -652,10 +667,10 @@ class _WorkoutCardState extends State<WorkoutCard> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () { HapticFeedback.lightImpact(); widget.onDecline?.call(); },
-                  icon: Icon(Icons.close, size: 18, color: Colors.red[400]),
-                  label: Text('Decline', style: TextStyle(color: Colors.red[400])),
+                  icon: Icon(Icons.close, size: 18, color: palette.statusDanger),
+                  label: Text('Decline', style: TextStyle(color: palette.statusDanger)),
                   style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Colors.red.withOpacity(0.4)),
+                    side: BorderSide(color: palette.statusDanger.withOpacity(0.4)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -675,6 +690,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
+        // Brand-adjacent accent, used sparingly — not a themed role
         color: const Color(0xFF7C3AED).withOpacity(0.08),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFF7C3AED).withOpacity(0.25)),
@@ -712,13 +728,13 @@ class _WorkoutCardState extends State<WorkoutCard> {
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.green.withOpacity(0.08),
+        color: appColors.successGreen.withOpacity(0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.green.withOpacity(0.3)),
+        border: Border.all(color: appColors.successGreen.withOpacity(0.3)),
       ),
       child: Row(
         children: [
-          Icon(Icons.local_fire_department, color: Colors.green[400], size: 18),
+          Icon(Icons.local_fire_department, color: appColors.successGreen, size: 18),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -729,7 +745,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: Colors.green[400]),
+                      color: appColors.successGreen),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -745,6 +761,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
   }
 
   Widget _buildWorkoutActions(String? creatorState, AppColors appColors) {
+    final palette = context.watch<AccentThemeProvider>().palette;
     if (creatorState == 'window_expired' || creatorState == 'buddy_completed') {
       return const SizedBox.shrink();
     }
@@ -762,7 +779,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
                 icon: const Icon(Icons.play_arrow, size: 22),
                 label: const Text('Join Workout'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange[500],
+                  backgroundColor: appColors.streakOrange,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -771,8 +788,8 @@ class _WorkoutCardState extends State<WorkoutCard> {
             ),
             TextButton.icon(
               onPressed: () { HapticFeedback.lightImpact(); widget.onCancel?.call(); },
-              icon: Icon(Icons.stop_circle_outlined, color: Colors.red[400], size: 16),
-              label: Text('Not joining', style: TextStyle(color: Colors.red[400], fontSize: 13)),
+              icon: Icon(Icons.stop_circle_outlined, color: palette.statusDanger, size: 16),
+              label: Text('Not joining', style: TextStyle(color: palette.statusDanger, fontSize: 13)),
             ),
           ],
         ),
@@ -798,7 +815,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
                 icon: Icon(hasReachedGoal ? Icons.check_circle : Icons.lock, size: 20),
                 label: Text(hasReachedGoal ? 'Complete Workout' : 'Complete Goal First'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: hasReachedGoal ? Colors.green[500] : appColors.sectionBackground,
+                  backgroundColor: hasReachedGoal ? appColors.successGreen : appColors.sectionBackground,
                   foregroundColor: hasReachedGoal ? Colors.white : appColors.subtleText,
                   disabledBackgroundColor: appColors.sectionBackground,
                   disabledForegroundColor: appColors.subtleText,
@@ -809,8 +826,8 @@ class _WorkoutCardState extends State<WorkoutCard> {
             ),
             TextButton.icon(
               onPressed: () { HapticFeedback.lightImpact(); widget.onCancel?.call(); },
-              icon: Icon(Icons.stop_circle_outlined, color: Colors.red[400], size: 16),
-              label: Text('Abandon Workout', style: TextStyle(color: Colors.red[400], fontSize: 13)),
+              icon: Icon(Icons.stop_circle_outlined, color: palette.statusDanger, size: 16),
+              label: Text('Abandon Workout', style: TextStyle(color: palette.statusDanger, fontSize: 13)),
             ),
           ],
         ),
@@ -848,7 +865,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
             icon: const Icon(Icons.play_arrow, size: 22),
             label: const Text('Start Together'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green[500],
+              backgroundColor: appColors.successGreen,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -901,12 +918,12 @@ class _WorkoutCardState extends State<WorkoutCard> {
               const SizedBox(width: 12),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: palette.statusDanger.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: IconButton(
                   onPressed: () { HapticFeedback.lightImpact(); widget.onCancel?.call(); },
-                  icon: Icon(Icons.close, color: Colors.red[400]),
+                  icon: Icon(Icons.close, color: palette.statusDanger),
                   tooltip: 'Cancel',
                 ),
               ),
@@ -948,12 +965,12 @@ class _WorkoutCardState extends State<WorkoutCard> {
               const SizedBox(width: 12),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: palette.statusDanger.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: IconButton(
                   onPressed: () { HapticFeedback.lightImpact(); widget.onCancel?.call(); },
-                  icon: Icon(Icons.close, color: Colors.red[400]),
+                  icon: Icon(Icons.close, color: palette.statusDanger),
                   tooltip: 'Cancel',
                 ),
               ),
