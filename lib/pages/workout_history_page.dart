@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
-import '../widgets/workout_calendar_widget.dart';
+import '../widgets/workout_calendar.dart';
 import '../widgets/workout_history_list.dart';
 
 class WorkoutHistoryPage extends StatefulWidget {
