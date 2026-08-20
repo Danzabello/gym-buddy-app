@@ -29,6 +29,7 @@ import 'widgets/workout_selection_modal.dart';
 import 'widgets/workout_join_checker.dart';
 import 'pages/notification_settings_page.dart';
 import 'pages/shop_page.dart';
+import 'pages/workout_history_page.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'widgets/xp_progress_bar.dart';
@@ -6674,7 +6675,11 @@ class _ProfilePageState extends State<ProfilePage>
                           color: appColors.sectionBackground,
                           label: 'Progress',
                           sub: 'View your history',
-                          onTap: () {},
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const WorkoutHistoryPage()),
+                          ),
                         ),
                       ]),
                       const SizedBox(height: 22),
