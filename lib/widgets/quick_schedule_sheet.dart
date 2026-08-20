@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/workout_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/accent_theme_provider.dart';
+import 'package:provider/provider.dart';
 
 class QuickScheduleSheet extends StatefulWidget {
   final String buddyUserId;
@@ -48,6 +50,10 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
   bool _isCustomDuration = false;
   bool _isCreating = false;
 
+  /// Workout-type identity hues. Deliberately NOT themed: these encode which
+  /// kind of session it is, the same way achievements' _categoryAccent encodes
+  /// category. Ruled a keeper alongside workout_card._getWorkoutColor.
+  /// (MaterialColor, not Color — call sites use color[400] / withOpacity.)
   final List<Map<String, dynamic>> _workoutTypes = [
     {'name': 'Strength',   'icon': Icons.fitness_center,    'color': Colors.blue},
     {'name': 'Cardio',     'icon': Icons.directions_run,    'color': Colors.red},
@@ -90,7 +96,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
                 Expanded(child: Text('Workout invite sent to ${widget.buddyDisplayName}! 🎉')),
               ],
             ),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.of(context).successGreen,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -99,7 +105,10 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $error'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Error: $error'),
+              backgroundColor:
+                  context.read<AccentThemeProvider>().palette.statusDanger),
         );
       }
     }
@@ -236,7 +245,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: dialColor,
-                        foregroundColor: Colors.white,
+                        foregroundColor: appColors.readableForeground(dialColor),
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16)),
@@ -283,10 +292,11 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.12),  // ✅ subtle in dark too
+                    color: appColors.tint(appColors.successGreen),  // ✅ subtle in dark too
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(Icons.calendar_today, color: Colors.green[600], size: 24),
+                  child: Icon(Icons.calendar_today,
+                  color: appColors.successGreen, size: 24),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -340,7 +350,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
                     child: ElevatedButton(
                       onPressed: _isCreating ? null : _scheduleWorkout,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green[600],
+                        backgroundColor: appColors.successGreen,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -506,7 +516,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
                   color: Theme.of(context).colorScheme.onSurface,  // ✅
                 )),
             Text(_formatDuration(_duration),
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green[700])),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: appColors.successGreen)),
           ],
         ),
         const SizedBox(height: 12),
@@ -526,14 +536,12 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
     );
   }
 
+  // Two tiers, theme-driven: short sessions read as neutral, longer ones
+  // get the accent nod. (Was a 7-step rainbow duplicated across sheets.)
   Color _durationColor(int minutes) {
-    if (minutes <= 20)  return Colors.grey[500]!;
-    if (minutes <= 30)  return Colors.blue[600]!;
-    if (minutes <= 45)  return Colors.green[600]!;
-    if (minutes <= 60)  return Colors.teal[600]!;
-    if (minutes <= 75)  return Colors.purple[600]!;
-    if (minutes <= 90)  return Colors.deepPurple[600]!;
-    return Colors.red[600]!;
+    final appColors = AppColors.of(context);
+    if (minutes <= 30) return appColors.subtleText;
+    return appColors.streakOrange; // resolves to accentPalette.action
   }
 
   Widget _buildDurationChip(int minutes, AppColors appColors) {

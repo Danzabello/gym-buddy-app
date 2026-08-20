@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
+import '../theme/accent_theme_provider.dart';
 import '../services/workout_service.dart';
 import '../data/coach_comments.dart';
 import 'user_avatar.dart';
@@ -45,6 +46,9 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
   }
 
   // ── Colour + icon ─────────────────────────────────────────────
+  /// Workout-type identity hues. Deliberately NOT themed: these encode which
+  /// kind of session it was, the same way achievements' _categoryAccent encodes
+  /// category. Ruled a keeper alongside workout_card._getWorkoutColor.
   Color _typeColor(String? type) {
     switch (type?.toLowerCase()) {
       case 'cardio':      return Colors.red[600]!;
@@ -59,15 +63,13 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
     }
   }
 
+  // Two tiers, theme-driven: short sessions read as neutral, longer ones
+  // get the accent nod. (Was a 7-step rainbow duplicated across sheets.)
   Color _durationColor(int? minutes) {
-    if (minutes == null) return AppColors.of(context).subtleText;
-    if (minutes <= 20)  return Colors.grey[500]!;
-    if (minutes <= 30)  return Colors.blue[600]!;
-    if (minutes <= 45)  return Colors.green[600]!;
-    if (minutes <= 60)  return Colors.teal[600]!;
-    if (minutes <= 75)  return Colors.purple[600]!;
-    if (minutes <= 90)  return Colors.deepPurple[600]!;
-    return Colors.red[600]!;
+    final appColors = AppColors.of(context);
+    if (minutes == null) return appColors.subtleText;
+    if (minutes <= 30) return appColors.subtleText;
+    return appColors.streakOrange; // resolves to accentPalette.action
   }
 
   IconData _typeIcon(String? type) {
@@ -91,10 +93,13 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
     final partnerBailed = w['buddy_id'] != null &&
         (isCreator ? (w['buddy_cancelled'] ?? false) : (w['creator_cancelled'] ?? false));
 
+    final appColors = AppColors.of(context);
+    final palette = context.read<AccentThemeProvider>().palette;
+
     if (partnerBailed) return (
       label: 'buddy bailed',
-      color: Colors.amber[400]!,
-      bg: Colors.amber.withOpacity(0.12),
+      color: palette.statusWarning,
+      bg: appColors.tint(palette.statusWarning),
     );
 
     final actual  = w['actual_duration_minutes'] as int?;
@@ -103,20 +108,20 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
 
     if (actual != null && !isAuto && actual < (planned * 0.8).round()) return (
       label: 'cut short −${planned - actual}m',
-      color: Colors.red[400]!,
-      bg: Colors.red.withOpacity(0.1),
+      color: palette.statusDanger,
+      bg: appColors.tint(palette.statusDanger),
     );
 
     if (w['buddy_id'] != null) return (
       label: 'co-op finish',
-      color: Colors.blue[400]!,
-      bg: Colors.blue.withOpacity(0.12),
+      color: palette.statusInfo,
+      bg: appColors.tint(palette.statusInfo),
     );
 
     return (
       label: 'solo win',
-      color: Colors.green[400]!,
-      bg: Colors.green.withOpacity(0.1),
+      color: appColors.successGreen,
+      bg: appColors.tint(appColors.successGreen),
     );
   }
 
@@ -166,10 +171,12 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
   }
 
   Color _vsColor(String vs) {
-    if (vs.startsWith('+')) return Colors.green[400]!;
-    if (vs.startsWith('-')) return Colors.red[400]!;
-    if (vs == 'exact') return Colors.blue[400]!;
-    return Colors.grey[500]!;
+    final appColors = AppColors.of(context);
+    final palette = context.read<AccentThemeProvider>().palette;
+    if (vs.startsWith('+')) return appColors.successGreen;
+    if (vs.startsWith('-')) return palette.statusDanger;
+    if (vs == 'exact') return palette.statusInfo;
+    return appColors.subtleText;
   }
 
   // ── Partner helpers ───────────────────────────────────────────
@@ -270,10 +277,11 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
                 Container(
                   width: 36, height: 36,
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.15),
+                    color: appColors.tint(appColors.successGreen),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(Icons.history, color: Colors.green[400], size: 18),
+                  child: Icon(Icons.history,
+                      color: appColors.successGreen, size: 18),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -308,6 +316,7 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
   // ── Compact card ──────────────────────────────────────────────
   Widget _buildCard(Map<String, dynamic> workout) {
     final appColors  = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     final type       = workout['workout_type'] as String? ?? 'Workout';
     final color      = _typeColor(type);
     final f          = _flavour(workout);
@@ -417,15 +426,20 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
                               else
                                 CircleAvatar(
                                   radius: 8,
-                                  backgroundColor: Colors.blue.withOpacity(0.2),
+                                  backgroundColor: appColors
+                                      .tint(accentPalette.statusInfo),
                                   child: Text(
                                     partnerName!.substring(0, 1).toUpperCase(),
-                                    style: TextStyle(fontSize: 9, color: Colors.blue[400]),
+                                    style: TextStyle(
+                                        fontSize: 9,
+                                        color: accentPalette.statusInfo),
                                   ),
                                 ),
                               const SizedBox(width: 4),
                               Text(partnerName!,
-                                  style: TextStyle(fontSize: 10, color: Colors.blue[400])),
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: accentPalette.statusInfo)),
                             ],
                           ],
                         ),
@@ -502,6 +516,7 @@ class _DetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appColors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     final progress = (actualDuration != null && !isAuto)
         ? (actualDuration! / plannedDuration).clamp(0.0, 1.0)
         : null;
@@ -600,7 +615,9 @@ class _DetailSheet extends StatelessWidget {
                       minHeight: 6,
                       backgroundColor: appColors.divider,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                          progress >= 1.0 ? Colors.green[400]! : Colors.orange[400]!),
+                          progress >= 1.0
+                              ? appColors.successGreen
+                              : appColors.streakOrange),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -628,10 +645,11 @@ class _DetailSheet extends StatelessWidget {
                   else
                     CircleAvatar(
                       radius: 18,
-                      backgroundColor: Colors.blue.withOpacity(0.15),
+                      backgroundColor: appColors.tint(accentPalette.statusInfo),
                       child: Text(
                         partnerName!.substring(0, 1).toUpperCase(),
-                        style: TextStyle(fontSize: 14, color: Colors.blue[400]),
+                        style: TextStyle(
+                            fontSize: 14, color: accentPalette.statusInfo),
                       ),
                     ),
                   const SizedBox(width: 12),
@@ -640,7 +658,7 @@ class _DetailSheet extends StatelessWidget {
                     children: [
                       Text(partnerName!,
                           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500,
-                              color: Colors.blue[400])),
+                              color: accentPalette.statusInfo)),
                       Text('workout partner · streak protected',
                           style: TextStyle(fontSize: 11, color: appColors.subtleText)),
                     ],
@@ -669,7 +687,7 @@ class _DetailSheet extends StatelessWidget {
                       Container(
                         width: 26, height: 26,
                         decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.12),
+                          color: appColors.tint(accentPalette.statusInfo),
                           shape: BoxShape.circle,
                         ),
                         child: const Center(

@@ -64,6 +64,25 @@ void main() {
     }
   });
 
+  test('readableForeground clears 4.5:1 on both duration tiers, all accents', () {
+    for (final accent in AccentTheme.values) {
+      final p = AccentPalette.forTheme(accent);
+      final c = AppColors.fromAccent(p);
+      // _durationColor: <=30min -> subtleText, >30min -> action(streakOrange)
+      final tiers = {'<=30m (subtleText)': c.subtleText, '>30m (action)': c.streakOrange};
+      for (final e in tiers.entries) {
+        final fg = c.readableForeground(e.value);
+        final ratio = AppColors.contrastRatio(fg, e.value);
+        final which = fg == const Color(0xFFFFFFFF) ? 'white' : 'dark';
+        // ignore: avoid_print
+        print('${accent.name.padRight(11)} ${e.key.padRight(20)} '
+            '-> $which  ${ratio.toStringAsFixed(2)}x');
+        expect(ratio, greaterThanOrEqualTo(4.5),
+            reason: '${accent.name}/${e.key}');
+      }
+    }
+  });
+
   test('floor is overridable per call', () {
     final c = AppColors.fromAccent(AccentPalette.emeraldInk);
     final soft = c.tint(AccentPalette.emeraldInk.statusInfo, floor: 1.2);

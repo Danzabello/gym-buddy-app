@@ -182,6 +182,21 @@ class AppColors extends ThemeExtension<AppColors> {
     return Color.alphaBlend(role.withValues(alpha: 1), bg);
   }
 
+  /// Whichever of white / near-black is more readable on [background].
+  ///
+  /// A fixed `Colors.white` foreground cannot work here: button backgrounds
+  /// that come from a role vary per accent, so white passes on one accent and
+  /// fails badly on another (the duration button measured 4.83:1 on signalBlue
+  /// but 1.64:1 on emeraldInk). Picking per-render keeps every combination
+  /// legible without pinning the background to one hue.
+  Color readableForeground(Color background) {
+    const dark = Color(0xFF111827); // near-black ink
+    return contrastRatio(Colors.white, background) >=
+            contrastRatio(dark, background)
+        ? Colors.white
+        : dark;
+  }
+
   /// WCAG relative-luminance contrast ratio between two opaque colours.
   /// Same maths used to pick the per-accent status role values.
   static double contrastRatio(Color a, Color b) {
@@ -232,6 +247,10 @@ class AccentPalette {
   final Color statusSuccess;
   final Color statusDanger;
   final Color statusWarning;
+  /// Secondary identity accent — not a status. Profile/identity rows, sheet
+  /// header accents, "waiting for partner" panels. Replaces the ad-hoc
+  /// brand-adjacent purple that had accumulated in several files.
+  final Color secondaryAccent;
   final Color action;
   final Color heroBackground;
   final Color heroText;
@@ -252,6 +271,7 @@ class AccentPalette {
     required this.statusSuccess,
     required this.statusDanger,
     required this.statusWarning,
+    required this.secondaryAccent,
     required this.action,
     required this.heroBackground,
     required this.heroText,
@@ -273,6 +293,7 @@ class AccentPalette {
     statusSuccess: Color(0xFF10B981),
     statusDanger: Color(0xFFF87171),   // 6.20:1 on background
     statusWarning: Color(0xFFFBBF24),  // 10.27:1 on background
+    secondaryAccent: Color(0xFFA78BFA), // 6.30 bg / 5.04 card
     action: Color(0xFFEA580C),
     heroBackground: Color(0xFF064E3B),
     heroText: Color(0xFFF8E7C9),
@@ -294,6 +315,8 @@ class AccentPalette {
     statusSuccess: Color(0xFF10B981),
     statusDanger: Color(0xFFDC2626),   // 4.51:1 on light background
     statusWarning: Color(0xFFB45309),  // 4.69:1 — amber must go dark on light
+    // the app's established purple; light accent renders these sites unchanged
+    secondaryAccent: Color(0xFF7C3AED), // 5.32 bg / 5.70 card
     action: Color(0xFFEA580C),
     heroBackground: Color(0xFF0057FF),
     heroText: Color(0xFFF8F7F4),
@@ -315,6 +338,7 @@ class AccentPalette {
     statusSuccess: Color(0xFF4ADE80),
     statusDanger: Color(0xFFF87171),   // 6.10:1 — red-400, matches 400 family
     statusWarning: Color(0xFFFBBF24),  // 10.10:1 on background
+    secondaryAccent: Color(0xFFA78BFA), // 6.20 bg / 5.55 card
     action: Color(0xFFEA580C),
     heroBackground: Color(0xFF23262F),
     heroText: Color(0xFFEDEEF0),

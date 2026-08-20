@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
+import '../theme/accent_theme_provider.dart';
+import 'package:provider/provider.dart';
 import '../services/workout_service.dart';
 import '../services/friend_service.dart';
 import 'user_avatar.dart';
@@ -56,6 +58,10 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
   bool _isCreating = false;
   bool _isLoadingFriends = true;
 
+  /// Workout-type identity hues. Deliberately NOT themed: these encode which
+  /// kind of session it is, the same way achievements' _categoryAccent encodes
+  /// category. Ruled a keeper alongside workout_card._getWorkoutColor.
+  /// (MaterialColor, not Color — call sites use color[400] / withOpacity.)
   final List<Map<String, dynamic>> _workoutTypes = [
     {'name': 'Strength',   'icon': Icons.fitness_center,    'color': Colors.blue},
     {'name': 'Cardio',     'icon': Icons.directions_run,    'color': Colors.red},
@@ -117,14 +123,17 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                 ),
               ],
             ),
-            backgroundColor: Colors.green[600],
+            backgroundColor: AppColors.of(context).successGreen,
           ),
         );
       }
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $error'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Error: $error'),
+              backgroundColor:
+                  context.read<AccentThemeProvider>().palette.statusDanger),
         );
       }
     }
@@ -262,7 +271,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: dialColor,
-                        foregroundColor: Colors.white,
+                        foregroundColor: appColors.readableForeground(dialColor),
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16)),
@@ -309,11 +318,11 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.15),
+                      color: appColors.tint(appColors.successGreen),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(Icons.calendar_today,
-                        color: Colors.green[400], size: 24),
+                        color: appColors.successGreen, size: 24),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -378,7 +387,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                     child: ElevatedButton(
                       onPressed: _isCreating ? null : _scheduleWorkout,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green[600],
+                        backgroundColor: appColors.successGreen,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
@@ -496,7 +505,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: _selectedBuddyId != null
-                ? Colors.green[400]! : appColors.cardBorder,
+                ? appColors.successGreen : appColors.cardBorder,
           ),
         ),
         child: Row(
@@ -508,14 +517,14 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                 width: 40, height: 40,
                 decoration: BoxDecoration(
                   color: _selectedBuddyId != null
-                      ? Colors.green.withOpacity(0.15)
+                      ? appColors.tint(appColors.successGreen)
                       : appColors.cardBorder,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   _selectedBuddyId != null ? Icons.people : Icons.person,
                   color: _selectedBuddyId != null
-                      ? Colors.green[400] : appColors.subtleText,
+                      ? appColors.successGreen : appColors.subtleText,
                   size: 20,
                 ),
               ),
@@ -531,7 +540,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                     style: TextStyle(
                       fontSize: 15, fontWeight: FontWeight.w600,
                       color: _selectedBuddyId != null
-                          ? Colors.green[400]
+                          ? appColors.successGreen
                           : Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
@@ -551,7 +560,12 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
               TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: Text('Add Friends',
-                    style: TextStyle(fontSize: 12, color: Colors.blue[400])),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: context
+                            .watch<AccentThemeProvider>()
+                            .palette
+                            .statusInfo)),
               ),
           ],
         ),
@@ -655,14 +669,12 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
     );
   }
 
+  // Two tiers, theme-driven: short sessions read as neutral, longer ones
+  // get the accent nod. (Was a 7-step rainbow duplicated across sheets.)
   Color _durationColor(int minutes) {
-    if (minutes <= 20)  return Colors.grey[500]!;
-    if (minutes <= 30)  return Colors.blue[600]!;
-    if (minutes <= 45)  return Colors.green[600]!;
-    if (minutes <= 60)  return Colors.teal[600]!;
-    if (minutes <= 75)  return Colors.purple[600]!;
-    if (minutes <= 90)  return Colors.deepPurple[600]!;
-    return Colors.red[600]!;
+    final appColors = AppColors.of(context);
+    if (minutes <= 30) return appColors.subtleText;
+    return appColors.streakOrange; // resolves to accentPalette.action
   }
 
   Widget _buildDurationSelector(AppColors appColors) {
@@ -849,7 +861,7 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                Icon(Icons.people, color: Colors.green[400], size: 24),
+                Icon(Icons.people, color: appColors.successGreen, size: 24),
                 const SizedBox(width: 12),
                 Text('Choose Workout Buddy',
                     style: TextStyle(
@@ -956,7 +968,8 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         color: isSelected
-            ? Colors.green.withOpacity(0.08) : Colors.transparent,
+            ? appColors.tint(appColors.successGreen)
+            : Colors.transparent,
         child: Row(
           children: [
             if (!isSolo && avatarId != null)
@@ -966,14 +979,14 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
                 width: 44, height: 44,
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? Colors.green.withOpacity(0.15)
+                      ? appColors.tint(appColors.successGreen)
                       : appColors.sectionBackground,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   isSolo ? Icons.person : Icons.people,
                   color: isSelected
-                      ? Colors.green[400] : appColors.subtleText,
+                      ? appColors.successGreen : appColors.subtleText,
                   size: 22,
                 ),
               ),
@@ -988,7 +1001,7 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
                         fontWeight:
                             isSelected ? FontWeight.bold : FontWeight.w500,
                         color: isSelected
-                            ? Colors.green[400]
+                            ? appColors.successGreen
                             : Theme.of(context).colorScheme.onSurface,
                       )),
                   if (subtitle != null)
@@ -1002,7 +1015,7 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                    color: Colors.green[500], shape: BoxShape.circle),
+                    color: appColors.successGreen, shape: BoxShape.circle),
                 child: const Icon(Icons.check, color: Colors.white, size: 16),
               ),
           ],

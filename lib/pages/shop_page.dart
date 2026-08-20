@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
+import '../theme/accent_theme_provider.dart';
 import '../services/coin_service.dart';
 
 class ShopPage extends StatefulWidget {
@@ -64,7 +65,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${item.emoji} ${item.name} equipped!'),
-            backgroundColor: const Color(0xFF10B981),
+            backgroundColor: AppColors.of(context).successGreen,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -99,7 +100,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                 Text('${item.name} purchased!'),
               ],
             ),
-            backgroundColor: const Color(0xFF10B981),
+            backgroundColor: AppColors.of(context).successGreen,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -107,7 +108,10 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
         _loadData();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Purchase failed. Try again.'), backgroundColor: Colors.red),
+          SnackBar(
+              content: const Text('Purchase failed. Try again.'),
+              backgroundColor:
+                  context.read<AccentThemeProvider>().palette.statusDanger),
         );
       }
     }
@@ -150,6 +154,8 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   decoration: BoxDecoration(
+                    // Coin/currency branding, not a status — gold stays fixed
+                    // across accents, same ruling as achievements' legendary.
                     color: const Color(0xFFFFFBEB),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: const Color(0xFFFDE68A)),
@@ -270,6 +276,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final colors = AppColors.of(context);
     return Scaffold(
       backgroundColor: colors.sectionBackground,
@@ -281,15 +288,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
             pinned: true,
             elevation: 0,
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: SafeArea(
+              background: SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                     child: Column(
@@ -297,15 +296,13 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                       children: [
                         const Text('Shop',
                             style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold)),
+                                fontSize: 28, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 12),
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 10),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: colors.sectionBackground,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
@@ -316,9 +313,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                               Text(
                                 '$_coinBalance coins',
                                 style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold),
+                                    fontSize: 18, fontWeight: FontWeight.bold),
                               ),
                             ],
                           ),
@@ -327,14 +322,13 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                     ),
                   ),
                 ),
-              ),
             ),
             bottom: TabBar(
               controller: _tabController,
               isScrollable: true,
-              indicatorColor: Colors.white,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white60,
+              indicatorColor: cs.onSurface,
+              labelColor: cs.onSurface,
+              unselectedLabelColor: colors.subtleText,
               labelStyle:
                   const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
               tabs: _categories
@@ -390,7 +384,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: item.isOwned
-                ? const Color(0xFF10B981)
+                ? colors.successGreen
                 : colors.divider,
             width: item.isOwned ? 2 : 1,
           ),
@@ -408,7 +402,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
               child: Container(
                 decoration: BoxDecoration(
                   color: item.isOwned
-                      ? const Color(0xFF10B981).withOpacity(0.12)
+                      ? colors.successGreen.withOpacity(0.12)
                       : colors.sectionBackground,
                   borderRadius:
                       const BorderRadius.vertical(top: Radius.circular(15)),
@@ -424,8 +418,8 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                         right: 8,
                         child: Container(
                           padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF10B981),
+                          decoration: BoxDecoration(
+                            color: colors.successGreen,
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.check,
@@ -465,7 +459,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF10B981),
+                        color: colors.successGreen,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Text('Equip',

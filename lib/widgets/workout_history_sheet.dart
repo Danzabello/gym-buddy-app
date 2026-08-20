@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
+import '../theme/accent_theme_provider.dart';
+import 'package:provider/provider.dart';
 import 'quick_schedule_sheet.dart';
 
 class WorkoutHistorySheet extends StatefulWidget {
@@ -89,6 +91,7 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
   @override
   Widget build(BuildContext context) {
     final appColors = AppColors.of(context);
+    final palette = context.watch<AccentThemeProvider>().palette;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.75,
@@ -118,7 +121,8 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.history, color: Colors.purple[600], size: 28),
+                      Icon(Icons.history,
+                          color: palette.secondaryAccent, size: 28),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -173,6 +177,7 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
   }
 
   Widget _buildStatsSummary(AppColors appColors) {
+    final palette = context.watch<AccentThemeProvider>().palette;
     final hours = _totalMinutes ~/ 60;
     final minutes = _totalMinutes % 60;
     final timeString = hours > 0 ? '${hours}h ${minutes}m' : '${minutes}m';
@@ -191,7 +196,7 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
             icon: Icons.fitness_center,
             value: '$_totalWorkouts',
             label: 'Workouts\nTogether',
-            color: Colors.purple[700]!,
+            color: palette.secondaryAccent,
             appColors: appColors,
           ),
           Container(height: 40, width: 1, color: appColors.divider),  // ✅
@@ -199,7 +204,7 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
             icon: Icons.timer,
             value: timeString,
             label: 'Total\nTime',
-            color: Colors.blue[700]!,
+            color: palette.statusInfo,
             appColors: appColors,
           ),
         ],
@@ -229,6 +234,7 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
   }
 
   Widget _buildEmptyState(AppColors appColors) {
+    final palette = context.watch<AccentThemeProvider>().palette;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -263,7 +269,7 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
               icon: const Icon(Icons.add),
               label: const Text('Schedule Workout'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple[600],
+                backgroundColor: palette.secondaryAccent,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -355,10 +361,10 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.12),  // ✅ was Colors.green[50]
+              color: appColors.tint(appColors.successGreen),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.check, color: Colors.green[600], size: 16),
+            child: Icon(Icons.check, color: appColors.successGreen, size: 16),
           ),
         ],
       ),
@@ -388,6 +394,9 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
     return mins > 0 ? '${hours}h ${mins}m' : '${hours}h';
   }
 
+  /// Workout-type identity hues. Deliberately NOT themed: these encode which
+  /// kind of session it was, the same way achievements' _categoryAccent encodes
+  /// category. Ruled a keeper alongside workout_card._getWorkoutColor.
   Color _getWorkoutColor(String type) {
     switch (type.toLowerCase()) {
       case 'cardio':      return Colors.red[600]!;
@@ -404,14 +413,12 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
     }
   }
 
+  // Two tiers, theme-driven: short sessions read as neutral, longer ones
+  // get the accent nod. (Was a 7-step rainbow duplicated across sheets.)
   Color _durationColor(int minutes) {
-    if (minutes <= 20)  return Colors.grey[500]!;
-    if (minutes <= 30)  return Colors.blue[600]!;
-    if (minutes <= 45)  return Colors.green[600]!;
-    if (minutes <= 60)  return Colors.teal[600]!;
-    if (minutes <= 75)  return Colors.purple[600]!;
-    if (minutes <= 90)  return Colors.deepPurple[600]!;
-    return Colors.red[600]!;
+    final appColors = AppColors.of(context);
+    if (minutes <= 30) return appColors.subtleText;
+    return appColors.streakOrange; // resolves to accentPalette.action
   }
 
   IconData _getWorkoutIcon(String type) {

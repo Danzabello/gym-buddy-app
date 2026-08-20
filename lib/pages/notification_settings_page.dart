@@ -4,6 +4,8 @@ import 'package:flutter/cupertino.dart';
 import '../services/notification_service.dart';
 import 'package:app_settings/app_settings.dart';
 import '../theme/app_theme.dart';
+import '../theme/accent_theme_provider.dart';
+import 'package:provider/provider.dart';
 
 class NotificationSettingsPage extends StatefulWidget {
   const NotificationSettingsPage({super.key});
@@ -74,7 +76,7 @@ class _NotificationSettingsPageState
             SizedBox(width: 12),
             Text('Notification settings saved!'),
           ]),
-          backgroundColor: const Color(0xFF10B981),
+          backgroundColor: AppColors.of(context).successGreen,
           behavior: SnackBarBehavior.floating,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -147,9 +149,9 @@ class _NotificationSettingsPageState
                     });
                     Navigator.pop(context);
                   },
-                  child: const Text('Done',
+                  child: Text('Done',
                       style: TextStyle(
-                          color: Color(0xFFF97316),
+                          color: AppColors.of(context).streakOrange,
                           fontWeight: FontWeight.w700)),
                 ),
               ],
@@ -181,33 +183,21 @@ class _NotificationSettingsPageState
   @override
   Widget build(BuildContext context) {
     final appColors = AppColors.of(context);
+    final palette = context.watch<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
+        // Inherits transparent bg + foreground from appBarTheme
         elevation: 0,
-        backgroundColor: Colors.transparent,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios,
-              color: Colors.white, size: 18),
+          icon: const Icon(Icons.arrow_back_ios, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           'Notifications',
-          style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w800),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
         ),
         actions: [
           if (_isSaving)
@@ -216,17 +206,13 @@ class _NotificationSettingsPageState
               child: SizedBox(
                   width: 18,
                   height: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white)),
+                  child: CircularProgressIndicator(strokeWidth: 2)),
             )
           else
             TextButton(
               onPressed: _saveSettings,
               child: const Text('Save',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700)),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
             ),
         ],
       ),
@@ -239,8 +225,9 @@ class _NotificationSettingsPageState
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFF97316), Color(0xFFFB923C)],
+                    gradient: LinearGradient(
+                      // reversed: this banner ramps dark -> light
+                      colors: appColors.actionGradient.reversed.toList(),
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -371,22 +358,21 @@ class _NotificationSettingsPageState
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF3B82F6).withOpacity(0.08),
+                      color: appColors.tint(palette.statusInfo),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                          color:
-                              const Color(0xFF3B82F6).withOpacity(0.2),
+                          color: palette.statusInfo.withValues(alpha: 0.2),
                           width: 0.5),
                     ),
                     child: Row(children: [
-                      const Icon(Icons.info_outline,
-                          color: Color(0xFF3B82F6), size: 15),
+                      Icon(Icons.info_outline,
+                          color: palette.statusInfo, size: 15),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Quiet hours: ${_formatHour(_quietHoursStart)} → ${_formatHour(_quietHoursEnd)}',
-                          style: const TextStyle(
-                              color: Color(0xFF3B82F6), fontSize: 12),
+                          style: TextStyle(
+                              color: palette.statusInfo, fontSize: 12),
                         ),
                       ),
                     ]),
@@ -402,7 +388,7 @@ class _NotificationSettingsPageState
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF97316),
+                      color: appColors.streakOrange,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Center(
@@ -430,20 +416,21 @@ class _NotificationSettingsPageState
 
   Widget _buildOsPermissionBanner(AppColors appColors, ColorScheme cs) {
     if (_osPermissionGranted) return const SizedBox.shrink();
+    final palette = context.watch<AccentThemeProvider>().palette;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFEF4444).withOpacity(0.08),
+        color: appColors.tint(palette.statusDanger),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-            color: const Color(0xFFEF4444).withOpacity(0.25), width: 0.5),
+            color: palette.statusDanger.withValues(alpha: 0.25), width: 0.5),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.notifications_off,
-              color: Color(0xFFEF4444), size: 24),
+          Icon(Icons.notifications_off,
+              color: palette.statusDanger, size: 24),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -464,9 +451,9 @@ class _NotificationSettingsPageState
                 GestureDetector(
                   onTap: () => AppSettings.openAppSettings(
                       type: AppSettingsType.notification),
-                  child: const Text('Open Phone Settings →',
+                  child: Text('Open Phone Settings →',
                       style: TextStyle(
-                          color: Color(0xFFEF4444),
+                          color: palette.statusDanger,
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                           decoration: TextDecoration.underline)),
@@ -542,7 +529,7 @@ class _NotificationSettingsPageState
         CupertinoSwitch(
           value: value,
           onChanged: onChanged,
-          activeColor: const Color(0xFFF97316),
+          activeColor: AppColors.of(context).streakOrange,
         ),
       ]),
     );
@@ -583,15 +570,15 @@ class _NotificationSettingsPageState
             padding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: const Color(0xFFF97316).withOpacity(0.10),
+              color: appColors.tint(appColors.streakOrange),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                  color: const Color(0xFFF97316).withOpacity(0.25),
+                  color: appColors.streakOrange.withValues(alpha: 0.25),
                   width: 0.5),
             ),
             child: Text(time,
-                style: const TextStyle(
-                    color: Color(0xFFF97316),
+                style: TextStyle(
+                    color: appColors.streakOrange,
                     fontSize: 13,
                     fontWeight: FontWeight.w700)),
           ),

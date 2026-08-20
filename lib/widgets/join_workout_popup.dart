@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'user_avatar.dart';
+import '../theme/app_theme.dart';
+import '../theme/accent_theme_provider.dart';
+import 'package:provider/provider.dart';
 
 /// Popup that shows when a buddy has started a workout you scheduled
 /// Gives the creator the option to join within the quarter-time window
@@ -120,9 +123,15 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
   }
 
   Color _getUrgencyColor() {
-    if (_remainingSeconds < 60) return Colors.red;
-    if (_remainingSeconds < 180) return Colors.orange;
-    return Colors.green;
+    final appColors = AppColors.of(context);
+    // Urgency ramp, not destructive intent — statusDanger is borrowed for the
+    // red endpoint so the escalation reads green -> orange -> red, same
+    // grammar as workout_card's join-window countdown.
+    if (_remainingSeconds < 60) {
+      return context.read<AccentThemeProvider>().palette.statusDanger;
+    }
+    if (_remainingSeconds < 180) return appColors.streakOrange;
+    return appColors.successGreen;
   }
 
   String _getWorkoutEmoji(String type) {
@@ -142,6 +151,7 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
   @override
   Widget build(BuildContext context) {
     final urgencyColor = _getUrgencyColor();
+    final appColors = AppColors.of(context);
     final workoutTimeRemaining = widget.plannedDurationMinutes - 
         ((widget.plannedDurationMinutes ~/ 4) - (_remainingSeconds ~/ 60));
 
@@ -151,7 +161,7 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
       child: Container(
         constraints: const BoxConstraints(maxWidth: 380),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: appColors.cardBackground,
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
@@ -168,11 +178,7 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
             Container(
               padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.green[400]!, Colors.teal[500]!],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                color: appColors.successGreen,
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(28),
                   topRight: Radius.circular(28),
@@ -221,7 +227,8 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
                                     size: 80,
                                   )
                                 : Container(
-                                    color: Colors.orange[100],
+                                    color: AppColors.of(context)
+                                        .tint(AppColors.of(context).streakOrange),
                                     child: const Center(
                                       child: Text('🏋️', style: TextStyle(fontSize: 40)),
                                     ),
@@ -235,7 +242,7 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
                           child: Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: Colors.green[600],
+                              color: AppColors.of(context).successGreen,
                               shape: BoxShape.circle,
                               border: Border.all(color: Colors.white, width: 3),
                             ),
@@ -325,7 +332,7 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
                               'Join window closes in',
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.grey[700],
+                                color: appColors.subtleText,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -363,7 +370,7 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
                           '~${workoutTimeRemaining}m remaining to complete workout',
                           style: TextStyle(
                             fontSize: 13,
-                            color: Colors.grey[600],
+                            color: appColors.subtleText,
                           ),
                         ),
                       ],
@@ -384,7 +391,7 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
                           },
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
-                            side: BorderSide(color: Colors.grey[300]!, width: 2),
+                            side: BorderSide(color: appColors.cardBorder, width: 2),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
@@ -393,7 +400,7 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
                             'Not Now',
                             style: TextStyle(
                               fontSize: 16,
-                              color: Colors.grey[600],
+                              color: appColors.subtleText,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -411,11 +418,11 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
                             widget.onJoin();
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green[500],
+                            backgroundColor: appColors.successGreen,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             elevation: 4,
-                            shadowColor: Colors.green.withOpacity(0.4),
+                            shadowColor: appColors.successGreen.withOpacity(0.4),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
@@ -445,13 +452,13 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.info_outline, size: 14, color: Colors.grey[400]),
+                      Icon(Icons.info_outline, size: 14, color: appColors.subtleText),
                       const SizedBox(width: 6),
                       Text(
                         'You can also join from the Schedule tab',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey[500],
+                          color: appColors.subtleText,
                         ),
                       ),
                     ],
@@ -495,12 +502,13 @@ class BuddyInWorkoutPopup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appColors = AppColors.of(context);
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 340),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: appColors.cardBackground,
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
@@ -524,9 +532,7 @@ class BuddyInWorkoutPopup extends StatelessWidget {
                     height: 90,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [Colors.orange[300]!, Colors.deepOrange[400]!],
-                      ),
+                      color: appColors.streakOrange,
                     ),
                     padding: const EdgeInsets.all(4),
                     child: Container(
@@ -547,7 +553,7 @@ class BuddyInWorkoutPopup extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 36,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.orange[700],
+                                  color: AppColors.of(context).streakOrange,
                                 ),
                               ),
                             ),
@@ -560,12 +566,14 @@ class BuddyInWorkoutPopup extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.orange[500],
+                        color: AppColors.of(context).streakOrange,
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 3),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.orange.withOpacity(0.3),
+                            color: AppColors.of(context)
+                                .streakOrange
+                                .withValues(alpha: 0.3),
                             blurRadius: 8,
                           ),
                         ],
@@ -587,7 +595,7 @@ class BuddyInWorkoutPopup extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 12),
@@ -596,19 +604,19 @@ class BuddyInWorkoutPopup extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.orange[50],
+                  color: appColors.streakOrange.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
+                    Icon(Icons.info_outline, color: appColors.streakOrange, size: 20),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         '$buddyName is currently in a workout. Try again when they\'re done!',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.orange[900],
+                          color: appColors.streakOrange,
                         ),
                       ),
                     ),
@@ -623,7 +631,7 @@ class BuddyInWorkoutPopup extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: () => Navigator.of(context).pop(),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange[500],
+                    backgroundColor: appColors.streakOrange,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     elevation: 2,
@@ -677,13 +685,14 @@ class MissedWorkoutPopup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appColors = AppColors.of(context);
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 340),
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: appColors.cardBackground,
           borderRadius: BorderRadius.circular(24),
         ),
         child: Column(
@@ -693,12 +702,12 @@ class MissedWorkoutPopup extends StatelessWidget {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: Colors.grey[100],
+                color: appColors.sectionBackground,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.timer_off_outlined,
-                color: Colors.grey[400],
+                color: appColors.subtleText,
                 size: 40,
               ),
             ),
@@ -709,7 +718,7 @@ class MissedWorkoutPopup extends StatelessWidget {
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
+                color: Theme.of(context).colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 12),
@@ -718,7 +727,7 @@ class MissedWorkoutPopup extends StatelessWidget {
               'Sorry, $buddyName has already started working out without you',
               style: TextStyle(
                 fontSize: 15,
-                color: Colors.grey[600],
+                color: appColors.subtleText,
               ),
               textAlign: TextAlign.center,
             ),
@@ -729,8 +738,8 @@ class MissedWorkoutPopup extends StatelessWidget {
               child: ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[200],
-                  foregroundColor: Colors.grey[700],
+                  backgroundColor: appColors.sectionBackground,
+                  foregroundColor: appColors.subtleText,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   elevation: 0,
                   shape: RoundedRectangleBorder(
@@ -782,13 +791,14 @@ class BuddyCompletedWorkoutPopup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appColors = AppColors.of(context);
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 340),
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: appColors.cardBackground,
           borderRadius: BorderRadius.circular(24),
         ),
         child: Column(
@@ -798,13 +808,11 @@ class BuddyCompletedWorkoutPopup extends StatelessWidget {
               width: 90,
               height: 90,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.green[400]!, Colors.teal[400]!],
-                ),
+                color: appColors.successGreen,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.green.withOpacity(0.3),
+                    color: appColors.successGreen.withOpacity(0.3),
                     blurRadius: 20,
                     offset: const Offset(0, 8),
                   ),
@@ -830,14 +838,14 @@ class BuddyCompletedWorkoutPopup extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.green[50],
+                color: appColors.successGreen.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 '$buddyName completed the workout and helped the streak grow!',
                 style: TextStyle(
                   fontSize: 15,
-                  color: Colors.green[800],
+                  color: appColors.successGreen,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -849,7 +857,7 @@ class BuddyCompletedWorkoutPopup extends StatelessWidget {
               child: ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green[500],
+                  backgroundColor: appColors.successGreen,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   elevation: 2,

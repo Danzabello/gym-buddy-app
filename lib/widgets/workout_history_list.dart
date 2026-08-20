@@ -30,15 +30,13 @@ class _WorkoutHistoryListState extends State<WorkoutHistoryList> {
     });
   }
 
+  // Two tiers, theme-driven: short sessions read as neutral, longer ones
+  // get the accent nod. (Was a 7-step rainbow duplicated across sheets.)
   Color _durationColor(int? minutes) {
-    if (minutes == null) return AppColors.of(context).subtleText;
-    if (minutes <= 20)  return Colors.grey[500]!;
-    if (minutes <= 30)  return Colors.blue[600]!;
-    if (minutes <= 45)  return Colors.green[600]!;
-    if (minutes <= 60)  return Colors.teal[600]!;
-    if (minutes <= 75)  return Colors.purple[600]!;
-    if (minutes <= 90)  return Colors.deepPurple[600]!;
-    return Colors.red[600]!;
+    final appColors = AppColors.of(context);
+    if (minutes == null) return appColors.subtleText;
+    if (minutes <= 30) return appColors.subtleText;
+    return appColors.streakOrange; // resolves to accentPalette.action
   }
 
   @override
