@@ -52,3 +52,7 @@ android/app/google-services.json
 supabase/.temp/
 # Added by code-review-graph
 .code-review-graph/
+
+# Claude Code local config
+.claude/
+.mcp.json
