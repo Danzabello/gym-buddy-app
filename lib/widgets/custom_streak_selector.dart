@@ -1,8 +1,10 @@
 // lib/widgets/custom_streak_selector.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../services/team_streak_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/accent_theme_provider.dart';
 import 'user_avatar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -146,6 +148,7 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
   @override
   Widget build(BuildContext context) {
     final appColors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
 
     return SlideTransition(
@@ -153,27 +156,14 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
       child: Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
+          // Inherits transparent bg + foreground from appBarTheme
           elevation: 0,
-          backgroundColor: Colors.transparent,
-          flexibleSpace: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-          ),
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios,
-                color: Colors.white, size: 18),
+            icon: const Icon(Icons.arrow_back_ios, size: 18),
             onPressed: () => Navigator.pop(context),
           ),
           title: const Text('Pick your top 4',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800)),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           actions: [
             if (_canSave)
               Padding(
@@ -184,12 +174,13 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF97316),
+                      color: accentPalette.action,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Text('Save',
+                    child: Text('Save',
                         style: TextStyle(
-                            color: Colors.white,
+                            color: appColors
+                                .readableForeground(accentPalette.action),
                             fontSize: 13,
                             fontWeight: FontWeight.w700)),
                   ),
@@ -226,6 +217,7 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
                             size: 46,
                             isPrimary: i == 0,
                             appColors: appColors,
+                            accentPalette: accentPalette,
                             cs: cs),
                         const SizedBox(width: 10),
                       ],
@@ -287,9 +279,9 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
                   if (_filtered.isNotEmpty) ...[
                     _sectionHeader('Available',
                         _filtered.length, appColors,
-                        countColor: const Color(0xFF3B82F6)),
+                        countColor: accentPalette.statusInfo),
                     ..._filtered.map(
-                        (s) => _buddyRow(s, appColors, cs,
+                        (s) => _buddyRow(s, appColors, accentPalette, cs,
                             assigned: false)),
                   ] else if (_searchQuery.isNotEmpty) ...[
                     const SizedBox(height: 24),
@@ -305,9 +297,11 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
                     const SizedBox(height: 8),
                     _sectionHeader('Assigned',
                         _assigned.length, appColors,
+                        // Category pairing against "Available" (blue), not a
+                        // CTA — kept hardcoded like the type-hue palettes.
                         countColor: const Color(0xFFF97316)),
                     ..._assigned.map(
-                        (s) => _buddyRow(s, appColors, cs,
+                        (s) => _buddyRow(s, appColors, accentPalette, cs,
                             assigned: true)),
                   ],
 
@@ -340,6 +334,7 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
       {required double size,
       bool isPrimary = false,
       required AppColors appColors,
+      required AccentPalette accentPalette,
       required ColorScheme cs}) {
     final filled = streak != null;
     return Column(
@@ -350,15 +345,17 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: filled
-                ? (isPrimary
-                    ? const Color(0xFF7C3AED).withOpacity(0.12)
-                    : const Color(0xFF3B82F6).withOpacity(0.10))
+                ? appColors.tint(
+                    isPrimary
+                        ? accentPalette.secondaryAccent
+                        : accentPalette.statusInfo,
+                    surface: appColors.cardBackground)
                 : appColors.sectionBackground,
             border: Border.all(
               color: filled
                   ? (isPrimary
-                      ? const Color(0xFF7C3AED)
-                      : const Color(0xFF3B82F6))
+                      ? accentPalette.secondaryAccent
+                      : accentPalette.statusInfo)
                   : appColors.cardBorder,
               width: filled ? 2 : 1.5,
             ),
@@ -377,7 +374,7 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
                 fontSize: 9,
                 fontWeight: FontWeight.w600,
                 color: isPrimary && filled
-                    ? const Color(0xFF7C3AED)
+                    ? accentPalette.secondaryAccent
                     : appColors.subtleText)),
       ],
     );
@@ -392,6 +389,7 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
           height: 46,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
+            // brand gradient — do not tokenise
             gradient: const LinearGradient(
               colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
             ),
@@ -430,7 +428,8 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
           padding:
               const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
           decoration: BoxDecoration(
-            color: countColor.withOpacity(0.12),
+            color: appColors.tint(countColor,
+                surface: appColors.cardBackground),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text('$count',
@@ -444,6 +443,7 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
   }
 
   Widget _buddyRow(TeamStreak streak, AppColors appColors,
+      AccentPalette accentPalette,
       ColorScheme cs, {required bool assigned}) {
     final name = streak.isCoachMaxTeam
         ? 'Coach Max'
@@ -470,17 +470,15 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
               height: 38,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: streak.isCoachMaxTeam
-                      ? [
-                          const Color(0xFF1D4ED8),
-                          const Color(0xFF7C3AED)
-                        ]
-                      : [
-                          const Color(0xFF374151),
-                          const Color(0xFF4B5563)
-                        ],
-                ),
+                color: streak.isCoachMaxTeam
+                    ? null
+                    : appColors.sectionBackground,
+                gradient: streak.isCoachMaxTeam
+                    // brand gradient — do not tokenise
+                    ? const LinearGradient(
+                        colors: [Color(0xFF1D4ED8), Color(0xFF7C3AED)],
+                      )
+                    : null,
               ),
               child: streak.isCoachMaxTeam
                   ? const Center(
@@ -509,11 +507,11 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
                         padding: const EdgeInsets.symmetric(
                             horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
-                          color: isPrimaryLbl
-                              ? const Color(0xFF7C3AED)
-                                  .withOpacity(0.12)
-                              : const Color(0xFF3B82F6)
-                                  .withOpacity(0.12),
+                          color: appColors.tint(
+                              isPrimaryLbl
+                                  ? accentPalette.secondaryAccent
+                                  : accentPalette.statusInfo,
+                              surface: appColors.cardBackground),
                           borderRadius: BorderRadius.circular(5),
                         ),
                         child: Text(slotLbl,
@@ -521,8 +519,8 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
                                 fontSize: 8,
                                 fontWeight: FontWeight.w700,
                                 color: isPrimaryLbl
-                                    ? const Color(0xFF7C3AED)
-                                    : const Color(0xFF3B82F6))),
+                                    ? accentPalette.secondaryAccent
+                                    : accentPalette.statusInfo)),
                       ),
                     ],
                   ]),
@@ -549,17 +547,18 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
                 height: 30,
                 decoration: BoxDecoration(
                   color: assigned
-                      ? const Color(0xFFEF4444).withOpacity(0.10)
+                      ? appColors.tint(accentPalette.statusDanger,
+                          surface: appColors.cardBackground)
                       : canAssign
-                          ? const Color(0xFF3B82F6).withOpacity(0.10)
+                          ? appColors.tint(accentPalette.statusInfo,
+                              surface: appColors.cardBackground)
                           : appColors.sectionBackground,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: assigned
-                        ? const Color(0xFFEF4444).withOpacity(0.25)
+                        ? accentPalette.statusDanger
                         : canAssign
-                            ? const Color(0xFF3B82F6)
-                                .withOpacity(0.25)
+                            ? accentPalette.statusInfo
                             : appColors.cardBorder,
                     width: 0.5,
                   ),
@@ -568,9 +567,9 @@ class _CustomStreakSelectorState extends State<CustomStreakSelector>
                   assigned ? Icons.close : Icons.add,
                   size: 16,
                   color: assigned
-                      ? const Color(0xFFEF4444)
+                      ? accentPalette.statusDanger
                       : canAssign
-                          ? const Color(0xFF3B82F6)
+                          ? accentPalette.statusInfo
                           : appColors.subtleText,
                 ),
               ),

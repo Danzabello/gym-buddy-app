@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'user_avatar.dart';
 import '../services/level_service.dart';
+import '../theme/app_theme.dart';
 
 
 enum AvatarBorderStyle { simple, bold, arc }
@@ -38,7 +39,6 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
       desc: 'Power & Courage',
       traits: ['Strength', 'Bold', 'Leader'],
       color: Color(0xFFD85A30),
-      bgColor: Color(0xFFFAECE7),
       borderColor: Color(0xFFC07010),
     ),
     _AvatarOption(
@@ -48,8 +48,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
       desc: 'Speed & Loyalty',
       traits: ['Speed', 'Loyal', 'Sharp'],
       color: Color(0xFF185FA5),
-      bgColor: Color(0xFFE6F1FB),
-      borderColor: Color(0xFF3E6890),
+      borderColor: Color(0xFF5889B7),
     ),
     _AvatarOption(
       id: 'bear',
@@ -58,8 +57,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
       desc: 'Power & Endurance',
       traits: ['Strength', 'Steady', 'Calm'],
       color: Color(0xFF0F6E56),
-      bgColor: Color(0xFFE1F5EE),
-      borderColor: Color(0xFF8B5E10),
+      borderColor: Color(0xFF108B6C),
     ),
   ];
 
@@ -165,17 +163,20 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
   }
 
   void _showLockedToast(String message) {
+    final appColors = AppColors.of(context);
     HapticFeedback.lightImpact();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.lock_rounded, color: Colors.white, size: 16),
+            Icon(Icons.lock_rounded,
+                color: appColors.readableForeground(appColors.streakOrange),
+                size: 16),
             const SizedBox(width: 8),
             Text(message),
           ],
         ),
-        backgroundColor: const Color(0xFF534AB7),
+        backgroundColor: appColors.streakOrange,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         duration: const Duration(seconds: 2),
@@ -241,6 +242,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
   }
 
   Widget _buildHeader() {
+    final appColors = AppColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -254,16 +256,18 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
         const SizedBox(height: 6),
         Text(
           'Pick your icon — unlock more as you level up',
-          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+          style: TextStyle(fontSize: 14, color: appColors.subtleText),
         ),
       ],
     );
   }
 
   Widget _buildStarterRow() {
+    final appColors = AppColors.of(context);
     return Row(
       children: List.generate(_starters.length, (i) {
         final a = _starters[i];
+        final avatarTint = appColors.tint(a.color);
         final isSelected = i == _selectedAvatarIndex;
         return Expanded(
           child: Padding(
@@ -274,10 +278,10 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
                 decoration: BoxDecoration(
-                  color: isSelected ? a.bgColor : Colors.white,
+                  color: isSelected ? avatarTint : appColors.cardBackground,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: isSelected ? a.borderColor : Colors.grey[200]!,
+                    color: isSelected ? a.borderColor : appColors.cardBorder,
                     width: isSelected ? 2 : 1.5,
                   ),
                 ),
@@ -287,7 +291,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                       emoji: a.emoji,
                       borderStyle: isSelected ? _selectedBorder : AvatarBorderStyle.simple,
                       borderColor: a.borderColor,
-                      bgColor: a.bgColor,
+                      bgColor: avatarTint,
                       size: 72,
                     ),
                     const SizedBox(height: 8),
@@ -296,7 +300,9 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: isSelected ? a.color : Colors.grey[600],
+                        color: isSelected
+                            ? appColors.readableForeground(avatarTint)
+                            : appColors.subtleText,
                       ),
                     ),
                   ],
@@ -311,12 +317,14 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
 
   Widget _buildDetailCard() {
     final a = _selected;
+    final appColors = AppColors.of(context);
+    final avatarTint = appColors.tint(a.color);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: appColors.cardBackground,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(color: appColors.cardBorder),
       ),
       child: Column(
         children: [
@@ -329,7 +337,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                   emoji: a.emoji,
                   borderStyle: _selectedBorder,
                   borderColor: a.borderColor,
-                  bgColor: a.bgColor,
+                  bgColor: avatarTint,
                   size: 130,
                 ),
               ),
@@ -343,7 +351,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                             fontSize: 22, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
                     Text(a.desc,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                        style: TextStyle(fontSize: 12, color: appColors.subtleText)),
                     const SizedBox(height: 10),
                     Wrap(
                       spacing: 6,
@@ -353,14 +361,15 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: a.bgColor,
+                                  color: avatarTint,
                                   borderRadius: BorderRadius.circular(100),
                                 ),
                                 child: Text(t,
                                     style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
-                                        color: a.color)),
+                                        color: appColors
+                                            .readableForeground(avatarTint))),
                               ))
                           .toList(),
                     ),
@@ -381,7 +390,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
               style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color: Colors.grey[500],
+                  color: appColors.subtleText,
                   letterSpacing: 0.8),
             ),
           ),
@@ -401,10 +410,10 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                       duration: const Duration(milliseconds: 180),
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       decoration: BoxDecoration(
-                        color: isOn ? a.bgColor : Colors.white,
+                        color: isOn ? avatarTint : appColors.cardBackground,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: isOn ? a.borderColor : Colors.grey[300]!,
+                          color: isOn ? a.borderColor : appColors.cardBorder,
                           width: isOn ? 2 : 1,
                         ),
                       ),
@@ -419,18 +428,18 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                                   emoji: a.emoji,
                                   borderStyle: style,
                                   borderColor: a.borderColor,
-                                  bgColor: a.bgColor,
+                                  bgColor: avatarTint,
                                   size: 72,
                                 ),
                               ),
                               if (isLocked)
                                 Container(
                                   padding: const EdgeInsets.all(2),
-                                  decoration: const BoxDecoration(
-                                      color: Colors.white,
+                                  decoration: BoxDecoration(
+                                      color: appColors.cardBackground,
                                       shape: BoxShape.circle),
                                   child: Icon(Icons.lock_rounded,
-                                      size: 12, color: Colors.grey[400]),
+                                      size: 12, color: appColors.subtleText),
                                 ),
                             ],
                           ),
@@ -440,10 +449,11 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
                                   color: isLocked
-                                      ? Colors.grey[400]
+                                      ? appColors.subtleText
                                       : isOn
-                                          ? a.color
-                                          : Colors.grey[500])),
+                                          ? appColors
+                                              .readableForeground(avatarTint)
+                                          : appColors.subtleText)),
                         ],
                       ),
                     ),
@@ -460,19 +470,22 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
             child: ElevatedButton(
               onPressed: _isSaving ? null : _confirm,
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF7F77DD),
-                foregroundColor: Colors.white,
+                backgroundColor: appColors.streakOrange,
+                foregroundColor:
+                    appColors.readableForeground(appColors.streakOrange),
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14)),
                 elevation: 0,
               ),
               child: _isSaving
-                  ? const SizedBox(
+                  ? SizedBox(
                       height: 20,
                       width: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
+                          strokeWidth: 2,
+                          color: appColors
+                              .readableForeground(appColors.streakOrange)))
                   : Text(
                       "I'm ${a.name} — let's go",
                       style: const TextStyle(
@@ -575,7 +588,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
       style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w600,
-          color: Colors.grey[500],
+          color: AppColors.of(context).subtleText,
           letterSpacing: 0.8),
     );
   }
@@ -584,6 +597,8 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
   /// Tapping it selects it as a starter-like option — we treat it as a
   /// virtual "starter" so the full detail card renders correctly.
   Widget _buildUnlockedEarnableCard(_EarnableAvatar e) {
+    final appColors = AppColors.of(context);
+    final statusSuccess = appColors.successGreen;
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
@@ -597,8 +612,8 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFF7F77DD).withOpacity(0.4)),
-          color: const Color(0xFFEEEDFE),
+          border: Border.all(color: statusSuccess.withOpacity(0.4)),
+          color: statusSuccess.withOpacity(0.1),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -606,22 +621,22 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
             Text(e.emoji, style: const TextStyle(fontSize: 36)),
             const SizedBox(height: 5),
             Text(e.name,
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF534AB7))),
+                    color: statusSuccess)),
             const SizedBox(height: 2),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFF7F77DD),
+                color: statusSuccess,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Text('USE',
+              child: Text('USE',
                   style: TextStyle(
                       fontSize: 8,
                       fontWeight: FontWeight.w700,
-                      color: Colors.white)),
+                      color: appColors.readableForeground(statusSuccess))),
             ),
           ],
         ),
@@ -648,11 +663,12 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
   }
 
   Widget _buildLockedCard(_EarnableAvatar l) {
+    final appColors = AppColors.of(context);
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey[200]!),
-        color: Colors.grey[50],
+        border: Border.all(color: appColors.cardBorder),
+        color: appColors.cardBackground,
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -666,10 +682,10 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
               ),
               Container(
                 padding: const EdgeInsets.all(2),
-                decoration: const BoxDecoration(
-                    color: Colors.white, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                    color: appColors.cardBackground, shape: BoxShape.circle),
                 child: Icon(Icons.lock_rounded,
-                    size: 14, color: Colors.grey[400]),
+                    size: 14, color: appColors.subtleText),
               ),
             ],
           ),
@@ -678,12 +694,12 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
               style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color: Colors.grey[500])),
+                  color: appColors.subtleText)),
           const SizedBox(height: 2),
           Text(l.req,
               textAlign: TextAlign.center,
               style: TextStyle(
-                  fontSize: 8, color: Colors.grey[400], height: 1.3)),
+                  fontSize: 8, color: appColors.subtleText, height: 1.3)),
         ],
       ),
     );
@@ -781,7 +797,6 @@ class _AvatarOption {
   final String desc;
   final List<String> traits;
   final Color color;
-  final Color bgColor;
   final Color borderColor;
 
   const _AvatarOption({
@@ -791,7 +806,6 @@ class _AvatarOption {
     required this.desc,
     required this.traits,
     required this.color,
-    required this.bgColor,
     required this.borderColor,
   });
 }

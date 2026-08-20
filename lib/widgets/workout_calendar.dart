@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/workout_history_service.dart';
+import '../theme/app_theme.dart';
+import '../theme/accent_theme_provider.dart';
+import 'package:provider/provider.dart';
 
 class WorkoutCalendarWidget extends StatefulWidget {
   const WorkoutCalendarWidget({super.key});
@@ -60,16 +63,10 @@ class _WorkoutCalendarWidgetState extends State<WorkoutCalendarWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final appColors = AppColors.of(context);
     return Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.orange.shade50,
-            Colors.red.shade50,
-          ],
-        ),
+        color: appColors.cardBackground,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -101,6 +98,8 @@ class _WorkoutCalendarWidgetState extends State<WorkoutCalendarWidget> {
   }
 
   Widget _buildMonthHeader() {
+    final appColors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     final monthName = DateFormat('MMMM yyyy').format(_currentMonth);
     final now = DateTime.now();
     final isCurrentMonth = _currentMonth.year == now.year && 
@@ -114,7 +113,7 @@ class _WorkoutCalendarWidgetState extends State<WorkoutCalendarWidget> {
           IconButton(
             icon: const Icon(Icons.chevron_left, size: 28),
             onPressed: _previousMonth,
-            color: Colors.orange.shade700,
+            color: accentPalette.action,
           ),
           Column(
             children: [
@@ -123,7 +122,7 @@ class _WorkoutCalendarWidgetState extends State<WorkoutCalendarWidget> {
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade800,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               if (isCurrentMonth)
@@ -131,14 +130,14 @@ class _WorkoutCalendarWidgetState extends State<WorkoutCalendarWidget> {
                   margin: const EdgeInsets.only(top: 4),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.orange.shade100,
+                    color: appColors.tint(accentPalette.action),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     'This Month',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.orange.shade700,
+                      color: accentPalette.action,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -148,7 +147,7 @@ class _WorkoutCalendarWidgetState extends State<WorkoutCalendarWidget> {
           IconButton(
             icon: const Icon(Icons.chevron_right, size: 28),
             onPressed: _nextMonth,
-            color: Colors.orange.shade700,
+            color: accentPalette.action,
           ),
         ],
       ),
@@ -156,6 +155,7 @@ class _WorkoutCalendarWidgetState extends State<WorkoutCalendarWidget> {
   }
 
   Widget _buildWeekdayLabels() {
+    final appColors = AppColors.of(context);
     const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     
     return Padding(
@@ -169,7 +169,7 @@ class _WorkoutCalendarWidgetState extends State<WorkoutCalendarWidget> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey.shade600,
+                color: appColors.subtleText,
               ),
             ),
           ),
@@ -205,21 +205,23 @@ class _WorkoutCalendarWidgetState extends State<WorkoutCalendarWidget> {
   }
 
   Widget _buildCalendarDay(CalendarDay day) {
+    final appColors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     return GestureDetector(
       onTap: () => _showWorkoutDetails(day),
       child: Container(
         decoration: BoxDecoration(
           color: day.isToday 
-              ? Colors.orange.shade400
+              ? accentPalette.action
               : day.hasWorkout
-                  ? Colors.green.shade100
+                  ? appColors.tint(appColors.successGreen)
                   : day.isFuture
-                      ? Colors.grey.shade100
-                      : Colors.white,
+                      ? appColors.sectionBackground
+                      : appColors.cardBackground,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: day.isToday 
-                ? Colors.orange.shade600
+                ? accentPalette.action
                 : Colors.transparent,
             width: 2,
           ),
@@ -233,10 +235,10 @@ class _WorkoutCalendarWidgetState extends State<WorkoutCalendarWidget> {
                 fontSize: 14,
                 fontWeight: day.isToday ? FontWeight.bold : FontWeight.w500,
                 color: day.isToday
-                    ? Colors.white
+                    ? appColors.readableForeground(accentPalette.action)
                     : day.isFuture
-                        ? Colors.grey.shade400
-                        : Colors.grey.shade800,
+                        ? appColors.subtleText
+                        : Theme.of(context).colorScheme.onSurface,
               ),
             ),
             if (day.hasWorkout) ...[
@@ -265,11 +267,13 @@ class _WorkoutDetailsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dateStr = DateFormat('EEEE, MMMM d, yyyy').format(workouts.first.workoutDate);
-    
+    final appColors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
+
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: appColors.cardBackground,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -282,7 +286,7 @@ class _WorkoutDetailsSheet extends StatelessWidget {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: appColors.divider,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -295,7 +299,7 @@ class _WorkoutDetailsSheet extends StatelessWidget {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.grey.shade800,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
@@ -303,13 +307,13 @@ class _WorkoutDetailsSheet extends StatelessWidget {
             '${workouts.length} workout${workouts.length > 1 ? 's' : ''} completed',
             style: TextStyle(
               fontSize: 14,
-              color: Colors.grey.shade600,
+              color: appColors.subtleText,
             ),
           ),
           const SizedBox(height: 20),
           
           // Workout list
-          ...workouts.map((workout) => _buildWorkoutCard(workout)),
+          ...workouts.map((workout) => _buildWorkoutCard(context, workout)),
           
           const SizedBox(height: 20),
           
@@ -319,18 +323,18 @@ class _WorkoutDetailsSheet extends StatelessWidget {
             child: ElevatedButton(
               onPressed: () => Navigator.pop(context),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange.shade400,
+                backgroundColor: accentPalette.action,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text(
+              child: Text(
                 'Close',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  color: appColors.readableForeground(accentPalette.action),
                 ),
               ),
             ),
@@ -340,18 +344,17 @@ class _WorkoutDetailsSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildWorkoutCard(WorkoutLog workout) {
+  Widget _buildWorkoutCard(BuildContext context, WorkoutLog workout) {
     final timeStr = DateFormat('h:mm a').format(workout.workoutTime);
-    
+    final appColors = AppColors.of(context);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.orange.shade50, Colors.red.shade50],
-        ),
+        color: appColors.sectionBackground,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade200),
+        border: Border.all(color: appColors.cardBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -378,7 +381,7 @@ class _WorkoutDetailsSheet extends StatelessWidget {
                       workout.workoutCategory.toUpperCase(),
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.grey.shade600,
+                        color: appColors.subtleText,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -390,16 +393,17 @@ class _WorkoutDetailsSheet extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              _buildInfoChip(Icons.access_time, timeStr),
+              _buildInfoChip(context, Icons.access_time, timeStr),
               const SizedBox(width: 8),
               if (workout.actualDurationMinutes != null)
                 _buildInfoChip(
+                  context,
                   Icons.timer,
                   '${workout.actualDurationMinutes} min',
                 ),
               if (workout.buddyName != null) ...[
                 const SizedBox(width: 8),
-                _buildInfoChip(Icons.person, workout.buddyName!),
+                _buildInfoChip(context, Icons.person, workout.buddyName!),
               ],
             ],
           ),
@@ -409,7 +413,7 @@ class _WorkoutDetailsSheet extends StatelessWidget {
               workout.notes!,
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey.shade700,
+                color: Theme.of(context).colorScheme.onSurface,
                 fontStyle: FontStyle.italic,
               ),
             ),
@@ -419,23 +423,24 @@ class _WorkoutDetailsSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoChip(IconData icon, String label) {
+  Widget _buildInfoChip(BuildContext context, IconData icon, String label) {
+    final appColors = AppColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.7),
+        color: appColors.sectionBackground,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.grey.shade600),
+          Icon(icon, size: 14, color: appColors.subtleText),
           const SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(
               fontSize: 12,
-              color: Colors.grey.shade700,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
         ],
