@@ -450,12 +450,12 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                 decoration: BoxDecoration(
                   color: checkedIn
                       ? appColors.successGreen.withOpacity(0.12)
-                      : appColors.streakOrange.withOpacity(0.12),
+                      : palette.statusWarning.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                       color: checkedIn
                           ? appColors.successGreen.withOpacity(0.25)
-                          : appColors.streakOrange.withOpacity(0.25),
+                          : palette.statusWarning.withOpacity(0.25),
                       width: 0.5),
                 ),
                 child: Text(
@@ -465,7 +465,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                       fontWeight: FontWeight.w700,
                       color: checkedIn
                           ? appColors.successGreen
-                          : appColors.streakOrange),
+                          : palette.statusWarning),
                 ),
               ),
             ]),
