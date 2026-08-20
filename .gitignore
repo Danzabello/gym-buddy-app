@@ -50,3 +50,5 @@ android/app/google-services.json
 
 # Supabase CLI local cache
 supabase/.temp/
+# Added by code-review-graph
+.code-review-graph/
