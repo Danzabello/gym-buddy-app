@@ -397,6 +397,9 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     final id = friend['id'] as String;
     final name = friend['display_name'] as String? ?? 'Buddy';
     final checkedIn = _checkedInToday.contains(id);
+    final chipRole =
+        checkedIn ? appColors.successGreen : palette.statusWarning;
+    final chipFill = appColors.tint(chipRole);
     final borderColor = _borderColor(friend['avatar_border'] as String?);
 
     showModalBottomSheet(
@@ -448,24 +451,19 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: checkedIn
-                      ? appColors.successGreen.withOpacity(0.12)
-                      : palette.statusWarning.withOpacity(0.12),
+                  // Both chips tinted against the sheet's cardBackground so the
+                  // pair stays symmetrical; the flat 12%/25% fills they replace
+                  // measured ~1.1-1.3:1 and read as no container at all.
+                  color: chipFill,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                      color: checkedIn
-                          ? appColors.successGreen.withOpacity(0.25)
-                          : palette.statusWarning.withOpacity(0.25),
-                      width: 0.5),
+                  border: Border.all(color: chipRole, width: 0.5),
                 ),
                 child: Text(
                   checkedIn ? '✓ Checked in' : 'Not checked in',
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
-                      color: checkedIn
-                          ? appColors.successGreen
-                          : palette.statusWarning),
+                      color: appColors.readableForeground(chipFill)),
                 ),
               ),
             ]),
