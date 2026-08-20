@@ -302,7 +302,13 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 10),
                           decoration: BoxDecoration(
-                            color: colors.sectionBackground,
+                            // Tinted gold, not a status role: this is currency
+                            // chrome, matching the gold coin chip and prices
+                            // kept elsewhere in this file. Surface is passed
+                            // explicitly — the pill sits on the Scaffold's
+                            // sectionBackground, not on a card.
+                            color: colors.tint(const Color(0xFFD97706),
+                                surface: colors.sectionBackground),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
