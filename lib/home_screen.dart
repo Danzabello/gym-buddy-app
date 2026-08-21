@@ -569,9 +569,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         _buildBuddyWheel(displayItems),
         _buildSwipeHint(),
         _buildCheckInCard(displayItems),
-        const SizedBox(height: 14),
+        const SizedBox(height: 10),
         _buildInfoTray(),
-        const SizedBox(height: 28),
+        const SizedBox(height: 4),
       ],
     );
   }
@@ -692,7 +692,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       onTap: _showAllStreaks,
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+        padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -791,7 +791,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     return Opacity(
       opacity: 0.6,
       child: Padding(
-        padding: const EdgeInsets.only(top: 4, bottom: 14),
+        padding: const EdgeInsets.only(top: 2, bottom: 4),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -834,14 +834,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: 150,
+          // Sized to the tallest real card (the 3-line coach tip) with its
+          // trimmed padding — not a clamp: nothing is cut at this height.
+          height: 128,
           child: PageView(
             controller: _trayController,
             onPageChanged: (i) => setState(() => _trayIndex = i),
             children: orderedCards,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(3, (i) {
@@ -868,7 +870,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final c = AppColors.of(context);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: padding ?? const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      padding: padding ?? const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: BoxDecoration(
         color: c.claySurface,
         borderRadius: BorderRadius.circular(26),
@@ -938,8 +940,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   Widget _trayGlyph(String glyph, {Color? role}) {
     final c = AppColors.of(context);
     return Container(
-      width: 44,
-      height: 44,
+      width: 38,
+      height: 38,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
@@ -951,7 +953,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         ),
         boxShadow: c.clayShadow(),
       ),
-      child: Center(child: Text(glyph, style: const TextStyle(fontSize: 19))),
+      child: Center(child: Text(glyph, style: const TextStyle(fontSize: 17))),
     );
   }
 
@@ -1116,8 +1118,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 clipBehavior: Clip.none,
                 children: [
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       // Matches the Coach Max wheel avatar — brand identity,
@@ -1130,7 +1132,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       boxShadow: c.clayShadow(),
                     ),
                     child: const Center(
-                      child: Text('🤖', style: TextStyle(fontSize: 18)),
+                      child: Text('🤖', style: TextStyle(fontSize: 16)),
                     ),
                   ),
                   // 🤖 AI disclosure on the avatar, alongside the category pill.
@@ -1177,11 +1179,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Flexible(
             child: Text(
               tip['tip'],
-              style: TextStyle(color: c.inkMuted, fontSize: 12.5, height: 1.45),
+              style: TextStyle(color: c.inkMuted, fontSize: 12.5, height: 1.32),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
@@ -1226,7 +1228,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: week.map((date) {
