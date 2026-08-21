@@ -467,47 +467,56 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
 
+  /// The wheel's slots: top 4 friends by the active sort + Coach Max.
+  /// Returns null when there is nothing to show a wheel for — the caller
+  /// decides which empty-state card to render.
+  List<dynamic>? _wheelItems() {
+    // Coach Max always has a slot: he's the automatic buddy.
+    final coachMaxStreak = _allStreaks.firstWhere(
+      (s) => s.isCoachMaxTeam,
+      orElse: () => _allStreaks.first,
+    );
+
+    // Friends ordered by the selected sort mode (custom keeps stored order)
+    final friendStreaks = _streakSortMode == StreakSortMode.custom
+      ? _allStreaks.where((s) => !s.isCoachMaxTeam).toList()  // Just filter, don't sort
+      : sortStreaks(_allStreaks, _streakSortMode);
+
+    if (_streakSortMode == StreakSortMode.favorites && friendStreaks.isEmpty) {
+      return null;
+    }
+
+    // Top 4 earn a wheel slot — the rest live in the full streak list
+    final displayItems = <dynamic>[
+      ...friendStreaks.take(4),
+      coachMaxStreak,
+    ];
+
+    // Pad with "Add a buddy" placeholders so the wheel always has 3+ visuals
+    while (displayItems.length < 3) {
+      displayItems.add(null);
+    }
+    return displayItems;
+  }
+
   Widget _buildStreakCarousel() {
     if (_allStreaks.isEmpty) {
       return _buildNoStreaksCard();
     }
 
-  // ✅ WHEEL: top 4 friends (by active sort) + Coach Max — max 5 slots,
-  // wrapping infinitely. Coach Max always has a slot: he's the automatic buddy.
-  final displayItems = <dynamic>[];
+    final displayItems = _wheelItems();
+    if (displayItems == null) {
+      return _buildEmptyFavoritesCard();
+    }
 
-  final coachMaxStreak = _allStreaks.firstWhere(
-    (s) => s.isCoachMaxTeam,
-    orElse: () => _allStreaks.first,
-  );
+    // ✅ Debug output
+    debugLog('📊 WHEEL ITEMS (${displayItems.length}):');
+    for (var i = 0; i < displayItems.length; i++) {
+      final it = displayItems[i];
+      debugLog('  [$i] ${it is TeamStreak ? it.teamName : 'Add Buddy'}');
+    }
+    debugLog('  Current index: $_currentCarouselIndex');
 
-  // Friends ordered by the selected sort mode (custom keeps stored order)
-  final friendStreaks = _streakSortMode == StreakSortMode.custom
-    ? _allStreaks.where((s) => !s.isCoachMaxTeam).toList()  // Just filter, don't sort
-    : sortStreaks(_allStreaks, _streakSortMode);
-
-  if (_streakSortMode == StreakSortMode.favorites && friendStreaks.isEmpty) {
-    return _buildEmptyFavoritesCard();
-  }
-
-  // Top 4 earn a wheel slot — the rest live in the full streak list
-  displayItems.addAll(friendStreaks.take(4));
-  displayItems.add(coachMaxStreak);
-
-  // Pad with "Add a buddy" placeholders so the wheel always has 3+ visuals
-  while (displayItems.length < 3) {
-    displayItems.add(null);
-  }
-
-  // ✅ Debug output
-  debugLog('📊 WHEEL ITEMS (${displayItems.length}):');
-  for (var i = 0; i < displayItems.length; i++) {
-    final it = displayItems[i];
-    debugLog('  [$i] ${it is TeamStreak ? it.teamName : 'Add Buddy'}');
-  }
-  debugLog('  Current index: $_currentCarouselIndex');
-
-    final appColors = AppColors.of(context);
     final accentPalette = context.watch<AccentThemeProvider>().palette;
 
     // ✅ MERGED CARD: Carousel + Action Buttons in one! (PIXEL 7A OPTIMIZED)
@@ -522,323 +531,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         ),
         child: Column(
           children: [
-            // ✅ HEADER ROW - Fixed overflow issue
-            Row(
-              children: [
-                // Left: Three-dot menu (fixed width)
-                SizedBox(
-                  width: 48,  // ✅ Was 60, slimmed down
-                  child: GestureDetector(
-                    onTap: _showSortBottomSheet,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: accentPalette.heroText.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.more_vert,
-                        size: 20,
-                        color: accentPalette.heroTextMuted,
-                      ),
-                    ),
-                  ),
-                ),
-                
-                // Center: Title (takes remaining space)
-                Expanded(
-                  child: Center(
-                    child: GestureDetector(
-                      onTap: _showAllStreaks,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: accentPalette.heroText.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // ✅ FIX: Use Flexible to prevent text overflow
-                            Flexible(
-                              child: Text(
-                                'Your Active Streaks ($_streakCount)',
-                                style: TextStyle(
-                                  fontSize: 14,  // ✅ Was 16
-                                  fontWeight: FontWeight.w600,
-                                  color: accentPalette.heroTextMuted,
-                                ),
-                                overflow: TextOverflow.ellipsis,  // ✅ Safety net
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.chevron_right,
-                              size: 18,  // ✅ Was 20
-                              color: accentPalette.heroTextMuted,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                
-                // Right: Check-in badge (fixed width)
-                SizedBox(
-                  width: 48,  // ✅ Was 60, matches left side
-                  child: displayItems[_currentCarouselIndex] != null
-                      ? Align(
-                          alignment: Alignment.centerRight,
-                          child: _buildCompactCheckInBadge(
-                            displayItems[_currentCarouselIndex] as TeamStreak,
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-              ],
-            ),
-            
+            _buildCarouselHeader(displayItems, accentPalette),
             const SizedBox(height: 16),  // ✅ Was 24
-            
-            // ✅ INFINITE CAROUSEL - Wraps around in a circle
-            SizedBox(
-              height: 170,  // ✅ Was 200 - major space saver
-              child: AnimatedBuilder(
-                animation: _carouselEntranceAnimation,
-                builder: (context, child) {
-                  return Transform.translate(
-                    offset: Offset(
-                      0,
-                      (1 - _carouselEntranceAnimation.value) * 100,
-                    ),
-                    child: Opacity(
-                      opacity: _carouselEntranceAnimation.value.clamp(0.0, 1.0),
-                      child: child,
-                    ),
-                  );
-                },
-                child: PageView.builder(
-                  controller: _carouselController,
-                  onPageChanged: (index) {
-                    final newIndex = index % displayItems.length;
-                    
-                    // ✅ ONLY update index - preset stays locked
-                    setState(() {
-                      _currentCarouselIndex = newIndex;
-                    });
-                  },
-                  itemCount: null,
-                  itemBuilder: (context, index) {
-                    final displayIndex = index % displayItems.length;
-                    final item = displayItems[displayIndex];
-                    final isFocused = displayIndex == _currentCarouselIndex;
-                    
-                    return AnimatedBuilder(
-                      animation: _carouselController,
-                      builder: (context, child) {
-                        double scale = 1.0;
- 
-                        if (_carouselController.position.haveDimensions && 
-                            _carouselEntranceAnimation.value >= 1.0) {
-                          final page = _carouselController.page ?? index.toDouble();
-                          final diff = (page - index).abs();
-                          scale = (1 - (diff * 0.45)).clamp(0.75, 1.0);
-                        } else if (displayIndex == _currentCarouselIndex) {
-                          scale = 1.0;
-                        } else {
-                          scale = 0.75;
-                        }
-                        
-                        return Transform.scale(
-                          scale: scale,
-                          child: Center(
-                            child: GestureDetector(
-                              onTap: () {
-                                _carouselController.animateToPage(
-                                  index,
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeInOut,
-                                );
-                              },
-                              child: item != null
-                                  ? _buildCarouselAvatar(item as TeamStreak, isFocused)
-                                  : _buildAddFriendPlaceholder(isFocused),
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ),
-            
+            _buildBuddyWheel(displayItems),
             const SizedBox(height: 10),  // ✅ Was 16
-            
-            // ✅ NAME & STREAK COUNT
-            Column(
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        _getDisplayName(displayItems[_currentCarouselIndex]),
-                        style: TextStyle(
-                          fontSize: 16,  // ✅ Was 18
-                          fontWeight: FontWeight.bold,
-                          color: displayItems[_currentCarouselIndex] != null
-                              ? accentPalette.heroText
-                              : accentPalette.heroTextMuted,
-                        ),
-                      ),
-                    ),
-                    if (_isCoachMaxItem(displayItems[_currentCarouselIndex])) ...[
-                      const SizedBox(width: 6),
-                      const AiInlinePill(),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 4),  // ✅ Was 8
-                // Just show streak count - removed progress bar
-                if (displayItems[_currentCarouselIndex] != null)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Text(
-                        '${(displayItems[_currentCarouselIndex] as TeamStreak).currentStreak} Day Streak',
-                        style: TextStyle(
-                          fontSize: 24,  // ✅ Was 28
-                          fontWeight: FontWeight.bold,
-                          color: accentPalette.heroText,
-                        ),
-                      ),
-                      if (_isBuddyOnBreak(displayItems[_currentCarouselIndex]))
-                        Text(
-                          ' · on break today',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                    ],
-                  )
-                else
-                  Text(
-                    '— Day Streak',
-                    style: TextStyle(
-                      fontSize: 24,  // ✅ Was 28
-                      fontWeight: FontWeight.bold,
-                      color: accentPalette.heroTextMuted,
-                    ),
-                  ),
-                if (_isOnBreakToday) ...[
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.shield,
-                        size: 13,
-                        color: accentPalette.heroText,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        'Your streak is protected today.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: accentPalette.heroTextMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-            
+            _buildFocusedStreakInfo(displayItems, accentPalette),
             const SizedBox(height: 16),  // ✅ Was 24
-            
-            // ✅ ACTION BUTTONS
-            // Check In button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _hasCheckedInToday || _isCheckingIn ? null : _checkIn,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _hasCheckedInToday 
-                      ? Colors.green[600]
-                      : accentPalette.action,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),  // ✅ Was 18
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  elevation: 4,
-                  disabledBackgroundColor: _hasCheckedInToday 
-                      ? Colors.green[600]
-                      : appColors.subtleText,
-                ),
-                child: _isCheckingIn
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 3,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            _hasCheckedInToday ? Icons.check_circle : Icons.local_fire_department,
-                            size: 24,  // ✅ Was 28
-                            color: Colors.white,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            _hasCheckedInToday ? 'Checked In! ✓' : 'Check In',
-                            style: const TextStyle(
-                              fontSize: 18,  // ✅ Was 20
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-            
-            const SizedBox(height: 8),
-
-            // Take a Break — subtle text link
-            if (!_hasCheckedInToday)
-              GestureDetector(
-                onTap: _showTakeBreakDialog,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.bedtime, size: 14, color: accentPalette.heroTextMuted),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Take a break day',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: accentPalette.heroTextMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            _buildCheckInCard(accentPalette),
             Padding(
               padding: EdgeInsets.symmetric(vertical: 2),
               child: Divider(height: 1, color: accentPalette.heroText.withOpacity(0.2)),
@@ -847,6 +546,332 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           ],
         ),
       ),
+    );
+  }
+
+  /// Sort menu · "Your Active Streaks (N)" entry point · focused check-in badge.
+  Widget _buildCarouselHeader(List<dynamic> displayItems, AccentPalette accentPalette) {
+    // ✅ HEADER ROW - Fixed overflow issue
+    return Row(
+      children: [
+        // Left: Three-dot menu (fixed width)
+        SizedBox(
+          width: 48,  // ✅ Was 60, slimmed down
+          child: GestureDetector(
+            onTap: _showSortBottomSheet,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: accentPalette.heroText.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.more_vert,
+                size: 20,
+                color: accentPalette.heroTextMuted,
+              ),
+            ),
+          ),
+        ),
+
+        // Center: Title (takes remaining space)
+        Expanded(
+          child: Center(
+            child: GestureDetector(
+              onTap: _showAllStreaks,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: accentPalette.heroText.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ✅ FIX: Use Flexible to prevent text overflow
+                    Flexible(
+                      child: Text(
+                        'Your Active Streaks ($_streakCount)',
+                        style: TextStyle(
+                          fontSize: 14,  // ✅ Was 16
+                          fontWeight: FontWeight.w600,
+                          color: accentPalette.heroTextMuted,
+                        ),
+                        overflow: TextOverflow.ellipsis,  // ✅ Safety net
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 18,  // ✅ Was 20
+                      color: accentPalette.heroTextMuted,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        // Right: Check-in badge (fixed width)
+        SizedBox(
+          width: 48,  // ✅ Was 60, matches left side
+          child: displayItems[_currentCarouselIndex] != null
+              ? Align(
+                  alignment: Alignment.centerRight,
+                  child: _buildCompactCheckInBadge(
+                    displayItems[_currentCarouselIndex] as TeamStreak,
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+
+  /// ✅ INFINITE CAROUSEL - Wraps around in a circle
+  Widget _buildBuddyWheel(List<dynamic> displayItems) {
+    return SizedBox(
+      height: 170,  // ✅ Was 200 - major space saver
+      child: AnimatedBuilder(
+        animation: _carouselEntranceAnimation,
+        builder: (context, child) {
+          return Transform.translate(
+            offset: Offset(
+              0,
+              (1 - _carouselEntranceAnimation.value) * 100,
+            ),
+            child: Opacity(
+              opacity: _carouselEntranceAnimation.value.clamp(0.0, 1.0),
+              child: child,
+            ),
+          );
+        },
+        child: PageView.builder(
+          controller: _carouselController,
+          onPageChanged: (index) {
+            final newIndex = index % displayItems.length;
+
+            // ✅ ONLY update index - preset stays locked
+            setState(() {
+              _currentCarouselIndex = newIndex;
+            });
+          },
+          itemCount: null,
+          itemBuilder: (context, index) {
+            final displayIndex = index % displayItems.length;
+            final item = displayItems[displayIndex];
+            final isFocused = displayIndex == _currentCarouselIndex;
+
+            return AnimatedBuilder(
+              animation: _carouselController,
+              builder: (context, child) {
+                double scale = 1.0;
+
+                if (_carouselController.position.haveDimensions &&
+                    _carouselEntranceAnimation.value >= 1.0) {
+                  final page = _carouselController.page ?? index.toDouble();
+                  final diff = (page - index).abs();
+                  scale = (1 - (diff * 0.45)).clamp(0.75, 1.0);
+                } else if (displayIndex == _currentCarouselIndex) {
+                  scale = 1.0;
+                } else {
+                  scale = 0.75;
+                }
+
+                return Transform.scale(
+                  scale: scale,
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: () {
+                        _carouselController.animateToPage(
+                          index,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                      },
+                      child: item != null
+                          ? _buildCarouselAvatar(item as TeamStreak, isFocused)
+                          : _buildAddFriendPlaceholder(isFocused),
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// ✅ NAME & STREAK COUNT for whichever wheel slot is focused.
+  Widget _buildFocusedStreakInfo(List<dynamic> displayItems, AccentPalette accentPalette) {
+    return Column(
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                _getDisplayName(displayItems[_currentCarouselIndex]),
+                style: TextStyle(
+                  fontSize: 16,  // ✅ Was 18
+                  fontWeight: FontWeight.bold,
+                  color: displayItems[_currentCarouselIndex] != null
+                      ? accentPalette.heroText
+                      : accentPalette.heroTextMuted,
+                ),
+              ),
+            ),
+            if (_isCoachMaxItem(displayItems[_currentCarouselIndex])) ...[
+              const SizedBox(width: 6),
+              const AiInlinePill(),
+            ],
+          ],
+        ),
+        const SizedBox(height: 4),  // ✅ Was 8
+        // Just show streak count - removed progress bar
+        if (displayItems[_currentCarouselIndex] != null)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                '${(displayItems[_currentCarouselIndex] as TeamStreak).currentStreak} Day Streak',
+                style: TextStyle(
+                  fontSize: 24,  // ✅ Was 28
+                  fontWeight: FontWeight.bold,
+                  color: accentPalette.heroText,
+                ),
+              ),
+              if (_isBuddyOnBreak(displayItems[_currentCarouselIndex]))
+                Text(
+                  ' · on break today',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+            ],
+          )
+        else
+          Text(
+            '— Day Streak',
+            style: TextStyle(
+              fontSize: 24,  // ✅ Was 28
+              fontWeight: FontWeight.bold,
+              color: accentPalette.heroTextMuted,
+            ),
+          ),
+        if (_isOnBreakToday) ...[
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.shield,
+                size: 13,
+                color: accentPalette.heroText,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                'Your streak is protected today.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: accentPalette.heroTextMuted,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// ✅ ACTION BUTTONS — Check In, plus the Take a Break escape hatch.
+  Widget _buildCheckInCard(AccentPalette accentPalette) {
+    final appColors = AppColors.of(context);
+    return Column(
+      children: [
+        // Check In button
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _hasCheckedInToday || _isCheckingIn ? null : _checkIn,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _hasCheckedInToday
+                  ? Colors.green[600]
+                  : accentPalette.action,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),  // ✅ Was 18
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              elevation: 4,
+              disabledBackgroundColor: _hasCheckedInToday
+                  ? Colors.green[600]
+                  : appColors.subtleText,
+            ),
+            child: _isCheckingIn
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      color: Colors.white,
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _hasCheckedInToday ? Icons.check_circle : Icons.local_fire_department,
+                        size: 24,  // ✅ Was 28
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        _hasCheckedInToday ? 'Checked In! ✓' : 'Check In',
+                        style: const TextStyle(
+                          fontSize: 18,  // ✅ Was 20
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+
+        const SizedBox(height: 8),
+
+        // Take a Break — subtle text link
+        if (!_hasCheckedInToday)
+          GestureDetector(
+            onTap: _showTakeBreakDialog,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.bedtime, size: 14, color: accentPalette.heroTextMuted),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Take a break day',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: accentPalette.heroTextMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 
