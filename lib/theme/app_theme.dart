@@ -102,6 +102,12 @@ class AppColors extends ThemeExtension<AppColors> {
       // contrast-floor treatment `tint()` already models if Step 2 puts small
       // muted text on light clay.
       inkMuted: p.subtleText,
+      // These three were left on their fixed defaults when the clay tokens were
+      // derived — the palette has carried per-accent status roles all along, so
+      // a skin's own info/success/warning never reached the clay surfaces.
+      info: p.statusInfo,
+      success: p.statusSuccess,
+      warn: p.statusWarning,
     );
   }
 
