@@ -6748,11 +6748,7 @@ class _ProfilePageState extends State<ProfilePage>
 
   String _accentThemeLabel(BuildContext context) {
     final theme = context.watch<AccentThemeProvider>().accentTheme;
-    return switch (theme) {
-      AccentTheme.signalBlue => 'Signal blue',
-      AccentTheme.limeSpark  => 'Lime spark',
-      AccentTheme.emeraldInk => 'Emerald ink',
-    };
+    return AccentPalette.forTheme(theme).name;
   }
 
   void _showAccentThemePicker(BuildContext context) {
@@ -6789,14 +6785,13 @@ class _ProfilePageState extends State<ProfilePage>
                 ),
               ),
               const SizedBox(height: 20),
-              _accentOption(ctx, provider, AccentTheme.signalBlue, 'Signal blue',
-                  'Bold electric blue', const Color(0xFF0057FF)),
-              const SizedBox(height: 10),
-              _accentOption(ctx, provider, AccentTheme.limeSpark, 'Lime spark',
-                  'Dark with lime accents', const Color(0xFFB6FF2E)),
-              const SizedBox(height: 10),
-              _accentOption(ctx, provider, AccentTheme.emeraldInk, 'Emerald ink',
-                  'Deep green with cream', const Color(0xFF064E3B)),
+              // Every skin's label, blurb and swatch comes off its palette —
+              // adding an accent never touches this screen again.
+              for (final theme in AccentTheme.values) ...[
+                if (theme != AccentTheme.values.first)
+                  const SizedBox(height: 10),
+                _accentOption(ctx, provider, theme),
+              ],
             ],
           ),
         );
@@ -6808,10 +6803,8 @@ class _ProfilePageState extends State<ProfilePage>
     BuildContext ctx,
     AccentThemeProvider provider,
     AccentTheme theme,
-    String label,
-    String sub,
-    Color swatchColor,
   ) {
+    final palette = AccentPalette.forTheme(theme);
     final isSelected = provider.accentTheme == theme;
     final appColors = AppColors.of(ctx);
     return GestureDetector(
@@ -6841,7 +6834,7 @@ class _ProfilePageState extends State<ProfilePage>
               height: 22,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: swatchColor,
+                color: palette.swatch,
                 border: Border.all(color: appColors.cardBorder),
               ),
             ),
@@ -6851,7 +6844,7 @@ class _ProfilePageState extends State<ProfilePage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    label,
+                    palette.name,
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -6861,7 +6854,7 @@ class _ProfilePageState extends State<ProfilePage>
                     ),
                   ),
                   Text(
-                    sub,
+                    palette.description,
                     style: TextStyle(fontSize: 12, color: appColors.subtleText),
                   ),
                 ],

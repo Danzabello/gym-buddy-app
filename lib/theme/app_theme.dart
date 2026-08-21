@@ -38,8 +38,8 @@ class AppColors extends ThemeExtension<AppColors> {
     required this.streakOrange,
     required this.successGreen,
     required this.avatarRing,
-    // Clay tokens default to the emerald clay set; they don't vary by accent
-    // theme yet, so light/dark/fromAccent inherit them untouched.
+    // Fallbacks for the legacy `light` / `dark` themes, which have no accent
+    // palette to derive from. `fromAccent` computes all six per accent.
     this.clayShadowDark   = const Color(0x59000000), // black @ 35%
     this.clayShadowLight  = const Color(0x0FFFFFFF), // white @ 6%
     this.clayBg           = const Color(0xFF163828),
@@ -51,17 +51,59 @@ class AppColors extends ThemeExtension<AppColors> {
     this.warn             = const Color(0xFFFBBF24),
   });
 
-  factory AppColors.fromAccent(AccentPalette p) => AppColors(
-    cardBackground: p.cardBackground,
-    cardBorder: p.cardBorder,
-    sectionBackground: p.sectionBackground,
-    subtleText: p.subtleText,
-    divider: p.divider,
-    inputFill: p.inputFill,
-    streakOrange: p.action,
-    successGreen: p.statusSuccess,
-    avatarRing: p.avatarRing,
-  );
+  /// Lightness offsets (HSL points /100) that define the clay stack. Measured
+  /// off the Emerald Ink set these tokens used to hardcode:
+  /// bg #0B1F1A (L 8.2) → clayBg #163828 (L 15.3) → claySurface #1D4A35
+  /// (L 20.2) → claySurfaceLight #245A41 (L 24.7).
+  static const _clayBgShift      = 0.071;
+  static const _claySurfaceShift = 0.120; // 7.1 + 4.9
+  static const _clayEdgeShift    = 0.045; // lit edge, always *up* from the slab
+
+  static Color _shiftLightness(Color c, double delta) {
+    final hsl = HSLColor.fromColor(c);
+    return hsl.withLightness((hsl.lightness + delta).clamp(0.0, 1.0)).toColor();
+  }
+
+  factory AppColors.fromAccent(AccentPalette p) {
+    // Dark accents stack the clay upward off the page. Light accents have no
+    // headroom above (signalBlue's background is L96.5 — every step would clamp
+    // to white and the stack would vanish), so they stack downward instead. The
+    // lit edge is always lighter than its own slab: it's a highlight, not a step.
+    final dir = p.background.computeLuminance() < 0.5 ? 1.0 : -1.0;
+    final clayBg = _shiftLightness(p.background, _clayBgShift * dir);
+    final claySurface = _shiftLightness(p.background, _claySurfaceShift * dir);
+    final claySurfaceLight = _shiftLightness(claySurface, _clayEdgeShift);
+
+    // Shadow strength tracks the slab's own luminance, not the accent's name,
+    // so a new skin gets the right treatment for free. Black carries the drop on
+    // dark clay (35%) but reads as soot on light clay, so it backs off to 12%;
+    // the white rim is the inverse — 6% suffices on dark, 90% to be seen on
+    // light. Lerped rather than branched: no crossover threshold to mis-tune.
+    final t = claySurface.computeLuminance();
+
+    return AppColors(
+      cardBackground: p.cardBackground,
+      cardBorder: p.cardBorder,
+      sectionBackground: p.sectionBackground,
+      subtleText: p.subtleText,
+      divider: p.divider,
+      inputFill: p.inputFill,
+      streakOrange: p.action,
+      successGreen: p.statusSuccess,
+      avatarRing: p.avatarRing,
+      clayBg: clayBg,
+      claySurface: claySurface,
+      claySurfaceLight: claySurfaceLight,
+      clayShadowDark: Colors.black.withValues(alpha: 0.35 + (0.12 - 0.35) * t),
+      clayShadowLight: Colors.white.withValues(alpha: 0.06 + (0.90 - 0.06) * t),
+      // ponytail: subtleText is the muted ink by definition, and it clears AA on
+      // the two dark accents (emerald 5.93:1, lime 4.24:1) — but only 3.52:1 on
+      // signalBlue's lighter slab, i.e. AA-large, not AA-normal. Give it the
+      // contrast-floor treatment `tint()` already models if Step 2 puts small
+      // muted text on light clay.
+      inkMuted: p.subtleText,
+    );
+  }
 
   static AppColors of(BuildContext context) =>
       Theme.of(context).extension<AppColors>()!;
@@ -235,6 +277,17 @@ class AppColors extends ThemeExtension<AppColors> {
 }
 
 class AccentPalette {
+  /// Everything the settings picker needs to render this skin lives here, so
+  /// adding a skin is a palette edit, never a screen edit.
+  final String name;
+  final String description;
+  /// The single colour that identifies this skin in the picker. Deliberately
+  /// its own field: it is `heroBackground` on signalBlue/emeraldInk but
+  /// `avatarRing` on limeSpark (whose hero is a near-black card), so no one
+  /// existing field carries it across all three. Each palette points it at the
+  /// shared const it already uses, so the hex is still declared exactly once.
+  final Color swatch;
+
   final Color background;
   final Color cardBackground;
   final Color cardBorder;
@@ -259,6 +312,9 @@ class AccentPalette {
   final Color accentIcon;
 
   const AccentPalette({
+    required this.name,
+    required this.description,
+    required this.swatch,
     required this.background,
     required this.cardBackground,
     required this.cardBorder,
@@ -280,7 +336,12 @@ class AccentPalette {
     required this.accentIcon,
   });
 
+  static const _emeraldDeep = Color(0xFF064E3B);
+
   static const emeraldInk = AccentPalette(
+    name: 'Emerald ink',
+    description: 'Deep green with cream',
+    swatch: _emeraldDeep,
     background: Color(0xFF0B1F1A),
     cardBackground: Color(0xFF123328),
     cardBorder: Color(0xFF1F4A3A),
@@ -295,14 +356,19 @@ class AccentPalette {
     statusWarning: Color(0xFFFBBF24),  // 10.27:1 on background
     secondaryAccent: Color(0xFFA78BFA), // 6.30 bg / 5.04 card
     action: Color(0xFFEA580C),
-    heroBackground: Color(0xFF064E3B),
+    heroBackground: _emeraldDeep,
     heroText: Color(0xFFF8E7C9),
     heroTextMuted: Color(0xFFB9CFC3),
     avatarRing: Color(0xFFF8E7C9),
     accentIcon: Color(0xFFF8E7C9),
   );
 
+  static const _blueSignal = Color(0xFF0057FF);
+
   static const signalBlue = AccentPalette(
+    name: 'Signal blue',
+    description: 'Bold electric blue',
+    swatch: _blueSignal,
     background: Color(0xFFF8F7F4),
     cardBackground: Color(0xFFFFFFFF),
     cardBorder: Color(0xFFE5E7EB),
@@ -318,14 +384,19 @@ class AccentPalette {
     // the app's established purple; light accent renders these sites unchanged
     secondaryAccent: Color(0xFF7C3AED), // 5.32 bg / 5.70 card
     action: Color(0xFFEA580C),
-    heroBackground: Color(0xFF0057FF),
+    heroBackground: _blueSignal,
     heroText: Color(0xFFF8F7F4),
     heroTextMuted: Color(0xFFC7D6FF),
-    avatarRing: Color(0xFF0057FF),
-    accentIcon: Color(0xFF0057FF),
+    avatarRing: _blueSignal,
+    accentIcon: _blueSignal,
   );
 
+  static const _limeSpark = Color(0xFFB6FF2E);
+
   static const limeSpark = AccentPalette(
+    name: 'Lime spark',
+    description: 'Dark with lime accents',
+    swatch: _limeSpark,
     background: Color(0xFF1A1D24),
     cardBackground: Color(0xFF23262F),
     cardBorder: Color(0xFF2E323C),
@@ -342,9 +413,9 @@ class AccentPalette {
     action: Color(0xFFEA580C),
     heroBackground: Color(0xFF23262F),
     heroText: Color(0xFFEDEEF0),
-    heroTextMuted: Color(0xFFB6FF2E),
-    avatarRing: Color(0xFFB6FF2E),
-    accentIcon: Color(0xFFB6FF2E),
+    heroTextMuted: _limeSpark,
+    avatarRing: _limeSpark,
+    accentIcon: _limeSpark,
   );
 
   static AccentPalette forTheme(AccentTheme theme) => switch (theme) {
