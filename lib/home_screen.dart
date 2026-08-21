@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:gym_buddy_app/login_screen.dart';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/friend_service.dart';
@@ -112,6 +113,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.of(context).clayBg,
+      extendBody: true,
       body: PageView(
         controller: _tabPageController,
         physics: const PageScrollPhysics(),
@@ -304,6 +307,58 @@ List<TeamStreak> sortStreaks(List<TeamStreak> streaks, StreakSortMode mode) {
   
   debugLog('✅ SORT: Returning ${friendStreaks.length} sorted streaks');
   return friendStreaks;
+}
+
+/// Splits a ring into one arc per team member: solid in that member's colour
+/// once they have checked in today, a faint track if not. Recon confirmed teams
+/// are pairs (42 two-member, 2 one-member, never more), but this draws N arcs so
+/// a larger team degrades gracefully rather than silently mis-rendering.
+class _CheckInRingPainter extends CustomPainter {
+  final List<Color> segmentColors;
+  final List<bool> checkedIn;
+  final Color track;
+
+  static const stroke = 5.0;
+
+  const _CheckInRingPainter({
+    required this.segmentColors,
+    required this.checkedIn,
+    required this.track,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final n = segmentColors.length;
+    if (n == 0) return;
+
+    final rect = Rect.fromLTWH(
+        stroke / 2, stroke / 2, size.width - stroke, size.height - stroke);
+    // A single-member team has no seam to show, so it draws as one closed ring.
+    final gap = n == 1 ? 0.0 : 0.14;
+    final sweep = (2 * math.pi / n) - gap;
+
+    for (var i = 0; i < n; i++) {
+      final start = -math.pi / 2 + i * (2 * math.pi / n) + gap / 2;
+      final done = checkedIn[i];
+      canvas.drawArc(
+        rect,
+        start,
+        sweep,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = done ? stroke : stroke * 0.6
+          ..color = done ? segmentColors[i] : track,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CheckInRingPainter old) =>
+      old.checkedIn.toString() != checkedIn.toString() ||
+      old.segmentColors.toString() != segmentColors.toString() ||
+      old.track != track;
 }
 
 /// Brand gradient, fixed per CLAUDE.md. Coach Max's identity depends on it, so
@@ -555,12 +610,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   /// Greeting · sort · bell, a hairline rule, then the focused streak's
   /// check-in chip right-aligned under the bell.
-  Widget _buildDashboardHeader(List<dynamic>? displayItems) {
+  Widget _buildDashboardHeader() {
     final c = AppColors.of(context);
     // The clay slab is the surface here, so the greeting has to be measured
     // against it — a fixed white was invisible on light accents (1.12:1).
     final ink = c.readableForeground(c.clayBg);
-    final focused = displayItems == null ? null : _focusedOf(displayItems);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -607,54 +661,26 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           ),
         ),
         Container(height: 1, color: c.clayShadowLight),
-        if (focused is TeamStreak)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: _buildFocusedCheckInChip(focused),
-            ),
-          ),
       ],
     );
   }
 
-  /// "N/M checked in" for whichever wheel slot is focused. Same three states the
-  /// old in-card badge had, restyled as a clay pill.
-  Widget _buildFocusedCheckInChip(TeamStreak streak) {
-    final c = AppColors.of(context);
-    final checkedInCount = streak.todayCheckIns.length;
-    final totalMembers = streak.members.length;
-    final isComplete = _streakCompletionStatus[streak.id] ?? false;
-
-    final (Color role, String glyph) = isComplete
-        ? (c.success, '✓')
-        : checkedInCount == 0
-            ? (c.warn, '⚠')
-            : (c.info, '•');
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: _grad(role),
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(999),
-        boxShadow: c.clayShadow(),
-      ),
-      child: Text(
-        '$glyph $checkedInCount/$totalMembers',
-        style: TextStyle(
-          // The pill is a solid role fill, so its label is measured against the
-          // fill itself rather than against the page.
-          color: c.readableForeground(role),
-          fontSize: 13,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    );
+  /// A member's identifying colour for the check-in ring. Picked from the
+  /// accent's own identity roles by a stable hash of the user id, so a person
+  /// keeps the same colour across rebuilds and every skin stays on-palette.
+  Color _memberColor(String userId, AccentPalette p) {
+    final roles = [
+      p.avatarRing,
+      p.secondaryAccent,
+      p.statusInfo,
+      p.statusSuccess,
+      p.statusWarning,
+    ];
+    var h = 0;
+    for (final unit in userId.codeUnits) {
+      h = (h * 31 + unit) & 0x7fffffff;
+    }
+    return roles[h % roles.length];
   }
 
   /// The "Your Active Streaks (N)" entry point. The old header pill is gone, so
@@ -672,7 +698,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           children: [
             Flexible(
               child: Text(
-                'YOUR ACTIVE STREAKS ($_streakCount)',
+                'YOUR ACTIVE STREAKS',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: c.inkMuted,
@@ -793,37 +819,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       orElse: () => item.members.first,
     );
     return _buddyOnBreakToday[buddy.userId] == true;
-  }
-
-  // 🤖 Coach Max needs an AI tag wherever he's shown as a buddy.
-  bool _isCoachMaxItem(dynamic item) =>
-      item is TeamStreak && item.isCoachMaxTeam;
-
-  // ✅ HELPER METHOD: Get display name
-  String _getDisplayName(dynamic item) {
-    if (item == null) {
-      return 'Add a Workout Buddy!';
-    }
-    
-    final streak = item as TeamStreak;
-    if (streak.isCoachMaxTeam) {
-      return streak.teamName;  // "Coach Max"
-    }
-    
-    // Get friend info
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    final friendMember = streak.members.firstWhere(
-      (m) => m.userId != currentUserId,
-      orElse: () => streak.members.first,
-    );
-    
-    // Check for nickname first!
-    final nickname = _nicknames[friendMember.userId];
-    if (nickname != null && nickname.isNotEmpty) {
-      return nickname;  // Show nickname
-    }
-    
-    return friendMember.displayName;  // Fall back to display name
   }
 
   Widget _buildInfoTray() {
@@ -1334,6 +1329,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   /// Clay avatar for one wheel slot. [d] is 0.0 focused → 1.0 fully peeked.
   Widget _buildCarouselAvatar(TeamStreak streak, double d) {
     final c = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     final size = 108.0 - 32.0 * d;      // 108 focused → 76 peeked
     final focused = d < 0.5;
 
@@ -1356,8 +1352,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
-              width: size + 18,
-              height: size + 18,
+              width: size + 26,
+              height: size + 26,
               child: Stack(
                 clipBehavior: Clip.none,
                 alignment: Alignment.center,
@@ -1374,10 +1370,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
-                      // Focus ring only — not a structural border.
-                      border: focused
-                          ? Border.all(color: c.info, width: 3 * (1 - d * 2))
-                          : null,
                       boxShadow: c.clayShadow(),
                     ),
                     child: Center(
@@ -1391,6 +1383,32 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                             ),
                     ),
                   ),
+
+                  // Check-in ring: one arc per team member, filled once they
+                  // have checked in today. Reads the same members/todayCheckIns
+                  // the old floating chip did — no extra query. Focused slot
+                  // only; it fades out as the avatar peeks away.
+                  if (focused)
+                    IgnorePointer(
+                      child: Opacity(
+                        opacity: (1 - d * 2).clamp(0.0, 1.0),
+                        child: CustomPaint(
+                          size: Size(size + 14, size + 14),
+                          painter: _CheckInRingPainter(
+                            segmentColors: [
+                              for (final m in streak.members)
+                                _memberColor(m.userId, accentPalette),
+                            ],
+                            checkedIn: [
+                              for (final m in streak.members)
+                                streak.todayCheckIns
+                                    .any((ci) => ci.userId == m.userId),
+                            ],
+                            track: c.claySurfaceLight,
+                          ),
+                        ),
+                      ),
+                    ),
 
                   // 🤖 AI disclosure — Coach Max shares this wheel with real
                   // buddies, so the tag has to ride on the avatar itself.
@@ -1500,6 +1518,33 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
+  // ✅ HELPER METHOD: Get display name
+  String _getDisplayName(dynamic item) {
+    if (item == null) {
+      return 'Add a Workout Buddy!';
+    }
+    
+    final streak = item as TeamStreak;
+    if (streak.isCoachMaxTeam) {
+      return streak.teamName;  // "Coach Max"
+    }
+    
+    // Get friend info
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final friendMember = streak.members.firstWhere(
+      (m) => m.userId != currentUserId,
+      orElse: () => streak.members.first,
+    );
+    
+    // Check for nickname first!
+    final nickname = _nicknames[friendMember.userId];
+    if (nickname != null && nickname.isNotEmpty) {
+      return nickname;  // Show nickname
+    }
+    
+    return friendMember.displayName;  // Fall back to display name
+  }
+
   Widget _buildAddFriendPlaceholder(double d) {
     final c = AppColors.of(context);
     final size = 108.0 - 32.0 * d;
@@ -1590,39 +1635,21 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       ),
       child: Column(
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  _getDisplayName(focused).toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: c.inkMuted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.6,
-                  ),
-                ),
+          // The wheel already names and pictures whoever is focused, so the
+          // card leads with the number instead of repeating the name.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              streak != null
+                  ? '${streak.currentStreak} DAY STREAK'
+                  : '— DAY STREAK',
+              maxLines: 1,
+              style: TextStyle(
+                color: streak != null ? ink : c.inkMuted,
+                fontSize: 36,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
               ),
-              if (_isCoachMaxItem(focused)) ...[
-                const SizedBox(width: 6),
-                const AiInlinePill(),
-              ],
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            streak != null
-                ? '${streak.currentStreak} DAY STREAK'
-                : '— DAY STREAK',
-            style: TextStyle(
-              color: streak != null ? ink : c.inkMuted,
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.5,
             ),
           ),
           if (_isBuddyOnBreak(focused)) ...[
@@ -1673,7 +1700,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Text(
-                  '🌙 Take a break day',
+                  'Take a break day',
                   style: TextStyle(
                     color: c.inkMuted,
                     fontSize: 13,
@@ -1718,7 +1745,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   child: CircularProgressIndicator(strokeWidth: 3, color: label),
                 )
               : Text(
-                  done ? '✓ Checked In!' : '🔥 Check In',
+                  done ? 'Checked In' : 'Check In',
                   style: TextStyle(
                     color: label,
                     fontSize: 17,
@@ -2581,9 +2608,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _buildDashboardHeader(displayItems),
+                      _buildDashboardHeader(),
                       Expanded(
                         child: SingleChildScrollView(
+                          // The nav bar floats over the body (extendBody), so
+                          // reserve its height or the last card hides under it.
+                          padding: EdgeInsets.only(
+                            bottom: 62 + MediaQuery.paddingOf(context).bottom,
+                          ),
                           child: _buildDashboardBody(displayItems),
                         ),
                       ),
@@ -2868,13 +2900,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   String _getGreeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) {
-      return 'Good Morning! ☀️';
+      return 'Good Morning';
     } else if (hour < 17) {
-      return 'Good Afternoon! 👋';
+      return 'Good Afternoon';
     } else if (hour < 21) {
-      return 'Good Evening! 🌆';
+      return 'Good Evening';
     } else {
-      return 'Good Night! 🌙';
+      return 'Good Night';
     }
   }
 
@@ -6807,31 +6839,26 @@ class _GymBuddyNavBar extends StatelessWidget {
 
     @override
     Widget build(BuildContext context) {
-      final appColors = AppColors.of(context);
-      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final c = AppColors.of(context);
+      // Same clay language as the cards above it: raised slab, dual shadow,
+      // rounded top so the bar reads as part of one surface system.
+      final inactiveColor = c.inkMuted;
+      final activeColor = c.readableForeground(c.claySurface);
 
-      final navBg = isDark
-          ? const Color(0xFF0F0F1A)
-          : const Color(0xFFFFFFFF);
-      final borderColor = isDark
-          ? const Color(0xFF2A2A3E)
-          : const Color(0xFFE5E7EB);
-      final inactiveColor = isDark
-          ? const Color(0xFF4B4B6B)
-          : const Color(0xFFADADB8);
-      final activeColor = isDark
-          ? Colors.white
-          : const Color(0xFF1D4ED8);
-
-      return SafeArea(
-        child: Container(
-          height: 60,
-          decoration: BoxDecoration(
-            color: navBg,
-            border: Border(
-              top: BorderSide(color: borderColor, width: 0.5),
-            ),
+      return Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [c.claySurfaceLight, c.claySurface],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
           ),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+          boxShadow: c.clayShadow(),
+        ),
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 62,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -6892,7 +6919,8 @@ class _GymBuddyNavBar extends StatelessWidget {
                   onTabSelected(4);
                 },
               ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -6950,6 +6978,7 @@ class _FireNavButton extends StatelessWidget {
 
     @override
     Widget build(BuildContext context) {
+      final c = AppColors.of(context);
       return Semantics(
         label: 'Streaks',
         button: true,
@@ -6958,25 +6987,22 @@ class _FireNavButton extends StatelessWidget {
           child: Transform.translate(
             offset: const Offset(0, -10),
             child: Container(
-              width: 52,
-              height: 52,
+              width: 54,
+              height: 54,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFF97316), Color(0xFFDC2626)],
+                // Same action gradient as the Check In CTA, so the hero button
+                // and the hero action read as one thing.
+                gradient: LinearGradient(
+                  colors: c.actionGradient,
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFF97316).withOpacity(isActive ? 0.55 : 0.35),
-                    blurRadius: isActive ? 18 : 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: c.clayShadow(inset: isActive),
               ),
-              child: const Center(
-                child: const Icon(Icons.local_fire_department, color: Colors.white, size: 35),
+              child: Center(
+                child: Icon(Icons.local_fire_department,
+                    color: c.readableForeground(c.streakOrange), size: 32),
               ),
             ),
           ),
