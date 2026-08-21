@@ -385,8 +385,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   /// In favourites mode this is a *filtered* subset — use [_streakCount] for
   /// labels so a mode with no matches never reads as "no streaks".
   List<TeamStreak> get _listStreaks => sortStreaks(_allStreaks, _streakSortMode);
-  /// Total sortable streaks (friends only), independent of sort/filter mode.
-  int get _streakCount => _allStreaks.where((s) => !s.isCoachMaxTeam).length;
   List<Map<String, dynamic>> _todaysWorkouts = [];
   bool _hasCheckedInToday = false;
   bool _isLoading = true;
@@ -1336,13 +1334,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final focused = d < 0.5;
 
     // Get the friend's info
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    final friendMember = streak.isCoachMaxTeam
-        ? null
-        : streak.members.firstWhere(
-            (m) => m.userId != currentUserId,
-            orElse: () => streak.members.first,
-          );
+    final friendMember = streak.isCoachMaxTeam ? null : _buddyOf(streak);
 
     return Opacity(
       opacity: 1.0 - 0.4 * d,            // 1.0 focused → 0.6 peeked
@@ -1520,6 +1512,20 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
+  /// The other member of a two-person team, or null if the viewer is the only
+  /// member. `get_user_streaks` filters solo teams out (migration
+  /// 20260821223910), so null should be unreachable from the RPC path — but
+  /// `_getTeamStreakData` builds TeamStreaks without that filter, and the old
+  /// `orElse: members.first` failed by handing back the *viewer*, i.e. showing
+  /// you to yourself as your own buddy. Failing visibly beats failing silently.
+  TeamMember? _buddyOf(TeamStreak streak) {
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    for (final m in streak.members) {
+      if (m.userId != currentUserId) return m;
+    }
+    return null;
+  }
+
   // ✅ HELPER METHOD: Get display name
   String _getDisplayName(dynamic item) {
     if (item == null) {
@@ -1532,12 +1538,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
     
     // Get friend info
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    final friendMember = streak.members.firstWhere(
-      (m) => m.userId != currentUserId,
-      orElse: () => streak.members.first,
-    );
-    
+    final friendMember = _buddyOf(streak);
+    if (friendMember == null) return 'Add a Workout Buddy!';
+
     // Check for nickname first!
     final nickname = _nicknames[friendMember.userId];
     if (nickname != null && nickname.isNotEmpty) {
