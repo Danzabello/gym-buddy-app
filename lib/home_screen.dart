@@ -1795,15 +1795,39 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     // break_day_service and safe_user_tz() server-side.
     final today = localTodayString();
 
-    // Check if already took break today (uncancelled — a cancelled break
-    // can be legitimately re-declared through the capped RPC)
-    final existingBreak = await Supabase.instance.client
-        .from('break_day_usage')  // ✅ FIXED: Changed from 'break_days'
-        .select()
-        .eq('user_id', currentUserId)
-        .eq('break_date', today)
-        .isFilter('cancelled_at', null)
-        .maybeSingle();
+    // Local week boundary (via getWeekStart), same frame as the now-local
+    // break_date keys.
+    final startOfWeekStr = _breakDayService
+        .getWeekStart(DateTime.now())
+        .toIso8601String()
+        .split('T')[0];
+
+    // All three queries depend only on currentUserId + these locally-computed
+    // dates, not on each other's results, so they can fire concurrently
+    // instead of round-tripping one at a time.
+    final (existingBreak, userProfile, breaksThisWeek) = await (
+      // Already took break today (uncancelled — a cancelled break can be
+      // legitimately re-declared through the capped RPC)
+      Supabase.instance.client
+          .from('break_day_usage')  // ✅ FIXED: Changed from 'break_days'
+          .select()
+          .eq('user_id', currentUserId)
+          .eq('break_date', today)
+          .isFilter('cancelled_at', null)
+          .maybeSingle(),
+      // Weekly plan, to know the goal breaks are counted against
+      Supabase.instance.client
+          .from('user_profiles')
+          .select('current_weekly_goal')
+          .eq('id', currentUserId)
+          .single(),
+      // Breaks already taken this week
+      Supabase.instance.client
+          .from('break_day_usage')  // ✅ FIXED: Changed from 'break_days'
+          .select()
+          .eq('user_id', currentUserId)
+          .gte('break_date', startOfWeekStr),
+    ).wait;
 
     if (existingBreak != null) {
       if (!mounted) return;
@@ -1816,30 +1840,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       return;
     }
 
-    // Get weekly plan and count breaks used this week
-    final userProfile = await Supabase.instance.client
-        .from('user_profiles')
-        .select('current_weekly_goal')
-        .eq('id', currentUserId)
-        .single();
-
     final weeklyBreakGoal = userProfile['current_weekly_goal'] ?? 2;
-
-
-
-    // Count breaks taken this week. Local week boundary (via getWeekStart),
-    // same frame as the now-local break_date keys.
-    final startOfWeekStr = _breakDayService
-        .getWeekStart(DateTime.now())
-        .toIso8601String()
-        .split('T')[0];
-
-    final breaksThisWeek = await Supabase.instance.client
-        .from('break_day_usage')  // ✅ FIXED: Changed from 'break_days'
-        .select()
-        .eq('user_id', currentUserId)
-        .gte('break_date', startOfWeekStr);
-
     final breakDaysLeft = weeklyBreakGoal - breaksThisWeek.length;
 
     if (!mounted) return;
