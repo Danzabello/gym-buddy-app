@@ -1831,98 +1831,136 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     if (!mounted) return;
 
     // Show dialog
+    final c = AppColors.of(context);
+    final accentPalette = context.read<AccentThemeProvider>().palette;
+    final hasBreaks = breakDaysLeft > 0;
+    final role = hasBreaks ? accentPalette.statusInfo : accentPalette.statusDanger;
+    final roleTint = c.tint(role, surface: c.claySurface);
+    final onCard = c.readableForeground(c.claySurface);
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.blue[100],
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.bedtime,
-                color: Colors.blue[700],
-                size: 28,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Text('Take a Break Day?'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: breakDaysLeft > 0 ? Colors.blue[50] : Colors.red[50],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: breakDaysLeft > 0 ? Colors.blue[200]! : Colors.red[200]!,
-                  width: 2,
-                ),
-              ),
-              child: Row(
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: c.claySurface,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: c.clayShadow(),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Text(
-                    '$breakDaysLeft',
-                    style: TextStyle(
-                      fontSize: 48,
-                      fontWeight: FontWeight.bold,
-                      color: breakDaysLeft > 0 ? Colors.blue[700] : Colors.red[700],
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: roleTint,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: c.clayShadow(inset: true),
                     ),
+                    child: Icon(Icons.bedtime, color: role, size: 26),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'break day${breakDaysLeft == 1 ? '' : 's'} left\nuntil next week',
+                      'Take a Break Day?',
                       style: TextStyle(
-                        fontSize: 14,
-                        color: breakDaysLeft > 0 ? Colors.blue[900] : Colors.red[900],
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: onCard,
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              breakDaysLeft > 0
-                  ? 'Taking a break counts as your workout for today without breaking your streak.'
-                  : 'You\'ve used all your break days this week. Check back Monday!',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[700],
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: roleTint,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: c.clayShadow(inset: true),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      '$breakDaysLeft',
+                      style: TextStyle(
+                        fontSize: 48,
+                        fontWeight: FontWeight.bold,
+                        color: role,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        'break day${breakDaysLeft == 1 ? '' : 's'} left\nuntil next week',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: role,
+                          fontWeight: FontWeight.w600,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              Text(
+                hasBreaks
+                    ? 'Taking a break counts as your workout for today without breaking your streak.'
+                    : 'You\'ve used all your break days this week. Check back Monday!',
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.5,
+                  color: c.subtleText,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: Text('Cancel', style: TextStyle(color: c.subtleText)),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: hasBreaks ? c.clayShadow() : null,
+                    ),
+                    child: ElevatedButton(
+                      onPressed: hasBreaks
+                          ? () => Navigator.pop(context, true)
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: accentPalette.statusInfo,
+                        foregroundColor: c.readableForeground(accentPalette.statusInfo),
+                        disabledBackgroundColor: c.sectionBackground,
+                        disabledForegroundColor: c.subtleText,
+                        elevation: 0,
+                        shadowColor: Colors.transparent,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text('Yes, Take Break'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: breakDaysLeft > 0 
-                ? () => Navigator.pop(context, true)
-                : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue[700],
-              disabledBackgroundColor: Colors.grey[300],
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
-            child: const Text('Yes, Take Break'),
-          ),
-        ],
       ),
     );
 
