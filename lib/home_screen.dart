@@ -13,7 +13,6 @@ import 'package:flutter/services.dart';
 import 'widgets/user_avatar.dart';
 import 'services/team_sync_service.dart';
 import 'package:flutter/foundation.dart';
-import 'widgets/break_day_section.dart';
 import 'services/break_day_service.dart';
 import 'widgets/friends_page_modern.dart';
 import 'widgets/workout_invites_card.dart';
