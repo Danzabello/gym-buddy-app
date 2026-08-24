@@ -816,6 +816,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
   // ── Template card ─────────────────────────────────────────────
   Widget _buildTemplateCard(WorkoutTemplate template) {
     final colors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -837,66 +838,104 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
           borderRadius: BorderRadius.circular(14),
           child: Padding(
             padding: const EdgeInsets.all(14),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: colors.streakOrange.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Text(template.emoji,
-                        style: const TextStyle(fontSize: 26)),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        template.name,
-                        style: const TextStyle(
-                          fontSize: 16,
+                Row(
+                  children: [
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: colors.streakOrange.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Center(
+                        child: Text(template.emoji,
+                            style: const TextStyle(fontSize: 26)),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            template.name,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (template.description != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              template.description!,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: colors.subtleText,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: colors.streakOrange.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${template.defaultDurationMinutes}m',
+                        style: TextStyle(
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
+                          color: colors.streakOrange,
                         ),
                       ),
-                      if (template.description != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          template.description!,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: colors.subtleText,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(Icons.chevron_right,
+                        size: 20, color: colors.subtleText),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: colors.streakOrange.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    '${template.defaultDurationMinutes}m',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: colors.streakOrange,
+                // TODO: remove before release — test-only 1-min duration
+                // chip so check-in testing doesn't require waiting out a
+                // real workout's duration. Deliberately styled apart from
+                // the real duration pill above (danger role, not the
+                // orange accent) so it can't be mistaken for one.
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.pop(context);
+                      widget.onWorkoutSelected(template, 1, null, []);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: colors.tint(accentPalette.statusDanger),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: accentPalette.statusDanger),
+                      ),
+                      child: Text(
+                        '🧪 Test (1 min)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: accentPalette.statusDanger,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 6),
-                Icon(Icons.chevron_right, size: 20, color: colors.subtleText),
               ],
             ),
           ),
