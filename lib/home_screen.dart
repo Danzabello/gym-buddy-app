@@ -389,6 +389,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   bool _isLoading = true;
   bool _isCheckingIn = false;
   bool _isRefreshing = false;
+  bool _isBreakDialogOpen = false;
   static bool _weeklyPlanCheckedThisSession = false;
 
 
@@ -1762,6 +1763,20 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   Future<void> _showTakeBreakDialog() async {
+    // Guard against a second tap re-entering this method while a dialog from
+    // a prior call is still open or its pre-checks are still in flight —
+    // without it, rapid double-tap stacks two Dialogs and Cancel only closes
+    // the top one.
+    if (_isBreakDialogOpen) return;
+    _isBreakDialogOpen = true;
+    try {
+      await _showTakeBreakDialogBody();
+    } finally {
+      _isBreakDialogOpen = false;
+    }
+  }
+
+  Future<void> _showTakeBreakDialogBody() async {
     // ✅ NEW: Can't take break if already checked in
     if (_hasCheckedInToday) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1772,7 +1787,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       );
       return;
     }
-    
+
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
     if (currentUserId == null) return;
 
