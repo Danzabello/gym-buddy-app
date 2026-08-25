@@ -708,7 +708,11 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     final notChecked = _notCheckedInFriends;
 
     return ListView(
-      padding: const EdgeInsets.only(bottom: 20),
+      // The nav bar floats over the body (extendBody), so
+      // reserve its height or the last card hides under it.
+      padding: EdgeInsets.only(
+        bottom: 20 + 62 + MediaQuery.paddingOf(context).bottom,
+      ),
       children: [
         // ── Summary tiles ──────────────────────────────────
         Padding(
