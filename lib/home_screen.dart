@@ -527,6 +527,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   Map<String, Map<String, dynamic>> _presenceState = {};
   List<String> _friendIds = [];
 
+  // Live check-in feed for the streak rings — separate from the presence
+  // channel above (that's online/working-out state, not DB rows). RLS on
+  // daily_team_checkins already scopes each subscriber to their own teams
+  // and accepted friends, so no extra client-side filter is needed here.
+  RealtimeChannel? _checkinChannel;
+
 
 
   @override
@@ -551,6 +557,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         if (mounted) setState(() => _presenceState = state);
     };
     _presenceService.join();
+    _subscribeToCheckIns();
 
     // ✅ ENTRANCE ANIMATION SETUP
     _carouselEntranceController = AnimationController(
@@ -606,8 +613,106 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _trayController.dispose();
     _countdownTimer?.cancel();
     _presenceService.leave();
+    if (_checkinChannel != null) {
+      _supabase.removeChannel(_checkinChannel!);
+    }
     super.dispose();
   }
+
+  /// Live feed for the streak rings: a buddy's check-in lands here as a
+  /// daily_team_checkins INSERT and gets folded into _allStreaks so the
+  /// ring fills in without a manual refresh. Table is insert-only in
+  /// practice (verified — every write path in this codebase is `.insert`),
+  /// so INSERT is the only event this subscribes to.
+  void _subscribeToCheckIns() {
+    _checkinChannel = _supabase
+        .channel('dashboard_checkins')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'daily_team_checkins',
+          callback: (payload) {
+            if (kDebugMode) {
+              debugLog('📡 Realtime check-in event: ${payload.newRecord}');
+            }
+            _handleRealtimeCheckIn(payload.newRecord);
+          },
+        )
+        .subscribe();
+  }
+
+  void _handleRealtimeCheckIn(Map<String, dynamic> row) {
+    final teamStreakId = row['team_streak_id'] as String?;
+    final userId = row['user_id'] as String?;
+    final checkInDateRaw = row['check_in_date'] as String?;
+    final checkInTimeRaw = row['check_in_time'] as String?;
+    if (teamStreakId == null || userId == null || checkInDateRaw == null) {
+      return;
+    }
+
+    DateTime checkInDate;
+    try {
+      checkInDate = DateTime.parse(checkInDateRaw);
+    } catch (_) {
+      return;
+    }
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (!DateTime(checkInDate.year, checkInDate.month, checkInDate.day)
+        .isAtSameMomentAs(today)) {
+      return; // Not today's check-in (or a differently-dated row) — ignore.
+    }
+
+    final streakIndex = _allStreaks.indexWhere((s) => s.id == teamStreakId);
+    if (streakIndex == -1) return; // Not one of the viewer's own streaks.
+
+    final streak = _allStreaks[streakIndex];
+    if (streak.todayCheckIns.any((ci) => ci.userId == userId)) {
+      return; // Already reflected (e.g. own check-in via the normal flow).
+    }
+
+    final member = streak.members.firstWhere(
+      (m) => m.userId == userId,
+      orElse: () =>
+          TeamMember(userId: userId, displayName: 'Unknown', isCoachMax: false),
+    );
+    final checkInTime = checkInTimeRaw != null
+        ? DateTime.tryParse(checkInTimeRaw) ?? now
+        : now;
+
+    final updatedCheckIns = [
+      ...streak.todayCheckIns,
+      CheckInStatus(
+        userId: userId,
+        displayName: member.displayName,
+        checkInTime: checkInTime,
+        order: streak.todayCheckIns.length + 1,
+      ),
+    ];
+
+    final updatedStreak = TeamStreak(
+      id: streak.id,
+      teamId: streak.teamId,
+      teamName: streak.teamName,
+      teamEmoji: streak.teamEmoji,
+      currentStreak: streak.currentStreak,
+      longestStreak: streak.longestStreak,
+      totalWorkouts: streak.totalWorkouts,
+      bestStreak: streak.bestStreak,
+      lastWorkoutDate: streak.lastWorkoutDate,
+      lastInteractionAt: streak.lastInteractionAt,
+      isCoachMaxTeam: streak.isCoachMaxTeam,
+      members: streak.members,
+      todayCheckIns: updatedCheckIns,
+      isFavorite: streak.isFavorite,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _allStreaks = [..._allStreaks]..[streakIndex] = updatedStreak;
+    });
+  }
+
 
   /// The wheel's slots: top 4 friends by the active sort + Coach Max.
   /// Returns null when there is nothing to show a wheel for — the caller
