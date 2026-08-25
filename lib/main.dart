@@ -19,6 +19,7 @@ import 'theme/app_theme.dart';
 import 'theme/accent_theme_provider.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/timezone_sync.dart';
+import 'widgets/live_event_toast.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,6 +45,9 @@ class GymBuddyApp extends StatelessWidget {
         builder: (context, accentProvider, _) {
           return MaterialApp(
             title: 'Gym Buddy',
+            // Lets NotificationService reach an Overlay with no BuildContext,
+            // so a foreground push can toast over whatever screen is showing.
+            navigatorKey: appNavigatorKey,
             theme: AppTheme.fromAccent(accentProvider.palette),
             home: const AuthWrapper(),
             debugShowCheckedModeBanner: false,

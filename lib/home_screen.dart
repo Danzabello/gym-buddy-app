@@ -45,6 +45,7 @@ import 'theme/accent_theme_provider.dart';
 import 'data/coach_tips.dart';
 import 'services/presence_service.dart';
 import 'services/notification_service.dart';
+import 'widgets/live_event_toast.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
 
@@ -533,6 +534,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   // and accepted friends, so no extra client-side filter is needed here.
   RealtimeChannel? _checkinChannel;
 
+  // Live check-in banner — same trigger as the ring fill above, gated by the
+  // live_checkin_banner setting (cached once on load).
+  TeamMember? _bannerBuddy;
+  int _bannerRequestId = 0;
 
 
   @override
@@ -710,6 +715,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     if (!mounted) return;
     setState(() {
       _allStreaks = [..._allStreaks]..[streakIndex] = updatedStreak;
+      // Banner is only ever for a buddy's check-in, never the viewer's own
+      // — that path already has its own on-screen feedback.
+      if (userId != _supabase.auth.currentUser?.id) {
+        _bannerBuddy = member;
+        _bannerRequestId++;
+      }
     });
   }
 
@@ -2945,6 +2956,24 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             ],
           ),
         ),
+        if (_bannerBuddy != null)
+          LiveEventToastCard(
+            key: ValueKey(_bannerRequestId),
+            leading: ClipOval(
+              child: UserAvatar(
+                avatarId: _bannerBuddy!.avatarId ?? 'avatar_1',
+                size: 40,
+              ),
+            ),
+            accentPrefix: _nicknames[_bannerBuddy!.userId]?.isNotEmpty == true
+                ? _nicknames[_bannerBuddy!.userId]!
+                : _bannerBuddy!.displayName,
+            title: ' just checked in 🔥',
+            subtitle: 'Your streak is safe today',
+            onDismissed: () {
+              if (mounted) setState(() => _bannerBuddy = null);
+            },
+          ),
       ],
     );
   }
