@@ -2534,14 +2534,31 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             // A session linked to a workouts row must complete that row too —
             // otherwise it hangs in_progress until the 3-hour sweep, blocking
             // both users and losing the partner-completion credit.
+            //
+            // completeWorkoutWithDuration and checkInAllTeams don't depend on
+            // each other's results (verified: checkInAllTeams and everything
+            // it calls never touch the workouts table), so they run
+            // concurrently. Workout achievements DO read workouts.status —
+            // so that check is pulled out and sequenced after both finish,
+            // never run from inside checkInAllTeams itself.
+            final Map<String, dynamic> result;
             if (linkedWorkoutId != null) {
-              await _workoutService.completeWorkoutWithDuration(linkedWorkoutId);
+              final results = await (
+                _workoutService.completeWorkoutWithDuration(linkedWorkoutId),
+                _teamStreakService.checkInAllTeams(
+                  workoutName: activeSession['workout_type'] ?? 'Workout',
+                  workoutEmoji: activeSession['workout_emoji'] ?? '💪',
+                  durationMinutes: activeSession['planned_duration'] ?? 30,
+                ),
+              ).wait;
+              result = results.$2;
+            } else {
+              result = await _teamStreakService.checkInAllTeams(
+                workoutName: activeSession['workout_type'] ?? 'Workout',
+                workoutEmoji: activeSession['workout_emoji'] ?? '💪',
+                durationMinutes: activeSession['planned_duration'] ?? 30,
+              );
             }
-            final result = await _teamStreakService.checkInAllTeams(
-              workoutName: activeSession['workout_type'] ?? 'Workout',
-              workoutEmoji: activeSession['workout_emoji'] ?? '💪',
-              durationMinutes: activeSession['planned_duration'] ?? 30,
-            );
 
             if (result['success'] == true) {
               HapticFeedback.heavyImpact();
@@ -2558,13 +2575,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 ),
               );
 
-              // 🏆 Show workout achievement toasts
-              final workoutAchievements = result['workout_achievements'];
-              if (workoutAchievements is List && workoutAchievements.isNotEmpty && mounted) {
-                AchievementToast.show(
-                  context,
-                  List<AchievementUnlockResult>.from(workoutAchievements),
+              // 🏆 Show workout achievement toasts — checked now that both
+              // completeWorkoutWithDuration and checkInAllTeams are done.
+              if ((result['teams_updated'] as int? ?? 0) > 0) {
+                final workoutAchievements = await AchievementService().checkWorkoutAchievements(
+                  durationMinutes: activeSession['planned_duration'] ?? 30,
+                  workoutType: activeSession['workout_type'] ?? 'Workout',
                 );
+                if (workoutAchievements.isNotEmpty && mounted) {
+                  AchievementToast.show(context, workoutAchievements);
+                }
               }
 
               await _loadStreakData();
@@ -3640,13 +3660,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             ),
           );
 
-          // 🏆 Show workout achievement toasts
-          final workoutAchievements = result['workout_achievements'];
-          if (workoutAchievements is List && workoutAchievements.isNotEmpty && mounted) {
-            AchievementToast.show(
-              context,
-              List<AchievementUnlockResult>.from(workoutAchievements),
+          // 🏆 Show workout achievement toasts — no linked workouts row on
+          // this flow, so there's no completeWorkoutWithDuration to wait on.
+          if ((result['teams_updated'] as int? ?? 0) > 0) {
+            final workoutAchievements = await AchievementService().checkWorkoutAchievements(
+              durationMinutes: selectedDuration!,
+              workoutType: selectedTemplate!.name,
             );
+            if (workoutAchievements.isNotEmpty && mounted) {
+              AchievementToast.show(context, workoutAchievements);
+            }
           }
 
           await _loadStreakData();
@@ -4364,19 +4387,30 @@ class _SchedulePageState extends State<SchedulePage> {
       workoutEmoji: workoutEmoji,
       plannedDuration: plannedDuration,
       onCheckInComplete: () async {
-        // Complete the scheduled workout
-        await _workoutService.completeWorkoutWithDuration(workoutId);
-        
-        // Also check in to all team streaks (this makes the buddy workout count!)
+        // Complete the scheduled workout and check in to all team streaks
+        // concurrently — neither depends on the other's result. Workout
+        // achievements DO read workouts.status though, so that check is
+        // sequenced after both finish rather than run from inside
+        // checkInAllTeams itself.
         final teamStreakService = TeamStreakService();
-        final result = await teamStreakService.checkInAllTeams(
-          workoutName: workoutType,
-          workoutEmoji: workoutEmoji,
-          durationMinutes: plannedDuration,
-        );
+        final results = await (
+          _workoutService.completeWorkoutWithDuration(workoutId),
+          teamStreakService.checkInAllTeams(
+            workoutName: workoutType,
+            workoutEmoji: workoutEmoji,
+            durationMinutes: plannedDuration,
+          ),
+        ).wait;
+        final result = results.$2;
 
         if (result['success'] == true) {
           HapticFeedback.heavyImpact();
+          if ((result['teams_updated'] as int? ?? 0) > 0) {
+            await AchievementService().checkWorkoutAchievements(
+              durationMinutes: plannedDuration,
+              workoutType: workoutType,
+            );
+          }
         }
         return result['partner_bonus_earned'] == true;
       },
@@ -4545,6 +4579,14 @@ class _SchedulePageState extends State<SchedulePage> {
           if (creatorId == currentUserId) {
             final userResult = await teamStreakService.checkInAllTeams();
             debugLog('✅ Creator (current user) check-in: ${userResult['message']}');
+            // completeWorkoutWithDuration already ran above, sequentially,
+            // before this — workouts.status is safely 'completed' by now.
+            if ((userResult['teams_updated'] as int? ?? 0) > 0) {
+              await AchievementService().checkWorkoutAchievements(
+                durationMinutes: 0,
+                workoutType: 'workout',
+              );
+            }
           } else {
             final result = await teamStreakService.checkInAllTeamsForUser(creatorId, workoutId: workoutId);
             debugLog('✅ Creator check-in: Checked in to $result teams');
@@ -4562,6 +4604,14 @@ class _SchedulePageState extends State<SchedulePage> {
           } else if (workoutBuddyId == currentUserId) {
             final userResult = await teamStreakService.checkInAllTeams();
             debugLog('✅ Buddy (current user) check-in: ${userResult['message']}');
+            // completeWorkoutWithDuration already ran above, sequentially,
+            // before this — workouts.status is safely 'completed' by now.
+            if ((userResult['teams_updated'] as int? ?? 0) > 0) {
+              await AchievementService().checkWorkoutAchievements(
+                durationMinutes: 0,
+                workoutType: 'workout',
+              );
+            }
           } else {
             final result = await teamStreakService.checkInAllTeamsForUser(workoutBuddyId, workoutId: workoutId);
             debugLog('✅ Buddy check-in: Checked in to $result teams');

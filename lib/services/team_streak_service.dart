@@ -523,14 +523,11 @@ class TeamStreakService {
         debugLog('✅ Checked in to $successCount/${streaks.length} teams');
       }
 
-      // 🏆 Workout achievements
-      List<AchievementUnlockResult> workoutAchievements = [];
-      if (successCount > 0) {
-        workoutAchievements = await AchievementService().checkWorkoutAchievements(
-          durationMinutes: durationMinutes ?? 0,
-          workoutType: workoutName ?? 'workout',
-        );
-      }
+      // 🏆 Workout achievements are checked by the caller, after this
+      // returns — they read the `workouts` table (status = 'completed'),
+      // which for linked-workout flows is written by a concurrent
+      // completeWorkoutWithDuration() call, so they can't safely run from
+      // inside here without an ordering guarantee this function can't make.
 
       final partnerBonusTransaction = await _supabase
           .from('coin_transactions')
@@ -547,7 +544,6 @@ class TeamStreakService {
         'break_cancelled': onBreak,
         'level_up': levelUpResult,
         'partner_bonus_earned': partnerBonusTransaction != null,
-        'workout_achievements': workoutAchievements,
       };
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error checking in: $e');
