@@ -72,6 +72,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _tabPageController = PageController(initialPage: 2);
+    // Dashboard is the landing tab. Kept in sync on every tab change so a
+    // buddy_checked_in push knows whether the dashboard's own realtime banner
+    // is already visibly handling that event.
+    LiveEventToast.dashboardTabActive = true;
     _pages = [
       const SchedulePage(),
       const FriendsPageModern(),
@@ -84,6 +88,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _tabPageController.dispose();
+    LiveEventToast.dashboardTabActive = false;
     super.dispose();
   }
 
@@ -93,6 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _selectedIndex = index;
     });
+    LiveEventToast.dashboardTabActive = index == 2;
 
     // Animate tab PageView if not already on the right page
     if (_tabPageController.hasClients &&
@@ -122,6 +128,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onPageChanged: (index) {
           if (index != _selectedIndex) {
             setState(() => _selectedIndex = index);
+            LiveEventToast.dashboardTabActive = index == 2;
             if (index == 2 && _selectedIndex == 1) {
               _dashboardKey.currentState?._syncTeamCheckIns();
               _dashboardKey.currentState?._loadStreakData();

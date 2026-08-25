@@ -5,6 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import '../widgets/live_event_toast.dart';
 
 // Handle background messages (must be top-level function)
 @pragma('vm:entry-point')
@@ -144,27 +145,30 @@ class NotificationService {
     }
   }
 
+  /// The app is already on screen, so a system-tray popup is redundant — show
+  /// an in-app toast in the navigator overlay instead, on whatever screen the
+  /// user is on. No category filtering here: send-notification has already
+  /// checked the user's settings before the push was ever sent.
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     debugLog('🔔 Foreground message: ${message.notification?.title}');
 
     final notification = message.notification;
     if (notification == null) return;
 
-    await _localNotifications.show(
-      notification.hashCode,
-      notification.title,
-      notification.body,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          _channel.id,
-          _channel.name,
-          channelDescription: _channel.description,
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-      ),
-      payload: message.data['type'],
+    final type = message.data['type'] as String?;
+
+    // A buddy check-in fires this push AND the dashboard's realtime banner off
+    // the same row insert. When that banner is visibly handling it, stand down
+    // rather than stacking a second one.
+    if (type == 'buddy_checked_in' && LiveEventToast.dashboardOwnsCheckIns) {
+      debugLog('⏭️ Skipping toast — dashboard banner owns buddy_checked_in');
+      return;
+    }
+
+    LiveEventToast.show(
+      title: notification.title ?? 'Gym Buddy',
+      subtitle: notification.body,
+      icon: LiveEventToast.iconForType(type),
     );
   }
 
