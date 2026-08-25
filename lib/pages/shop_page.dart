@@ -360,7 +360,12 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                   return RefreshIndicator(
                     onRefresh: _loadData,
                     child: GridView.builder(
-                      padding: const EdgeInsets.all(16),
+                      // The nav bar floats over the body (extendBody), so
+                      // reserve its height or the last row hides under it.
+                      padding: EdgeInsets.fromLTRB(
+                        16, 16, 16,
+                        16 + 62 + MediaQuery.paddingOf(context).bottom,
+                      ),
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,

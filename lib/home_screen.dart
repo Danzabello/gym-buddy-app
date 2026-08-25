@@ -5310,7 +5310,11 @@ class _ProfilePageState extends State<ProfilePage>
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.zero,
+          // The nav bar floats over the body (extendBody), so
+          // reserve its height or the last card hides under it.
+          padding: EdgeInsets.only(
+            bottom: 62 + MediaQuery.paddingOf(context).bottom,
+          ),
           children: [
             _buildHero(
               name: name, year: year, avatarId: avatarId,
