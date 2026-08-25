@@ -222,5 +222,6 @@ class NotificationService {
         'quiet_hours_enabled': true,
         'quiet_hours_start': 23,
         'quiet_hours_end': 7,
+        'live_checkin_banner': true,
       };
 }

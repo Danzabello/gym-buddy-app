@@ -538,6 +538,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   // live_checkin_banner setting (cached once on load).
   TeamMember? _bannerBuddy;
   int _bannerRequestId = 0;
+  bool _liveCheckinBannerEnabled = true;
 
 
   @override
@@ -563,6 +564,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     };
     _presenceService.join();
     _subscribeToCheckIns();
+    _loadLiveCheckinBannerSetting();
 
     // ✅ ENTRANCE ANIMATION SETUP
     _carouselEntranceController = AnimationController(
@@ -646,6 +648,21 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         .subscribe();
   }
 
+  /// Cached once on load per the settings toggle (notification_settings_page
+  /// .dart) — _handleRealtimeCheckIn reads the cached flag, no refetch per
+  /// event.
+  Future<void> _loadLiveCheckinBannerSetting() async {
+    final settings = await NotificationService().getSettings();
+    if (mounted) {
+      setState(() {
+        _liveCheckinBannerEnabled = settings['live_checkin_banner'] ?? true;
+      });
+      // With the banner off the dashboard shows nothing for a check-in, so the
+      // generic push toast should take over rather than also staying silent.
+      LiveEventToast.dashboardCheckInBannerEnabled = _liveCheckinBannerEnabled;
+    }
+  }
+
   void _handleRealtimeCheckIn(Map<String, dynamic> row) {
     final teamStreakId = row['team_streak_id'] as String?;
     final userId = row['user_id'] as String?;
@@ -716,8 +733,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     setState(() {
       _allStreaks = [..._allStreaks]..[streakIndex] = updatedStreak;
       // Banner is only ever for a buddy's check-in, never the viewer's own
-      // — that path already has its own on-screen feedback.
-      if (userId != _supabase.auth.currentUser?.id) {
+      // (that path already has its own on-screen feedback), and only when
+      // the live_checkin_banner setting allows it. The ring update above
+      // always applies regardless of that toggle.
+      if (userId != _supabase.auth.currentUser?.id &&
+          _liveCheckinBannerEnabled) {
         _bannerBuddy = member;
         _bannerRequestId++;
       }

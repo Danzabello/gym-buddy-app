@@ -28,6 +28,8 @@ class _NotificationSettingsPageState
   bool _notifStreaks = true;
   bool _notifCoachMax = true;
 
+  bool _liveCheckinBanner = true;
+
   bool _quietHoursEnabled = true;
   int _quietHoursStart = 23;
   int _quietHoursEnd = 7;
@@ -48,6 +50,7 @@ class _NotificationSettingsPageState
         _notifWorkouts = settings['notif_workouts'] ?? true;
         _notifStreaks = settings['notif_streaks'] ?? true;
         _notifCoachMax = settings['notif_coach_max'] ?? true;
+        _liveCheckinBanner = settings['live_checkin_banner'] ?? true;
         _quietHoursEnabled = settings['quiet_hours_enabled'] ?? true;
         _quietHoursStart = settings['quiet_hours_start'] ?? 23;
         _quietHoursEnd = settings['quiet_hours_end'] ?? 7;
@@ -63,6 +66,7 @@ class _NotificationSettingsPageState
       'notif_workouts': _notifWorkouts,
       'notif_streaks': _notifStreaks,
       'notif_coach_max': _notifCoachMax,
+      'live_checkin_banner': _liveCheckinBanner,
       'quiet_hours_enabled': _quietHoursEnabled,
       'quiet_hours_start': _quietHoursStart,
       'quiet_hours_end': _quietHoursEnd,
@@ -308,6 +312,23 @@ class _NotificationSettingsPageState
                     onChanged: _osPermissionGranted
                         ? (v) => setState(() => _notifCoachMax = v)
                         : null,
+                    appColors: appColors,
+                    cs: cs,
+                  ),
+                ], appColors),
+
+                const SizedBox(height: 22),
+                _buildSectionHeader('📱  In-App', appColors, cs),
+                const SizedBox(height: 8),
+                _buildCard([
+                  _buildToggleTile(
+                    icon: '🔥',
+                    title: 'Live check-in banner',
+                    subtitle:
+                        'Show a banner when your buddy checks in while '
+                        'you\'re on the dashboard',
+                    value: _liveCheckinBanner,
+                    onChanged: (v) => setState(() => _liveCheckinBanner = v),
                     appColors: appColors,
                     cs: cs,
                   ),
