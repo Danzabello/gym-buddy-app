@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:gym_buddy_app/login_screen.dart';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/friend_service.dart';
@@ -312,16 +313,20 @@ List<TeamStreak> sortStreaks(List<TeamStreak> streaks, StreakSortMode mode) {
 /// once they have checked in today, a faint track if not. Recon confirmed teams
 /// are pairs (42 two-member, 2 one-member, never more), but this draws N arcs so
 /// a larger team degrades gracefully rather than silently mis-rendering.
+///
+/// [fillProgress] is 0.0 (track) → 1.0 (fully checked in) per segment, so
+/// _AnimatedCheckInRing can tween a segment in rather than popping it — the
+/// endpoints are pixel-identical to the old boolean on/off draw.
 class _CheckInRingPainter extends CustomPainter {
   final List<Color> segmentColors;
-  final List<bool> checkedIn;
+  final List<double> fillProgress;
   final Color track;
 
   static const stroke = 5.0;
 
   const _CheckInRingPainter({
     required this.segmentColors,
-    required this.checkedIn,
+    required this.fillProgress,
     required this.track,
   });
 
@@ -338,7 +343,7 @@ class _CheckInRingPainter extends CustomPainter {
 
     for (var i = 0; i < n; i++) {
       final start = -math.pi / 2 + i * (2 * math.pi / n) + gap / 2;
-      final done = checkedIn[i];
+      final t = fillProgress[i].clamp(0.0, 1.0);
       canvas.drawArc(
         rect,
         start,
@@ -347,18 +352,111 @@ class _CheckInRingPainter extends CustomPainter {
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round
-          ..strokeWidth = done ? stroke : stroke * 0.6
-          ..color = done ? segmentColors[i] : track,
+          ..strokeWidth = ui.lerpDouble(stroke * 0.6, stroke, t)!
+          ..color = Color.lerp(track, segmentColors[i], t)!,
       );
     }
   }
 
   @override
   bool shouldRepaint(_CheckInRingPainter old) =>
-      old.checkedIn.toString() != checkedIn.toString() ||
+      old.fillProgress.toString() != fillProgress.toString() ||
       old.segmentColors.toString() != segmentColors.toString() ||
       old.track != track;
 }
+
+/// Tweens _CheckInRingPainter's fill from whatever it last was to the new
+/// checked-in state — reused for both the user's own check-in and a buddy's
+/// realtime one, so the ring never pops, only fills in.
+class _AnimatedCheckInRing extends StatefulWidget {
+  final List<Color> segmentColors;
+  final List<bool> checkedIn;
+  final Color track;
+  final double size;
+
+  const _AnimatedCheckInRing({
+    super.key,
+    required this.segmentColors,
+    required this.checkedIn,
+    required this.track,
+    required this.size,
+  });
+
+  @override
+  State<_AnimatedCheckInRing> createState() => _AnimatedCheckInRingState();
+}
+
+class _AnimatedCheckInRingState extends State<_AnimatedCheckInRing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _anim;
+  late List<double> _fromFill;
+  late List<double> _toFill;
+
+  static List<double> _fillFor(List<bool> checkedIn) =>
+      [for (final c in checkedIn) c ? 1.0 : 0.0];
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _anim = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+    _toFill = _fillFor(widget.checkedIn);
+    _fromFill = _toFill;
+    _controller.value = 1.0; // no transition on first mount
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedCheckInRing old) {
+    super.didUpdateWidget(old);
+    final newTarget = _fillFor(widget.checkedIn);
+    if (newTarget.length != _toFill.length) {
+      // Team roster changed shape (rare) — snap rather than lerp mismatched
+      // segment counts.
+      _toFill = newTarget;
+      _fromFill = newTarget;
+      _controller.value = 1.0;
+      return;
+    }
+    if (newTarget.toString() != _toFill.toString()) {
+      _fromFill = _currentFill();
+      _toFill = newTarget;
+      _controller
+        ..value = 0.0
+        ..forward();
+    }
+  }
+
+  List<double> _currentFill() => [
+        for (var i = 0; i < _toFill.length; i++)
+          ui.lerpDouble(_fromFill[i], _toFill[i], _anim.value)!,
+      ];
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) => CustomPaint(
+        size: Size(widget.size, widget.size),
+        painter: _CheckInRingPainter(
+          segmentColors: widget.segmentColors,
+          fillProgress: _currentFill(),
+          track: widget.track,
+        ),
+      ),
+    );
+  }
+}
+
 
 /// Brand gradient, fixed per CLAUDE.md. Coach Max's identity depends on it, so
 /// it is deliberately NOT an accent token — it must not shift with the skin.
@@ -430,6 +528,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   List<String> _friendIds = [];
 
 
+
   @override
   void initState() {
     super.initState();
@@ -452,7 +551,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         if (mounted) setState(() => _presenceState = state);
     };
     _presenceService.join();
-    
+
     // ✅ ENTRANCE ANIMATION SETUP
     _carouselEntranceController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -509,7 +608,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _presenceService.leave();
     super.dispose();
   }
-
 
   /// The wheel's slots: top 4 friends by the active sort + Coach Max.
   /// Returns null when there is nothing to show a wheel for — the caller
@@ -1336,6 +1434,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     // Get the friend's info
     final friendMember = streak.isCoachMaxTeam ? null : _buddyOf(streak);
 
+    // Viewer-relative order for the check-in ring: with the painter's
+    // clockwise-from-top layout, the first member lands on the RIGHT arc
+    // and the last on the LEFT — so put the signed-in user last, resolved
+    // fresh every build rather than trusting streak.members' fetch order.
+    final myId = Supabase.instance.client.auth.currentUser?.id;
+    final orderedMembers = [
+      ...streak.members.where((m) => m.userId != myId),
+      ...streak.members.where((m) => m.userId == myId),
+    ];
+
     return Opacity(
       opacity: 1.0 - 0.4 * d,            // 1.0 focused → 0.6 peeked
       child: GestureDetector(
@@ -1386,20 +1494,19 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     IgnorePointer(
                       child: Opacity(
                         opacity: (1 - d * 2).clamp(0.0, 1.0),
-                        child: CustomPaint(
-                          size: Size(size + 14, size + 14),
-                          painter: _CheckInRingPainter(
-                            segmentColors: [
-                              for (final m in streak.members)
-                                _memberColor(m.userId, accentPalette),
-                            ],
-                            checkedIn: [
-                              for (final m in streak.members)
-                                streak.todayCheckIns
-                                    .any((ci) => ci.userId == m.userId),
-                            ],
-                            track: c.claySurfaceLight,
-                          ),
+                        child: _AnimatedCheckInRing(
+                          key: ValueKey('checkin_ring_${streak.id}'),
+                          size: size + 14,
+                          segmentColors: [
+                            for (final m in orderedMembers)
+                              _memberColor(m.userId, accentPalette),
+                          ],
+                          checkedIn: [
+                            for (final m in orderedMembers)
+                              streak.todayCheckIns
+                                  .any((ci) => ci.userId == m.userId),
+                          ],
+                          track: c.claySurfaceLight,
                         ),
                       ),
                     ),
