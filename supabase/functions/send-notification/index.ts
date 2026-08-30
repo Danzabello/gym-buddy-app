@@ -5,6 +5,34 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const FIREBASE_SERVICE_ACCOUNT = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT')!)
 
+// Fallback for a missing/unset user_profiles.timezone — same as
+// coach-max-cron / workout-overtime-cron.
+const FALLBACK_TZ = 'Europe/Dublin'
+
+// ── tz helpers, copied verbatim from coach-max-cron / workout-overtime-cron
+// (kept in sync there — each edge function deploys standalone, so no shared
+// import) ────────────────────────────────────────────────────────────────
+function tzParts(d: Date, tz: string): Record<string, string> {
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+  return Object.fromEntries(fmt.formatToParts(d).map((x) => [x.type, x.value]))
+}
+
+// Wall-clock "HH:MM:SS" in the given zone.
+function localTimeOfDay(d: Date, tz: string): string {
+  const p = tzParts(d, tz)
+  const hh = p.hour === '24' ? '00' : p.hour // en-GB midnight edge
+  return `${hh}:${p.minute}:${p.second}`
+}
+
 async function getAccessToken(): Promise<string> {
   const now = Math.floor(Date.now() / 1000)
   
@@ -154,7 +182,16 @@ serve(async (req) => {
 
     if (settings) {
       if (settings.quiet_hours_enabled) {
-        const hour = new Date().getHours()
+        // Recipient's own local hour, not the server's — a UTC hour was
+        // being compared against a quiet-hours window the user configured
+        // in their own local time, which is wrong for anyone far from UTC.
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('timezone')
+          .eq('id', user_id)
+          .maybeSingle()
+        const tz = profile?.timezone || FALLBACK_TZ
+        const hour = Number(localTimeOfDay(new Date(), tz).slice(0, 2))
         const start = settings.quiet_hours_start
         const end = settings.quiet_hours_end
         const inQuietHours = start > end
