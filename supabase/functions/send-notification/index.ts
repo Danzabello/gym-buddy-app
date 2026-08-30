@@ -176,6 +176,7 @@ serve(async (req) => {
         'workout_starting_soon': 'notif_workouts',
         'buddy_started_workout': 'notif_workouts',
         'join_window_expiring': 'notif_workouts',
+        'workout_overtime': 'notif_workouts',
         'buddy_checked_in': 'notif_streaks',
         'streak_complete': 'notif_streaks',
         'streak_milestone': 'notif_streaks',
