@@ -5483,6 +5483,12 @@ class _ProfilePageState extends State<ProfilePage>
   LevelInfo? _levelInfo;
   int _totalWorkouts = 0;
   int _buddyCount = 0;
+  /// Top 3 workout_category values for the CURRENT CALENDAR MONTH in the
+  /// user's own local timezone, from get_favourite_categories (the RPC does
+  /// the month + tz resolution server-side). Each row:
+  /// {workout_category, category_count}. Empty is a normal state — the card
+  /// is hidden rather than showing a zero.
+  List<Map<String, dynamic>> _favouriteCategories = [];
   bool _isLoading = true;
 
   late AnimationController _fadeController;
@@ -5535,12 +5541,15 @@ class _ProfilePageState extends State<ProfilePage>
           .or('user_id.eq.$uid,buddy_id.eq.$uid')
           .eq('status', 'completed');
       final friendsFuture = FriendService().getFriends();
+      final favouriteCategoriesFuture = Supabase.instance.client
+          .rpc('get_favourite_categories', params: {'p_user_id': uid});
 
       final profile  = await profileFuture;
       final streaks  = await streaksFuture;
       final level    = await levelFuture;
       final workouts = await workoutsFuture;
       final friends  = await friendsFuture;
+      final favouriteCategories = await favouriteCategoriesFuture;
 
       if (!mounted) return;
 
@@ -5554,6 +5563,7 @@ class _ProfilePageState extends State<ProfilePage>
         _levelInfo     = level;
         _totalWorkouts = (workouts as List).length;
         _buddyCount    = friends.length;
+        _favouriteCategories = (favouriteCategories as List).cast<Map<String, dynamic>>();
         _isLoading     = false;
       });
 
@@ -5645,7 +5655,13 @@ class _ProfilePageState extends State<ProfilePage>
                 children: [
                       _buildXpCard(),
                       const SizedBox(height: 14),
-                      _buildStatsRow(),
+                      _buildLifetimeStatsCard(),
+                      // Hidden entirely when the user has logged nothing this
+                      // month (e.g. the first days of a new month).
+                      if (_favouriteCategories.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        _buildTopCategoriesCard(),
+                      ],
                       const SizedBox(height: 22),
                       _sectionLabel('Activity'),
                       const SizedBox(height: 10),
@@ -6148,60 +6164,238 @@ class _ProfilePageState extends State<ProfilePage>
   // ══════════════════════════════════════════════════════════════
   // STATS ROW
   // ══════════════════════════════════════════════════════════════
-  Widget _buildStatsRow() {
-    return Row(
+  // ══════════════════════════════════════════════════════════════
+  // LIFETIME STATS
+  // ══════════════════════════════════════════════════════════════
+  // Replaces the old four-tile emoji stats row. The dropped 4th tile was
+  // 'Streaks' showing _allStreaks.length -- every streak INCLUDING the Coach
+  // Max team, which disagreed with the "All Streaks" menu row below (that one
+  // uses _streakCount, friends-only). Dropping it removes the mismatch rather
+  // than carrying it into the new card.
+  //
+  // Uses the radius-20 card token shared with _buildXpCard and the top
+  // categories card, not the lighter radius-16 one the old tiles had.
+  Widget _buildLifetimeStatsCard() {
+    final appColors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: appColors.cardBackground,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: accentPalette.statusInfo.withOpacity(0.1),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'LIFETIME STATS',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: appColors.subtleText,
+            ),
+          ),
+          const SizedBox(height: 10),
+          // IntrinsicHeight so the hairline dividers span the tallest block
+          // rather than collapsing to zero height.
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: _lifetimeStatBlock(_bestStreak, 'Best streak')),
+                _statDivider(),
+                Expanded(child: _lifetimeStatBlock(_totalWorkouts, 'Workouts')),
+                _statDivider(),
+                Expanded(child: _lifetimeStatBlock(_buddyCount, 'Buddies')),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statDivider() {
+    final appColors = AppColors.of(context);
+    return Container(width: 1, color: appColors.divider);
+  }
+
+  Widget _lifetimeStatBlock(int value, String caption) {
+    final appColors = AppColors.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        _buildStatCard('🔥', '$_bestStreak', 'Best streak'),
-        const SizedBox(width: 10),
-        _buildStatCard('💪', '$_totalWorkouts', 'Workouts'),
-        const SizedBox(width: 10),
-        _buildStatCard('👥', '$_buddyCount', 'Buddies'),
-        const SizedBox(width: 10),
-        _buildStatCard('⚡', '${_allStreaks.length}', 'Streaks'),
+        CappedCount(
+          value: value,
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        Text(
+          caption,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: appColors.subtleText,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildStatCard(String emoji, String value, String label) {
+  // ══════════════════════════════════════════════════════════════
+  // THIS MONTH'S TOP CATEGORIES
+  // ══════════════════════════════════════════════════════════════
+  // Category keys/labels mirror WorkoutSelectionModal._categoryDefs (the
+  // canonical "10 category tile" list from the check-in grid). Not shared as
+  // a common lookup — this page only touches its own file, matching
+  // _avatarEmoji/_titleIcon above.
+  //
+  // The per-category emoji lookup that used to live here is gone: rows are
+  // ranked 1/2/3 by number now, and neither of the two new cards uses emoji.
+  String _categoryLabel(String category) {
+    const map = {
+      'strength': 'Strength',
+      'cardio': 'Cardio',
+      'hiit': 'HIIT',
+      'yoga': 'Yoga / stretch',
+      'outside': 'Outside',
+      'sports': 'Sports',
+      'swimming': 'Swimming',
+      'cycling': 'Cycling',
+      'martial_arts': 'Martial arts',
+      'recovery': 'Recovery',
+    };
+    return map[category] ?? category;
+  }
+
+  Widget _buildTopCategoriesCard() {
     final appColors = AppColors.of(context);
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: appColors.cardBackground,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 12,
-              offset: const Offset(0, 2),
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
+    final topCount = (_favouriteCategories.first['category_count'] as num).toInt();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: appColors.cardBackground,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: accentPalette.statusInfo.withOpacity(0.1),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // The title carries the timeframe on its own — no corner tag.
+          Text(
+            "This Month's Top Categories",
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 20)),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
+          ),
+          const SizedBox(height: 8),
+          for (int i = 0; i < _favouriteCategories.length; i++)
+            _buildCategoryRow(
+              rank: i + 1,
+              category: _favouriteCategories[i]['workout_category'] as String,
+              count: (_favouriteCategories[i]['category_count'] as num).toInt(),
+              topCount: topCount,
+              isTop: i == 0,
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(fontSize: 9, color: appColors.subtleText, fontWeight: FontWeight.w500),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
- 
+
+  Widget _buildCategoryRow({
+    required int rank,
+    required String category,
+    required int count,
+    required int topCount,
+    required bool isTop,
+  }) {
+    final appColors = AppColors.of(context);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
+    // No gold slot exists on AccentPalette; statusWarning is its amber, and
+    // it is the one warm token that is contrast-tuned per palette (action is
+    // reserved for the primary CTA per the brand rule).
+    final gold = accentPalette.statusWarning;
+    final rankColor = isTop ? gold : appColors.subtleText;
+    final barColor = isTop ? gold : appColors.subtleText;
+    final fraction = topCount == 0 ? 0.0 : count / topCount;
+
+    return Row(
+      children: [
+        SizedBox(
+          width: 16,
+          child: Text(
+            '$rank',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: rankColor,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _categoryLabel(category),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(100),
+                child: LinearProgressIndicator(
+                  value: fraction,
+                  minHeight: 5,
+                  backgroundColor: appColors.sectionBackground,
+                  valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        CappedCount(
+          value: count,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            color: rankColor,
+          ),
+        ),
+      ],
+    );
+  }
+
   // ══════════════════════════════════════════════════════════════
   // MENU
   // ══════════════════════════════════════════════════════════════
@@ -6474,6 +6668,69 @@ class _ProfilePageState extends State<ProfilePage>
 }
  
 // ── Simple data class for menu items ─────────────────────────────
+/// Renders a count, capping anything over 99 as "99+" with a dotted
+/// underline, and revealing the exact number in a tooltip on tap.
+///
+/// Shared by all four numeric displays on the profile page — the three
+/// Lifetime Stats blocks and every "This Month's Top Categories" count — so
+/// the cap rule lives in exactly one place rather than being re-decided per
+/// field. Three-digit values are real here, not an edge case: Century Lifter
+/// is 100 workouts and Century Club is a 100-day streak, and buddy counts can
+/// pass 99 on a well-connected account.
+///
+/// The 44x44 minimum tap target is reserved for EVERY value, not just capped
+/// ones, so a row's height never depends on whether its number happened to
+/// cross 99 — otherwise a card with one capped and one uncapped stat would
+/// render them at different heights.
+// Public (not _CappedCount) for the same reason resolveStatusSlot/StatusSlot
+// are: this file's widget tests reach it directly, and Dart privacy is
+// library-level so a private class is untestable from test/.
+class CappedCount extends StatelessWidget {
+  const CappedCount({required this.value, required this.style});
+
+  final int value;
+  final TextStyle style;
+
+  static const int _cap = 99;
+
+  @override
+  Widget build(BuildContext context) {
+    final capped = value > _cap;
+
+    final label = Text(
+      capped ? '$_cap+' : '$value',
+      textAlign: TextAlign.center,
+      style: capped
+          ? style.copyWith(
+              decoration: TextDecoration.underline,
+              decorationStyle: TextDecorationStyle.dotted,
+              decorationColor: style.color?.withOpacity(0.6),
+            )
+          : style,
+    );
+
+    final target = ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+      child: Center(child: label),
+    );
+
+    if (!capped) return target;
+
+    // Framework Tooltip rather than a hand-rolled OverlayEntry: it already
+    // positions itself near the target and dismisses itself.
+    // ponytail: dismissal is timeout-based (and on showing another tooltip),
+    // not literal tap-away — swap in an OverlayEntry + full-screen
+    // GestureDetector if true tap-anywhere-to-dismiss is needed.
+    return Tooltip(
+      message: '$value',
+      triggerMode: TooltipTriggerMode.tap,
+      preferBelow: false,
+      showDuration: const Duration(seconds: 3),
+      child: target,
+    );
+  }
+}
+
 class _MenuItem {
   final String emoji;
   final Color color;
