@@ -22,6 +22,7 @@ import 'widgets/workout_celebration.dart';
 import 'widgets/custom_streak_selector.dart';
 import 'widgets/buddy_profile_sheet.dart';
 import 'services/nickname_service.dart';
+import 'services/nudge_service.dart';
 import 'widgets/workout_card.dart';
 import 'widgets/schedule_workout_sheet.dart';
 import 'widgets/workout_checkin_sheet.dart';
@@ -40,6 +41,8 @@ import 'pages/achievements_page.dart' as achievements_page;
 import 'widgets/achievement_toast.dart';
 import 'services/achievement_service.dart';
 import 'package:provider/provider.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
+import 'package:timezone/timezone.dart' as tz;
 import 'theme/app_theme.dart';
 import 'theme/accent_theme_provider.dart';
 import 'data/coach_tips.dart';
@@ -251,6 +254,68 @@ extension StreakSortModeExtension on StreakSortMode {
 /// Friends-only, ordered by [mode]. Coach Max is always excluded — it is an
 /// AI buddy, not a rankable streak. Top-level so both the dashboard and the
 /// profile page order the streak list identically.
+/// Time left before the streak-breaking deadline — the end of [now]'s day in
+/// [now]'s own zone — or null while it's still before [cutoffHour] there.
+/// Cutoff and deadline are both local to that zone, never UTC: the buddy's own
+/// local midnight is the boundary reconcile_stale_streaks judges them against,
+/// so a UTC frame quoted anyone far from UTC a deadline hours off their real
+/// one. Absolute-time arithmetic, so a night that springs forward is 23h.
+Duration? dangerRemainingAt(tz.TZDateTime now, {int cutoffHour = 18}) {
+  if (now.hour < cutoffHour) return null;
+  return tz.TZDateTime(now.location, now.year, now.month, now.day + 1)
+      .difference(now);
+}
+
+/// Which variant Card 1's single slot shows.
+enum StatusSlot { danger, secured, feed }
+
+/// The danger window owns the slot: inside it the card reports where the
+/// team's streak stands, outside it the feed has the slot to itself.
+/// "Secured" is the resolved half of the countdown, not an all-day badge —
+/// gating it the same way as [StatusSlot.danger] is what keeps the feed
+/// reachable on a day the buddy checked in early. No buddy (Coach Max, solo
+/// team) means there's no check-in to wait on, so those always get the feed.
+StatusSlot resolveStatusSlot({
+  required bool hasBuddy,
+  required bool buddyCheckedIn,
+  required bool inDangerWindow,
+}) {
+  if (!hasBuddy || !inDangerWindow) return StatusSlot.feed;
+  return buddyCheckedIn ? StatusSlot.secured : StatusSlot.danger;
+}
+
+/// Streak milestones and their celebration names. One source for both the
+/// milestone dialog's trigger list and the "next milestone" card, so the two
+/// can't drift apart.
+const kStreakMilestones = <int, String>{
+  1: 'First Check-in',
+  3: 'Building Momentum',
+  7: 'On Fire',
+  14: 'Two Weeks',
+  30: 'Diamond Status',
+  50: 'Unstoppable',
+  100: 'Legend',
+  365: 'Immortal',
+};
+
+/// The milestone [current] is working toward, and how far along it is —
+/// [progress] is 0.0 at the previous milestone and 1.0 at the next. Null once
+/// every milestone is behind it.
+({int target, String name, double progress, int toGo})? getNextMilestone(
+    int current) {
+  final target =
+      kStreakMilestones.keys.firstWhere((m) => m > current, orElse: () => -1);
+  if (target < 0) return null;
+  final previous =
+      kStreakMilestones.keys.lastWhere((m) => m <= current, orElse: () => 0);
+  return (
+    target: target,
+    name: kStreakMilestones[target]!,
+    progress: ((current - previous) / (target - previous)).clamp(0.0, 1.0),
+    toGo: target - current,
+  );
+}
+
 List<TeamStreak> sortStreaks(List<TeamStreak> streaks, StreakSortMode mode) {
   debugLog('🔄 SORT: Mode = ${mode.displayName}');
   debugLog('🔄 SORT: Input streaks count = ${streaks.length}');
@@ -470,14 +535,37 @@ class _AnimatedCheckInRingState extends State<_AnimatedCheckInRing>
 /// it is deliberately NOT an accent token — it must not shift with the skin.
 const _kBrandGradient = [Color(0xFF1D4ED8), Color(0xFF7C3AED)];
 
+/// One row of the post-check-in team activity feed. Nothing persists these —
+/// they're assembled from the tables that already record the underlying facts.
+enum _FeedKind { checkIn, milestone, breakDay }
+
+class _FeedEvent {
+  final _FeedKind kind;
+  final String text;
+  final DateTime at;
+  const _FeedEvent(this.kind, this.text, this.at);
+}
+
 class _DashboardPageState extends State<DashboardPage> with TickerProviderStateMixin {
   final SupabaseClient _supabase = Supabase.instance.client;
   final TeamStreakService _teamStreakService = TeamStreakService();
   final WorkoutService _workoutService = WorkoutService();
   final TeamSyncService _teamSyncService = TeamSyncService();
   final BreakDayService _breakDayService = BreakDayService();
+  final NudgeService _nudgeService = NudgeService();
   Map<String, bool> _streakCompletionStatus = {};
   Map<String, String> _nicknames = {};
+
+  /// Buddy id -> IANA zone (user_profiles.timezone), for the danger
+  /// countdown's deadline. Empty until the first fresh load; every lookup
+  /// falls back the way safe_user_tz does.
+  Map<String, String> _buddyTimezones = {};
+
+  /// Activity-feed futures per team_streak_id, memoised so the per-minute
+  /// countdown tick and every carousel swipe don't refire the query. Dropped
+  /// on refresh and whenever a live check-in lands for that team — which is
+  /// all the realtime wiring the feed needs.
+  final Map<String, Future<List<_FeedEvent>>> _teamFeeds = {};
 
   
   TeamStreak? _highestStreak;
@@ -739,6 +827,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     if (!mounted) return;
     setState(() {
       _allStreaks = [..._allStreaks]..[streakIndex] = updatedStreak;
+      _teamFeeds.remove(teamStreakId);  // feed reloads with the new check-in
       // Banner is only ever for a buddy's check-in, never the viewer's own
       // (that path already has its own on-screen feedback), and only when
       // the live_checkin_banner setting allows it. The ring update above
@@ -808,6 +897,15 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         _buildBuddyWheel(displayItems),
         _buildSwipeHint(),
         _buildCheckInCard(displayItems),
+        // Fills the room the "Take a break day" link vacates once you've
+        // checked in. Both cards follow the focused wheel slot, same as the
+        // streak count and the "on break today" line above them.
+        if (_hasCheckedInToday) ...[
+          const SizedBox(height: 10),
+          _buildTeamStatusCard(displayItems),
+          const SizedBox(height: 10),
+          _buildMilestoneCard(displayItems),
+        ],
         const SizedBox(height: 10),
         _buildInfoTray(),
         const SizedBox(height: 4),
@@ -1052,12 +1150,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   // today (server-resolved). Coach Max never takes breaks.
   bool _isBuddyOnBreak(dynamic item) {
     if (item is! TeamStreak || item.isCoachMaxTeam) return false;
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    final buddy = item.members.firstWhere(
-      (m) => m.userId != currentUserId,
-      orElse: () => item.members.first,
-    );
-    return _buddyOnBreakToday[buddy.userId] == true;
+    final buddy = _buddyOf(item);
+    return buddy != null && _buddyOnBreakToday[buddy.userId] == true;
   }
 
   Widget _buildInfoTray() {
@@ -1105,13 +1199,17 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   /// The clay slab every tray card sits on. One shell, so the three card types
   /// can't drift apart in radius, shadow or padding.
-  Widget _clayTraySlab({required Widget child, EdgeInsets? padding}) {
+  Widget _clayTraySlab({
+    required Widget child,
+    EdgeInsets? padding,
+    Color? color,
+  }) {
     final c = AppColors.of(context);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: padding ?? const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: BoxDecoration(
-        color: c.claySurface,
+        color: color ?? c.claySurface,
         borderRadius: BorderRadius.circular(26),
         boxShadow: c.clayShadow(),
       ),
@@ -1129,47 +1227,57 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     Color? titleColor,
     String? subtitle,
     Widget? trailing,
+    Color? color,
+    Widget? below,
   }) {
     final c = AppColors.of(context);
     return _clayTraySlab(
-      child: Row(
+      color: color,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          leading,
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: labelColor ?? c.inkMuted,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                  ),
+          Row(
+            children: [
+              leading,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: labelColor ?? c.inkMuted,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: titleColor ?? c.readableForeground(c.claySurface),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle,
+                        style: TextStyle(fontSize: 11, color: c.inkMuted),
+                      ),
+                  ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: titleColor ?? c.readableForeground(c.claySurface),
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (subtitle != null)
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 11, color: c.inkMuted),
-                  ),
-              ],
-            ),
+              ),
+              if (trailing != null) ...[const SizedBox(width: 10), trailing],
+            ],
           ),
-          if (trailing != null) ...[const SizedBox(width: 10), trailing],
+          if (below != null) below,
         ],
       ),
     );
@@ -2012,6 +2120,374 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
+  // ── Post-check-in cards ─────────────────────────────────────────────────
+  // Two slabs that only exist once you've checked in, filling the space the
+  // "Take a break day" link leaves behind. Both read the focused wheel slot,
+  // so a swipe re-renders them with no extra plumbing.
+
+  /// Streak danger opens at 18:00 in the BUDDY's own zone — the same cutoff
+  /// coach-max-cron's PART 3 now fires on, so the card and the push agree.
+  static const int _kDangerHour = 18;
+
+  /// What safe_user_tz() falls back to for a missing or null timezone. Kept
+  /// identical to the DB helper and to coach-max-cron's FALLBACK_TZ.
+  static const String _kFallbackTz = 'Europe/Dublin';
+
+  static bool _timeZonesLoaded = false;
+
+  /// The buddy's zone, resolved the way safe_user_tz would: their stored IANA
+  /// name, else the shared fallback. An unrecognised name falls back too
+  /// rather than throwing mid-build.
+  tz.Location _zoneOf(String userId) {
+    if (!_timeZonesLoaded) {
+      tzdata.initializeTimeZones();
+      _timeZonesLoaded = true;
+    }
+    try {
+      return tz.getLocation(_buddyTimezones[userId] ?? _kFallbackTz);
+    } catch (_) {
+      return tz.getLocation(_kFallbackTz);
+    }
+  }
+
+  String _displayName(String userId, String fallback) =>
+      _nicknames[userId] ?? fallback;
+
+  /// Time left before the streak breaks for [buddy], or null while it isn't
+  /// yet their evening — resolved entirely in the buddy's own zone.
+  Duration? _dangerRemaining(TeamMember buddy) => dangerRemainingAt(
+        tz.TZDateTime.now(_zoneOf(buddy.userId)),
+        cutoffHour: _kDangerHour,
+      );
+
+  String _feedAge(DateTime at) {
+    final d = DateTime.now().difference(at);
+    if (d.inMinutes < 1) return 'just now';
+    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+    if (d.inHours < 24) return '${d.inHours}h ago';
+    return '${d.inDays}d ago';
+  }
+
+  /// CARD 1 — one slot, three mutually exclusive states: the danger countdown,
+  /// "secured", or the activity feed. Never two at once.
+  ///
+  /// The danger window owns the slot: inside it the card reports where the
+  /// team's streak stands (at risk, or secured), and outside it the feed has
+  /// the slot to itself. "Secured" is the resolved half of the countdown, not
+  /// an all-day badge — gating it the same way is what keeps the feed
+  /// reachable on a day the buddy checked in early.
+  Widget _buildTeamStatusCard(List<dynamic> displayItems) {
+    final focused = _focusedOf(displayItems);
+    if (focused is! TeamStreak) return const SizedBox.shrink();
+
+    // Coach Max never reaches either status variant — there's no real buddy
+    // whose check-in the streak is waiting on. His team falls through to the
+    // feed, which still has his daily check-ins and yours to show.
+    final buddy = focused.isCoachMaxTeam ? null : _buddyOf(focused);
+    final remaining = buddy == null ? null : _dangerRemaining(buddy);
+    switch (resolveStatusSlot(
+      hasBuddy: buddy != null,
+      buddyCheckedIn: buddy != null &&
+          focused.todayCheckIns.any((ci) => ci.userId == buddy.userId),
+      inDangerWindow: remaining != null,
+    )) {
+      case StatusSlot.danger:
+        return _buildStreakDangerCard(buddy!, remaining!);
+      case StatusSlot.secured:
+        return _buildStreakSecuredCard();
+      case StatusSlot.feed:
+        return _buildTeamFeedCard(focused);
+    }
+  }
+
+  Widget _buildStreakDangerCard(TeamMember buddy, Duration remaining) {
+    final c = AppColors.of(context);
+    final danger = context.read<AccentThemeProvider>().palette.statusDanger;
+    final surface = c.tint(danger, surface: c.claySurface);
+    final name = _displayName(buddy.userId, buddy.displayName);
+    // Drains toward midnight: how much of the danger window is still left.
+    final left = remaining.inMinutes /
+        const Duration(hours: 24 - _kDangerHour).inMinutes;
+
+    return _trayRow(
+      color: surface,
+      leading: _trayGlyph('⏳', role: danger),
+      label: 'STREAK AT RISK',
+      labelColor: danger,
+      title: '$name hasn\'t checked in',
+      titleColor: c.readableForeground(surface),
+      subtitle:
+          'Streak breaks in ${remaining.inHours}h ${remaining.inMinutes % 60}m',
+      trailing: _trayAction('Nudge $name →', danger, () => _nudgeBuddy(buddy)),
+      below: _thinTrack(left.clamp(0.0, 1.0), danger),
+    );
+  }
+
+  Widget _buildStreakSecuredCard() {
+    final c = AppColors.of(context);
+    final surface = c.tint(c.success, surface: c.claySurface);
+    return _trayRow(
+      color: surface,
+      leading: _trayGlyph('✅', role: c.success),
+      label: 'STREAK SECURED',
+      labelColor: c.success,
+      title: 'Streak secured for today',
+      titleColor: c.readableForeground(surface),
+      subtitle: 'You both checked in.',
+    );
+  }
+
+  Widget _buildTeamFeedCard(TeamStreak streak) {
+    final c = AppColors.of(context);
+    return FutureBuilder<List<_FeedEvent>>(
+      future: _teamFeeds.putIfAbsent(streak.id, () => _loadTeamFeed(streak)),
+      builder: (context, snapshot) {
+        final events = snapshot.data ?? const <_FeedEvent>[];
+        // Still loading, or a team with nothing to say yet — an empty slab
+        // reads as a bug, so the card simply isn't there.
+        if (events.isEmpty) return const SizedBox.shrink();
+        return _clayTraySlab(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'TEAM ACTIVITY',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: c.inkMuted,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 6),
+              for (final e in events) _buildFeedRow(e),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFeedRow(_FeedEvent e) {
+    final c = AppColors.of(context);
+    final palette = context.read<AccentThemeProvider>().palette;
+    final (icon, role) = switch (e.kind) {
+      _FeedKind.checkIn => (Icons.local_fire_department_rounded, c.streakOrange),
+      _FeedKind.milestone => (Icons.emoji_events_rounded, palette.statusWarning),
+      _FeedKind.breakDay => (Icons.nightlight_round, c.info),
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: role),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              e.text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: c.readableForeground(c.claySurface),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _feedAge(e.at),
+            style: TextStyle(fontSize: 11, color: c.inkMuted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// CARD 2 — the focused team's next streak milestone.
+  Widget _buildMilestoneCard(List<dynamic> displayItems) {
+    final focused = _focusedOf(displayItems);
+    if (focused is! TeamStreak) return const SizedBox.shrink();
+
+    final role = context.read<AccentThemeProvider>().palette.statusWarning;
+    final current = focused.currentStreak;
+    final next = getNextMilestone(current);
+
+    if (next == null) {
+      return _trayRow(
+        leading: _trayGlyph('👑', role: role),
+        label: 'MILESTONES',
+        labelColor: role,
+        title: 'Every milestone cleared',
+        subtitle: '$current days and counting',
+      );
+    }
+
+    return _trayRow(
+      leading: _trayGlyph('🏆', role: role),
+      label: 'NEXT MILESTONE',
+      labelColor: role,
+      title: '${next.name} · ${next.target} days',
+      subtitle: next.toGo == 1 ? '1 day to go' : '${next.toGo} days to go',
+      below: _thinTrack(next.progress, role),
+    );
+  }
+
+  Widget _thinTrack(double value, Color role) {
+    final c = AppColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: LinearProgressIndicator(
+          value: value,
+          minHeight: 6,
+          backgroundColor: c.claySurfaceLight,
+          color: role,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _nudgeBuddy(TeamMember buddy) async {
+    final name = _displayName(buddy.userId, buddy.displayName);
+    final result = await _nudgeService.sendNudge(
+      targetUserId: buddy.userId,
+      targetDisplayName: name,
+    );
+    if (!mounted) return;
+
+    final c = AppColors.of(context);
+    final palette = context.read<AccentThemeProvider>().palette;
+    final (message, background) = switch (result) {
+      NudgeResult.sent => ('Nudge sent to $name! 🔔', c.success),
+      NudgeResult.alreadySent => ('Already nudged $name today', c.inkMuted),
+      NudgeResult.tooEarly =>
+        ('Too early to nudge — try after 10am', palette.statusWarning),
+      NudgeResult.error => ('Couldn\'t send that nudge', palette.statusDanger),
+    };
+    if (result == NudgeResult.sent) HapticFeedback.mediumImpact();
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      backgroundColor: background,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ));
+  }
+
+  /// The focused team's last few events, built entirely from tables that
+  /// already record them: daily_team_checkins for check-ins, break_day_usage
+  /// for break days (both are teammate-readable under existing RLS). No events
+  /// table and no new RPC — milestones aren't stored anywhere, so they're
+  /// derived in [_deriveMilestones].
+  Future<List<_FeedEvent>> _loadTeamFeed(TeamStreak streak) async {
+    final me = _supabase.auth.currentUser?.id;
+    final memberIds = streak.members.map((m) => m.userId).toList();
+
+    String who(String id) {
+      if (id == me) return 'You';
+      final member = streak.members.firstWhere(
+        (m) => m.userId == id,
+        orElse: () =>
+            TeamMember(userId: id, displayName: 'Buddy', isCoachMax: false),
+      );
+      return _displayName(id, member.displayName);
+    }
+
+    try {
+      final (checkIns, breaks) = await (
+        _supabase
+            .from('daily_team_checkins')
+            .select('user_id, check_in_date, check_in_time')
+            .eq('team_streak_id', streak.id)
+            .order('check_in_time', ascending: false)
+            .limit(40),
+        _supabase
+            .from('break_day_usage')
+            .select('user_id, break_date')
+            .inFilter('user_id', memberIds)
+            .isFilter('cancelled_at', null)
+            .order('break_date', ascending: false)
+            .limit(6),
+      ).wait;
+
+      final events = <_FeedEvent>[];
+
+      for (final row in checkIns) {
+        final raw = (row['check_in_time'] ?? row['check_in_date']) as String?;
+        final at = raw == null ? null : DateTime.tryParse(raw);
+        final userId = row['user_id'] as String?;
+        if (at == null || userId == null) continue;
+        events.add(_FeedEvent(
+          _FeedKind.checkIn,
+          '${who(userId)} checked in',
+          at.toLocal(),
+        ));
+      }
+
+      for (final row in breaks) {
+        final at = DateTime.tryParse(row['break_date'] as String? ?? '');
+        final userId = row['user_id'] as String?;
+        if (at == null || userId == null) continue;
+        events.add(_FeedEvent(
+          _FeedKind.breakDay,
+          '${who(userId)} took a break day',
+          at,
+        ));
+      }
+
+      events.addAll(_deriveMilestones(streak, checkIns));
+      events.sort((a, b) => b.at.compareTo(a.at));
+      return events.take(4).toList();
+    } catch (e) {
+      if (kDebugMode) debugLog('❌ Team feed load failed: $e');
+      return [];
+    }
+  }
+
+  /// Milestones live in no table, so they're reconstructed: one complete day
+  /// (every member checked in) is one streak day, so the Nth-newest complete
+  /// day sat at `currentStreak - N`. Walks back only while the dates stay
+  /// consecutive — a gap means that run had already ended.
+  // ponytail: only sees the fetched window (~40 rows). If milestones ever need
+  // to survive further back than that, that's when an events table earns its
+  // keep.
+  List<_FeedEvent> _deriveMilestones(
+      TeamStreak streak, List<Map<String, dynamic>> checkIns) {
+    if (streak.currentStreak <= 0 || streak.members.isEmpty) return [];
+
+    final byDate = <String, Set<String>>{};
+    for (final row in checkIns) {
+      final date = row['check_in_date'] as String?;
+      final userId = row['user_id'] as String?;
+      if (date == null || userId == null) continue;
+      byDate.putIfAbsent(date, () => <String>{}).add(userId);
+    }
+
+    final complete = byDate.entries
+        .where((e) => e.value.length >= streak.members.length)
+        .map((e) => DateTime.tryParse(e.key))
+        .whereType<DateTime>()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    final events = <_FeedEvent>[];
+    for (var i = 0; i < complete.length; i++) {
+      if (i > 0 && complete[i - 1].difference(complete[i]).inDays != 1) break;
+      final name = kStreakMilestones[streak.currentStreak - i];
+      if (name != null) {
+        events.add(_FeedEvent(
+          _FeedKind.milestone,
+          '$name — ${streak.currentStreak - i}-day streak',
+          complete[i],
+        ));
+      }
+    }
+    return events;
+  }
+
   Future<void> _showTakeBreakDialog() async {
     // Guard against a second tap re-entering this method while a dialog from
     // a prior call is still open or its pre-checks are still in flight —
@@ -2585,6 +3061,26 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         buddyOnBreak[id] = false;
       }
     }));
+
+    // Buddy zones for the danger countdown: the deadline is the BUDDY's local
+    // midnight — theirs is the miss that breaks the streak (reconcile_stale_
+    // streaks judges each member in their own tz). Same column safe_user_tz
+    // reads, same fallback, so client and server frame the day identically.
+    final buddyZones = <String, String>{};
+    if (buddyIds.isNotEmpty) {
+      try {
+        final rows = await Supabase.instance.client
+            .from('user_profiles')
+            .select('id, timezone')
+            .inFilter('id', buddyIds.toList());
+        for (final row in rows) {
+          buddyZones[row['id'] as String] =
+              (row['timezone'] as String?) ?? _kFallbackTz;
+        }
+      } catch (_) {
+        // Left empty: each lookup falls back to _kFallbackTz on its own.
+      }
+    }
   
     final completionStatus = <String, bool>{};
     for (int i = 0; i < uniqueStreaks.length; i++) {
@@ -2621,7 +3117,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _myBreakDates          = myBreakDates;
       _isOnBreakToday        = myBreakDates.contains(localTodayString());
       _buddyOnBreakToday     = buddyOnBreak;
+      _buddyTimezones        = buddyZones;
       _hasCheckedInToday     = hasCheckedIn;
+      _teamFeeds.clear();
       _todaysWorkouts        = todaysWorkouts;
       _pendingRequests       = pendingFriends.length + pendingWorkouts;
       _totalWorkouts         = completedWorkouts;
@@ -3301,9 +3799,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     if (_highestStreak == null) return;
     
     final currentStreak = _highestStreak!.currentStreak;
-    final milestones = [1, 3, 7, 14, 30, 50, 100, 365];
-    
-    if (milestones.contains(currentStreak) && currentStreak > _lastCelebratedStreak) {
+
+    if (kStreakMilestones.containsKey(currentStreak) &&
+        currentStreak > _lastCelebratedStreak) {
       _lastCelebratedStreak = currentStreak;
       _showMilestoneDialog(currentStreak).then((_) {
         if (mounted) {
