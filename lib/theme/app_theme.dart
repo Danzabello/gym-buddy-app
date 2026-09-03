@@ -27,6 +27,7 @@ class AppColors extends ThemeExtension<AppColors> {
   final Color info;
   final Color success;
   final Color warn;
+  final Color danger;
 
   const AppColors({
     required this.cardBackground,
@@ -49,6 +50,7 @@ class AppColors extends ThemeExtension<AppColors> {
     this.info             = const Color(0xFF5B93F2),
     this.success          = const Color(0xFF4ADE80),
     this.warn             = const Color(0xFFFBBF24),
+    this.danger           = const Color(0xFFEF4444),
   });
 
   /// Lightness offsets (HSL points /100) that define the clay stack. Measured
@@ -108,6 +110,7 @@ class AppColors extends ThemeExtension<AppColors> {
       info: p.statusInfo,
       success: p.statusSuccess,
       warn: p.statusWarning,
+      danger: p.statusDanger,
     );
   }
 
@@ -134,6 +137,7 @@ class AppColors extends ThemeExtension<AppColors> {
     Color? info,
     Color? success,
     Color? warn,
+    Color? danger,
   }) {
     return AppColors(
       cardBackground: cardBackground ?? this.cardBackground,
@@ -154,6 +158,7 @@ class AppColors extends ThemeExtension<AppColors> {
       info: info ?? this.info,
       success: success ?? this.success,
       warn: warn ?? this.warn,
+      danger: danger ?? this.danger,
     );
   }
 
@@ -179,6 +184,7 @@ class AppColors extends ThemeExtension<AppColors> {
       info: Color.lerp(info, other.info, t)!,
       success: Color.lerp(success, other.success, t)!,
       warn: Color.lerp(warn, other.warn, t)!,
+      danger: Color.lerp(danger, other.danger, t)!,
     );
   }
 
@@ -306,6 +312,10 @@ class AccentPalette {
   final Color statusSuccess;
   final Color statusDanger;
   final Color statusWarning;
+  /// Decoupled from [statusWarning] so a future gold-specific tuning pass
+  /// doesn't also move every warning banner. Same value as statusWarning
+  /// today on every palette -- zero visual change until something reads it.
+  final Color gold;
   /// Secondary identity accent — not a status. Profile/identity rows, sheet
   /// header accents, "waiting for partner" panels. Replaces the ad-hoc
   /// brand-adjacent purple that had accumulated in several files.
@@ -333,6 +343,7 @@ class AccentPalette {
     required this.statusSuccess,
     required this.statusDanger,
     required this.statusWarning,
+    required this.gold,
     required this.secondaryAccent,
     required this.action,
     required this.heroBackground,
@@ -360,13 +371,14 @@ class AccentPalette {
     statusSuccess: Color(0xFF10B981),
     statusDanger: Color(0xFFF87171),   // 6.20:1 on background
     statusWarning: Color(0xFFFBBF24),  // 10.27:1 on background
+    gold: Color(0xFFFBBF24),
     secondaryAccent: Color(0xFFA78BFA), // 6.30 bg / 5.04 card
     action: Color(0xFFEA580C),
     heroBackground: _emeraldDeep,
     heroText: Color(0xFFF8E7C9),
     heroTextMuted: Color(0xFFB9CFC3),
-    avatarRing: Color(0xFFF8E7C9),
-    accentIcon: Color(0xFFF8E7C9),
+    avatarRing: Color(0xFF50C878),
+    accentIcon: Color(0xFF50C878),
   );
 
   static const _blueSignal = Color(0xFF0057FF);
@@ -387,6 +399,7 @@ class AccentPalette {
     statusSuccess: Color(0xFF10B981),
     statusDanger: Color(0xFFDC2626),   // 4.51:1 on light background
     statusWarning: Color(0xFFB45309),  // 4.69:1 — amber must go dark on light
+    gold: Color(0xFFB45309),
     // the app's established purple; light accent renders these sites unchanged
     secondaryAccent: Color(0xFF7C3AED), // 5.32 bg / 5.70 card
     action: Color(0xFFEA580C),
@@ -415,6 +428,7 @@ class AccentPalette {
     statusSuccess: Color(0xFF4ADE80),
     statusDanger: Color(0xFFF87171),   // 6.10:1 — red-400, matches 400 family
     statusWarning: Color(0xFFFBBF24),  // 10.10:1 on background
+    gold: Color(0xFFFBBF24),
     secondaryAccent: Color(0xFFA78BFA), // 6.20 bg / 5.55 card
     action: Color(0xFFEA580C),
     heroBackground: Color(0xFF23262F),
