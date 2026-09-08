@@ -1319,6 +1319,35 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
+  /// Vector-icon counterpart to [_trayGlyph] — same round clay disc, an
+  /// [Icon] instead of an emoji [Text]. New cards move off emoji per the
+  /// approved mockup; existing emoji cards are untouched.
+  Widget _trayIconGlyph(IconData icon, {Color? role}) {
+    final c = AppColors.of(context);
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: role != null
+              ? _grad(role)
+              : [c.claySurfaceLight, c.claySurface],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: c.clayShadow(),
+      ),
+      child: Center(
+        child: Icon(
+          icon,
+          size: 18,
+          color: c.readableForeground(role ?? c.claySurface),
+        ),
+      ),
+    );
+  }
+
   /// A small raised clay action pill.
   Widget _trayAction(String text, Color role, VoidCallback onTap) {
     final c = AppColors.of(context);
@@ -1446,9 +1475,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       orElse: () => {},
     );
     if (scheduled.isNotEmpty) {
-      return _trayRow(
-        leading: _trayGlyph('📅'),
-        label: "TODAY'S WORKOUT",
+      return _buildTodayWorkoutCard(
         title: scheduled['workout_type'] ?? 'Workout',
         subtitle: scheduled['workout_time'],
         trailing: _trayAction('View', c.info, () {
@@ -1459,11 +1486,72 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
 
     // ── Priority 5: Nothing ──
-    return _trayRow(
-      leading: _trayGlyph('📅'),
-      label: "TODAY'S WORKOUT",
+    return _buildTodayWorkoutCard(
       title: 'No workout scheduled',
       trailing: _trayAction('+ Add', c.info, _showQuickCreateWorkoutDialog),
+    );
+  }
+
+  /// Vector-icon, vertically-centered variant of the "TODAY'S WORKOUT" tray
+  /// card. Bespoke rather than a _trayRow call: _trayRow's Column has no
+  /// mainAxisAlignment set, so inside _buildInfoTray's fixed 128px PageView
+  /// box its content sits top-anchored — the same fix _buildTrayHeatmap
+  /// already applies to itself, just not something safe to bake into
+  /// _trayRow without re-centering every other card built on it.
+  Widget _buildTodayWorkoutCard({
+    required String title,
+    String? subtitle,
+    required Widget trailing,
+  }) {
+    final c = AppColors.of(context);
+    return _clayTraySlab(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            children: [
+              _trayIconGlyph(Icons.calendar_today_rounded),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "TODAY'S WORKOUT",
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: c.inkMuted,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: c.readableForeground(c.claySurface),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle,
+                        style: TextStyle(fontSize: 11, color: c.inkMuted),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              trailing,
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -2217,26 +2305,112 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
   }
 
+  /// Progress-bar colour at low urgency (just entered the danger window).
+  static const _kDangerBarStart = Color(0xFFFFB199);
+
+  /// Progress-bar colour at high urgency (deadline imminent).
+  static const _kDangerBarEnd = Color(0xFFFF3B30);
+
   Widget _buildStreakDangerCard(TeamMember buddy, Duration remaining) {
     final c = AppColors.of(context);
     final danger = context.read<AccentThemeProvider>().palette.statusDanger;
     final surface = c.tint(danger, surface: c.claySurface);
-    final name = _displayName(buddy.userId, buddy.displayName);
-    // Drains toward midnight: how much of the danger window is still left.
-    final left = remaining.inMinutes /
+    // Fills up (and deepens in colour) toward the deadline — the inverse of
+    // `remaining`, off the same window/value the "Xh Ym" text reads, so it
+    // recomputes on that text's existing 1-minute _countdownTimer cadence
+    // with no rebuild trigger of its own.
+    final totalWindowMinutes =
         const Duration(hours: 24 - _kDangerHour).inMinutes;
+    final elapsed =
+        (1 - remaining.inMinutes / totalWindowMinutes).clamp(0.0, 1.0);
+    final barColor = Color.lerp(_kDangerBarStart, _kDangerBarEnd, elapsed)!;
 
-    return _trayRow(
+    // Bespoke layout, not _trayRow: the nudge button needs its own full-width
+    // row, which _trayRow's single Row-with-trailing shape can't express
+    // without changing every other card built on it.
+    return _clayTraySlab(
       color: surface,
-      leading: _trayGlyph('⏳', role: danger),
-      label: 'STREAK AT RISK',
-      labelColor: danger,
-      title: '$name hasn\'t checked in',
-      titleColor: c.readableForeground(surface),
-      subtitle:
-          'Streak breaks in ${remaining.inHours}h ${remaining.inMinutes % 60}m',
-      trailing: _trayAction('Nudge $name →', danger, () => _nudgeBuddy(buddy)),
-      below: _thinTrack(left.clamp(0.0, 1.0), danger),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _trayIconGlyph(Icons.hourglass_bottom_rounded, role: danger),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'STREAK AT RISK',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: danger,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    // The focused buddy wheel above already identifies who —
+                    // no name here.
+                    Text(
+                      "Hasn't checked in yet",
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: c.readableForeground(surface),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Streak breaks in ${remaining.inHours}h ${remaining.inMinutes % 60}m',
+                      style: TextStyle(fontSize: 11, color: c.inkMuted),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          _thinTrack(elapsed, barColor),
+          const SizedBox(height: 10),
+          _fullWidthTrayButton('Nudge →', danger, () => _nudgeBuddy(buddy)),
+        ],
+      ),
+    );
+  }
+
+  /// Full-width counterpart to [_trayAction], for a card whose button gets
+  /// its own row instead of sitting beside the title.
+  Widget _fullWidthTrayButton(String text, Color role, VoidCallback onTap) {
+    final c = AppColors.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: double.infinity,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: _grad(role),
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: c.clayShadow(),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: c.readableForeground(role),
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+          ),
+        ),
+      ),
     );
   }
 
