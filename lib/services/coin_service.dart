@@ -68,24 +68,56 @@ class CoinService {
       final userId = _supabase.auth.currentUser?.id;
       final items = await _supabase
           .from('shop_items')
-          .select()
+          .select('*, achievements(name)')
           .eq('is_available', true)
           .order('category')
           .order('cost');
 
-      List<String> ownedIds = [];
+      Set<String> ownedIds = {};
+      Map<String, bool> equippedById = {};
       if (userId != null) {
         final inventory = await _supabase
             .from('user_inventory')
-            .select('shop_item_id')
+            .select('shop_item_id, equipped')
             .eq('user_id', userId);
-        ownedIds = inventory.map<String>((i) => i['shop_item_id'] as String).toList();
+        for (final row in inventory) {
+          final id = row['shop_item_id'] as String;
+          ownedIds.add(id);
+          equippedById[id] = row['equipped'] as bool? ?? false;
+        }
       }
 
-      return items.map<ShopItem>((item) => ShopItem.fromMap(item, ownedIds.contains(item['id']))).toList();
+      return items
+          .map<ShopItem>((item) => ShopItem.fromMap(
+                item,
+                ownedIds.contains(item['id']),
+                isEquipped: equippedById[item['id']] ?? false,
+              ))
+          .toList();
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error getting shop items: $e');
       return [];
+    }
+  }
+
+  // ============================================================
+  // GET EQUIPPED ITEM COLOR (e.g. the equipped ring_color)
+  // ============================================================
+  Future<String?> getEquippedColorHex({String category = 'ring_color'}) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return null;
+      final row = await _supabase
+          .from('user_inventory')
+          .select('shop_items!inner(color_hex)')
+          .eq('user_id', userId)
+          .eq('shop_items.category', category)
+          .eq('equipped', true)
+          .maybeSingle();
+      return (row?['shop_items'] as Map<String, dynamic>?)?['color_hex'] as String?;
+    } catch (e) {
+      if (kDebugMode) debugLog('❌ Error getting equipped color: $e');
+      return null;
     }
   }
 
@@ -159,6 +191,11 @@ class ShopItem {
   final String emoji;
   final String assetId;
   final bool isOwned;
+  final bool isEquipped;
+  final int unlockLevel;
+  final String? colorHex;
+  final String? unlockAchievementId;
+  final String? unlockAchievementName;
 
   ShopItem({
     required this.id,
@@ -169,9 +206,14 @@ class ShopItem {
     required this.emoji,
     required this.assetId,
     required this.isOwned,
+    this.isEquipped = false,
+    this.unlockLevel = 1,
+    this.colorHex,
+    this.unlockAchievementId,
+    this.unlockAchievementName,
   });
 
-  factory ShopItem.fromMap(Map<String, dynamic> map, bool isOwned) {
+  factory ShopItem.fromMap(Map<String, dynamic> map, bool isOwned, {bool isEquipped = false}) {
     return ShopItem(
       id: map['id'] as String,
       name: map['name'] as String,
@@ -181,6 +223,12 @@ class ShopItem {
       emoji: map['emoji'] as String? ?? '⭐',
       assetId: map['asset_id'] as String? ?? '',
       isOwned: isOwned,
+      isEquipped: isEquipped,
+      unlockLevel: map['unlock_level'] as int? ?? 1,
+      colorHex: map['color_hex'] as String?,
+      unlockAchievementId: map['unlock_achievement_id'] as String?,
+      unlockAchievementName:
+          (map['achievements'] as Map<String, dynamic>?)?['name'] as String?,
     );
   }
 }

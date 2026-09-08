@@ -3,6 +3,10 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import '../services/coin_service.dart';
+import '../services/level_service.dart';
+
+Color _hexToColor(String hex) =>
+    Color(int.parse('FF${hex.replaceFirst('#', '')}', radix: 16));
 
 class ShopPage extends StatefulWidget {
   const ShopPage({super.key});
@@ -25,7 +29,10 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
     {'key': 'badge', 'label': 'Badges', 'emoji': '🏅'},
     {'key': 'streak_emoji', 'label': 'Emojis', 'emoji': '✨'},
     {'key': 'avatar', 'label': 'Avatars', 'emoji': '🦁'},
+    {'key': 'ring_color', 'label': 'Ring Colors', 'emoji': '⭕'},
   ];
+
+  int _userLevel = 1;
 
   @override
   void initState() {
@@ -44,10 +51,12 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
     setState(() => _isLoading = true);
     final balance = await _coinService.getBalance();
     final items = await _coinService.getShopItems();
+    final levelInfo = await LevelService().getLevelInfo();
     if (mounted) {
       setState(() {
         _coinBalance = balance;
         _allItems = items;
+        _userLevel = levelInfo?.level ?? 1;
         _isLoading = false;
       });
     }
@@ -58,13 +67,44 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
     return _allItems.where((i) => i.category == category).toList();
   }
 
+  /// Ring colors have no emoji (the DB row's `emoji` is null → defaults to
+  /// ⭐), so every place that shows an item's identity needs to swap in the
+  /// actual color swatch instead.
+  Widget _itemPreview(ShopItem item, {required double size}) {
+    if (item.category == 'ring_color' && item.colorHex != null) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: _hexToColor(item.colorHex!),
+          border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+        ),
+      );
+    }
+    return Text(item.emoji, style: TextStyle(fontSize: size * 0.65));
+  }
+
+  bool _isLevelLocked(ShopItem item) =>
+      !item.isOwned &&
+      item.unlockAchievementId == null &&
+      _userLevel < item.unlockLevel;
+
   Future<void> _purchaseItem(ShopItem item) async {
+    // Achievement-gated items are auto-granted by a DB trigger, never bought,
+    // and level-locked items aren't actionable until the user levels up.
+    if (!item.isOwned &&
+        (item.unlockAchievementId != null || _isLevelLocked(item))) {
+      return;
+    }
+
     if (item.isOwned) {
       await _coinService.equipItem(itemId: item.id, category: item.category);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${item.emoji} ${item.name} equipped!'),
+            content: Text(
+                '${item.category == 'ring_color' ? '⭕' : item.emoji} ${item.name} equipped!'),
             backgroundColor: AppColors.of(context).successGreen,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -95,7 +135,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
           SnackBar(
             content: Row(
               children: [
-                Text(item.emoji, style: const TextStyle(fontSize: 20)),
+                _itemPreview(item, size: 20),
                 const SizedBox(width: 8),
                 Text('${item.name} purchased!'),
               ],
@@ -138,7 +178,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                     color: colors.sectionBackground,
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Center(child: Text(item.emoji, style: const TextStyle(fontSize: 40))),
+                  child: Center(child: _itemPreview(item, size: 40)),
                 ),
                 const SizedBox(height: 16),
                 Text(item.name,
@@ -387,8 +427,12 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
   Widget _buildShopCard(ShopItem item) {
     final colors = AppColors.of(context);
     final canAfford = _coinBalance >= item.cost;
+    final isAchievementGated = item.unlockAchievementId != null;
+    final isLevelLocked = _isLevelLocked(item);
+    final isLocked = !item.isOwned && (isAchievementGated || isLevelLocked);
+    final isTappable = item.isOwned || !isLocked;
     return GestureDetector(
-      onTap: () => _purchaseItem(item),
+      onTap: isTappable ? () => _purchaseItem(item) : null,
       child: Container(
         decoration: BoxDecoration(
           color: colors.cardBackground,
@@ -420,9 +464,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                 ),
                 child: Stack(
                   children: [
-                    Center(
-                        child: Text(item.emoji,
-                            style: const TextStyle(fontSize: 52))),
+                    Center(child: _itemPreview(item, size: 52)),
                     if (item.isOwned)
                       Positioned(
                         top: 8,
@@ -437,7 +479,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                               color: Colors.white, size: 12),
                         ),
                       ),
-                    if (!canAfford && !item.isOwned)
+                    if (!item.isOwned && (isLocked || !canAfford))
                       Positioned.fill(
                         child: Container(
                           decoration: BoxDecoration(
@@ -478,6 +520,36 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                               color: Colors.white,
                               fontSize: 12,
                               fontWeight: FontWeight.w600)),
+                    )
+                  else if (isAchievementGated)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Not purchasable',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: colors.subtleText)),
+                        Text(
+                            item.unlockAchievementName ?? 'Achievement locked',
+                            style: TextStyle(
+                                fontSize: 11, color: colors.subtleText),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                      ],
+                    )
+                  else if (isLevelLocked)
+                    Row(
+                      children: [
+                        Icon(Icons.lock_outline,
+                            size: 13, color: colors.subtleText),
+                        const SizedBox(width: 4),
+                        Text('Locked · Lvl ${item.unlockLevel}',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: colors.subtleText)),
+                      ],
                     )
                   else
                     Row(

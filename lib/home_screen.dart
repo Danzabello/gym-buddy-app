@@ -33,7 +33,9 @@ import 'pages/notification_settings_page.dart';
 import 'pages/shop_page.dart';
 import 'pages/workout_history_page.dart';
 import 'pages/account_page.dart';
+import 'pages/ring_color_closet_page.dart';
 import 'pages/help_support_page.dart';
+import 'services/coin_service.dart';
 import 'widgets/menu_card.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -55,7 +57,8 @@ import 'widgets/live_event_toast.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
 
-
+Color _hexToColor(String hex) =>
+    Color(int.parse('FF${hex.replaceFirst('#', '')}', radix: 16));
 
 
 
@@ -583,6 +586,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   List<TeamStreak> get _listStreaks => sortStreaks(_allStreaks, _streakSortMode);
   List<Map<String, dynamic>> _todaysWorkouts = [];
   bool _hasCheckedInToday = false;
+  /// The signed-in user's equipped `ring_color` shop item, if any — overrides
+  /// their hashed identity color in the check-in ring. Null falls back to
+  /// today's existing `_memberColor` behaviour.
+  Color? _equippedRingColor;
   bool _isLoading = true;
   bool _isCheckingIn = false;
   bool _isRefreshing = false;
@@ -1753,7 +1760,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                           size: size + 14,
                           segmentColors: [
                             for (final m in orderedMembers)
-                              _memberColor(m.userId, accentPalette),
+                              (m.userId == myId && _equippedRingColor != null)
+                                  ? _equippedRingColor!
+                                  : _memberColor(m.userId, accentPalette),
                           ],
                           checkedIn: [
                             for (final m in orderedMembers)
@@ -2945,8 +2954,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         debugLog('⚠️ Could not load preferences: $e');
         _customStreakOrder = [];
       }
+
+      final equippedHex = await CoinService().getEquippedColorHex();
+      if (mounted) {
+        setState(() {
+          _equippedRingColor =
+              equippedHex != null ? _hexToColor(equippedHex) : null;
+        });
+      }
     }
-  
+
     // ── STEP 3: Sync + fetch streaks ────────────────────────
     _syncTeamCheckIns(); // fire and forget - don't await
     final allStreaks = await _teamStreakService.getAllUserStreaks();
@@ -6243,6 +6260,17 @@ class _ProfilePageState extends State<ProfilePage>
                           label: 'Accent Theme',
                           sub: _accentThemeLabel(context),
                           onTap: () => _showAccentThemePicker(context),
+                        ),
+                        MenuItem(
+                          emoji: '⭕',
+                          color: appColors.sectionBackground,
+                          label: 'Ring Colors',
+                          sub: 'Check-in ring color',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const RingColorClosetPage()),
+                          ),
                         ),
                         MenuItem(
                           emoji: '❓',
