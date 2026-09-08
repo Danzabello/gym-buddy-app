@@ -101,23 +101,31 @@ class CoinService {
   }
 
   // ============================================================
-  // GET EQUIPPED ITEM COLOR (e.g. the equipped ring_color)
+  // GET EQUIPPED ITEM COLOR for multiple users in one query
+  // (e.g. every visible team member's equipped ring_color)
   // ============================================================
-  Future<String?> getEquippedColorHex({String category = 'ring_color'}) async {
+  Future<Map<String, String>> getEquippedColorHexForUsers(
+    List<String> userIds, {
+    String category = 'ring_color',
+  }) async {
+    if (userIds.isEmpty) return {};
     try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return null;
-      final row = await _supabase
+      final rows = await _supabase
           .from('user_inventory')
-          .select('shop_items!inner(color_hex)')
-          .eq('user_id', userId)
+          .select('user_id, shop_items!inner(color_hex)')
+          .inFilter('user_id', userIds)
           .eq('shop_items.category', category)
-          .eq('equipped', true)
-          .maybeSingle();
-      return (row?['shop_items'] as Map<String, dynamic>?)?['color_hex'] as String?;
+          .eq('equipped', true);
+      final result = <String, String>{};
+      for (final row in rows) {
+        final userId = row['user_id'] as String?;
+        final hex = (row['shop_items'] as Map<String, dynamic>?)?['color_hex'] as String?;
+        if (userId != null && hex != null) result[userId] = hex;
+      }
+      return result;
     } catch (e) {
-      if (kDebugMode) debugLog('❌ Error getting equipped color: $e');
-      return null;
+      if (kDebugMode) debugLog('❌ Error getting equipped colors for users: $e');
+      return {};
     }
   }
 

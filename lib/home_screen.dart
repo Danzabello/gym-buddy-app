@@ -586,10 +586,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   List<TeamStreak> get _listStreaks => sortStreaks(_allStreaks, _streakSortMode);
   List<Map<String, dynamic>> _todaysWorkouts = [];
   bool _hasCheckedInToday = false;
-  /// The signed-in user's equipped `ring_color` shop item, if any — overrides
-  /// their hashed identity color in the check-in ring. Null falls back to
-  /// today's existing `_memberColor` behaviour.
-  Color? _equippedRingColor;
+  /// Equipped `ring_color` shop item per team member (userId → color),
+  /// covering every visible buddy plus the signed-in user. A member absent
+  /// from this map falls back to `_memberColor`'s hashed identity color.
+  Map<String, Color> _memberRingColors = {};
   bool _isLoading = true;
   bool _isCheckingIn = false;
   bool _isRefreshing = false;
@@ -1760,9 +1760,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                           size: size + 14,
                           segmentColors: [
                             for (final m in orderedMembers)
-                              (m.userId == myId && _equippedRingColor != null)
-                                  ? _equippedRingColor!
-                                  : _memberColor(m.userId, accentPalette),
+                              _memberRingColors[m.userId] ??
+                                  _memberColor(m.userId, accentPalette),
                           ],
                           checkedIn: [
                             for (final m in orderedMembers)
@@ -2954,14 +2953,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         debugLog('⚠️ Could not load preferences: $e');
         _customStreakOrder = [];
       }
-
-      final equippedHex = await CoinService().getEquippedColorHex();
-      if (mounted) {
-        setState(() {
-          _equippedRingColor =
-              equippedHex != null ? _hexToColor(equippedHex) : null;
-        });
-      }
     }
 
     // ── STEP 3: Sync + fetch streaks ────────────────────────
@@ -3101,7 +3092,23 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         // Left empty: each lookup falls back to _kFallbackTz on its own.
       }
     }
-  
+
+    // Equipped ring colors for every visible member (buddies + self), one
+    // batched query rather than one per carousel slot. Members with nothing
+    // equipped are simply absent from the map — _buildCarouselAvatar falls
+    // back to _memberColor's hash for those.
+    final allMemberIds = uniqueStreaks
+        .where((s) => !s.isCoachMaxTeam)
+        .expand((s) => s.members)
+        .map((m) => m.userId)
+        .toSet();
+    final ringColorHexById =
+        await CoinService().getEquippedColorHexForUsers(allMemberIds.toList());
+    final memberRingColors = <String, Color>{
+      for (final entry in ringColorHexById.entries)
+        entry.key: _hexToColor(entry.value),
+    };
+
     final completionStatus = <String, bool>{};
     for (int i = 0; i < uniqueStreaks.length; i++) {
       completionStatus[uniqueStreaks[i].id] = completionList[i];
@@ -3138,6 +3145,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _isOnBreakToday        = myBreakDates.contains(localTodayString());
       _buddyOnBreakToday     = buddyOnBreak;
       _buddyTimezones        = buddyZones;
+      _memberRingColors       = memberRingColors;
       _hasCheckedInToday     = hasCheckedIn;
       _teamFeeds.clear();
       _todaysWorkouts        = todaysWorkouts;
