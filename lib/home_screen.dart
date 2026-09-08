@@ -900,6 +900,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
     debugLog('  Current index: $_currentCarouselIndex');
 
+    final statusCard =
+        _hasCheckedInToday ? _buildTeamStatusCard(displayItems) : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -911,8 +914,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         // checked in. Both cards follow the focused wheel slot, same as the
         // streak count and the "on break today" line above them.
         if (_hasCheckedInToday) ...[
-          const SizedBox(height: 10),
-          _buildTeamStatusCard(displayItems),
+          if (statusCard != null) ...[
+            const SizedBox(height: 10),
+            statusCard,
+          ],
           const SizedBox(height: 10),
           _buildMilestoneCard(displayItems),
         ],
@@ -2179,15 +2184,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     return '${d.inDays}d ago';
   }
 
-  /// CARD 1 — one slot, three mutually exclusive states: the danger countdown,
-  /// "secured", or the activity feed. Never two at once.
+  /// CARD 1 — one slot, two rendered states: the danger countdown or the
+  /// activity feed. "Secured" is still a real resolved state out of
+  /// [resolveStatusSlot] (its own regression coverage in
+  /// test/status_slot_test.dart depends on that), it just has no card of its
+  /// own anymore — the slot renders nothing for it, and the caller omits the
+  /// slot's spacing too so no gap is left behind.
   ///
   /// The danger window owns the slot: inside it the card reports where the
-  /// team's streak stands (at risk, or secured), and outside it the feed has
-  /// the slot to itself. "Secured" is the resolved half of the countdown, not
-  /// an all-day badge — gating it the same way is what keeps the feed
-  /// reachable on a day the buddy checked in early.
-  Widget _buildTeamStatusCard(List<dynamic> displayItems) {
+  /// team's streak stands, and outside it the feed has the slot to itself.
+  Widget? _buildTeamStatusCard(List<dynamic> displayItems) {
     final focused = _focusedOf(displayItems);
     if (focused is! TeamStreak) return const SizedBox.shrink();
 
@@ -2205,7 +2211,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       case StatusSlot.danger:
         return _buildStreakDangerCard(buddy!, remaining!);
       case StatusSlot.secured:
-        return _buildStreakSecuredCard();
+        return null;
       case StatusSlot.feed:
         return _buildTeamFeedCard(focused);
     }
@@ -2231,20 +2237,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           'Streak breaks in ${remaining.inHours}h ${remaining.inMinutes % 60}m',
       trailing: _trayAction('Nudge $name →', danger, () => _nudgeBuddy(buddy)),
       below: _thinTrack(left.clamp(0.0, 1.0), danger),
-    );
-  }
-
-  Widget _buildStreakSecuredCard() {
-    final c = AppColors.of(context);
-    final surface = c.tint(c.success, surface: c.claySurface);
-    return _trayRow(
-      color: surface,
-      leading: _trayGlyph('✅', role: c.success),
-      label: 'STREAK SECURED',
-      labelColor: c.success,
-      title: 'Streak secured for today',
-      titleColor: c.readableForeground(surface),
-      subtitle: 'You both checked in.',
     );
   }
 
