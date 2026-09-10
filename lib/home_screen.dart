@@ -33,14 +33,13 @@ import 'pages/notification_settings_page.dart';
 import 'pages/shop_page.dart';
 import 'pages/workout_history_page.dart';
 import 'pages/account_page.dart';
-import 'pages/ring_color_closet_page.dart';
+import 'pages/wardrobe/wardrobe_page.dart';
 import 'pages/help_support_page.dart';
 import 'services/coin_service.dart';
 import 'widgets/menu_card.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'widgets/xp_progress_bar.dart';
-import 'widgets/avatar_picker_screen.dart';
 import 'services/level_service.dart';
 import 'pages/achievements_page.dart' as achievements_page;
 import 'widgets/achievement_toast.dart';
@@ -6405,46 +6404,11 @@ class _ProfilePageState extends State<ProfilePage>
                           ),
                         ),
                         MenuItem(
-                          emoji: '🎨',
-                          color: appColors.sectionBackground,
-                          label: 'Appearance',
-                          sub: 'Avatar & border',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => Scaffold(
-                                appBar: AppBar(
-                                  // Inherits transparent bg + foreground from appBarTheme
-                                  title: const Text('Choose Avatar'),
-                                ),
-                                body: AvatarPickerScreen(
-                                  onComplete: () {
-                                    Navigator.pop(context);
-                                    _fadeController.reset();
-                                    _loadAll();
-                                  },
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        MenuItem(
                           emoji: '🌈',
                           color: appColors.sectionBackground,
                           label: 'Accent Theme',
                           sub: _accentThemeLabel(context),
                           onTap: () => _showAccentThemePicker(context),
-                        ),
-                        MenuItem(
-                          emoji: '⭕',
-                          color: appColors.sectionBackground,
-                          label: 'Ring Colors',
-                          sub: 'Check-in ring color',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const RingColorClosetPage()),
-                          ),
                         ),
                         MenuItem(
                           emoji: '❓',
@@ -6670,61 +6634,73 @@ class _ProfilePageState extends State<ProfilePage>
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Stack(
-                        clipBehavior: Clip.none,
-                        alignment: Alignment.center,
-                        children: [
-                          SizedBox(
-                            width: 98, height: 98,
-                            child: AnimatedBuilder(
-                              animation: _ringAnimation,
-                              builder: (context, _) => CircularProgressIndicator(
-                                value: (_levelInfo?.progressPercent ?? 0.0) * _ringAnimation.value,
-                                strokeWidth: 4,
-                                backgroundColor: Colors.white.withOpacity(0.2),
-                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                      GestureDetector(
+                        onTap: () async {
+                          final saved = await Navigator.push<bool>(
+                            context,
+                            MaterialPageRoute(builder: (_) => const WardrobePage()),
+                          );
+                          if (saved == true) {
+                            _fadeController.reset();
+                            _loadAll();
+                          }
+                        },
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          alignment: Alignment.center,
+                          children: [
+                            SizedBox(
+                              width: 98, height: 98,
+                              child: AnimatedBuilder(
+                                animation: _ringAnimation,
+                                builder: (context, _) => CircularProgressIndicator(
+                                  value: (_levelInfo?.progressPercent ?? 0.0) * _ringAnimation.value,
+                                  strokeWidth: 4,
+                                  backgroundColor: Colors.white.withOpacity(0.2),
+                                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
                               ),
                             ),
-                          ),
-                          Container(
-                            width: 86, height: 86,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withOpacity(0.15),
-                              border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
-                            ),
-                            child: Center(
-                              child: Text(_avatarEmoji(avatarId), style: const TextStyle(fontSize: 46)),
-                            ),
-                          ),
-                          Positioned(
-                            bottom: -4, right: -4,
-                            child: Container(
-                              width: 30, height: 30,
+                            Container(
+                              width: 86, height: 86,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                  colors: _levelGradient(level),
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                border: Border.all(color: Colors.white, width: 2),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: _levelGradient(level).last.withOpacity(0.5),
-                                    blurRadius: 8,
-                                  ),
-                                ],
+                                color: Colors.white.withOpacity(0.15),
+                                border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
                               ),
                               child: Center(
-                                child: Text(
-                                  '$level',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white),
+                                child: Text(_avatarEmoji(avatarId), style: const TextStyle(fontSize: 46)),
+                              ),
+                            ),
+                            Positioned(
+                              bottom: -4, right: -4,
+                              child: Container(
+                                width: 30, height: 30,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    colors: _levelGradient(level),
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  border: Border.all(color: Colors.white, width: 2),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: _levelGradient(level).last.withOpacity(0.5),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '$level',
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
