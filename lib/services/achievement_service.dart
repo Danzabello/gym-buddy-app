@@ -283,11 +283,18 @@ class AchievementService {
       'power_couple',
       'early_bird',
       'night_owl',
+      'coop_path_bison',
+      'coop_path_mammoth',
     ]) {
       final r = await _verifyAndUnlock(id);
       if (r != null) results.add(r);
     }
     return results;
+  }
+
+  Future<List<AchievementUnlockResult>> checkSpecialAchievements() async {
+    final r = await _verifyAndUnlock('special_path_robot');
+    return r != null ? [r] : [];
   }
 
   Future<List<AchievementUnlockResult>> checkWorkoutAchievements({
@@ -311,6 +318,8 @@ class AchievementService {
       'marathon',
       'mixed_bag',
       'iron_will',
+      'workout_path_eagle',
+      'workout_path_gorilla',
     ]) {
       final r = await _verifyAndUnlock(id);
       if (r != null) results.add(r);

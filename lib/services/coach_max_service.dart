@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
+import 'achievement_service.dart';
 
 class CoachMaxService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -311,6 +313,8 @@ class CoachMaxService {
             })
             .eq('user_id', userId)
             .eq('scheduled_date', today);
+
+        unawaited(AchievementService().checkSpecialAchievements());
       }
 
       if (kDebugMode) debugLog('✅ Coach Max checked in successfully!');

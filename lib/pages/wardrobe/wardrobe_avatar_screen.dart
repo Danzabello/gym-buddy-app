@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
-import 'wardrobe_avatar_wheel.dart';
+import 'avatar_unlock_tree_screen.dart';
 import 'wardrobe_preview_header.dart';
 
 class WardrobeAvatarScreen extends StatelessWidget {
@@ -18,7 +18,7 @@ class WardrobeAvatarScreen extends StatelessWidget {
         children: const [
           WardrobePreviewHeader(),
           SizedBox(height: 16),
-          WardrobeAvatarWheel(),
+          AvatarUnlockTree(),
         ],
       ),
     );
