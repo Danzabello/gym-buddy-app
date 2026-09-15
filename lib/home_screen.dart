@@ -8,6 +8,7 @@ import 'services/friend_service.dart';
 import 'services/workout_service.dart';
 import 'services/team_streak_service.dart';
 import 'widgets/coach_max_widget.dart';
+import 'widgets/skeleton_box.dart';
 import 'widgets/ai_disclosure_tag.dart';
 import 'package:confetti/confetti.dart';
 import 'package:flutter/services.dart';
@@ -3741,25 +3742,25 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         mainAxisSize: MainAxisSize.min,
         children: [
           // Section label
-          Center(child: _skeletonBox(180, 12, radius: 6)),
+          const Center(child: SkeletonBox(width: 180, height: 12, radius: 6)),
           const SizedBox(height: 24),
           // Wheel: focused centre, two peeking
-          Row(
+          const Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _skeletonCircle(76),
-              _skeletonCircle(108),
-              _skeletonCircle(76),
+              SkeletonBox.circle(size: 76),
+              SkeletonBox.circle(size: 108),
+              SkeletonBox.circle(size: 76),
             ],
           ),
           const SizedBox(height: 26),
           // Name + streak count
-          Center(child: _skeletonBox(120, 14, radius: 7)),
+          const Center(child: SkeletonBox(width: 120, height: 14, radius: 7)),
           const SizedBox(height: 10),
-          Center(child: _skeletonBox(190, 30, radius: 8)),
+          const Center(child: SkeletonBox(width: 190, height: 30, radius: 8)),
           const SizedBox(height: 22),
           // CTA
-          _skeletonBox(double.infinity, 58, radius: 19),
+          const SkeletonBox(width: double.infinity, height: 58, radius: 19),
         ],
       ),
     );
@@ -3775,11 +3776,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
             child: Row(
               children: [
-                _skeletonBox(180, 26, radius: 8),
+                const SkeletonBox(width: 180, height: 26, radius: 8),
                 const Spacer(),
-                _skeletonCircle(44),
+                const SkeletonBox.circle(size: 44),
                 const SizedBox(width: 10),
-                _skeletonCircle(46),
+                const SkeletonBox.circle(size: 46),
               ],
             ),
           ),
@@ -3791,38 +3792,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
   
-  Widget _skeletonBox(double width, double height, {double radius = 8}) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.4, end: 0.9),
-      duration: const Duration(milliseconds: 900),
-      curve: Curves.easeInOut,
-      builder: (_, value, __) => Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          color: AppColors.of(context).claySurfaceLight.withValues(alpha: value),
-          borderRadius: BorderRadius.circular(radius),
-        ),
-      ),
-    );
-  }
-  
-  Widget _skeletonCircle(double size) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.4, end: 0.9),
-      duration: const Duration(milliseconds: 900),
-      curve: Curves.easeInOut,
-      builder: (_, value, __) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: AppColors.of(context).claySurfaceLight.withValues(alpha: value),
-        ),
-      ),
-    );
-  }
-
   Widget _buildEmptyFavoritesCard() {
     final c = AppColors.of(context);
     return Padding(
@@ -7168,26 +7137,26 @@ class _ProfilePageState extends State<ProfilePage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    const Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _shimmerBox(60, 18, radius: 6),
-                        _shimmerCircle(36),
+                        SkeletonBox(width: 60, height: 18, radius: 6),
+                        SkeletonBox.circle(size: 36),
                       ],
                     ),
                     const SizedBox(height: 24),
-                    Row(
+                    const Row(
                       children: [
-                        _shimmerCircle(86),
-                        const SizedBox(width: 16),
+                        SkeletonBox.circle(size: 86),
+                        SizedBox(width: 16),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _shimmerBox(120, 20, radius: 6),
-                            const SizedBox(height: 8),
-                            _shimmerBox(90, 14, radius: 6),
-                            const SizedBox(height: 10),
-                            _shimmerBox(100, 26, radius: 13),
+                            SkeletonBox(width: 120, height: 20, radius: 6),
+                            SizedBox(height: 8),
+                            SkeletonBox(width: 90, height: 14, radius: 6),
+                            SizedBox(height: 10),
+                            SkeletonBox(width: 100, height: 26, radius: 13),
                           ],
                         ),
                       ],
@@ -7203,27 +7172,27 @@ class _ProfilePageState extends State<ProfilePage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _shimmerCard(height: 110),
+                  const SkeletonBox(width: double.infinity, height: 110, radius: 18),
                   const SizedBox(height: 14),
-                  Row(
+                  const Row(
                     children: [
-                      Expanded(child: _shimmerCard(height: 90)),
-                      const SizedBox(width: 10),
-                      Expanded(child: _shimmerCard(height: 90)),
-                      const SizedBox(width: 10),
-                      Expanded(child: _shimmerCard(height: 90)),
-                      const SizedBox(width: 10),
-                      Expanded(child: _shimmerCard(height: 90)),
+                      Expanded(child: SkeletonBox(width: double.infinity, height: 90, radius: 18)),
+                      SizedBox(width: 10),
+                      Expanded(child: SkeletonBox(width: double.infinity, height: 90, radius: 18)),
+                      SizedBox(width: 10),
+                      Expanded(child: SkeletonBox(width: double.infinity, height: 90, radius: 18)),
+                      SizedBox(width: 10),
+                      Expanded(child: SkeletonBox(width: double.infinity, height: 90, radius: 18)),
                     ],
                   ),
                   const SizedBox(height: 22),
-                  _shimmerBox(70, 12, radius: 4),
+                  const SkeletonBox(width: 70, height: 12, radius: 4),
                   const SizedBox(height: 10),
-                  _shimmerCard(height: 160),
+                  const SkeletonBox(width: double.infinity, height: 160, radius: 18),
                   const SizedBox(height: 22),
-                  _shimmerBox(70, 12, radius: 4),
+                  const SkeletonBox(width: 70, height: 12, radius: 4),
                   const SizedBox(height: 10),
-                  _shimmerCard(height: 160),
+                  const SkeletonBox(width: double.infinity, height: 160, radius: 18),
                 ],
               ),
             ),
@@ -7233,51 +7202,6 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  Widget _shimmerBox(double width, double height, {double radius = 8}) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.3, end: 0.7),
-      duration: const Duration(milliseconds: 900),
-      curve: Curves.easeInOut,
-      builder: (_, value, __) => Container(
-        width: width, height: height,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(value),
-          borderRadius: BorderRadius.circular(radius),
-        ),
-      ),
-    );
-  }
-
-  Widget _shimmerCircle(double size) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.3, end: 0.7),
-      duration: const Duration(milliseconds: 900),
-      curve: Curves.easeInOut,
-      builder: (_, value, __) => Container(
-        width: size, height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.white.withOpacity(value),
-        ),
-      ),
-    );
-  }
-
-  Widget _shimmerCard({required double height}) {
-    final appColors = AppColors.of(context);
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.6, end: 1.0),
-      duration: const Duration(milliseconds: 900),
-      curve: Curves.easeInOut,
-      builder: (_, value, __) => Container(
-        height: height,
-        decoration: BoxDecoration(
-          color: appColors.cardBackground.withOpacity(value),
-          borderRadius: BorderRadius.circular(18),
-        ),
-      ),
-    );
-  }
 }
  
 // ── Simple data class for menu items ─────────────────────────────

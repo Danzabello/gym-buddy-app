@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/level_service.dart';
+import 'skeleton_box.dart';
 
 
 
@@ -205,49 +206,24 @@ class _XpProgressBarState extends State<XpProgressBar>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 12),
+              SkeletonBox.circle(size: 44),
+              SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                        height: 14,
-                        width: 100,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(6),
-                        )),
-                    const SizedBox(height: 6),
-                    Container(
-                        height: 10,
-                        width: 140,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(6),
-                        )),
+                    SkeletonBox(height: 14, width: 100, radius: 6),
+                    SizedBox(height: 6),
+                    SkeletonBox(height: 10, width: 140, radius: 6),
                   ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          Container(
-            height: 10,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(100),
-            ),
-          ),
+          const SkeletonBox(width: double.infinity, height: 10, radius: 100),
         ],
       ),
     );

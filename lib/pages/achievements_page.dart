@@ -4,6 +4,7 @@ import '../services/achievement_service.dart';
 import '../services/level_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
+import '../widgets/skeleton_box.dart';
 import 'package:provider/provider.dart';
 
 class AchievementsPage extends StatefulWidget {
@@ -1294,46 +1295,37 @@ class _AchievementsPageState extends State<AchievementsPage>
   // SKELETON
   // ══════════════════════════════════════════════════════════════
   Widget _buildSkeleton(BuildContext context) {
-    final c = AppColors.of(context).cardBorder;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _skBox(c, double.infinity, 120, 12),
+          const SkeletonBox(width: double.infinity, height: 120, radius: 12),
           const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: _skBox(c, double.infinity, 90, 12)),
-            const SizedBox(width: 6),
-            Expanded(child: _skBox(c, double.infinity, 90, 12)),
+          const Row(children: [
+            Expanded(child: SkeletonBox(width: double.infinity, height: 90, radius: 12)),
+            SizedBox(width: 6),
+            Expanded(child: SkeletonBox(width: double.infinity, height: 90, radius: 12)),
           ]),
           const SizedBox(height: 6),
-          Row(children: [
-            Expanded(child: _skBox(c, double.infinity, 70, 12)),
-            const SizedBox(width: 6),
-            Expanded(child: _skBox(c, double.infinity, 70, 12)),
+          const Row(children: [
+            Expanded(child: SkeletonBox(width: double.infinity, height: 70, radius: 12)),
+            SizedBox(width: 6),
+            Expanded(child: SkeletonBox(width: double.infinity, height: 70, radius: 12)),
           ]),
           const SizedBox(height: 6),
-          _skBox(c, double.infinity, 80, 12),
+          const SkeletonBox(width: double.infinity, height: 80, radius: 12),
           const SizedBox(height: 20),
           ...List.generate(
               5,
-              (_) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: _skBox(c, double.infinity, 62, 10),
+              (_) => const Padding(
+                    padding: EdgeInsets.only(bottom: 6),
+                    child: SkeletonBox(width: double.infinity, height: 62, radius: 10),
                   )),
         ],
       ),
     );
   }
-
-  Widget _skBox(Color color, double w, double h, double r) =>
-      Container(
-        width: w,
-        height: h,
-        decoration: BoxDecoration(
-            color: color, borderRadius: BorderRadius.circular(r)),
-      );
 }
 
 // ══════════════════════════════════════════════════════════════
