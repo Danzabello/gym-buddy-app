@@ -147,12 +147,21 @@ class _LoginScreenState extends State<LoginScreen>
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
         await NotificationService().initialize();
-        final onboardingComplete = await _checkOnboardingStatus(user.id);
+        final onboardingComplete = await _authService.checkOnboardingStatus(user.id);
         if (!mounted) return;
         setState(() => _isLoading = false);
 
+        if (onboardingComplete == null) {
+          // DI-7 audit fix: the read failed (timeout, network error, etc.)
+          // — status is unknown, NOT confirmed orphaned. Fail safe: do not
+          // delete the account, just let the user retry.
+          setState(() => _errorMessage = 'Could not verify your account. Please try again.');
+          return;
+        }
+
         if (!onboardingComplete) {
-          // Orphaned account — clean it up and send back to splash.
+          // Confirmed via a successful read (not just assumed from a
+          // failed one) — clean it up and send back to splash.
           // Token first: the delete-account failure below is swallowed, and in
           // that path the auth user survives with its token row intact.
           await NotificationService().removeToken();
@@ -248,19 +257,6 @@ class _LoginScreenState extends State<LoginScreen>
         }
       });
     });
-  }
-
-  Future<bool> _checkOnboardingStatus(String userId) async {
-    try {
-      final response = await Supabase.instance.client
-          .from('user_profiles')
-          .select('onboarding_completed')
-          .eq('id', userId)
-          .single();
-      return response['onboarding_completed'] == true;
-    } catch (e) {
-      return false;
-    }
   }
 
   @override

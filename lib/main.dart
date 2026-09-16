@@ -4,6 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
 import 'signup_screen.dart';
+import 'services/auth_service.dart';
 import 'services/coach_max_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'services/notification_service.dart';
@@ -67,6 +68,7 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   final CoachMaxService _coachMaxService = CoachMaxService();
+  final AuthService _authService = AuthService();
   final _appLinks = AppLinks();
   StreamSubscription<Uri>? _linkSubscription;
 
@@ -133,20 +135,29 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       await NotificationService().initialize();
-      final onboardingStatus = await _checkOnboardingStatus(user.id);
-      if (onboardingStatus) {
+      final onboardingStatus = await _authService.checkOnboardingStatus(user.id);
+      if (onboardingStatus == true) {
         // Refresh the stored device timezone every launch (people travel /
         // swap devices) — feeds per-user "today" resolution server-side.
         unawaited(syncDeviceTimezone());
         await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
         unawaited(AchievementService().checkLoyaltyAchievements());
-      } else {
-        // Orphaned auth account — user abandoned onboarding
-        // Clean it up so they can re-register with the same email
+      } else if (onboardingStatus == false) {
+        // Confirmed via a successful read (not just assumed from a failed
+        // one) — this auth account really did abandon onboarding.
+        // Clean it up so they can re-register with the same email.
         await _cleanupOrphanedAccount();
+      } else {
+        // DI-7 audit fix: the read itself failed (timeout, network error,
+        // etc.) — status is unknown, NOT confirmed orphaned. Do not
+        // delete; fall through to Splash so the user can retry (signing
+        // in again re-runs this check).
+        if (kDebugMode) {
+          debugLog('⚠️ Could not verify onboarding status; leaving account untouched');
+        }
       }
       setState(() {
-        _hasCompletedOnboarding = onboardingStatus;
+        _hasCompletedOnboarding = onboardingStatus == true;
         _isInitializing = false;
       });
     } else {
@@ -165,19 +176,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       if (kDebugMode) debugLog('⚠️ Could not delete orphaned account: $e');
     } finally {
       await Supabase.instance.client.auth.signOut();
-    }
-  }
-
-  Future<bool> _checkOnboardingStatus(String userId) async {
-    try {
-      final response = await Supabase.instance.client
-          .from('user_profiles')
-          .select('onboarding_completed')
-          .eq('id', userId)
-          .single();
-      return response['onboarding_completed'] == true;
-    } catch (e) {
-      return false;
     }
   }
 

@@ -36,6 +36,27 @@ serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
+  // DI-7 audit fix: this function used to trust the caller entirely. The
+  // client's own "is this account orphaned?" check used to return false
+  // (== "orphaned, clean it up") on ANY read failure -- a timeout was
+  // indistinguishable from a real never-finished signup, and a real,
+  // fully onboarded account could reach this function and be deleted
+  // permanently. Verify independently, server-side, before deleting:
+  // refuse only when the profile is CONFIRMED onboarding_completed=true.
+  // No profile row at all is let through -- that's never a real completed
+  // account, and it also lets a delete that partially completed on a
+  // prior call (profile row already removed in step 1 below, auth user
+  // still stranded) finish on retry.
+  const { data: profile, error: profileErr } = await admin
+    .from('user_profiles')
+    .select('onboarding_completed')
+    .eq('id', uid)
+    .maybeSingle()
+  if (profileErr) return json({ error: 'profile_check_failed', detail: profileErr.message }, 500)
+  if (profile?.onboarding_completed === true) {
+    return json({ error: 'not_orphaned', detail: 'onboarding_completed is true; refusing to delete' }, 403)
+  }
+
   try {
     // 1. Delete the profile. user_profiles has no FK to auth.users, so the
     //    auth-user delete below would NOT remove it; its own dependents cascade.

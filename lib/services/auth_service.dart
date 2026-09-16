@@ -86,4 +86,27 @@ class AuthService {
     }
     return userId;
   }
+
+  // DI-7 audit fix: was duplicated verbatim in main.dart and login_screen.dart,
+  // both returning a plain `false` on ANY exception -- a network timeout was
+  // indistinguishable from "this account really never finished onboarding",
+  // and callers treated `false` as "confirmed orphaned, safe to delete".
+  // Tri-state return distinguishes a successful read from a failed one:
+  //   true  -- read succeeded, onboarding_completed is true
+  //   false -- read succeeded, onboarding_completed is confirmed false
+  //   null  -- read failed; status could not be determined -- callers must
+  //            NOT treat this as orphaned.
+  Future<bool?> checkOnboardingStatus(String userId) async {
+    try {
+      final response = await _supabase
+          .from('user_profiles')
+          .select('onboarding_completed')
+          .eq('id', userId)
+          .single();
+      return response['onboarding_completed'] == true;
+    } catch (e) {
+      debugLog('AuthService.checkOnboardingStatus failed: $e');
+      return null;
+    }
+  }
 }
