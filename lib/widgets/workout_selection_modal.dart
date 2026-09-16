@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/workout_history_service.dart';
@@ -904,38 +905,46 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                         size: 20, color: colors.subtleText),
                   ],
                 ),
-                // TODO: remove before release — test-only 1-min duration
-                // chip so check-in testing doesn't require waiting out a
-                // real workout's duration. Deliberately styled apart from
+                // S-12 audit fix: was reachable in release builds with no
+                // server-side floor behind it, letting any user log a
+                // 1-minute "completed" workout. Now debug-build-only (never
+                // built into the widget tree in release, not just
+                // hidden/disabled) AND its duration was bumped from 1 to 15
+                // -- 1 minute is now below the server's own minimum
+                // (workouts_min_duration_check / workout_logs_min_duration_check,
+                // migration 20260916161414) and would silently fail to log,
+                // so this keeps it a genuinely working test affordance
+                // instead of a broken one. Deliberately styled apart from
                 // the real duration pill above (danger role, not the
                 // orange accent) so it can't be mistaken for one.
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      Navigator.pop(context);
-                      widget.onWorkoutSelected(template, 1, null, []);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: colors.tint(accentPalette.statusDanger),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: accentPalette.statusDanger),
-                      ),
-                      child: Text(
-                        '🧪 Test (1 min)',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: accentPalette.statusDanger,
+                if (kDebugMode)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: GestureDetector(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        Navigator.pop(context);
+                        widget.onWorkoutSelected(template, 15, null, []);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: colors.tint(accentPalette.statusDanger),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: accentPalette.statusDanger),
+                        ),
+                        child: Text(
+                          '🧪 Test (15 min)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: accentPalette.statusDanger,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
