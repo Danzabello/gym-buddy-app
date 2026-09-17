@@ -934,27 +934,23 @@ class TeamStreakService {
       }
 
       if (!gapIsValid) {
-        if (kDebugMode) debugLog('💔 Resetting broken streak: ${streak.teamName}');
-        await _resetStreak(streak.id);
+        // LIVE-15 fix: this used to call a client-side _resetStreak() that
+        // wrote current_streak=0 directly -- one of the two direct writes
+        // that made team_streaks.current_streak client-trustable in the
+        // first place. reconcile_stale_streaks() already does this same
+        // reset, more correctly (per-member timezone-aware gap detection,
+        // STRICT one-miss-breaks-it, vs. this function's single shared
+        // "today" and simple break-day scan), via pg_cron
+        // ("reconcile-stale-streaks-hourly", every hour at :05). No return
+        // value or UI state depended on the old call (fire-and-forget from
+        // checkAndResetBrokenStreaks, Future<void> throughout) -- nothing
+        // to replace it with here.
+        if (kDebugMode) debugLog('💔 Broken streak detected, cron will reset: ${streak.teamName}');
       } else {
         if (kDebugMode) debugLog('✅ Gap filled by break days: ${streak.teamName}');
       }
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error checking streak status: $e');
-    }
-  }
-
-  /// Reset a streak to 0
-  Future<void> _resetStreak(String streakId) async {
-    try {
-      await _supabase.from('team_streaks').update({
-        'current_streak': 0,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', streakId);
-
-      if (kDebugMode) debugLog('✅ Streak reset to 0');
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error resetting streak: $e');
     }
   }
 
