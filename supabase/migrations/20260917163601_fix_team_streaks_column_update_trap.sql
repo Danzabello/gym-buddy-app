@@ -1,0 +1,24 @@
+-- Correction to the immediately preceding migration
+-- (revoke_team_streaks_column_update): that REVOKE UPDATE (columns) was a
+-- no-op. team_streaks.relacl already granted authenticated/anon full
+-- table-level UPDATE (arwdDxtm), and a per-column REVOKE cannot subtract
+-- from a table-level grant in Postgres -- column ACLs are additive on top
+-- of table ACLs, never subtractive. Verified live: has_column_privilege
+-- for current_streak/best_streak stayed true for both authenticated and
+-- anon after that migration, and pg_attribute.attacl was empty (no
+-- column-level ACL entries were ever created) -- the exact
+-- table-level-grant trap already documented in this project's history
+-- (see CLAUDE.md's EXECUTE-grant note and the prior economy-write-hole
+-- fix). The only way to actually narrow this is to remove the table-level
+-- UPDATE grant entirely and re-grant just the columns that should remain
+-- client-writable.
+--
+-- is_favorite is the one column with a genuine client write path
+-- (toggleFavorite in team_streak_service.dart / home_screen.dart), scoped
+-- to team_streaks_own_team_streak via the existing "Users can update
+-- streaks for their teams" RLS policy (untouched). anon gets nothing --
+-- no anonymous user should be toggling anyone's favorite team either,
+-- matching the anon-gets-nothing pattern already used for
+-- user_achievements and user_inventory in the LIVE-12/LIVE-13 fixes.
+REVOKE UPDATE ON public.team_streaks FROM authenticated, anon;
+GRANT UPDATE (is_favorite) ON public.team_streaks TO authenticated;

@@ -315,16 +315,23 @@ class FriendService {
       // If both users had checked in today, update the streak immediately
       if (backfilledCount == 2) {
         if (kDebugMode) debugLog('🔥 Both users had checked in - updating streak!');
-        
-        // Set the streak to 1 and update the last_workout_date to today
-        await _supabase.from('team_streaks').update({
-          'current_streak': 1,
-          'longest_streak': 1,
-          'last_workout_date': today,  // This is crucial!
-          'updated_at': DateTime.now().toUtc().toIso8601String(),
-        }).eq('id', streakId);
 
-        if (kDebugMode) debugLog('✅ Streak updated to 1 for new team with date: $today');
+        // LIVE-15 fix: streak math now lives server-side (recompute_team_streak
+        // RPC) — single source of truth shared with TeamStreakService, the
+        // Coach Max cron, TeamSyncService, and CoachMaxService. Replaces the
+        // direct current_streak/longest_streak/last_workout_date write that
+        // made team_streaks client-writable in the first place; also fixes a
+        // pre-existing bug where the direct write never incremented
+        // total_workouts. Safe now that the daily_team_checkins inserts above
+        // are the only writer of those rows for this team on this date — the
+        // duplicate, racing backfill_team_checkins_on_creation trigger that
+        // used to also touch last_workout_date here has been dropped.
+        final result = await _supabase.rpc('recompute_team_streak', params: {
+          'p_streak_id': streakId,
+          'p_check_in_date': today,
+        });
+
+        if (kDebugMode) debugLog('✅ Streak updated via recompute_team_streak → $result');
       } else if (backfilledCount == 1) {
         if (kDebugMode) debugLog('⏳ Only one user had checked in - waiting for the other');
         // Don't update the streak, but the check-in is recorded
