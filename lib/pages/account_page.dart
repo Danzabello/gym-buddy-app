@@ -142,7 +142,11 @@ class _AccountPageState extends State<AccountPage> {
   Future<bool> _deleteAccount() async {
     await NotificationService().removeToken();
     try {
-      await Supabase.instance.client.functions.invoke('delete-account');
+      await Supabase.instance.client.functions.invoke(
+        'delete-account',
+        // Without this the server refuses a fully onboarded account.
+        body: {'confirm_self_serve': true},
+      );
     } catch (e) {
       if (kDebugMode) debugLog('❌ AccountPage._deleteAccount: $e');
       return false;

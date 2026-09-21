@@ -53,7 +53,21 @@ serve(async (req) => {
     .eq('id', uid)
     .maybeSingle()
   if (profileErr) return json({ error: 'profile_check_failed', detail: profileErr.message }, 500)
-  if (profile?.onboarding_completed === true) {
+
+  // Self-serve exception. AccountPage's "Delete Account" (behind a typed
+  // DELETE confirmation) is the one caller that legitimately deletes a fully
+  // onboarded account, and it sends { confirm_self_serve: true }. The three
+  // automatic orphan-cleanup callers (AuthWrapper, login_screen, the
+  // onboarding retry) never send it, so they are still refused if a client
+  // bug or network error ever points them at a genuinely completed account --
+  // DI-7's original protection is unchanged for them. The flag is
+  // client-asserted, but identity comes only from the caller's JWT (uid above,
+  // never the body), so it can only ever delete the sender's own account
+  // either way. The body is optional: absent or unparseable means no flag.
+  const body = await req.json().catch(() => ({}))
+  const isSelfServeConfirmed = body?.confirm_self_serve === true
+
+  if (profile?.onboarding_completed === true && !isSelfServeConfirmed) {
     return json({ error: 'not_orphaned', detail: 'onboarding_completed is true; refusing to delete' }, 403)
   }
 
