@@ -513,20 +513,6 @@ class WorkoutService {
     }
   }
 
-  Future<bool> updateWorkoutStatus(String workoutId, String status) async {
-    try {
-      await _supabase.from('workouts').update({
-        'status': status,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', workoutId);
-      if (kDebugMode) debugLog('✅ Workout status updated to: $status');
-      return true;
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error updating workout: $e');
-      return false;
-    }
-  }
-
   // ============================================================
   // CLEANUP
   // ============================================================
