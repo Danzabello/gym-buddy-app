@@ -283,42 +283,28 @@ class CoachMaxService {
         return true;
       }
 
-      // Get the scheduled time for this check-in
-      final schedule = await _supabase
-          .from('coach_max_schedule')
-          .select('scheduled_time')
-          .eq('user_id', userId)
-          .eq('scheduled_date', today)
-          .maybeSingle();
+      // LIVE-15-adjacent fix: the daily_team_checkins insert and the
+      // coach_max_schedule update (plus the no-schedule-row instant-checkin
+      // fallback that used to live here) are now enforced server-side by
+      // check_in_coach_max, which re-derives the caller's own local "today"
+      // and rejects the check-in if scheduled_time hasn't passed yet or no
+      // schedule row exists at all -- the client had no time-window check
+      // of its own before this.
+      final result = await _supabase.rpc('check_in_coach_max', params: {
+        'p_user_id': userId,
+      }) as Map<String, dynamic>;
 
-      final checkInTime = schedule != null
-          ? DateTime.parse('$today ${schedule['scheduled_time']}')
-          : DateTime.now();
-
-      // Perform check-in
-      await _supabase.from('daily_team_checkins').insert({
-        'team_streak_id': streakId,
-        'user_id': coachMaxId,
-        'check_in_date': today,
-        'check_in_time': checkInTime.toIso8601String(),
-      });
-
-      // Mark schedule as complete
-      if (schedule != null) {
-        await _supabase
-            .from('coach_max_schedule')
-            .update({
-              'has_checked_in': true,
-              'checked_in_at': DateTime.now().toIso8601String(),
-            })
-            .eq('user_id', userId)
-            .eq('scheduled_date', today);
-
-        unawaited(AchievementService().checkSpecialAchievements());
+      if (result['checked_in'] != true) {
+        if (kDebugMode) {
+          debugLog('❌ Coach Max check-in not performed: ${result['reason']}');
+        }
+        return false;
       }
 
       if (kDebugMode) debugLog('✅ Coach Max checked in successfully!');
-      
+
+      unawaited(AchievementService().checkSpecialAchievements());
+
       // Check if both have checked in and update streak
       await _checkAndUpdateStreak(streakId, teamId, today);
 

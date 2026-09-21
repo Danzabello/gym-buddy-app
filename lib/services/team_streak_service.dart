@@ -512,7 +512,16 @@ class TeamStreakService {
           
           if (streak.isCoachMaxTeam) {
             if (kDebugMode) debugLog('🤖 Auto-checking in Coach Max...');
-            await _checkInCoachMax(streak.id, today);
+            // LIVE-15-adjacent fix: this used to be a direct, unvalidated
+            // daily_team_checkins insert (_checkInCoachMax) -- no gate at
+            // all beyond "hasn't Coach Max already checked in today".
+            // check_in_coach_max_with_buddy enforces server-side that Coach
+            // Max only mirrors a check-in that has genuinely already
+            // landed for this user/streak/day (true here, since
+            // _checkInToTeam above is awaited first).
+            await _supabase.rpc('check_in_coach_max_with_buddy', params: {
+              'p_user_id': currentUserId,
+            });
           }
         } catch (e) {
           if (kDebugMode) debugLog('❌ Failed check-in for ${streak.teamName}: $e');
@@ -548,36 +557,6 @@ class TeamStreakService {
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error checking in: $e');
       return {'success': false, 'message': 'Could not complete check-in. Please try again.'};
-    }
-  }
-
-  Future<void> _checkInCoachMax(String streakId, String today) async {
-    try {
-      // Check if Coach Max already checked in
-      final existing = await _supabase
-          .from('daily_team_checkins')
-          .select('id')
-          .eq('team_streak_id', streakId)
-          .eq('user_id', coachMaxId)
-          .eq('check_in_date', today)
-          .maybeSingle();
-
-      if (existing != null) {
-        if (kDebugMode) debugLog('✅ Coach Max already checked in');
-        return;
-      }
-
-      // Check in Coach Max
-      await _supabase.from('daily_team_checkins').insert({
-        'team_streak_id': streakId,
-        'user_id': coachMaxId,
-        'check_in_date': today,
-        'check_in_time': DateTime.now().toUtc().toIso8601String(),
-      });
-
-      if (kDebugMode) debugLog('✅ Coach Max checked in successfully');
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error checking in Coach Max: $e');
     }
   }
 
