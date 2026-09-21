@@ -100,7 +100,7 @@ Permission-check tests must run **clean**: no prior call from a more-privileged 
 
 ## Rules
 
-- **Brand gradient** is `Color(0xFF1D4ED8)` → `Color(0xFF7C3AED)`. Never change this. Warm/orange tones are only for the primary CTA button.
+- **Coach Max brand gradient** is `Color(0xFF1D4ED8)` → `Color(0xFF7C3AED)`. It is scoped to Coach Max's identity (badge / avatar). Never change it and never tokenise it — it must not shift with the accent skin. It is **not** an app-wide gradient: onboarding and all other chrome follow `AppColors` / `colorScheme` tokens (e.g. Emerald Ink accent `colorScheme.primary`), so don't flag a non-Coach-Max surface for lacking it. Warm/orange tones are only for the primary CTA button.
 - **Never use `const`** on widgets that reference `AppColors.of(context)` or `Theme.of(context)` — it causes a compile error.
 - **One page at a time.** Only touch the file explicitly asked about. No collateral changes.
 - **Mockup approval before code.** For any UI change, describe or show the plan first and wait for approval.
