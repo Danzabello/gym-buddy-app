@@ -20,7 +20,7 @@ import 'widgets/friends_page_modern.dart';
 import 'widgets/workout_invites_card.dart';
 import 'widgets/completed_workouts_section.dart';
 import 'widgets/workout_celebration.dart';
-import 'widgets/ignite_ring.dart';
+import 'widgets/checkin_ignite_video.dart';
 import 'widgets/custom_streak_selector.dart';
 import 'widgets/buddy_profile_sheet.dart';
 import 'services/nickname_service.dart';
@@ -3506,17 +3506,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             if (result['success'] == true) {
               HapticFeedback.heavyImpact();
               if (!mounted) return false;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Row(children: [
-                    const Icon(Icons.check_circle, color: Colors.white),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(result['message'] ?? 'Check-in successful!')),
-                  ]),
-                  backgroundColor: Colors.green,
-                  duration: const Duration(seconds: 3),
-                ),
-              );
+              // Refresh first so the confirmation shows the new streak.
+              await _loadStreakData();
+              if (!mounted) return false;
+              await _showCheckInConfirmation(
+                  result['message'] ?? 'Check-in successful!');
 
               // 🏆 Show workout achievement toasts — checked now that both
               // completeWorkoutWithDuration and checkInAllTeams are done.
@@ -3531,7 +3525,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               }
 
               await _loadStreakData();
-              _checkForMilestone();
               return result['partner_bonus_earned'] == true;
             }
             return false;
@@ -3958,104 +3951,85 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     return days[date.weekday - 1];
   }
 
-  void _checkForMilestone() {
-    if (_highestStreak == null) return;
-    
-    final currentStreak = _highestStreak!.currentStreak;
+  /// Shown after every successful check-in: milestone copy on milestone
+  /// days, a generic confirmation otherwise. Confetti stays milestone-only.
+  Future<void> _showCheckInConfirmation(String checkInMessage) async {
+    final currentStreak = _highestStreak?.currentStreak;
+    final isMilestone = currentStreak != null &&
+        kStreakMilestones.containsKey(currentStreak) &&
+        currentStreak > _lastCelebratedStreak;
+    if (isMilestone) _lastCelebratedStreak = currentStreak;
 
-    if (kStreakMilestones.containsKey(currentStreak) &&
-        currentStreak > _lastCelebratedStreak) {
-      _lastCelebratedStreak = currentStreak;
-      _showMilestoneDialog(currentStreak).then((_) {
-        if (mounted) {
-          _confettiController.play();
-          _confettiControllerRight.play();
-        }
-      });
+    await _showMilestoneDialog(currentStreak,
+        isMilestone: isMilestone, fallbackMessage: checkInMessage);
+    if (isMilestone && mounted) {
+      _confettiController.play();
+      _confettiControllerRight.play();
     }
   }
 
-  Future<void> _showMilestoneDialog(int streak) async {
+  Future<void> _showMilestoneDialog(
+    int? streak, {
+    required bool isMilestone,
+    required String fallbackMessage,
+  }) async {
+    String title = 'Checked In!';
+    String message = fallbackMessage;
 
-    String title = '';
-    String emoji = '';
-    String message = '';
-    
+    if (isMilestone) {
     switch (streak) {
       case 1:
         title = 'First Check-in!';
-        emoji = '🌱';
         message = 'Your journey begins!';
         break;
       case 3:
         title = 'Building Momentum!';
-        emoji = '🔥';
         message = 'Three days strong!';
         break;
       case 7:
         title = 'On Fire!';
-        emoji = '🔥🔥';
         message = 'One week streak unlocked!';
         break;
       case 14:
         title = 'Two Weeks!';
-        emoji = '💪';
         message = 'You\'re crushing it!';
         break;
       case 30:
         title = 'Diamond Status!';
-        emoji = '💎';
         message = 'A full month! Legendary!';
         break;
       case 50:
         title = 'Unstoppable!';
-        emoji = '⚡';
         message = '50 days of dedication!';
         break;
       case 100:
         title = 'LEGEND!';
-        emoji = '👑';
         message = '100 days! You\'re a champion!';
         break;
       case 365:
         title = 'IMMORTAL!';
-        emoji = '🏆';
         message = 'A FULL YEAR! Incredible!';
         break;
       default:
         title = 'Milestone Reached!';
-        emoji = '🎉';
         message = '$streak days strong!';
     }
+    }
     
+    final videoKey = GlobalKey<CheckinIgniteVideoState>();
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      // Tap anywhere on the dialog skips the clip to its final frame; the
+      // Awesome! button still wins its own taps.
+      builder: (context) => GestureDetector(
+        onTap: () => videoKey.currentState?.skip(),
+        child: AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Column(
           children: [
-            // PLACEMENT PENDING SIGN-OFF: halo around the milestone emoji.
-            // No delay: the ring starts as the dialog mounts, on the same
-            // beat as its entrance transition (this popup has no confetti).
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                const IgniteRing(size: 120, showFlame: false),
-                // Single emojis measure 79.7px on-device and pass through
-                // untouched; wider strings (day 7's 🔥🔥, 159px) scale down
-                // to stay inside the ring's 98px opening.
-                SizedBox(
-                  width: 80,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      emoji,
-                      style: const TextStyle(fontSize: 64),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            // PLACEMENT PENDING SIGN-OFF: 120px circle-clipped clip in the
+            // old emoji/halo slot.
+            CheckinIgniteVideo(key: videoKey, size: 120),
             const SizedBox(height: 16),
             Text(
               title,
@@ -4075,6 +4049,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 18),
             ),
+            if (streak != null) ...[
             const SizedBox(height: 16),
             Text(
               '$streak Day Streak!',
@@ -4085,6 +4060,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 color: Colors.orange[700],
               ),
             ),
+            ],
           ],
         ),
         actions: [
@@ -4093,6 +4069,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             child: const Text('Awesome!'),
           ),
         ],
+      ),
       ),
     );
   }
@@ -4595,17 +4572,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         if (result['success'] == true) {
           HapticFeedback.heavyImpact();
           if (!mounted) return false;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(children: [
-                const Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(child: Text(result['message'] ?? 'Check-in successful!')),
-              ]),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 3),
-            ),
-          );
+          // Refresh first so the confirmation shows the new streak.
+          await _loadStreakData();
+          if (!mounted) return false;
+          await _showCheckInConfirmation(
+              result['message'] ?? 'Check-in successful!');
 
           // 🏆 Show workout achievement toasts — no linked workouts row on
           // this flow, so there's no completeWorkoutWithDuration to wait on.
@@ -4620,7 +4591,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           }
 
           await _loadStreakData();
-          _checkForMilestone();
           return result['partner_bonus_earned'] == true;
         }
         return false;
