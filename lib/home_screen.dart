@@ -20,6 +20,7 @@ import 'widgets/friends_page_modern.dart';
 import 'widgets/workout_invites_card.dart';
 import 'widgets/completed_workouts_section.dart';
 import 'widgets/workout_celebration.dart';
+import 'widgets/ignite_ring.dart';
 import 'widgets/custom_streak_selector.dart';
 import 'widgets/buddy_profile_sheet.dart';
 import 'services/nickname_service.dart';
@@ -4033,9 +4034,27 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Column(
           children: [
-            Text(
-              emoji,
-              style: const TextStyle(fontSize: 64),
+            // PLACEMENT PENDING SIGN-OFF: halo around the milestone emoji.
+            // No delay: the ring starts as the dialog mounts, on the same
+            // beat as its entrance transition (this popup has no confetti).
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                const IgniteRing(size: 120, showFlame: false),
+                // Single emojis measure 79.7px on-device and pass through
+                // untouched; wider strings (day 7's 🔥🔥, 159px) scale down
+                // to stay inside the ring's 98px opening.
+                SizedBox(
+                  width: 80,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      emoji,
+                      style: const TextStyle(fontSize: 64),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             Text(
