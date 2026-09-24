@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'onboarding_theme.dart';
+import '../theme/app_theme.dart';
 import '../signup_screen.dart';
 
 class OnboardingValueProps extends StatefulWidget {
@@ -37,6 +37,12 @@ class _OnboardingValuePropsState extends State<OnboardingValueProps> {
     } else {
       _goToSignUp();
     }
+  }
+
+  void _goToPage(int i) {
+    HapticFeedback.selectionClick();
+    _pageController.animateToPage(i,
+        duration: const Duration(milliseconds: 350), curve: Curves.easeInOut);
   }
 
   void _goToSignUp() {
@@ -77,50 +83,235 @@ class _OnboardingValuePropsState extends State<OnboardingValueProps> {
             onRemove: _removePendingInvite,
             onNext: _next,
             onSkip: _skip,
+            active: _currentPage == 0,
+            onDotTap: _goToPage,
           ),
-          _Slide2(onNext: _next, onSkip: _skip),
-          _Slide3(onNext: _goToSignUp, onSkip: _goToSignUp),
+          _Slide2(
+              onNext: _next,
+              active: _currentPage == 1,
+              onDotTap: _goToPage),
+          _Slide3(
+              onNext: _goToSignUp,
+              active: _currentPage == 2,
+              onDotTap: _goToPage),
         ],
       ),
     );
   }
 }
 
-// ── Fixed-height gradient band used on all value prop screens ─────────────
+// ── Shared Emerald Ink pieces ──────────────────────────────────────────────
 
-class _GradBand extends StatelessWidget {
-  final Widget illustration;
-  final Widget? topRow;
-  final Widget? bottomRow;
-
-  const _GradBand({
-    required this.illustration,
-    this.topRow,
-    this.bottomRow,
-  });
+/// Floating 200×200 clay card holding the slide's emerald icon.
+class _IconCard extends StatelessWidget {
+  final IconData icon;
+  const _IconCard(this.icon);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(gradient: kGradientDiag),
-      child: SafeArea(
-        bottom: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (topRow != null) topRow!,
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: illustration,
-            ),
-            if (bottomRow != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: bottomRow!,
+    final colors = AppColors.of(context);
+    return _FloatingWidget(
+      duration: const Duration(milliseconds: 1600), // 3.2s up-and-back
+      offset: 8,
+      child: Container(
+        width: 200,
+        height: 200,
+        decoration: BoxDecoration(
+          color: colors.clayBg,
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: colors.clayShadow(),
+        ),
+        child: Icon(icon, size: 84, color: Theme.of(context).colorScheme.primary),
+      ),
+    );
+  }
+}
+
+/// Tappable page dots: 8×8 dim, 20×8 emerald when active.
+class _Dots extends StatelessWidget {
+  final int active;
+  final ValueChanged<int> onTap;
+  const _Dots({required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final primary = Theme.of(context).colorScheme.primary;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(3, (i) {
+        final isActive = i == active;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onTap(i),
+          child: Padding(
+            padding: const EdgeInsets.all(8), // 24px+ tap target
+            child: AnimatedContainer(
+              duration: reduceMotion
+                  ? Duration.zero
+                  : const Duration(milliseconds: 250),
+              width: isActive ? 20 : 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: isActive ? primary : colors.divider,
+                borderRadius: BorderRadius.circular(4),
               ),
-          ],
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+/// Full-width orange action button, 52 tall, presses down to 0.97.
+class _ActionButton extends StatefulWidget {
+  final String label;
+  final IconData? icon;
+  final VoidCallback onTap;
+  const _ActionButton({required this.label, required this.onTap, this.icon});
+
+  @override
+  State<_ActionButton> createState() => _ActionButtonState();
+}
+
+class _ActionButtonState extends State<_ActionButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final fg = colors.readableForeground(colors.streakOrange);
+    return Listener(
+      onPointerDown: (_) => setState(() => _pressed = true),
+      onPointerUp: (_) => setState(() => _pressed = false),
+      onPointerCancel: (_) => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1.0,
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 100),
+        child: SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton(
+            onPressed: widget.onTap,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: colors.streakOrange,
+              foregroundColor: fg,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              elevation: 0,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.icon != null) ...[
+                  Icon(widget.icon, size: 18),
+                  const SizedBox(width: 8),
+                ],
+                Text(widget.label,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// Bottom-anchored dots + primary CTA. Identical height on every slide, so the
+/// dots and CTA sit at the same y whichever slide is showing.
+class _Footer extends StatelessWidget {
+  final int dot;
+  final bool active;
+  final ValueChanged<int> onDotTap;
+  final Widget cta;
+  const _Footer(
+      {required this.dot,
+      required this.active,
+      required this.onDotTap,
+      required this.cta});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Dots(active: dot, onTap: onDotTap),
+          const SizedBox(height: 16),
+          _StaggerIn(active: active, delayMs: 120, child: cta),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fades + slides [child] up 12px over 300ms, [delayMs] after [active] turns
+/// true — i.e. each time its slide becomes the current page. Reduced motion:
+/// always rendered in its final state.
+class _StaggerIn extends StatefulWidget {
+  final bool active;
+  final int delayMs;
+  final Widget child;
+  const _StaggerIn(
+      {required this.active, required this.delayMs, required this.child});
+
+  @override
+  State<_StaggerIn> createState() => _StaggerInState();
+}
+
+class _StaggerInState extends State<_StaggerIn>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+      vsync: this, duration: Duration(milliseconds: widget.delayMs + 300));
+  late final Animation<double> _t = CurvedAnimation(
+      parent: _ctrl,
+      curve: Interval(widget.delayMs / (widget.delayMs + 300), 1,
+          curve: Curves.easeOut));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _ctrl.value = 1;
+    } else if (widget.active && _ctrl.isDismissed) {
+      _ctrl.forward();
+    }
+  }
+
+  @override
+  void didUpdateWidget(_StaggerIn old) {
+    super.didUpdateWidget(old);
+    if (MediaQuery.disableAnimationsOf(context)) return;
+    if (widget.active && !old.active) {
+      _ctrl.forward(from: 0);
+    } else if (!widget.active) {
+      _ctrl.value = 0; // ready to play again when swiped back to
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _t,
+      builder: (_, child) => Opacity(
+        opacity: _t.value,
+        child: Transform.translate(
+            offset: Offset(0, 12 * (1 - _t.value)), child: child),
+      ),
+      child: widget.child,
     );
   }
 }
@@ -132,6 +323,8 @@ class _Slide1 extends StatefulWidget {
   final void Function(String) onRemove;
   final VoidCallback onNext;
   final VoidCallback onSkip;
+  final bool active;
+  final ValueChanged<int> onDotTap;
 
   const _Slide1({
     required this.pendingInvites,
@@ -139,6 +332,8 @@ class _Slide1 extends StatefulWidget {
     required this.onRemove,
     required this.onNext,
     required this.onSkip,
+    required this.active,
+    required this.onDotTap,
   });
 
   @override
@@ -191,253 +386,236 @@ class _Slide1State extends State<_Slide1> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Gradient band — SafeArea + intrinsic height
-        Container(
-          decoration: const BoxDecoration(gradient: kGradientDiag),
-          child: SafeArea(
-            bottom: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Top row: back (when searching) + skip
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  child: Row(
-                    children: [
-                      if (_searching)
-                        GestureDetector(
-                          onTap: () => setState(() {
-                            _searching = false;
-                            _results = [];
-                            _searchCtrl.clear();
-                          }),
-                          child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.arrow_back,
-                                color: Colors.white, size: 16),
-                          ),
-                        )
-                      else
-                        const SizedBox(width: 32),
-                      const Spacer(),
-                      TextButton(
+    final colors = AppColors.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    return SafeArea(
+      child: Column(
+        children: [
+          // Back button, shown only while searching
+          if (_searching)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: GestureDetector(
+                onTap: () => setState(() {
+                  _searching = false;
+                  _results = [];
+                  _searchCtrl.clear();
+                }),
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: colors.clayBg,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.arrow_back,
+                      color: scheme.onSurface, size: 16),
+                ),
+              ),
+            ),
+          // Search field or illustration
+          _searching
+              ? Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                  child: Container(
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: colors.clayBg,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: colors.divider),
+                    ),
+                    child: TextField(
+                      controller: _searchCtrl,
+                      autofocus: true,
+                      cursorColor: scheme.primary,
+                      style: TextStyle(fontSize: 14, color: scheme.onSurface),
+                      decoration: InputDecoration(
+                        hintText: 'Search by username...',
+                        hintStyle:
+                            TextStyle(color: colors.inkMuted, fontSize: 14),
+                        prefixIcon: Icon(Icons.search,
+                            color: colors.inkMuted, size: 18),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        filled: false,
+                        contentPadding:
+                            const EdgeInsets.symmetric(vertical: 10),
+                        suffixIcon: _isSearching
+                            ? Padding(
+                                padding: const EdgeInsets.all(10),
+                                child: SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: scheme.primary)))
+                            : null,
+                      ),
+                      onChanged: (v) {
+                        Future.delayed(const Duration(milliseconds: 400), () {
+                          if (_searchCtrl.text == v && mounted) {
+                            _search(v);
+                          }
+                        });
+                      },
+                    ),
+                  ),
+                )
+              : const Padding(
+                  padding: EdgeInsets.only(top: 24, bottom: 8),
+                  child: _IconCard(Icons.local_fire_department),
+                ),
+
+          // Body
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _StaggerIn(
+                    active: widget.active,
+                    delayMs: 0,
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: Text('Find your buddy',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                              color: scheme.onSurface)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _StaggerIn(
+                    active: widget.active,
+                    delayMs: 60,
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 300),
+                        child: Text(
+                          'Connect with friends already on Gym Buddy and start building streaks from day one.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 15,
+                              color: colors.inkMuted,
+                              height: 1.5),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  if (!_searching) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: OutlinedButton(
                         onPressed: widget.onSkip,
-                        child: const Text('Skip',
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: colors.divider, width: 1.5),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                        ),
+                        child: Text('Skip for now',
                             style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 14,
+                                color: scheme.onSurface,
+                                fontSize: 15,
                                 fontWeight: FontWeight.w500)),
                       ),
-                    ],
-                  ),
-                ),
-                // Search field or illustration
-                _searching
-                    ? Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                        child: Container(
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.95),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: TextField(
-                            controller: _searchCtrl,
-                            autofocus: true,
-                            style: const TextStyle(
-                                fontSize: 14,
-                                color: Color(0xFF1E293B)),
-                            decoration: InputDecoration(
-                              hintText: 'Search by username...',
-                              hintStyle: TextStyle(
-                                  color: Colors.grey[400], fontSize: 14),
-                              prefixIcon: const Icon(Icons.search,
-                                  color: Colors.grey, size: 18),
-                              border: InputBorder.none,
-                              contentPadding:
-                                  const EdgeInsets.symmetric(vertical: 10),
-                              suffixIcon: _isSearching
-                                  ? const Padding(
-                                      padding: EdgeInsets.all(10),
-                                      child: SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: kObBlue)))
-                                  : null,
-                            ),
-                            onChanged: (v) {
-                              Future.delayed(
-                                  const Duration(milliseconds: 400), () {
-                                if (_searchCtrl.text == v && mounted) {
-                                  _search(v);
-                                }
-                              });
-                            },
-                          ),
+                    ),
+                  ] else ...[
+                    if (_results.isNotEmpty) ...[
+                      Text('Results',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: colors.inkMuted)),
+                      const SizedBox(height: 8),
+                      ..._results
+                          .map((u) => _UserResultTile(
+                                user: u,
+                                isInvited: widget.pendingInvites
+                                    .any((p) => p['id'] == u['id']),
+                                onInvite: () => widget.onInvite(u),
+                                onRemove: () => widget.onRemove(u['id']),
+                              ))
+                          .toList(),
+                    ] else if (_searchCtrl.text.isNotEmpty && !_isSearching)
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Text('No users found',
+                              style: TextStyle(
+                                  color: colors.inkMuted, fontSize: 14)),
                         ),
-                      )
-                    : Padding(
-                        padding: const EdgeInsets.only(bottom: 20),
-                        child: Column(
+                      ),
+
+                    if (widget.pendingInvites.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text('Invited (${widget.pendingInvites.length})',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: colors.inkMuted)),
+                      const SizedBox(height: 8),
+                      ...widget.pendingInvites
+                          .map((u) => _InvitedTile(
+                                user: u,
+                                onRemove: () => widget.onRemove(u['id']),
+                              ))
+                          .toList(),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: colors.tint(colors.info, surface: colors.clayBg),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: colors.info),
+                        ),
+                        child: Row(
                           children: [
-                            _FloatingWidget(
-                              duration: const Duration(milliseconds: 2400),
-                              offset: 9,
-                              child: Container(
-                                width: 90,
-                                height: 90,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Center(
-                                  child: Icon(Icons.people_outline,
-                                      color: Colors.white, size: 48),
-                                ),
+                            Icon(Icons.info_outline,
+                                color: colors.info, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Invites send automatically once you finish setup.',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurface,
+                                    height: 1.4),
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            ObProgressDots(count: 3, active: 0),
                           ],
                         ),
                       ),
-              ],
+                    ],
+                  ],
+                ],
+              ),
             ),
           ),
-        ),
-
-        // Body
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Find your buddy',
-                    style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1E293B))),
-                const SizedBox(height: 8),
-                Text(
-                  'Connect with friends already on Gym Buddy and start building streaks from day one.',
-                  style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                      height: 1.5),
-                ),
-                const SizedBox(height: 20),
-
-                if (!_searching) ...[
-                  ObGradientButton(
-                    label: 'Find my friends',
-                    icon: Icons.search,
-                    onTap: () =>
-                        setState(() => _searching = true),
-                  ),
-                  const SizedBox(height: 10),
-                  ObGhostButton(
-                      label: 'Skip for now',
-                      onTap: widget.onSkip),
-                ] else ...[
-                  if (_results.isNotEmpty) ...[
-                    Text('Results',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey[500])),
-                    const SizedBox(height: 8),
-                    ..._results
-                        .map((u) => _UserResultTile(
-                              user: u,
-                              isInvited: widget.pendingInvites
-                                  .any((p) => p['id'] == u['id']),
-                              onInvite: () =>
-                                  widget.onInvite(u),
-                              onRemove: () => widget
-                                  .onRemove(u['id']),
-                            ))
-                        .toList(),
-                  ] else if (_searchCtrl.text.isNotEmpty &&
-                      !_isSearching)
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 20),
-                        child: Text('No users found',
-                            style: TextStyle(
-                                color: Colors.grey[400],
-                                fontSize: 14)),
-                      ),
-                    ),
-
-                  if (widget.pendingInvites.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                        'Invited (${widget.pendingInvites.length})',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey[500])),
-                    const SizedBox(height: 8),
-                    ...widget.pendingInvites
-                        .map((u) => _InvitedTile(
-                              user: u,
-                              onRemove: () => widget
-                                  .onRemove(u['id']),
-                            ))
-                        .toList(),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEFF6FF),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: const Color(0xFFBFDBFE)),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.info_outline,
-                              color: kObBlue, size: 16),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Invites send automatically once you finish setup.',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF1D4ED8),
-                                  height: 1.4),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-
-                  const SizedBox(height: 20),
-                  ObGradientButton(
+          _Footer(
+            dot: 0,
+            active: widget.active,
+            onDotTap: widget.onDotTap,
+            cta: _searching
+                ? _ActionButton(
                     label: widget.pendingInvites.isEmpty
                         ? 'Next'
                         : 'Next — continue setup',
                     onTap: widget.onNext,
+                  )
+                : _ActionButton(
+                    label: 'Find my friends',
+                    icon: Icons.search,
+                    onTap: () => setState(() => _searching = true),
                   ),
-                ],
-              ],
-            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -465,22 +643,25 @@ class _UserResultTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final emoji = _avatarEmojis[user['avatar_id']] ?? '🦁';
+    final colors = AppColors.of(context);
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding:
           const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colors.clayBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: colors.divider),
       ),
       child: Row(
         children: [
           Container(
             width: 38,
             height: 38,
-            decoration: const BoxDecoration(
-                color: Color(0xFFEFF6FF), shape: BoxShape.circle),
+            decoration: BoxDecoration(
+                color: colors.tint(scheme.primary, surface: colors.clayBg),
+                shape: BoxShape.circle),
             child: Center(
                 child:
                     Text(emoji, style: const TextStyle(fontSize: 20))),
@@ -491,13 +672,12 @@ class _UserResultTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(user['display_name'] ?? '',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF1E293B))),
+                        color: scheme.onSurface)),
                 Text('@${user['username'] ?? ''}',
-                    style: TextStyle(
-                        fontSize: 12, color: Colors.grey[500])),
+                    style: TextStyle(fontSize: 12, color: colors.inkMuted)),
               ],
             ),
           ),
@@ -507,14 +687,11 @@ class _UserResultTile extends StatelessWidget {
               padding: const EdgeInsets.symmetric(
                   horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                gradient: isInvited ? null : kGradient,
                 color: isInvited
-                    ? const Color(0xFFDCFCE7)
-                    : null,
+                    ? colors.tint(colors.success, surface: colors.clayBg)
+                    : colors.streakOrange,
                 borderRadius: BorderRadius.circular(8),
-                border: isInvited
-                    ? Border.all(color: const Color(0xFF86EFAC))
-                    : null,
+                border: isInvited ? Border.all(color: colors.success) : null,
               ),
               child: Text(
                 isInvited ? 'Invited' : 'Invite',
@@ -522,8 +699,8 @@ class _UserResultTile extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: isInvited
-                      ? const Color(0xFF166534)
-                      : Colors.white,
+                      ? colors.success
+                      : colors.readableForeground(colors.streakOrange),
                 ),
               ),
             ),
@@ -542,32 +719,32 @@ class _InvitedTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding:
           const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0FDF4),
+        color: colors.tint(colors.success, surface: colors.clayBg),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF86EFAC)),
+        border: Border.all(color: colors.success),
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle,
-              color: Color(0xFF10B981), size: 16),
+          Icon(Icons.check_circle, color: colors.success, size: 16),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               '${user['display_name']} · @${user['username']}',
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
-                  color: Color(0xFF065F46)),
+                  color: Theme.of(context).colorScheme.onSurface),
             ),
           ),
           GestureDetector(
             onTap: onRemove,
-            child: Icon(Icons.close, size: 16, color: Colors.grey[400]),
+            child: Icon(Icons.close, size: 16, color: colors.inkMuted),
           ),
         ],
       ),
@@ -600,11 +777,21 @@ class _FloatingWidgetState extends State<_FloatingWidget>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: widget.duration)
-      ..repeat(reverse: true);
+    _ctrl = AnimationController(vsync: this, duration: widget.duration);
     _anim = Tween<double>(begin: 0, end: widget.offset).animate(
       CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reduced motion: hold still at the resting position.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _ctrl.reset();
+    } else if (!_ctrl.isAnimating) {
+      _ctrl.repeat(reverse: true);
+    }
   }
 
   @override
@@ -657,70 +844,48 @@ class FadeSlideRoute<T> extends PageRouteBuilder<T> {
         );
 }
 
-// ── Slide 2 — Build your streak ────────────────────────────────────────────
+// ── Slide 2 — Earn cosmetics ───────────────────────────────────────────────
 class _Slide2 extends StatelessWidget {
   final VoidCallback onNext;
-  final VoidCallback onSkip;
-  const _Slide2({required this.onNext, required this.onSkip});
+  final bool active;
+  final ValueChanged<int> onDotTap;
+  const _Slide2(
+      {required this.onNext, required this.active, required this.onDotTap});
 
   @override
   Widget build(BuildContext context) {
     return _ValuePropLayout(
       dot: 1,
-      onSkip: onSkip,
-      illustration: _FloatingWidget(
-        duration: const Duration(milliseconds: 2200),
-        child: Container(
-          width: 90,
-          height: 90,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
-            shape: BoxShape.circle,
-          ),
-          child: const Center(
-            child: Icon(Icons.local_fire_department,
-                color: Colors.white, size: 48),
-          ),
-        ),
-      ),
-      title: 'Build your streak',
+      active: active,
+      onDotTap: onDotTap,
+      icon: Icons.palette,
+      title: 'Earn cosmetics, not paywalls',
       body:
-          'Your streak only counts when you and your partner both check in. Real accountability — not just a number.',
+          'No premium tiers. Every ring, border and skin is unlocked by playing, not paying.',
       onNext: onNext,
     );
   }
 }
 
-// ── Slide 3 — Meet Coach Max ───────────────────────────────────────────────
+// ── Slide 3 — Never train alone ────────────────────────────────────────────
 class _Slide3 extends StatelessWidget {
   final VoidCallback onNext;
-  final VoidCallback onSkip;
-  const _Slide3({required this.onNext, required this.onSkip});
+  final bool active;
+  final ValueChanged<int> onDotTap;
+  const _Slide3(
+      {required this.onNext, required this.active, required this.onDotTap});
 
   @override
   Widget build(BuildContext context) {
     return _ValuePropLayout(
       dot: 2,
-      onSkip: onSkip,
-      illustration: _FloatingWidget(
-        duration: const Duration(milliseconds: 1800),
-        offset: 8,
-        child: Container(
-          width: 90,
-          height: 90,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
-            shape: BoxShape.circle,
-          ),
-          child: const Center(
-            child: Text('🤖', style: TextStyle(fontSize: 48)),
-          ),
-        ),
-      ),
-      title: 'Meet Coach Max',
+      active: active,
+      onDotTap: onDotTap,
+      icon: Icons.handshake,
+      title: 'Never train alone',
       body:
-          'No buddy? No problem. Coach Max keeps your streak alive, checks in automatically, and never lets you down.',
-      ctaLabel: "Let's go",
+          'Pick a real buddy or team up with Coach Max while you wait — either way, someone is checking in with you.',
+      ctaLabel: 'Get started',
       onNext: onNext,
     );
   }
@@ -729,8 +894,9 @@ class _Slide3 extends StatelessWidget {
 // ── Shared value prop layout ───────────────────────────────────────────────
 class _ValuePropLayout extends StatelessWidget {
   final int dot;
-  final VoidCallback onSkip;
-  final Widget illustration;
+  final bool active;
+  final ValueChanged<int> onDotTap;
+  final IconData icon;
   final String title;
   final String body;
   final String? ctaLabel;
@@ -738,8 +904,9 @@ class _ValuePropLayout extends StatelessWidget {
 
   const _ValuePropLayout({
     required this.dot,
-    required this.onSkip,
-    required this.illustration,
+    required this.active,
+    required this.onDotTap,
+    required this.icon,
     required this.title,
     required this.body,
     this.ctaLabel,
@@ -748,54 +915,55 @@ class _ValuePropLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _GradBand(
-          illustration: illustration,
-          topRow: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: onSkip,
-                child: const Text('Skip',
-                    style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500)),
+    final colors = AppColors.of(context);
+    return SafeArea(
+      child: Column(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                children: [
+                  const Spacer(flex: 2),
+                  _IconCard(icon),
+                  const SizedBox(height: 40),
+                  _StaggerIn(
+                    active: active,
+                    delayMs: 0,
+                    child: Text(title,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(context).colorScheme.onSurface)),
+                  ),
+                  const SizedBox(height: 12),
+                  _StaggerIn(
+                    active: active,
+                    delayMs: 60,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 300),
+                      child: Text(body,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 15,
+                              color: colors.inkMuted,
+                              height: 1.5)),
+                    ),
+                  ),
+                  const Spacer(flex: 3),
+                ],
               ),
             ),
           ),
-          bottomRow: ObProgressDots(count: 3, active: dot),
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1E293B))),
-                const SizedBox(height: 10),
-                Text(body,
-                    style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                        height: 1.6)),
-                const Spacer(),
-                ObGradientButton(
-                  label: ctaLabel ?? 'Next',
-                  onTap: onNext,
-                ),
-              ],
-            ),
+          _Footer(
+            dot: dot,
+            active: active,
+            onDotTap: onDotTap,
+            cta: _ActionButton(label: ctaLabel ?? 'Continue', onTap: onNext),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
