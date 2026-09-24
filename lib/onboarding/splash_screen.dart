@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'onboarding_theme.dart';
+import '../theme/app_theme.dart';
 import 'onboarding_value_props.dart';
 import '../signup_screen.dart';
 import '../login_screen.dart';
@@ -15,20 +15,47 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
+  // Entrance timeline: tile scales in over 0–450ms, then wordmark, tagline,
+  // CTA and sign-in link fade+slide up, 60ms apart from 380ms, 400ms each.
+  static const _totalMs = 960.0;
   late final AnimationController _ctrl;
-  late final Animation<double> _fade;
-  late final Animation<Offset> _slide;
+  late final Animation<double> _tileScale;
+  bool _ctaPressed = false;
 
   @override
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 900));
-    _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    _slide = Tween<Offset>(
-            begin: const Offset(0, 0.12), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
-    _ctrl.forward();
+        vsync: this, duration: Duration(milliseconds: _totalMs.toInt()));
+    _tileScale = Tween<double>(begin: 0.8, end: 1.0).animate(CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0, 450 / _totalMs, curve: Curves.easeOutBack)));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reduced motion: jump straight to the final frame.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _ctrl.value = 1;
+    } else if (_ctrl.isDismissed) {
+      _ctrl.forward();
+    }
+  }
+
+  Widget _stagger(int startMs, Widget child) {
+    final curved = CurvedAnimation(
+        parent: _ctrl,
+        curve: Interval(startMs / _totalMs, (startMs + 400) / _totalMs,
+            curve: Curves.easeOut));
+    return FadeTransition(
+      opacity: curved,
+      child: SlideTransition(
+        position: Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
+            .animate(curved),
+        child: child,
+      ),
+    );
   }
 
   @override
@@ -61,109 +88,134 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: kGradientDiag),
-        child: SafeArea(
-          child: FadeTransition(
-            opacity: _fade,
-            child: SlideTransition(
-              position: _slide,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  children: [
-                    const Spacer(flex: 3),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            children: [
+              const Spacer(flex: 3),
 
-                    // Logo
-                    Container(
-                      width: 88,
-                      height: 88,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: const Center(
-                        child: _DumbbellIcon(size: 48, color: Colors.white),
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    const Text(
-                      'Gym Buddy',
-                      style: TextStyle(
-                        fontSize: 34,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    Text(
-                      'Train together. Streak together.',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white.withOpacity(0.8),
-                        height: 1.4,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    const Spacer(flex: 3),
-
-                    // CTA
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _getStarted,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: kObBlue,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          'Get started',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    GestureDetector(
-                      onTap: _signIn,
-                      child: RichText(
-                        text: TextSpan(
-                          style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.white.withOpacity(0.7)),
-                          children: const [
-                            TextSpan(text: 'Already have an account? '),
-                            TextSpan(
-                              text: 'Sign in',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 32),
-                  ],
+              // Logo
+              ScaleTransition(
+                scale: _tileScale,
+                child: Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    color: colors.clayBg,
+                    borderRadius: BorderRadius.circular(26),
+                    boxShadow: colors.clayShadow(),
+                  ),
+                  child: Center(
+                    child: _DumbbellIcon(size: 44, color: scheme.primary),
+                  ),
                 ),
               ),
-            ),
+
+              const SizedBox(height: 24),
+
+              _stagger(
+                380,
+                Text(
+                  'Gym Buddy',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurface,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              _stagger(
+                440,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 260),
+                  child: Text(
+                    'Streaks are better with a buddy. Check in together, every day.',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: colors.inkMuted,
+                      height: 1.4,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+
+              const Spacer(flex: 3),
+
+              // CTA
+              _stagger(
+                500,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 326),
+                  child: Listener(
+                    onPointerDown: (_) => setState(() => _ctaPressed = true),
+                    onPointerUp: (_) => setState(() => _ctaPressed = false),
+                    onPointerCancel: (_) =>
+                        setState(() => _ctaPressed = false),
+                    child: AnimatedScale(
+                      scale: _ctaPressed ? 0.97 : 1.0,
+                      duration: reduceMotion
+                          ? Duration.zero
+                          : const Duration(milliseconds: 100),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: _getStarted,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: colors.streakOrange,
+                            foregroundColor:
+                                colors.readableForeground(colors.streakOrange),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16)),
+                            elevation: 0,
+                          ),
+                          child: const Text(
+                            'Get started',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              _stagger(
+                560,
+                GestureDetector(
+                  onTap: _signIn,
+                  child: RichText(
+                    text: TextSpan(
+                      style: TextStyle(fontSize: 14, color: colors.inkMuted),
+                      children: [
+                        const TextSpan(text: 'Already have an account? '),
+                        TextSpan(
+                          text: 'Sign in',
+                          style: TextStyle(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 32),
+            ],
           ),
         ),
       ),
