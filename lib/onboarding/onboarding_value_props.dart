@@ -361,18 +361,12 @@ class _Slide1State extends State<_Slide1> {
     try {
       final clean =
           query.startsWith('@') ? query.substring(1) : query;
-      // Escape % and _ so they're treated as literal characters, not
-      // SQL LIKE wildcards (S10 audit fix).
-      final escapedClean = clean
-          .replaceAll('\\', '\\\\')
-          .replaceAll('%', '\\%')
-          .replaceAll('_', '\\_');
+      // search_usernames RPC (SECURITY DEFINER, granted to anon) does the
+      // %/_ escaping and the 3-char minimum server-side -- this runs
+      // pre-signup, when the caller has no session and can't read
+      // user_profiles directly.
       final res = await Supabase.instance.client
-          .from('user_profiles')
-          .select('id, username, display_name, avatar_id')
-          .ilike('username', '%$escapedClean%')
-          .not('username', 'is', null)
-          .limit(10);
+          .rpc('search_usernames', params: {'q': clean});
       if (mounted) {
         setState(() {
           _results = List<Map<String, dynamic>>.from(res);
