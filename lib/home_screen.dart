@@ -13,6 +13,7 @@ import 'widgets/ai_disclosure_tag.dart';
 import 'package:confetti/confetti.dart';
 import 'package:flutter/services.dart';
 import 'widgets/user_avatar.dart';
+import 'widgets/press_scale.dart';
 import 'services/team_sync_service.dart';
 import 'package:flutter/foundation.dart';
 import 'services/break_day_service.dart';
@@ -130,7 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.of(context).clayBg,
+      backgroundColor: context.watch<AccentThemeProvider>().palette.background,
       extendBody: true,
       body: PageView(
         controller: _tabPageController,
@@ -604,6 +605,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   int _buddyCount = 0;
   int _achievementCount = 0;
 
+  // Header data (avatar, level, coins) — loaded separately from the streak
+  // wheel via _loadHeaderData() so a slow query can't block it.
+  LevelInfo? _levelInfo;
+  int _coinBalance = 0;
+  String? _myAvatarId;
+
   late ConfettiController _confettiController;
   late ConfettiController _confettiControllerRight;
   int _lastCelebratedStreak = 0;
@@ -662,7 +669,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       initialPage: 10080,
     );
 
-    _trayOrder = [0, 1, 2]..shuffle();
+    // Workout/coach-tip only — the week card and team-status card are fixed,
+    // unshuffled leading pages (see _buildInfoTray).
+    _trayOrder = [0, 1]..shuffle();
     _trayController = PageController();
 
     _presenceService.onPresenceChanged = (state) {
@@ -684,6 +693,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
     
     _initializeHomePage();
+    _loadHeaderData();
     _updateCountdown();
     _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _updateCountdown());
     _confettiController = ConfettiController(duration: const Duration(seconds: 3));
@@ -710,6 +720,36 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   
     // Reset broken streaks in background AFTER UI is shown
     _teamStreakService.checkAndResetBrokenStreaks();
+  }
+
+  /// Avatar, level and coin balance for the new header row — kept off
+  /// _initializeHomePage's await chain so a slow query here can't delay the
+  /// streak wheel.
+  Future<void> _loadHeaderData() async {
+    final uid = _supabase.auth.currentUser?.id;
+    if (uid == null) return;
+    try {
+      final profileFuture = _supabase
+          .from('user_profiles')
+          .select('avatar_id')
+          .eq('id', uid)
+          .single();
+      final levelFuture = LevelService().getLevelInfo();
+      final coinFuture = CoinService().getBalance();
+
+      final profile = await profileFuture;
+      final level = await levelFuture;
+      final coins = await coinFuture;
+
+      if (!mounted) return;
+      setState(() {
+        _myAvatarId = profile['avatar_id'] as String?;
+        _levelInfo = level;
+        _coinBalance = coins;
+      });
+    } catch (e) {
+      if (kDebugMode) debugLog('❌ _loadHeaderData: $e');
+    }
   }
 
   void _setupAppLifecycleListener() {
@@ -901,8 +941,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
     debugLog('  Current index: $_currentCarouselIndex');
 
-    final statusCard =
-        _hasCheckedInToday ? _buildTeamStatusCard(displayItems) : null;
+    // Below 700px the persistent week card would push the tray off-screen,
+    // so it folds into the tray's own swipe instead — see _buildInfoTray.
+    final compact = _isCompactHeight(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -912,22 +953,27 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         _buildSwipeHint(),
         _buildCheckInCard(displayItems),
         // Fills the room the "Take a break day" link vacates once you've
-        // checked in. Both cards follow the focused wheel slot, same as the
-        // streak count and the "on break today" line above them.
+        // checked in. Follows the focused wheel slot, same as the streak
+        // count and the "on break today" line above it.
         if (_hasCheckedInToday) ...[
-          if (statusCard != null) ...[
-            const SizedBox(height: 10),
-            statusCard,
-          ],
           const SizedBox(height: 10),
           _buildMilestoneCard(displayItems),
         ],
         const SizedBox(height: 10),
-        _buildInfoTray(),
+        _buildInfoTray(displayItems),
+        if (!compact) ...[
+          const SizedBox(height: 10),
+          _buildWeekCard(),
+        ],
         const SizedBox(height: 4),
       ],
     );
   }
+
+  /// Short phones (e.g. iPhone SE) don't have room for the tray AND a
+  /// separate persistent week card — see _buildDashboardBody/_buildInfoTray.
+  bool _isCompactHeight(BuildContext context) =>
+      MediaQuery.of(context).size.height < 700;
 
   /// Mirrors [AppColors.actionGradient]'s formula for the non-orange tokens, so
   /// every clay gradient is derived from one role colour, never a second hex.
@@ -961,33 +1007,77 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
-  /// Greeting · sort · bell, a hairline rule, then the focused streak's
-  /// check-in chip right-aligned under the bell.
+  /// Avatar · coins, spacer, sort · bell — then, once level info has loaded,
+  /// a thin XP bar with the LV progress row underneath.
   Widget _buildDashboardHeader() {
     final c = AppColors.of(context);
-    // The clay slab is the surface here, so the greeting has to be measured
-    // against it — a fixed white was invisible on light accents (1.12:1).
-    final ink = c.readableForeground(c.clayBg);
+    final accentPalette = context.watch<AccentThemeProvider>().palette;
+    // The header sits directly on the Scaffold body, not a clay slab, so
+    // ink is measured against the true background, not the clay step.
+    final ink = c.readableForeground(accentPalette.background);
+    final levelInfo = _levelInfo;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
-          child: Row(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              Expanded(
-                child: Text(
-                  _getGreeting(),
-                  style: TextStyle(
-                    color: ink,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+              _clayCircleButton(
+                size: 38,
+                tooltip: 'Profile',
+                onTap: () {
+                  final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+                  homeState?.setState(() => homeState._selectedIndex = 4);
+                },
+                child: ClipOval(
+                  child: UserAvatar(avatarId: _myAvatarId ?? 'lion', size: 32),
                 ),
               ),
               const SizedBox(width: 10),
+              GestureDetector(
+                onTap: () {
+                  final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+                  homeState?.setState(() => homeState._selectedIndex = 3);
+                },
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [c.claySurfaceLight, c.claySurface],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: c.clayShadow(),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Color(0xFFFBBF24), // gold
+                        ),
+                      ),
+                      const SizedBox(width: 7),
+                      Text(
+                        '$_coinBalance',
+                        style: TextStyle(
+                          color: ink,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const Spacer(),
               // Sort/filter lived in the old carousel header, which this
               // replaces; it keeps its own control so the modes stay reachable.
               _clayCircleButton(
@@ -1012,9 +1102,43 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ),
             ],
           ),
-        ),
-        Container(height: 1, color: c.clayShadowLight),
-      ],
+          if (levelInfo != null) ...[
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(100),
+              child: LinearProgressIndicator(
+                value: levelInfo.progressPercent,
+                minHeight: 6,
+                backgroundColor: c.claySurface,
+                valueColor: AlwaysStoppedAnimation<Color>(c.streakOrange),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'LV ${levelInfo.level} · ${levelInfo.xpIntoCurrentLevel}/'
+                  '${levelInfo.xpForNextLevel - levelInfo.xpForThisLevel} XP',
+                  style: TextStyle(
+                    color: c.inkMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  'LV ${levelInfo.level + 1}',
+                  style: TextStyle(
+                    color: c.inkMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -1170,46 +1294,63 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     return buddy != null && _buddyOnBreakToday[buddy.userId] == true;
   }
 
-  Widget _buildInfoTray() {
+  /// [displayItems] is the wheel's items, needed to resolve the leading
+  /// team-status card exactly the way the old standalone slab did.
+  Widget _buildInfoTray(List<dynamic> displayItems) {
     final c = AppColors.of(context);
     final tip = coachTips[DateTime.now().millisecondsSinceEpoch % coachTips.length];
-    final cards = [
-      _buildTrayWorkout(),
-      _buildTrayCoachTip(tip),
-      _buildTrayHeatmap(),
+    // Same condition/result the old standalone "Team Activity" slab used —
+    // just relocated here as the tray's leading, unshuffled page.
+    final teamStatusCard =
+        _hasCheckedInToday ? _buildTeamStatusCard(displayItems) : null;
+    final rotating = [_buildTrayWorkout(), _buildTrayCoachTip(tip)];
+    final orderedRotating = _trayOrder.map((i) => rotating[i]).toList();
+
+    final cards = <Widget>[
+      // Compact-height phones fold the persistent week card into the tray
+      // itself instead of also rendering it below — see _buildDashboardBody.
+      if (_isCompactHeight(context)) _buildWeekCard(),
+      if (teamStatusCard != null) teamStatusCard,
+      ...orderedRotating,
     ];
-    final orderedCards = _trayOrder.map((i) => cards[i]).toList();
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          // Sized to the tallest real card (the 3-line coach tip) with its
-          // trimmed padding — not a clamp: nothing is cut at this height.
-          height: 128,
-          child: PageView(
+
+    return SizedBox(
+      // Sized to the tallest real card (the 3-line coach tip) with its
+      // trimmed padding — not a clamp: nothing is cut at this height.
+      height: 128,
+      child: Stack(
+        children: [
+          PageView(
             controller: _trayController,
             onPageChanged: (i) => setState(() => _trayIndex = i),
-            children: orderedCards,
+            children: cards,
           ),
-        ),
-        const SizedBox(height: 6),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(3, (i) {
-            final active = i == _trayIndex;
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              width: active ? 22 : 9,
-              height: 9,
-              decoration: BoxDecoration(
-                color: active ? c.info : c.claySurfaceLight,
-                borderRadius: BorderRadius.circular(4),
+          if (cards.length > 1)
+            Positioned(
+              bottom: 8,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(cards.length, (i) {
+                    final active = i == _trayIndex.clamp(0, cards.length - 1);
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 250),
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      width: active ? 22 : 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        color: active ? c.info : c.claySurfaceLight,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    );
+                  }),
+                ),
               ),
-            );
-          }),
-        ),
-      ],
+            ),
+        ],
+      ),
     );
   }
 
@@ -1496,7 +1637,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   /// Vector-icon, vertically-centered variant of the "TODAY'S WORKOUT" tray
   /// card. Bespoke rather than a _trayRow call: _trayRow's Column has no
   /// mainAxisAlignment set, so inside _buildInfoTray's fixed 128px PageView
-  /// box its content sits top-anchored — the same fix _buildTrayHeatmap
+  /// box its content sits top-anchored — the same fix _buildWeekCard
   /// already applies to itself, just not something safe to bake into
   /// _trayRow without re-centering every other card built on it.
   Widget _buildTodayWorkoutCard({
@@ -1644,18 +1785,21 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
-  Widget _buildTrayHeatmap() {
+  /// Persistent (non-swipeable) 7-day week card — see _buildDashboardBody
+  /// and _buildInfoTray for where it's placed depending on screen height.
+  Widget _buildWeekCard() {
     final c = AppColors.of(context);
+    final danger = context.watch<AccentThemeProvider>().palette.statusDanger;
     final today = DateTime.now();
     final monday = today.subtract(Duration(days: today.weekday - 1));
     final week = List.generate(7, (i) => monday.add(Duration(days: i)));
-    final checkedCount = week.where((d) => _isDateCheckedIn(d)).length;
-    final ink = c.readableForeground(c.claySurface);
+    final checkedCount =
+        week.where((d) => !d.isAfter(today) && _isDateCheckedIn(d)).length;
 
     return _clayTraySlab(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1682,84 +1826,151 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: week.map((date) {
-              // Straight row lookup for every column, today included — the
-              // _hasCheckedInToday special-case caused the boundary-hour
-              // double-🔥 (see _isDateCheckedIn).
-              final checked = !date.isAfter(today) && _isDateCheckedIn(date);
-              // Checked-in wins over break: a real workout is the stronger signal.
-              final onBreak =
-                  !checked && !date.isAfter(today) && _isDateOnBreak(date);
-              final isToday = _isSameDay(date, today);
-              final isFuture = date.isAfter(today);
-
-              return Column(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: checked
-                          ? LinearGradient(
-                              colors: _grad(c.streakOrange),
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            )
-                          : onBreak
-                              ? LinearGradient(
-                                  colors: _grad(c.info),
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                )
-                              : LinearGradient(
-                                  colors: [c.claySurfaceLight, c.claySurface],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                      border: isToday
-                          ? Border.all(color: c.streakOrange, width: 2)
-                          : null,
-                      // Days not yet earned read as pressed-in, not raised.
-                      boxShadow: c.clayShadow(inset: !checked && !onBreak),
-                    ),
-                    child: Center(
-                      child: checked
-                          ? const Text('🔥', style: TextStyle(fontSize: 14))
-                          : onBreak
-                              ? Icon(Icons.shield,
-                                  size: 13, color: c.readableForeground(c.info))
-                              : Text(
-                                  '${date.day}',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: isFuture
-                                        ? c.inkMuted.withValues(alpha: 0.45)
-                                        : isToday
-                                            ? c.streakOrange
-                                            : c.inkMuted,
-                                    fontWeight: isToday
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                  ),
-                                ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _getDayInitial(date),
-                    style: TextStyle(
-                      fontSize: 9,
-                      color: isToday ? c.streakOrange : c.inkMuted,
-                      fontWeight: isToday ? FontWeight.w700 : FontWeight.normal,
-                    ),
-                  ),
-                ],
-              );
-            }).toList(),
+            children:
+                week.map((date) => _buildWeekDay(date, today, danger)).toList(),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _legendDot(color: c.streakOrange, filled: true, label: 'Done'),
+              const SizedBox(width: 12),
+              _legendDot(color: danger, filled: false, label: 'Missed'),
+              const SizedBox(width: 12),
+              _legendDot(color: c.info, filled: false, label: 'Freeze'),
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  /// One day's circle for [_buildWeekCard]. "Missed" = a past day that's
+  /// neither checked in nor a logged break — a day still in progress today
+  /// never counts (see isPast).
+  Widget _buildWeekDay(DateTime date, DateTime today, Color danger) {
+    final c = AppColors.of(context);
+    // Straight row lookup for every column, today included — the
+    // _hasCheckedInToday special-case caused the boundary-hour double-🔥
+    // (see _isDateCheckedIn).
+    final isFuture = date.isAfter(today);
+    final isToday = _isSameDay(date, today);
+    final isPast = !isFuture && !isToday;
+    final checked = !isFuture && _isDateCheckedIn(date);
+    // Checked-in wins over break: a real workout is the stronger signal.
+    final onBreak = !checked && !isFuture && _isDateOnBreak(date);
+    final missed = isPast && !checked && !onBreak;
+
+    Widget circle;
+    if (checked) {
+      circle = Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: _grad(c.streakOrange),
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: c.clayShadow(),
+        ),
+        child: const Center(child: Text('🔥', style: TextStyle(fontSize: 14))),
+      );
+    } else if (onBreak) {
+      circle = Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: c.info.withValues(alpha: 0.16),
+          border: Border.all(color: c.info, width: 1.5),
+        ),
+        child: Center(child: Icon(Icons.shield, size: 13, color: c.info)),
+      );
+    } else if (missed) {
+      circle = Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: danger.withValues(alpha: 0.14),
+          border: Border.all(color: danger, width: 1.5),
+        ),
+        child: Center(child: Icon(Icons.close_rounded, size: 13, color: danger)),
+      );
+    } else {
+      // Future.
+      circle = Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: [c.claySurfaceLight, c.claySurface],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: c.clayShadow(inset: true),
+        ),
+        child: Center(
+          child: Text(
+            '${date.day}',
+            style: TextStyle(fontSize: 10, color: c.inkMuted.withValues(alpha: 0.45)),
+          ),
+        ),
+      );
+    }
+
+    // Today keeps its own state's fill/icon and just gains an outer ring, so
+    // e.g. a missed Monday that happens to be today still reads as missed.
+    if (isToday) {
+      circle = Container(
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: c.streakOrange, width: 2),
+        ),
+        child: circle,
+      );
+    }
+
+    return Column(
+      children: [
+        circle,
+        const SizedBox(height: 4),
+        Text(
+          _getDayInitial(date),
+          style: TextStyle(
+            fontSize: 9,
+            color: isToday ? c.streakOrange : c.inkMuted,
+            fontWeight: isToday ? FontWeight.w700 : FontWeight.normal,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// One dot+label pair for [_buildWeekCard]'s legend.
+  Widget _legendDot({required Color color, required bool filled, required String label}) {
+    final c = AppColors.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: filled ? color : Colors.transparent,
+            border: filled ? null : Border.all(color: color, width: 1.3),
+          ),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(fontSize: 9.5, color: c.inkMuted, fontWeight: FontWeight.w600),
+        ),
+      ],
     );
   }
 
@@ -1900,7 +2111,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: c.readableForeground(c.clayBg),
+                  color: c.readableForeground(accentPalette.background),
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
@@ -2190,9 +2401,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final fill = done ? _grad(c.success) : c.actionGradient;
     final label = c.readableForeground(fill.last);
 
-    return GestureDetector(
+    return PressScale(
       onTap: done || _isCheckingIn ? null : _checkIn,
-      behavior: HitTestBehavior.opaque,
       child: Container(
         width: double.infinity,
         height: 58,
@@ -3615,7 +3825,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     return Stack(
       children: [
         Scaffold(
-          backgroundColor: c.clayBg,
+          backgroundColor: context.watch<AccentThemeProvider>().palette.background,
           body: _isLoading
               ? _buildLoadingSkeleton()
               : SafeArea(
@@ -3895,19 +4105,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       context: context,
       builder: (context) => _AllStreaksDialog(streaks: _listStreaks),
     );
-  }
-
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) {
-      return 'Good Morning';
-    } else if (hour < 17) {
-      return 'Good Afternoon';
-    } else if (hour < 21) {
-      return 'Good Evening';
-    } else {
-      return 'Good Night';
-    }
   }
 
   String _getCurrentDate() {
