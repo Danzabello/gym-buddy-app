@@ -941,8 +941,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
     debugLog('  Current index: $_currentCarouselIndex');
 
-    // Below 700px the persistent week card would push the tray off-screen,
-    // so it folds into the tray's own swipe instead — see _buildInfoTray.
+    // On nearly every phone the persistent week card would push the tray
+    // off-screen, so it folds into the tray's own swipe instead — see
+    // _buildInfoTray.
     final compact = _isCompactHeight(context);
 
     return Column(
@@ -956,24 +957,25 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         // checked in. Follows the focused wheel slot, same as the streak
         // count and the "on break today" line above it.
         if (_hasCheckedInToday) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           _buildMilestoneCard(displayItems),
         ],
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _buildInfoTray(displayItems),
         if (!compact) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           _buildWeekCard(),
         ],
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
       ],
     );
   }
 
-  /// Short phones (e.g. iPhone SE) don't have room for the tray AND a
-  /// separate persistent week card — see _buildDashboardBody/_buildInfoTray.
+  /// True for nearly every phone (a Pixel 7a is ~919dp) — the tray and a
+  /// separate persistent week card don't both fit, so the week card folds
+  /// into the tray instead. See _buildDashboardBody/_buildInfoTray.
   bool _isCompactHeight(BuildContext context) =>
-      MediaQuery.of(context).size.height < 700;
+      MediaQuery.of(context).size.height < 1000;
 
   /// Mirrors [AppColors.actionGradient]'s formula for the non-orange tokens, so
   /// every clay gradient is derived from one role colour, never a second hex.
@@ -1018,7 +1020,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final levelInfo = _levelInfo;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1026,10 +1028,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             children: [
               _clayCircleButton(
                 size: 38,
-                tooltip: 'Profile',
-                onTap: () {
-                  final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-                  homeState?.setState(() => homeState._selectedIndex = 4);
+                tooltip: 'Wardrobe',
+                onTap: () async {
+                  final saved = await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(builder: (_) => const WardrobePage()),
+                  );
+                  if (saved == true) _loadHeaderData();
                 },
                 child: ClipOval(
                   child: UserAvatar(avatarId: _myAvatarId ?? 'lion', size: 32),
@@ -1103,7 +1108,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             ],
           ),
           if (levelInfo != null) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             ClipRRect(
               borderRadius: BorderRadius.circular(100),
               child: LinearProgressIndicator(
@@ -1113,7 +1118,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 valueColor: AlwaysStoppedAnimation<Color>(c.streakOrange),
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1169,7 +1174,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       onTap: _showAllStreaks,
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 2),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -1198,7 +1203,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   /// Centre slot focused, neighbours peeking; the 10080 % N wrap is unchanged.
   Widget _buildBuddyWheel(List<dynamic> displayItems) {
     return SizedBox(
-      height: 182,
+      height: 170,
       child: AnimatedBuilder(
         animation: _carouselEntranceAnimation,
         builder: (context, child) {
@@ -1268,7 +1273,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     return Opacity(
       opacity: 0.6,
       child: Padding(
-        padding: const EdgeInsets.only(top: 2, bottom: 4),
+        padding: const EdgeInsets.only(top: 0, bottom: 2),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -1829,16 +1834,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             children:
                 week.map((date) => _buildWeekDay(date, today, danger)).toList(),
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _legendDot(color: c.streakOrange, filled: true, label: 'Done'),
-              const SizedBox(width: 12),
-              _legendDot(color: danger, filled: false, label: 'Missed'),
-              const SizedBox(width: 12),
-              _legendDot(color: c.info, filled: false, label: 'Freeze'),
-            ],
-          ),
         ],
       ),
     );
@@ -1945,30 +1940,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             color: isToday ? c.streakOrange : c.inkMuted,
             fontWeight: isToday ? FontWeight.w700 : FontWeight.normal,
           ),
-        ),
-      ],
-    );
-  }
-
-  /// One dot+label pair for [_buildWeekCard]'s legend.
-  Widget _legendDot({required Color color, required bool filled, required String label}) {
-    final c = AppColors.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 7,
-          height: 7,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: filled ? color : Colors.transparent,
-            border: filled ? null : Border.all(color: color, width: 1.3),
-          ),
-        ),
-        const SizedBox(width: 5),
-        Text(
-          label,
-          style: TextStyle(fontSize: 9.5, color: c.inkMuted, fontWeight: FontWeight.w600),
         ),
       ],
     );
@@ -2306,7 +2277,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
+      padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
       decoration: BoxDecoration(
         color: c.claySurface,
         borderRadius: BorderRadius.circular(26),
@@ -2354,10 +2325,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ),
             ),
           ],
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           _buildCheckInCta(),
           if (_isOnBreakToday) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -2372,7 +2343,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           ],
           // Take a Break — subtle text link
           if (!_hasCheckedInToday) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             GestureDetector(
               onTap: _showTakeBreakDialog,
               behavior: HitTestBehavior.opaque,
