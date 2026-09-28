@@ -4021,56 +4021,133 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       context: context,
       // Tap anywhere on the dialog skips the clip to its final frame; the
       // Awesome! button still wins its own taps.
-      builder: (context) => GestureDetector(
-        onTap: () => videoKey.currentState?.skip(),
-        child: AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Column(
-          children: [
-            // PLACEMENT PENDING SIGN-OFF: 120px circle-clipped clip in the
-            // old emoji/halo slot.
-            CheckinIgniteVideo(key: videoKey, size: 120),
-            const SizedBox(height: 16),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+      builder: (context) {
+        final c = AppColors.of(context);
+        final scheme = Theme.of(context).colorScheme;
+        return GestureDetector(
+          onTap: () => videoKey.currentState?.skip(),
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+              decoration: BoxDecoration(
+                // Clay tokens rather than the mockup's #223A2F → #142420:
+                // this dialog shows on every accent, and fixed dark greens
+                // would break the light (signalBlue) skin.
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [c.claySurface, c.clayBg],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: c.clayShadow(),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // PLACEMENT PENDING SIGN-OFF: 120px circle-clipped clip in
+                  // the old emoji/halo slot, lit by an avatarRing glow.
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: c.avatarRing.withValues(alpha: 0.45),
+                          blurRadius: 26,
+                        ),
+                      ],
+                    ),
+                    child: CheckinIgniteVideo(key: videoKey, size: 120),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: scheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (streak != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      '$streak Day Streak!',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange[700],
+                        shadows: [
+                          Shadow(
+                            color: c.streakOrange.withValues(alpha: 0.35),
+                            blurRadius: 22,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  // actionGradient, not the mockup's #F97316: white on
+                  // #F97316 is 2.8:1; this pair keeps the label ≥3.3:1 and
+                  // follows the one-orange rule.
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: c.actionGradient.reversed.toList(),
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: c.streakOrange.withValues(alpha: 0.40),
+                          offset: const Offset(0, 8),
+                          blurRadius: 18,
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: Semantics(
+                        button: true,
+                        child: InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: () => Navigator.pop(context),
+                        child: const SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: Center(
+                            child: Text(
+                              'Awesome!',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18),
-            ),
-            if (streak != null) ...[
-            const SizedBox(height: 16),
-            Text(
-              '$streak Day Streak!',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: Colors.orange[700],
-              ),
-            ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Awesome!'),
           ),
-        ],
-      ),
-      ),
+        );
+      },
     );
   }
 
