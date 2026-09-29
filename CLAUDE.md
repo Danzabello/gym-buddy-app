@@ -32,11 +32,13 @@ REVOKE EXECUTE ON FUNCTION public.<fn>(<args>) FROM PUBLIC, anon;
 GRANT  EXECUTE ON FUNCTION public.<fn>(<args>) TO authenticated;  -- anon only if truly needed
 ```
 
+**Table grants must be explicit.** New `public` tables get `anon` and `authenticated` grants from default privileges, so every migration that creates a table must enable RLS, `REVOKE ALL … FROM anon`, `REVOKE TRUNCATE … FROM authenticated`, and grant only the privileges the client needs.
+
 **Account deletion** goes through the `delete-account` Edge Function (service_role deletes `user_profiles`, then `auth.admin.deleteUser`). A postgres-owned `SECURITY DEFINER` RPC cannot delete `auth.users` when called as `authenticated`, so the old `delete_own_account` RPC only ever removed the profile. Call sites: `AuthWrapper._cleanupOrphanedAccount`, `login_screen` orphan cleanup, onboarding retry.
 
 **Testing permissions:** run the trusted call in a clean session. PL/pgSQL caches plans per session, so an earlier more-privileged call can make a later `SET ROLE authenticated` call wrongly succeed. Verify with a fresh authenticated-only call.
 
-**Migrations:** `supabase/migrations/` and live history are reconciled, but a from-scratch replay / `db reset` fails. The base tables (`team_members`, `user_profiles`, `friendships`, …) predate version control. Their DDL is in `docs/pre_vc_schema_baseline_20260720.sql`, which is REFERENCE ONLY and never applied. Don't retime the baseline migration `20260628000000` to fix ordering; it only moves the failure. `migration repair` is metadata-only (never runs SQL).
+**Migrations:** live history is NOT reconciled with `supabase/migrations/`: 10 remote versions have no matching local file, so `supabase db push` is blocked until they are reconciled. Never run `migration repair --status reverted` on them. Apply migrations with the CLI (`supabase db query --linked -f <file>`, then `migration repair --status applied <version>`), not the MCP `apply_migration` tool: it stamps its own version, which caused this drift. A from-scratch replay / `db reset` also fails. The base tables (`team_members`, `user_profiles`, `friendships`, …) predate version control. Their DDL is in `docs/pre_vc_schema_baseline_20260720.sql`, which is REFERENCE ONLY and never applied. Don't retime the baseline migration `20260628000000` to fix ordering; it only moves the failure. `migration repair` is metadata-only (never runs SQL).
 
 **Known gap:** leaked-password protection is off (needs Pro plan). Enable it before public launch.
 
