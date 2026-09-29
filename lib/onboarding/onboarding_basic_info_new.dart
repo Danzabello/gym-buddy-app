@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'onboarding_theme.dart';
 import '../widgets/avatar_picker_screen.dart';
 import '../home_screen.dart';
+import '../theme/app_theme.dart';
 import '../services/coach_max_service.dart';
 import '../services/friend_service.dart';
 import '../services/auth_service.dart';
@@ -1279,17 +1280,22 @@ class _OnboardingConfirmationState
             currentStreak: 0, hasCheckedInToday: false)
         : "Let's go! Coach Max is ready for you.";
 
+    // Captured before navigating: this screen is disposed by the time the
+    // delayed snackbar fires, but ScaffoldMessenger sits above the Navigator
+    // (MaterialApp), so it outlives the route change and shows on HomeScreen.
+    final messenger = ScaffoldMessenger.of(context);
+    final successColor = AppColors.of(context).success;
+
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const HomeScreen()),
       (r) => false,
     );
 
     Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(msg),
-          backgroundColor: const Color(0xFF10B981),
+          backgroundColor: successColor,
           duration: const Duration(seconds: 4),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
