@@ -29,7 +29,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   bool _showPassword = false;
   bool _showConfirm = false;
-  bool _isLoading = false;
   bool _acceptTerms = false;
 
   String? _emailError;
@@ -297,7 +296,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   const SizedBox(height: 24),
                   ObGradientButton(
                     label: 'Sign up',
-                    isLoading: _isLoading,
                     onTap: _next,
                   ),
                   const SizedBox(height: 14),

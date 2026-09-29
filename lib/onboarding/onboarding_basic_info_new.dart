@@ -795,6 +795,7 @@ class _OnboardingBuddyPrefsState
   ];
 
 Future<void> _finish() async {
+  if (_isLoading) return;
   // Captured before the first await: the buddy-request snackbar below fires
   // after many awaits, and ScaffoldMessenger sits above the Navigator.
   final messenger = ScaffoldMessenger.of(context);

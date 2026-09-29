@@ -39,7 +39,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   // Which friend IDs have already been nudged today
   Set<String> _nudgedToday = {};
   // Friend IDs currently being nudged (loading state)
-  Set<String> _nudging = {};
+  final Set<String> _nudging = {};
 
   // buddy userId → our shared team streak (for search-page sublines/sort)
   Map<String, TeamStreak> _buddyStreaks = {};
@@ -155,6 +155,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     final id = friend['id'] as String;
     final name = friend['display_name'] as String? ?? 'your buddy';
 
+    if (_nudging.contains(id)) return;
     setState(() => _nudging.add(id));
 
     final result = await _nudgeService.sendNudge(
@@ -162,6 +163,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
       targetDisplayName: name,
     );
 
+    if (!mounted) return;
     setState(() {
       _nudging.remove(id);
       if (result == NudgeResult.sent) _nudgedToday.add(id);
