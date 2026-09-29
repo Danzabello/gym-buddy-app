@@ -795,6 +795,10 @@ class _OnboardingBuddyPrefsState
   ];
 
 Future<void> _finish() async {
+  // Captured before the first await: the buddy-request snackbar below fires
+  // after many awaits, and ScaffoldMessenger sits above the Navigator.
+  final messenger = ScaffoldMessenger.of(context);
+  final successColor = AppColors.of(context).success;
   setState(() => _isLoading = true);
   try {
     // ── Step 1: Create the account NOW (first time we touch Supabase Auth) ──
@@ -923,12 +927,12 @@ Future<void> _finish() async {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        messenger.showSnackBar(SnackBar(
           content: Text(failed == 0
               ? '$sent buddy request${sent == 1 ? '' : 's'} sent'
               : "$sent sent, $failed couldn't be sent"),
           backgroundColor:
-              failed == 0 ? const Color(0xFF10B981) : const Color(0xFFF97316),
+              failed == 0 ? successColor : const Color(0xFFF97316),
           behavior: SnackBarBehavior.floating,
         ));
       }
