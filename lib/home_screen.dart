@@ -7,7 +7,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/friend_service.dart';
 import 'services/workout_service.dart';
 import 'services/team_streak_service.dart';
-import 'widgets/coach_max_widget.dart';
 import 'widgets/skeleton_box.dart';
 import 'widgets/ai_disclosure_tag.dart';
 import 'package:confetti/confetti.dart';
@@ -42,7 +41,6 @@ import 'services/coin_service.dart';
 import 'widgets/menu_card.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'widgets/xp_progress_bar.dart';
 import 'services/level_service.dart';
 import 'pages/achievements_page.dart' as achievements_page;
 import 'widgets/achievement_toast.dart';
@@ -561,7 +559,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   final TeamSyncService _teamSyncService = TeamSyncService();
   final BreakDayService _breakDayService = BreakDayService();
   final NudgeService _nudgeService = NudgeService();
-  Map<String, bool> _streakCompletionStatus = {};
   Map<String, String> _nicknames = {};
 
   /// Buddy id -> IANA zone (user_profiles.timezone), for the danger
@@ -594,16 +591,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   Map<String, Color> _memberRingColors = {};
   bool _isLoading = true;
   bool _isCheckingIn = false;
-  bool _isRefreshing = false;
   bool _isBreakDialogOpen = false;
   static bool _weeklyPlanCheckedThisSession = false;
 
-
-  String _timeUntilMidnight = '';
-  int _pendingRequests = 0;
-  int _totalWorkouts = 0;
-  int _buddyCount = 0;
-  int _achievementCount = 0;
 
   // Header data (avatar, level, coins) — loaded separately from the streak
   // wheel via _loadHeaderData() so a slow query can't block it.
@@ -615,10 +605,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   late ConfettiController _confettiControllerRight;
   int _lastCelebratedStreak = 0;
   
-  // NEW: For streak navigation
-  int _currentStreakIndex = 0;
-  final PageController _pageController = PageController();
-
   int _currentCarouselIndex = 0;
   late PageController _carouselController;
 
@@ -638,7 +624,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   Timer? _countdownTimer;
 
   final PresenceService _presenceService = PresenceService();
-  Map<String, Map<String, dynamic>> _presenceState = {};
   List<String> _friendIds = [];
 
   // Live check-in feed for the streak rings — separate from the presence
@@ -674,8 +659,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _trayOrder = [0, 1]..shuffle();
     _trayController = PageController();
 
-    _presenceService.onPresenceChanged = (state) {
-        if (mounted) setState(() => _presenceState = state);
+    // Rebuild only: getFriendsWorkingOut reads the service, not local state.
+    _presenceService.onPresenceChanged = (_) {
+        if (mounted) setState(() {});
     };
     _presenceService.join();
     _subscribeToCheckIns();
@@ -1968,22 +1954,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
-  String _getFriendName(TeamStreak streak) {
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    final friendMember = streak.members.firstWhere(
-      (member) => member.userId != currentUserId,
-      orElse: () => streak.members.first,
-    );
-    
-    // Check for nickname first!
-    final nickname = _nicknames[friendMember.userId];
-    if (nickname != null && nickname.isNotEmpty) {
-      return nickname;
-    }
-    
-    return friendMember.displayName;
-  }
-
   /// Clay avatar for one wheel slot. [d] is 0.0 focused → 1.0 fully peeked.
   Widget _buildCarouselAvatar(TeamStreak streak, double d) {
     final c = AppColors.of(context);
@@ -3128,16 +3098,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   void _updateCountdown() {
     if (!mounted) return;
     
-    final now = DateTime.now();
-    final midnight = DateTime(now.year, now.month, now.day + 1);
-    final difference = midnight.difference(now);
-    
-    final hours = difference.inHours;
-    final minutes = difference.inMinutes % 60;
-    
-    setState(() {
-      _timeUntilMidnight = '${hours}h ${minutes}m';
-    });
+    // Rebuild only: the danger countdown text/fill recompute on this tick.
+    setState(() {});
   }
 
   void _showCustomModeSelector() async {
@@ -3229,45 +3191,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
   }
 
-  Future<bool> _isStreakCompleteToday(TeamStreak streak) async {
-    final currentUserId = _supabase.auth.currentUser?.id;
-    if (currentUserId == null) return false;
-
-    // Check if current user checked in
-    final userCheckedIn = streak.todayCheckIns.any((checkIn) => 
-      checkIn.userId == currentUserId
-    );
-
-    // Get real members (excluding Coach Max)
-    final realMembers = streak.members.where((m) => !m.isCoachMax).toList();
-    final memberIds = realMembers.map((m) => m.userId).toList();
-    
-    // The user's own local date key — matches the break_date rows and check_in_date.
-    final today = localTodayString();
-
-    // Get break day status
-    final breakDayStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, today);
-
-    if (streak.isCoachMaxTeam) {
-      // ✅ COACH MAX TEAM
-      // Complete if user checked in OR is on break (Coach Max covers)
-      final userOnBreak = breakDayStatus[currentUserId] ?? false;
-      return userCheckedIn || userOnBreak;
-    } else {
-      // ✅ FRIEND TEAM
-      // Complete if all members checked in OR are on break
-      for (var member in realMembers) {
-        final checkedIn = streak.todayCheckIns.any((c) => c.userId == member.userId);
-        final onBreak = breakDayStatus[member.userId] ?? false;
-        
-        if (!checkedIn && !onBreak) {
-          return false; // Someone is missing
-        }
-      }
-      return true;
-    }
-  }
-
   Future<void> _loadStreakData({bool showLoading = true}) async {
     // ── STEP 1: Show cached data instantly ──────────────────
     final cached = await _loadCachedDashboard();
@@ -3275,10 +3198,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       setState(() {
         _allStreaks           = [];
         _hasCheckedInToday   = cached['hasCheckedIn']   ?? false;
-        _pendingRequests     = cached['pendingRequests'] ?? 0;
-        _totalWorkouts       = cached['totalWorkouts']  ?? 0;
-        _buddyCount          = cached['buddyCount']     ?? 0;
-        _achievementCount    = cached['achievements']   ?? 0;
         _isLoading           = _allStreaks.isEmpty;
       });
       // Trigger entrance animation on first cached load
@@ -3366,11 +3285,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     // ── STEP 4: ALL remaining calls IN PARALLEL ──────────────
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
   
-    final today = DateTime.now();
-    final todayStr = DateTime(today.year, today.month, today.day)
-        .toIso8601String()
-        .split('T')[0];
-  
     // Local frame: check_in_date labels are the user's own local dates now,
     // so the heatmap's 7-day lower bound must be local too (was .toUtc()).
     final sevenDaysAgoStr = DateTime.now()
@@ -3379,19 +3293,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         .split('T')[0];
 
     final results = await Future.wait([
-      // [0] completion status for each streak
-      Future.wait(uniqueStreaks.map((s) => _isStreakCompleteToday(s))),
-      // [1] has checked in today
+      // [0] has checked in today
       _teamStreakService.hasCheckedInToday(),
-      // [2] today's workouts
+      // [1] today's workouts
       _workoutService.getTodaysWorkouts(),
-      // [3] pending friend requests
-      FriendService().getPendingRequests(),
-      // [4] friend list
+      // [2] friend list
       FriendService().getFriends(),
-      // [5] all workouts (for completed count)
-      _workoutService.getAllWorkouts(),
-      // [6] real check-in dates for the heatmap (last 7 days, this user)
+      // [3] real check-in dates for the heatmap (last 7 days, this user)
       // — fixes the bug where days were painted as "done" purely from
       // arithmetic on current_streak rather than real check-in history.
       currentUserId == null
@@ -3401,7 +3309,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               .select('check_in_date')
               .eq('user_id', currentUserId)
               .gte('check_in_date', sevenDaysAgoStr),
-      // [7] own uncancelled break days — heatmap third state + today badge
+      // [4] own uncancelled break days — heatmap third state + today badge
       currentUserId == null
           ? Future.value(<Map<String, dynamic>>[])
           : Supabase.instance.client
@@ -3412,17 +3320,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               .isFilter('cancelled_at', null),
     ]);
   
-    final completionList   = results[0] as List<bool>;
-    final hasCheckedIn     = results[1] as bool;
-    final todaysWorkouts   = results[2] as List<Map<String, dynamic>>;
-    final pendingFriends   = results[3] as List;
-    final friends          = results[4] as List;
-    final allWorkouts      = results[5] as List<Map<String, dynamic>>;
-    final checkInDateRows  = results[6] as List<Map<String, dynamic>>;
+    final hasCheckedIn     = results[0] as bool;
+    final todaysWorkouts   = results[1] as List<Map<String, dynamic>>;
+    final friends          = results[2] as List;
+    final checkInDateRows  = results[3] as List<Map<String, dynamic>>;
     final myCheckInDates   = checkInDateRows
         .map((r) => r['check_in_date'] as String)
         .toSet();
-    final myBreakDates     = (results[7] as List<Map<String, dynamic>>)
+    final myBreakDates     = (results[4] as List<Map<String, dynamic>>)
         .map((r) => r['break_date'] as String)
         .toSet();
 
@@ -3483,36 +3388,17 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         entry.key: _hexToColor(entry.value),
     };
 
-    final completionStatus = <String, bool>{};
-    for (int i = 0; i < uniqueStreaks.length; i++) {
-      completionStatus[uniqueStreaks[i].id] = completionList[i];
-    }
-  
     // Highest streak (already sorted, just pick first)
     final highestStreak = uniqueStreaks.isEmpty
         ? null
         : uniqueStreaks.reduce((a, b) =>
             a.currentStreak > b.currentStreak ? a : b);
   
-    final pendingWorkouts = todaysWorkouts.where((w) =>
-        w['buddy_id'] == currentUserId &&
-        w['buddy_status'] == 'pending').length;
-  
-    final completedWorkouts =
-        allWorkouts.where((w) => w['status'] == 'completed').length;
-  
-    int achievements = 0;
-    if (hasCheckedIn) achievements++;
-    if ((highestStreak?.currentStreak ?? 0) >= 7) achievements++;
-    if ((highestStreak?.currentStreak ?? 0) >= 30) achievements++;
-    if (friends.length >= 3) achievements++;
-  
     if (!mounted) return;
   
     setState(() {
       _allStreaks            = uniqueStreaks;
       _nicknames             = nicknames;
-      _streakCompletionStatus = completionStatus;
       _highestStreak         = highestStreak;
       _myCheckInDates        = myCheckInDates;
       _myBreakDates          = myBreakDates;
@@ -3523,11 +3409,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _hasCheckedInToday     = hasCheckedIn;
       _teamFeeds.clear();
       _todaysWorkouts        = todaysWorkouts;
-      _pendingRequests       = pendingFriends.length + pendingWorkouts;
-      _totalWorkouts         = completedWorkouts;
-      _buddyCount            = friends.length;
       _friendIds = List<String>.from(friends.map((f) => f['id']));
-      _achievementCount      = achievements;
       _isLoading             = false;
     });
   
@@ -3548,10 +3430,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     await _saveCachedDashboard(
       streaks:         uniqueStreaks,
       hasCheckedIn:    hasCheckedIn,
-      pendingRequests: pendingFriends.length + pendingWorkouts,
-      totalWorkouts:   completedWorkouts,
-      buddyCount:      friends.length,
-      achievements:    achievements,
     );
 
   }
@@ -3593,23 +3471,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   
 
-  Future<Map<String, dynamic>?> _loadUserProfile() async {
-    try {
-      final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-      if (currentUserId == null) return null;
-
-      final response = await Supabase.instance.client
-          .from('user_profiles')
-          .select('avatar_id, display_name')
-          .eq('id', currentUserId)
-          .single();
-
-      return response;
-    } catch (e) {
-      return null;
-    }
-  }
-
   Future<Map<String, dynamic>?> _loadCachedDashboard() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -3624,10 +3485,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   Future<void> _saveCachedDashboard({
     required List<TeamStreak> streaks,
     required bool hasCheckedIn,
-    required int pendingRequests,
-    required int totalWorkouts,
-    required int buddyCount,
-    required int achievements,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -3635,10 +3492,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       // (streak objects are rebuilt fresh each load)
       await prefs.setString('dashboard_cache', jsonEncode({
         'hasCheckedIn':    hasCheckedIn,
-        'pendingRequests': pendingRequests,
-        'totalWorkouts':   totalWorkouts,
-        'buddyCount':      buddyCount,
-        'achievements':    achievements,
         // Don't cache streaks — they're complex objects, just skip spinner
       }));
     } catch (_) {}
@@ -3817,7 +3670,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    final c = AppColors.of(context);
     final displayItems = _allStreaks.isEmpty ? null : _wheelItems();
     return Stack(
       children: [
@@ -4093,29 +3945,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
   }
 
-  String _formatDurationDash(int? minutes) {
-    if (minutes == null) return '';
-    final hours = minutes ~/ 60;
-    final mins = minutes % 60;
-    if (hours > 0) {
-      return mins > 0 ? '${hours}h ${mins}m' : '${hours}h';
-    }
-    return '${mins}m';
-  }
-
   void _showAllStreaks() {
     showDialog(
       context: context,
       builder: (context) => _AllStreaksDialog(streaks: _listStreaks),
     );
-  }
-
-  String _getCurrentDate() {
-    final now = DateTime.now();
-    final days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
-    return '${days[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}';
   }
 
   // Pure lookup against real server rows. No _hasCheckedInToday special-case:
@@ -4351,54 +4185,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
-  IconData _getWorkoutIcon(String? type) {
-    switch (type?.toLowerCase()) {
-      case 'cardio':
-        return Icons.directions_run;
-      case 'strength':
-      case 'weights':
-        return Icons.fitness_center;
-      case 'upper body':
-        return Icons.accessibility_new;
-      case 'lower body':
-      case 'legs':
-      case 'leg day':
-        return Icons.directions_walk;
-      case 'full body':
-        return Icons.sports_gymnastics;
-      case 'hiit':
-        return Icons.flash_on;
-      case 'yoga':
-        return Icons.self_improvement;
-      default:
-        return Icons.sports;
-    }
-  }
-
-  Color _getWorkoutColorDash(String? type) {
-    switch (type?.toLowerCase()) {
-      case 'cardio':
-        return Colors.red[700]!;
-      case 'strength':
-      case 'weights':
-        return Colors.blue[700]!;
-      case 'legs':
-      case 'leg day':
-      case 'lower body':
-        return Colors.orange[700]!;
-      case 'upper body':
-        return Colors.purple[700]!;
-      case 'full body':
-        return Colors.indigo[700]!;
-      case 'hiit':
-        return Colors.deepOrange[700]!;
-      case 'yoga':
-        return Colors.teal[700]!;
-      default:
-        return Colors.green[700]!;
-    }
-  }
-
   Future<void> _syncTeamCheckIns() async {
     if (kDebugMode) debugLog('🔄 Dashboard: Starting team sync...');
     
@@ -4602,7 +4388,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   void _showSortModeInfo(BuildContext context, StreakSortMode mode) {
-    final appColors = AppColors.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -5353,43 +5138,6 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
     );
   }
 }
-class _StatItem extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _StatItem(this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.orange,
-          ),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: AppColors.of(context).subtleText,
-          ),
-          textAlign: TextAlign.center,
-          overflow: TextOverflow.ellipsis,
-          maxLines: 2,
-        ),
-      ],
-    );
-  }
-}
 
 // Schedule Page with Real Functionality
 class SchedulePage extends StatefulWidget {
@@ -5401,14 +5149,11 @@ class SchedulePage extends StatefulWidget {
 
 class _SchedulePageState extends State<SchedulePage> {
   final WorkoutService _workoutService = WorkoutService();
-  final FriendService _friendService = FriendService();
 
-  int _refreshTrigger = 0;
   int _completedRefreshTrigger = 0;
 
   
   List<Map<String, dynamic>> _upcomingWorkouts = [];
-  List<Map<String, dynamic>> _friends = [];
   bool _isLoading = true;
 
   @override
@@ -5443,7 +5188,6 @@ class _SchedulePageState extends State<SchedulePage> {
     });
 
     final workouts = await _workoutService.getUpcomingWorkouts();
-    final friends = await _friendService.getFriends();
 
     if (!mounted) return; // ✅ CHECK MOUNTED before setState
     
@@ -5451,7 +5195,6 @@ class _SchedulePageState extends State<SchedulePage> {
       _upcomingWorkouts = workouts.where((w) => 
         w['status'] != 'completed' && w['status'] != 'cancelled'
       ).toList();
-      _friends = friends;
       _isLoading = false;
       _completedRefreshTrigger++;
     });
@@ -5688,8 +5431,6 @@ class _SchedulePageState extends State<SchedulePage> {
       }
       
       // Open timer to continue the workout
-      final workoutType = workout['workout_type'] ?? 'Workout';
-      final plannedDuration = workout['planned_duration_minutes'] ?? 30;
       
       final startedAt = workout['workout_started_at'];
       if (startedAt != null) {
@@ -6002,42 +5743,6 @@ class _SchedulePageState extends State<SchedulePage> {
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.calendar_today,
-              size: 64,
-              color: AppColors.of(context).subtleText,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No workouts scheduled',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Tap the + button to schedule your first workout',
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.of(context).subtleText,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildWorkoutList() {
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -6098,99 +5803,6 @@ class _SchedulePageState extends State<SchedulePage> {
     );
   }
 
-  Color _getWorkoutColor(String? type) {
-    switch (type?.toLowerCase()) {
-      case 'cardio':
-        return Colors.red[700]!;
-      case 'strength':
-      case 'weights':
-        return Colors.blue[700]!;
-      case 'legs':
-      case 'leg day':
-      case 'lower body':
-        return Colors.orange[700]!;
-      case 'upper body':
-        return Colors.purple[700]!;
-      case 'full body':
-        return Colors.indigo[700]!;
-      case 'hiit':
-        return Colors.deepOrange[700]!;
-      case 'yoga':
-        return Colors.teal[700]!;
-      default:
-        return Colors.green[700]!;
-    }
-  }
-
-  IconData _getWorkoutIcon(String? type) {
-    switch (type?.toLowerCase()) {
-      case 'cardio':
-        return Icons.directions_run;
-      case 'strength':
-      case 'weights':
-        return Icons.fitness_center;
-      case 'upper body':
-        return Icons.accessibility_new;
-      case 'lower body':
-      case 'legs':
-      case 'leg day':
-        return Icons.directions_walk;
-      case 'full body':
-        return Icons.sports_gymnastics;
-      case 'hiit':
-        return Icons.flash_on;
-      case 'yoga':
-        return Icons.self_improvement;
-      default:
-        return Icons.sports;
-    }
-  }
-
-  String _getWorkoutStatusText(String? status) {
-    switch (status?.toLowerCase()) {
-      case 'scheduled':
-        return 'Scheduled';
-      case 'in_progress':
-        return 'In Progress';
-      case 'completed':
-        return 'Completed';
-      case 'cancelled':
-        return 'Cancelled';
-      default:
-        return 'Unknown';
-    }
-  }
-
-  IconData _getWorkoutStatusIcon(String? status) {
-    switch (status?.toLowerCase()) {
-      case 'scheduled':
-        return Icons.schedule;
-      case 'in_progress':
-        return Icons.play_circle;
-      case 'completed':
-        return Icons.check_circle;
-      case 'cancelled':
-        return Icons.cancel;
-      default:
-        return Icons.help_outline;
-    }
-  }
-
-  Color _getWorkoutStatusColor(String? status) {
-    switch (status?.toLowerCase()) {
-      case 'scheduled':
-        return Colors.blue[700]!;
-      case 'in_progress':
-        return Colors.orange[700]!;
-      case 'completed':
-        return Colors.green[700]!;
-      case 'cancelled':
-        return Colors.red[700]!;
-      default:
-        return Colors.grey[700]!;
-    }
-  }
-
   Widget _buildEmptyWorkoutsCard() {
     final appColors = AppColors.of(context);
     return Card(
@@ -6221,171 +5833,6 @@ class _SchedulePageState extends State<SchedulePage> {
     );
   }
 
-  Widget _buildStatusBadge(String? status) {
-    final statusText = _getWorkoutStatusText(status);
-    final statusIcon = _getWorkoutStatusIcon(status);
-    final statusColor = _getWorkoutStatusColor(status);
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: statusColor.withOpacity(0.3),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            statusIcon,
-            size: 14,
-            color: statusColor,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            statusText,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: statusColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(String? dateStr) {
-    if (dateStr == null) return 'Unknown';
-    try {
-      final date = DateTime.parse(dateStr);
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final workoutDate = DateTime(date.year, date.month, date.day);
-      
-      if (workoutDate == today) return 'Today';
-      if (workoutDate == today.add(const Duration(days: 1))) return 'Tomorrow';
-      
-      final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      return '${days[date.weekday - 1]}, ${date.month}/${date.day}';
-    } catch (e) {
-      return dateStr;
-    }
-  }
-
-  String _formatDuration(int? minutes) {
-    if (minutes == null) return '';
-    final hours = minutes ~/ 60;
-    final mins = minutes % 60;
-    if (hours > 0) {
-      return mins > 0 ? '${hours}h ${mins}m' : '${hours}h';
-    }
-    return '${mins}m';
-  }
-
-  String _timeAgo(String? timestamp) {
-    if (timestamp == null) return '';
-    try {
-      final time = DateTime.parse(timestamp);
-      final diff = DateTime.now().difference(time);
-      if (diff.inMinutes < 60) {
-        return '${diff.inMinutes}m ago';
-      } else {
-        return '${diff.inHours}h ago';
-      }
-    } catch (e) {
-      return '';
-    }
-  }
-
-  Widget _buildEnhancedStatusBadge(String? status) {
-    Color bgColor;
-    Color textColor;
-    IconData icon;
-    String label;
-    
-    switch (status?.toLowerCase()) {
-      case 'in_progress':
-        bgColor = Colors.orange[100]!;
-        textColor = Colors.orange[800]!;
-        icon = Icons.play_circle;
-        label = 'In Progress';
-        break;
-      case 'completed':
-        bgColor = Colors.green[100]!;
-        textColor = Colors.green[800]!;
-        icon = Icons.check_circle;
-        label = 'Completed';
-        break;
-      case 'cancelled':
-        bgColor = Colors.red[100]!;
-        textColor = Colors.red[800]!;
-        icon = Icons.cancel;
-        label = 'Cancelled';
-        break;
-      default: // scheduled
-        bgColor = Colors.blue[100]!;
-        textColor = Colors.blue[800]!;
-        icon = Icons.schedule;
-        label = 'Scheduled';
-    }
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: textColor),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: textColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoChip({
-    required IconData icon,
-    required String label,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 
@@ -7719,180 +7166,6 @@ class _BubbleTailPainter extends CustomPainter {
       old.color != color || old.pointingDown != pointingDown;
 }
 
-// Helper Widgets
-class _QuickActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _QuickActionButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: color.withOpacity(0.1),
-            child: Icon(icon, color: color, size: 30),
-          ),
-          const SizedBox(height: 8),
-          Text(label, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface)),
-        ],
-      ),
-    );
-  }
-}
-
-
-class _DayCircle extends StatelessWidget {
-  final String day;
-  final bool completed;
-
-  const _DayCircle(this.day, this.completed);
-
-  @override
-  Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: 20,
-      backgroundColor: completed ? Colors.green : AppColors.of(context).divider,
-      child: Text(
-        day,
-        style: TextStyle(
-          color: completed ? Colors.white : Theme.of(context).colorScheme.onSurface,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-}
-
-class _WorkoutCard extends StatelessWidget {
-  final String day;
-  final String time;
-  final String type;
-  final String buddy;
-
-  const _WorkoutCard({
-    required this.day,
-    required this.time,
-    required this.type,
-    required this.buddy,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.blue,
-          child: const Icon(Icons.fitness_center, color: Colors.white),
-        ),
-        title: Text('$day • $time'),
-        subtitle: Text('$type • with $buddy'),
-        trailing: const Icon(Icons.arrow_forward_ios),
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _StatCard(this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(color: AppColors.of(context).subtleText),
-        ),
-      ],
-    );
-  }
-}
-
-class _QuickTip extends StatelessWidget {
-  final IconData icon;
-  final String text;
-
-  const _QuickTip({required this.icon, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Icon(icon, size: 20, color: AppColors.of(context).subtleText),
-        const SizedBox(height: 4),
-        Text(
-          text,
-          style: TextStyle(
-            fontSize: 10,
-            color: AppColors.of(context).subtleText,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _BenefitRow extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  final Color color;
-
-  const _BenefitRow({
-    required this.icon,
-    required this.text,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: color, size: 24),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 14,
-              color: Theme.of(context).colorScheme.onSurface,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════
 // WEEKLY PLAN DIALOG — Editorial stepper redesign
@@ -8303,53 +7576,6 @@ class _StepButton extends StatelessWidget {
     }
 }
 
-// ── Tab swipe physics — rubber-band at edges ───────────────────────────────
-// ── Tab swipe physics — deliberate one-page swipes ───────────────
-class _TabScrollPhysics extends ScrollPhysics {
-  const _TabScrollPhysics({super.parent});
-
-  @override
-  _TabScrollPhysics applyTo(ScrollPhysics? ancestor) {
-    return _TabScrollPhysics(parent: buildParent(ancestor));
-  }
-
-  @override
-  Simulation? createBallisticSimulation(
-      ScrollMetrics position, double velocity) {
-    final tolerance = toleranceFor(position);
-    final page = position.pixels / position.viewportDimension;
-    final currentPage = page.round();
-
-    // Require a deliberate flick to move (default fling threshold is ~50)
-    if (velocity.abs() < 500) {
-      final target = currentPage * position.viewportDimension;
-      return ScrollSpringSimulation(
-        spring,
-        position.pixels,
-        target,
-        velocity,
-        tolerance: tolerance,
-      );
-    }
-
-    // Move exactly 1 page in swipe direction
-    final targetPage = (velocity < 0 ? currentPage + 1 : currentPage - 1)
-        .clamp(0, (position.maxScrollExtent / position.viewportDimension).round());
-    final target = targetPage * position.viewportDimension;
-
-    return ScrollSpringSimulation(
-      spring,
-      position.pixels,
-      target,
-      velocity,
-      tolerance: tolerance,
-    );
-  }
-
-  @override
-  bool get allowImplicitScrolling => false;
-}
-
   // ── Custom nav bar ─────────────────────────────────────────────────────────
 
 class _GymBuddyNavBar extends StatelessWidget {
@@ -8360,11 +7586,6 @@ class _GymBuddyNavBar extends StatelessWidget {
       required this.selectedIndex,
       required this.onTabSelected,
     });
-
-    // Visual order → logical index mapping
-    // Display: [Buddies, Schedule, 🔥Streaks, Shop, Profile]
-    // Indices: [1,       2,        0,          3,    4      ]
-    static const _visualToLogical = [1, 2, 0, 3, 4];
 
     @override
     Widget build(BuildContext context) {
