@@ -112,12 +112,18 @@ class BreakDayService {
 
     debugLog('🔄 Cancelling break day for $todayStr');
 
-    await _supabase
+    final cancelled = await _supabase
         .from('break_day_usage')
         .update({'cancelled_at': DateTime.now().toIso8601String()})
         .eq('user_id', userId)
         .eq('break_date', todayStr)
-        .isFilter('cancelled_at', null);
+        .isFilter('cancelled_at', null)
+        .select('id');
+
+    if (cancelled.isEmpty) {
+      debugLog('ℹ️ No active break day to cancel for $todayStr');
+      return false;
+    }
 
     debugLog('✅ Break day cancelled successfully');
     return true;
