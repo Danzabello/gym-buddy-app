@@ -289,7 +289,7 @@ class _LoginScreenState extends State<LoginScreen>
                             width: 36,
                             height: 36,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(Icons.arrow_back, color: Colors.white, size: 18),
@@ -304,7 +304,7 @@ class _LoginScreenState extends State<LoginScreen>
                               width: 72,
                               height: 72,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: const Center(
@@ -326,7 +326,7 @@ class _LoginScreenState extends State<LoginScreen>
                               'Sign in to continue your streak',
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.white.withOpacity(0.75),
+                                color: Colors.white.withValues(alpha: 0.75),
                               ),
                             ),
                           ],
@@ -432,7 +432,7 @@ class _LoginScreenState extends State<LoginScreen>
                                 borderRadius: BorderRadius.circular(14),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: kObBlue.withOpacity(0.3),
+                                    color: kObBlue.withValues(alpha: 0.3),
                                     blurRadius: 12,
                                     offset: const Offset(0, 4),
                                   ),

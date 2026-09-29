@@ -242,9 +242,9 @@ class _WorkoutCardState extends State<WorkoutCard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -277,23 +277,23 @@ class _WorkoutCardState extends State<WorkoutCard> {
     final appColors = AppColors.of(context);
     switch (state) {
       case 'waiting_to_join':
-        return appColors.streakOrange.withOpacity(0.25);
+        return appColors.streakOrange.withValues(alpha: 0.25);
       case 'in_progress':
-        return appColors.successGreen.withOpacity(0.25);
+        return appColors.successGreen.withValues(alpha: 0.25);
       case 'window_expired':
-        return Colors.black.withOpacity(0.15);
+        return Colors.black.withValues(alpha: 0.15);
       case 'buddy_completed':
-        return appColors.successGreen.withOpacity(0.15);
+        return appColors.successGreen.withValues(alpha: 0.15);
       default:
-        return Colors.black.withOpacity(0.15);
+        return Colors.black.withValues(alpha: 0.15);
     }
   }
 
   Border? _getCardBorder(String? state, bool isInvite, AppColors appColors) {
     final palette = context.watch<AccentThemeProvider>().palette;
-    if (state == 'waiting_to_join') return Border.all(color: appColors.streakOrange.withOpacity(0.5), width: 2);
-    if (state == 'in_progress') return Border.all(color: appColors.successGreen.withOpacity(0.4), width: 2);
-    if (isInvite) return Border.all(color: palette.statusInfo.withOpacity(0.4), width: 2);
+    if (state == 'waiting_to_join') return Border.all(color: appColors.streakOrange.withValues(alpha: 0.5), width: 2);
+    if (state == 'in_progress') return Border.all(color: appColors.successGreen.withValues(alpha: 0.4), width: 2);
+    if (isInvite) return Border.all(color: palette.statusInfo.withValues(alpha: 0.4), width: 2);
     return Border.all(color: appColors.cardBorder, width: 0.5);
   }
 
@@ -308,7 +308,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
       decoration: BoxDecoration(
         color: state == 'window_expired'
             ? appColors.sectionBackground
-            : color.withOpacity(0.15),
+            : color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Icon(
@@ -327,12 +327,12 @@ class _WorkoutCardState extends State<WorkoutCard> {
 
     switch (state) {
       case 'waiting_to_join':
-        bgColor = appColors.streakOrange.withOpacity(0.15);
+        bgColor = appColors.streakOrange.withValues(alpha: 0.15);
         textColor = appColors.streakOrange;
         label = '⏳ Waiting';
         break;
       case 'in_progress':
-        bgColor = appColors.successGreen.withOpacity(0.15);
+        bgColor = appColors.successGreen.withValues(alpha: 0.15);
         textColor = appColors.successGreen;
         label = '🔥 Active';
         break;
@@ -342,29 +342,29 @@ class _WorkoutCardState extends State<WorkoutCard> {
         label = '❌ Missed';
         break;
       case 'buddy_completed':
-        bgColor = appColors.successGreen.withOpacity(0.15);
+        bgColor = appColors.successGreen.withValues(alpha: 0.15);
         textColor = appColors.successGreen;
         label = '✅ Done';
         break;
       default:
         if (_creatorWaitingReady) {
-          bgColor = appColors.streakOrange.withOpacity(0.15);
+          bgColor = appColors.streakOrange.withValues(alpha: 0.15);
           textColor = appColors.streakOrange;
           label = '⏳ Waiting';
         } else if (_buddyCanStartTogether) {
-          bgColor = appColors.successGreen.withOpacity(0.15);
+          bgColor = appColors.successGreen.withValues(alpha: 0.15);
           textColor = appColors.successGreen;
           label = '🟢 Partner ready';
         } else if (widget.isBuddy && widget.buddyStatus == 'pending') {
-          bgColor = palette.statusInfo.withOpacity(0.15);
+          bgColor = palette.statusInfo.withValues(alpha: 0.15);
           textColor = palette.statusInfo;
           label = '📨 Invite';
         } else if (widget.workoutStatus == 'in_progress') {
-          bgColor = appColors.successGreen.withOpacity(0.15);
+          bgColor = appColors.successGreen.withValues(alpha: 0.15);
           textColor = appColors.successGreen;
           label = '🔥 Active';
         } else {
-          bgColor = palette.statusInfo.withOpacity(0.1);
+          bgColor = palette.statusInfo.withValues(alpha: 0.1);
           textColor = palette.statusInfo;
           label = '📅 Scheduled';
         }
@@ -423,9 +423,9 @@ class _WorkoutCardState extends State<WorkoutCard> {
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: appColors.streakOrange.withOpacity(0.1),
+        color: appColors.streakOrange.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: appColors.streakOrange.withOpacity(0.3)),
+        border: Border.all(color: appColors.streakOrange.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -499,16 +499,16 @@ class _WorkoutCardState extends State<WorkoutCard> {
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: appColors.successGreen.withOpacity(0.1),
+        color: appColors.successGreen.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: appColors.successGreen.withOpacity(0.3)),
+        border: Border.all(color: appColors.successGreen.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: appColors.successGreen.withOpacity(0.15),
+              color: appColors.successGreen.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
             child: Icon(Icons.check, color: appColors.successGreen, size: 20),
@@ -553,13 +553,13 @@ class _WorkoutCardState extends State<WorkoutCard> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: hasReachedGoal
-              ? appColors.successGreen.withOpacity(0.1)
-              : palette.statusInfo.withOpacity(0.1),
+              ? appColors.successGreen.withValues(alpha: 0.1)
+              : palette.statusInfo.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: hasReachedGoal
-                ? appColors.successGreen.withOpacity(0.35)
-                : palette.statusInfo.withOpacity(0.3),
+                ? appColors.successGreen.withValues(alpha: 0.35)
+                : palette.statusInfo.withValues(alpha: 0.3),
           ),
         ),
         child: Column(
@@ -587,8 +587,8 @@ class _WorkoutCardState extends State<WorkoutCard> {
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: hasReachedGoal
-                        ? appColors.successGreen.withOpacity(0.2)
-                        : palette.statusInfo.withOpacity(0.2),
+                        ? appColors.successGreen.withValues(alpha: 0.2)
+                        : palette.statusInfo.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -670,7 +670,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
                   icon: Icon(Icons.close, size: 18, color: palette.statusDanger),
                   label: Text('Decline', style: TextStyle(color: palette.statusDanger)),
                   style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: palette.statusDanger.withOpacity(0.4)),
+                    side: BorderSide(color: palette.statusDanger.withValues(alpha: 0.4)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -691,9 +691,9 @@ class _WorkoutCardState extends State<WorkoutCard> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         // Brand-adjacent accent, used sparingly — not a themed role
-        color: const Color(0xFF7C3AED).withOpacity(0.08),
+        color: const Color(0xFF7C3AED).withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF7C3AED).withOpacity(0.25)),
+        border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.25)),
       ),
       child: Row(
         children: [
@@ -728,9 +728,9 @@ class _WorkoutCardState extends State<WorkoutCard> {
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: appColors.successGreen.withOpacity(0.08),
+        color: appColors.successGreen.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: appColors.successGreen.withOpacity(0.3)),
+        border: Border.all(color: appColors.successGreen.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -918,7 +918,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
               const SizedBox(width: 12),
               Container(
                 decoration: BoxDecoration(
-                  color: palette.statusDanger.withOpacity(0.1),
+                  color: palette.statusDanger.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: IconButton(
@@ -965,7 +965,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
               const SizedBox(width: 12),
               Container(
                 decoration: BoxDecoration(
-                  color: palette.statusDanger.withOpacity(0.1),
+                  color: palette.statusDanger.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: IconButton(

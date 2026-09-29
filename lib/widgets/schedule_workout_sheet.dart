@@ -181,9 +181,9 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
                   decoration: BoxDecoration(
-                    color: dialColor.withOpacity(0.12),
+                    color: dialColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: dialColor.withOpacity(0.4), width: 2),
+                    border: Border.all(color: dialColor.withValues(alpha: 0.4), width: 2),
                   ),
                   child: Text(_formatDuration(tempDuration),
                       style: TextStyle(
@@ -197,7 +197,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                     activeTrackColor: dialColor,
                     inactiveTrackColor: appColors.cardBorder,
                     thumbColor: dialColor,
-                    overlayColor: dialColor.withOpacity(0.2),
+                    overlayColor: dialColor.withValues(alpha: 0.2),
                     trackHeight: 10,
                     thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 16),
                     overlayShape: const RoundSliderOverlayShape(overlayRadius: 28),
@@ -239,7 +239,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? chipColor.withOpacity(0.15)
+                              ? chipColor.withValues(alpha: 0.15)
                               : appColors.sectionBackground,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
@@ -448,7 +448,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
             duration: const Duration(milliseconds: 200),
             decoration: BoxDecoration(
               color: isSelected
-                  ? color.withOpacity(0.12)
+                  ? color.withValues(alpha: 0.12)
                   : appColors.sectionBackground,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
@@ -710,7 +710,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? _durationColor(m).withOpacity(0.12)
+                            ? _durationColor(m).withValues(alpha: 0.12)
                             : appColors.sectionBackground,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
@@ -742,7 +742,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   decoration: BoxDecoration(
                     color: _isCustomDuration
-                        ? _durationColor(_duration).withOpacity(0.12)
+                        ? _durationColor(_duration).withValues(alpha: 0.12)
                         : appColors.sectionBackground,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(

@@ -1318,7 +1318,7 @@ class _OnboardingConfirmationState
                       width: 100,
                       height: 100,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
                       child: const Center(
@@ -1339,7 +1339,7 @@ class _OnboardingConfirmationState
                     'Your profile is ready. Coach Max is waiting. Time to build some streaks.',
                     style: TextStyle(
                         fontSize: 16,
-                        color: Colors.white.withOpacity(0.8),
+                        color: Colors.white.withValues(alpha: 0.8),
                         height: 1.5),
                     textAlign: TextAlign.center,
                   ),

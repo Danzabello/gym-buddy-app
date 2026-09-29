@@ -56,7 +56,7 @@ class _StreakCompleteSheetState extends State<StreakCompleteSheet>
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.12),
+              color: Colors.black.withValues(alpha: 0.12),
               blurRadius: 24,
               offset: const Offset(0, -4),
             ),
@@ -93,7 +93,7 @@ class _StreakCompleteSheetState extends State<StreakCompleteSheet>
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF10B981).withOpacity(0.35),
+                        color: const Color(0xFF10B981).withValues(alpha: 0.35),
                         blurRadius: 16,
                         spreadRadius: 2,
                       ),
@@ -132,7 +132,7 @@ class _StreakCompleteSheetState extends State<StreakCompleteSheet>
                   color: const Color(0xFFFFFBEB),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: const Color(0xFFF59E0B).withOpacity(0.4),
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
                   ),
                 ),
                 child: Row(

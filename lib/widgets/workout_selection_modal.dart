@@ -196,10 +196,10 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                     padding: const EdgeInsets.symmetric(
                         horizontal: 32, vertical: 20),
                     decoration: BoxDecoration(
-                      color: dialColor.withOpacity(0.12),
+                      color: dialColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(
-                          color: dialColor.withOpacity(0.4), width: 2),
+                          color: dialColor.withValues(alpha: 0.4), width: 2),
                     ),
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
@@ -219,7 +219,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                       activeTrackColor: dialColor,
                       inactiveTrackColor: colors.cardBorder,
                       thumbColor: dialColor,
-                      overlayColor: dialColor.withOpacity(0.2),
+                      overlayColor: dialColor.withValues(alpha: 0.2),
                       trackHeight: 10,
                       thumbShape:
                           const RoundSliderThumbShape(enabledThumbRadius: 16),
@@ -271,7 +271,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                               horizontal: 18, vertical: 12),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? chipColor.withOpacity(0.15)
+                                ? chipColor.withValues(alpha: 0.15)
                                 : colors.sectionBackground,
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
@@ -451,7 +451,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: accentPalette.action.withOpacity(0.3),
+              color: accentPalette.action.withValues(alpha: 0.3),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -484,7 +484,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                   Text(
                     'Tap to randomise your workout',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.75),
+                      color: Colors.white.withValues(alpha: 0.75),
                       fontSize: 12,
                     ),
                   ),
@@ -495,7 +495,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
               padding: const EdgeInsets.symmetric(
                   horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Text(
@@ -709,7 +709,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: accentPalette.action.withOpacity(0.3),
+                            color: accentPalette.action.withValues(alpha: 0.3),
                             blurRadius: 8,
                             offset: const Offset(0, 3),
                           ),
@@ -780,7 +780,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: colors.streakOrange.withOpacity(0.12),
+                  color: colors.streakOrange.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: colors.streakOrange, size: 24),
@@ -826,7 +826,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
         border: Border.all(color: colors.cardBorder),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -848,7 +848,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                       width: 50,
                       height: 50,
                       decoration: BoxDecoration(
-                        color: colors.streakOrange.withOpacity(0.12),
+                        color: colors.streakOrange.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Center(
@@ -888,7 +888,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: colors.streakOrange.withOpacity(0.12),
+                        color: colors.streakOrange.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(

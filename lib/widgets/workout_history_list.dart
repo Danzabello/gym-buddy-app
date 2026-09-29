@@ -143,7 +143,7 @@ class _WorkoutHistoryListState extends State<WorkoutHistoryList> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: appColors.streakOrange.withOpacity(0.15),  // ✅
+                  color: appColors.streakOrange.withValues(alpha: 0.15),  // ✅
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -176,7 +176,7 @@ class _WorkoutHistoryListState extends State<WorkoutHistoryList> {
         border: Border.all(color: appColors.cardBorder),  // ✅
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -225,10 +225,10 @@ class _WorkoutHistoryListState extends State<WorkoutHistoryList> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: _durationColor(workout.actualDurationMinutes).withOpacity(0.12),
+                            color: _durationColor(workout.actualDurationMinutes).withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: _durationColor(workout.actualDurationMinutes).withOpacity(0.4),
+                              color: _durationColor(workout.actualDurationMinutes).withValues(alpha: 0.4),
                             ),
                           ),
                           child: Row(

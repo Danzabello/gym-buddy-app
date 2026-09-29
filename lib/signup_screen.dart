@@ -159,7 +159,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       width: 34,
                       height: 34,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.arrow_back,
@@ -176,7 +176,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   Text('Join the Gym Buddy community',
                       style: TextStyle(
                           fontSize: 14,
-                          color: Colors.white.withOpacity(0.8))),
+                          color: Colors.white.withValues(alpha: 0.8))),
                 ],
               ),
             ),

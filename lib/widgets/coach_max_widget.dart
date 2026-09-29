@@ -139,7 +139,7 @@ class _CoachMaxWidgetState extends State<CoachMaxWidget> with SingleTickerProvid
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.blue.withOpacity(0.3),
+                          color: Colors.blue.withValues(alpha: 0.3),
                           blurRadius: 10,
                           spreadRadius: 2,
                         ),
@@ -257,7 +257,7 @@ class _CoachMaxWidgetState extends State<CoachMaxWidget> with SingleTickerProvid
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -373,7 +373,7 @@ class CoachMaxAvatar extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.blue.withOpacity(0.3),
+                color: Colors.blue.withValues(alpha: 0.3),
                 blurRadius: 8,
                 spreadRadius: 1,
               ),

@@ -4335,7 +4335,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? appColors.avatarRing.withOpacity(0.12)
+                            ? appColors.avatarRing.withValues(alpha: 0.12)
                             : appColors.sectionBackground,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
@@ -4423,9 +4423,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.blue.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -4887,7 +4887,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text('${_streaks.length}',
@@ -4996,12 +4996,12 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
       margin: const EdgeInsets.only(bottom: 7),
       decoration: BoxDecoration(
         color: isCoach
-            ? const Color(0xFFF97316).withOpacity(0.06)
+            ? const Color(0xFFF97316).withValues(alpha: 0.06)
             : appColors.sectionBackground,
         borderRadius: BorderRadius.circular(11),
         border: Border.all(
           color: isCoach
-              ? const Color(0xFFF97316).withOpacity(0.2)
+              ? const Color(0xFFF97316).withValues(alpha: 0.2)
               : appColors.cardBorder,
           width: 0.5,
         ),
@@ -5121,7 +5121,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
               height: 28,
               decoration: BoxDecoration(
                 color: isComplete
-                    ? const Color(0xFF10B981).withOpacity(0.12)
+                    ? const Color(0xFF10B981).withValues(alpha: 0.12)
                     : appColors.sectionBackground,
                 shape: BoxShape.circle,
               ),
@@ -6198,7 +6198,7 @@ class _ProfilePageState extends State<ProfilePage>
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected
-              ? appColors.avatarRing.withOpacity(0.1)
+              ? appColors.avatarRing.withValues(alpha: 0.1)
               : appColors.sectionBackground,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
@@ -6270,7 +6270,7 @@ class _ProfilePageState extends State<ProfilePage>
                 width: 160, height: 160,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.06),
+                  color: Colors.white.withValues(alpha: 0.06),
                 ),
               ),
             ),
@@ -6280,7 +6280,7 @@ class _ProfilePageState extends State<ProfilePage>
                 width: 120, height: 120,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.04),
+                  color: Colors.white.withValues(alpha: 0.04),
                 ),
               ),
             ),
@@ -6305,7 +6305,7 @@ class _ProfilePageState extends State<ProfilePage>
                           width: 36, height: 36,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.white.withOpacity(0.15),
+                            color: Colors.white.withValues(alpha: 0.15),
                           ),
                           child: const Icon(Icons.settings_outlined, color: Colors.white, size: 18),
                         ),
@@ -6338,7 +6338,7 @@ class _ProfilePageState extends State<ProfilePage>
                                 builder: (context, _) => CircularProgressIndicator(
                                   value: (_levelInfo?.progressPercent ?? 0.0) * _ringAnimation.value,
                                   strokeWidth: 4,
-                                  backgroundColor: Colors.white.withOpacity(0.2),
+                                  backgroundColor: Colors.white.withValues(alpha: 0.2),
                                   valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                                 ),
                               ),
@@ -6347,8 +6347,8 @@ class _ProfilePageState extends State<ProfilePage>
                               width: 86, height: 86,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.white.withOpacity(0.15),
-                                border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+                                color: Colors.white.withValues(alpha: 0.15),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2),
                               ),
                               child: Center(
                                 child: Text(_avatarEmoji(avatarId), style: const TextStyle(fontSize: 46)),
@@ -6368,7 +6368,7 @@ class _ProfilePageState extends State<ProfilePage>
                                   border: Border.all(color: Colors.white, width: 2),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: _levelGradient(level).last.withOpacity(0.5),
+                                      color: _levelGradient(level).last.withValues(alpha: 0.5),
                                       blurRadius: 8,
                                     ),
                                   ],
@@ -6397,15 +6397,15 @@ class _ProfilePageState extends State<ProfilePage>
                             const SizedBox(height: 2),
                             Text(
                               'Member since $year',
-                              style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 13),
+                              style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 13),
                             ),
                             const SizedBox(height: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(20),
-                                color: Colors.white.withOpacity(0.18),
-                                border: Border.all(color: Colors.white.withOpacity(0.3)),
+                                color: Colors.white.withValues(alpha: 0.18),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
                               ),
                               child: Text(
                                 '${_titleIcon(title)}  $title',
@@ -6438,7 +6438,7 @@ class _ProfilePageState extends State<ProfilePage>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: accentPalette.statusInfo.withOpacity(0.1),
+            color: accentPalette.statusInfo.withValues(alpha: 0.1),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -6489,7 +6489,7 @@ class _ProfilePageState extends State<ProfilePage>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                         decoration: BoxDecoration(
-                          color: accentPalette.statusInfo.withOpacity(0.12),
+                          color: accentPalette.statusInfo.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -6560,7 +6560,7 @@ class _ProfilePageState extends State<ProfilePage>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: accentPalette.statusInfo.withOpacity(0.1),
+            color: accentPalette.statusInfo.withValues(alpha: 0.1),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -6667,7 +6667,7 @@ class _ProfilePageState extends State<ProfilePage>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: accentPalette.statusInfo.withOpacity(0.1),
+            color: accentPalette.statusInfo.withValues(alpha: 0.1),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -6809,9 +6809,9 @@ class _ProfilePageState extends State<ProfilePage>
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFFE53935).withOpacity(0.08),
+          color: const Color(0xFFE53935).withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE53935).withOpacity(0.3), width: 1.5),
+          border: Border.all(color: const Color(0xFFE53935).withValues(alpha: 0.3), width: 1.5),
         ),
         child: const Center(
           child: Text(
@@ -7011,7 +7011,7 @@ class _CappedCountState extends State<CappedCount> {
           ? widget.style.copyWith(
               decoration: TextDecoration.underline,
               decorationStyle: TextDecorationStyle.dotted,
-              decorationColor: widget.style.color?.withOpacity(0.6),
+              decorationColor: widget.style.color?.withValues(alpha: 0.6),
             )
           : widget.style,
     );
@@ -7399,11 +7399,11 @@ class _WeeklyPlanDialogState extends State<_WeeklyPlanDialog>
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF3B82F6).withOpacity(0.08),
+                      color: const Color(0xFF3B82F6).withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                           color:
-                              const Color(0xFF3B82F6).withOpacity(0.2),
+                              const Color(0xFF3B82F6).withValues(alpha: 0.2),
                           width: 0.5),
                     ),
                     child: Row(
@@ -7428,7 +7428,7 @@ class _WeeklyPlanDialogState extends State<_WeeklyPlanDialog>
                             fontWeight: FontWeight.w900,
                             letterSpacing: -1,
                             color: const Color(0xFF3B82F6)
-                                .withOpacity(0.35),
+                                .withValues(alpha: 0.35),
                           ),
                         ),
                       ],
@@ -7564,7 +7564,7 @@ class _StepButton extends StatelessWidget {
                 fontWeight: FontWeight.w700,
                 height: 1,
                 color: !enabled
-                    ? appColors.subtleText.withOpacity(0.4)
+                    ? appColors.subtleText.withValues(alpha: 0.4)
                     : active
                         ? Colors.white
                         : cs.onSurface,

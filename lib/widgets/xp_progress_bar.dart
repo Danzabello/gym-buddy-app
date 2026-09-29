@@ -83,7 +83,7 @@ class _XpProgressBarState extends State<XpProgressBar>
         border: Border.all(color: Colors.grey.shade100),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 2),
           ),
@@ -249,7 +249,7 @@ class _LevelBadge extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: _gradientColors(level).last.withOpacity(0.35),
+            color: _gradientColors(level).last.withValues(alpha: 0.35),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),

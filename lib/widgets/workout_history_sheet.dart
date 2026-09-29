@@ -297,7 +297,7 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
         border: Border.all(color: appColors.cardBorder),  // ✅ was Colors.grey[200]
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 8, offset: const Offset(0, 2),
           ),
         ],
@@ -307,7 +307,7 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
           Container(
             width: 48, height: 48,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(_getWorkoutIcon(workoutType), color: color, size: 24),
@@ -333,9 +333,9 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: _durationColor(duration).withOpacity(0.12),
+                        color: _durationColor(duration).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: _durationColor(duration).withOpacity(0.4)),
+                        border: Border.all(color: _durationColor(duration).withValues(alpha: 0.4)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,

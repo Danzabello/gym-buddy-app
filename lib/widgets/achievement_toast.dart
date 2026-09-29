@@ -112,7 +112,7 @@ class _AchievementToastWidgetState extends State<_AchievementToastWidget>
                   border: Border.all(color: color, width: 1.5),
                   boxShadow: [
                     BoxShadow(
-                      color: color.withOpacity(0.35),
+                      color: color.withValues(alpha: 0.35),
                       blurRadius: 20,
                       offset: const Offset(0, 6),
                     ),
@@ -125,9 +125,9 @@ class _AchievementToastWidgetState extends State<_AchievementToastWidget>
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: color.withOpacity(0.15),
+                        color: color.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: color.withOpacity(0.4)),
+                        border: Border.all(color: color.withValues(alpha: 0.4)),
                       ),
                       child: Center(
                         child: Text(a.icon, style: const TextStyle(fontSize: 24)),
@@ -194,9 +194,9 @@ class _AchievementToastWidgetState extends State<_AchievementToastWidget>
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: color.withOpacity(0.15),
+                        color: color.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: color.withOpacity(0.4)),
+                        border: Border.all(color: color.withValues(alpha: 0.4)),
                       ),
                       child: Text(
                         a.rarity[0].toUpperCase() + a.rarity.substring(1),

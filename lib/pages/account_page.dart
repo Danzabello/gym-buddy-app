@@ -205,7 +205,7 @@ class _AccountPageState extends State<AccountPage> {
             MenuItem(
               icon: Icons.delete_outline,
               iconColor: palette.statusDanger,
-              color: palette.statusDanger.withOpacity(0.10),
+              color: palette.statusDanger.withValues(alpha: 0.10),
               label: 'Delete Account',
               labelColor: palette.statusDanger,
               onTap: _showDeleteAccountSheet,
@@ -297,7 +297,7 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: palette.statusDanger.withOpacity(0.12),
+                  color: palette.statusDanger.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(Icons.warning_amber_rounded, color: palette.statusDanger, size: 28),
@@ -321,9 +321,9 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: palette.statusDanger.withOpacity(0.08),
+                color: palette.statusDanger.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: palette.statusDanger.withOpacity(0.2), width: 0.5),
+                border: Border.all(color: palette.statusDanger.withValues(alpha: 0.2), width: 0.5),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -365,7 +365,7 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
                 decoration: BoxDecoration(
                   color: _matches
                       ? palette.statusDanger
-                      : palette.statusDanger.withOpacity(0.3),
+                      : palette.statusDanger.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(

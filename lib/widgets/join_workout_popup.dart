@@ -165,7 +165,7 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.2),
+              color: Colors.black.withValues(alpha: 0.2),
               blurRadius: 30,
               spreadRadius: 5,
             ),
@@ -199,12 +199,12 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.5),
+                              color: Colors.white.withValues(alpha: 0.5),
                               width: 4,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.white.withOpacity(0.3),
+                                color: Colors.white.withValues(alpha: 0.3),
                                 blurRadius: 20,
                                 spreadRadius: 5,
                               ),
@@ -274,7 +274,7 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -311,13 +311,13 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          urgencyColor.withOpacity(0.1),
-                          urgencyColor.withOpacity(0.05),
+                          urgencyColor.withValues(alpha: 0.1),
+                          urgencyColor.withValues(alpha: 0.05),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: urgencyColor.withOpacity(0.3),
+                        color: urgencyColor.withValues(alpha: 0.3),
                         width: 2,
                       ),
                     ),
@@ -359,7 +359,7 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
                           child: LinearProgressIndicator(
                             value: _remainingSeconds / widget.timeRemainingSeconds,
                             minHeight: 6,
-                            backgroundColor: urgencyColor.withOpacity(0.2),
+                            backgroundColor: urgencyColor.withValues(alpha: 0.2),
                             valueColor: AlwaysStoppedAnimation<Color>(urgencyColor),
                           ),
                         ),
@@ -422,7 +422,7 @@ class _JoinWorkoutPopupState extends State<JoinWorkoutPopup>
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             elevation: 4,
-                            shadowColor: appColors.successGreen.withOpacity(0.4),
+                            shadowColor: appColors.successGreen.withValues(alpha: 0.4),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
@@ -512,7 +512,7 @@ class BuddyInWorkoutPopup extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.15),
+              color: Colors.black.withValues(alpha: 0.15),
               blurRadius: 20,
               spreadRadius: 5,
             ),
@@ -604,7 +604,7 @@ class BuddyInWorkoutPopup extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: appColors.streakOrange.withOpacity(0.12),
+                  color: appColors.streakOrange.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -812,7 +812,7 @@ class BuddyCompletedWorkoutPopup extends StatelessWidget {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: appColors.successGreen.withOpacity(0.3),
+                    color: appColors.successGreen.withValues(alpha: 0.3),
                     blurRadius: 20,
                     offset: const Offset(0, 8),
                   ),
@@ -838,7 +838,7 @@ class BuddyCompletedWorkoutPopup extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: appColors.successGreen.withOpacity(0.12),
+                color: appColors.successGreen.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(

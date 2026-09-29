@@ -524,7 +524,7 @@ class _NotificationSettingsPageState
             style: TextStyle(
                 fontSize: 22,
                 color: disabled
-                    ? appColors.subtleText.withOpacity(0.4)
+                    ? appColors.subtleText.withValues(alpha: 0.4)
                     : null)),
         const SizedBox(width: 12),
         Expanded(
@@ -541,7 +541,7 @@ class _NotificationSettingsPageState
               Text(subtitle,
                   style: TextStyle(
                       color: disabled
-                          ? appColors.subtleText.withOpacity(0.5)
+                          ? appColors.subtleText.withValues(alpha: 0.5)
                           : appColors.subtleText,
                       fontSize: 12)),
             ],

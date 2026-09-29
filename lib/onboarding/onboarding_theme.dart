@@ -99,7 +99,7 @@ class ObBottomNav extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, -4)),
         ],
@@ -197,7 +197,7 @@ class ObGhostButton extends StatelessWidget {
         onPressed: onTap,
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 14),
-          side: BorderSide(color: kObBlue.withOpacity(0.4), width: 1.5),
+          side: BorderSide(color: kObBlue.withValues(alpha: 0.4), width: 1.5),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14)),
         ),
@@ -326,7 +326,7 @@ class ObProgressDots extends StatelessWidget {
           decoration: BoxDecoration(
             color: isActive
                 ? Colors.white
-                : Colors.white.withOpacity(0.35),
+                : Colors.white.withValues(alpha: 0.35),
             borderRadius: BorderRadius.circular(4),
           ),
         );
@@ -352,7 +352,7 @@ class _GradButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-              color: kObBlue.withOpacity(0.3),
+              color: kObBlue.withValues(alpha: 0.3),
               blurRadius: 12,
               offset: const Offset(0, 4)),
         ],

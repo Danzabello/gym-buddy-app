@@ -352,7 +352,7 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
                   Container(
                     width: 38, height: 38,
                     decoration: BoxDecoration(
-                      color: color.withOpacity(0.12),
+                      color: color.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(_typeIcon(type), color: color, size: 20),
@@ -373,11 +373,11 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: _durationColor(workout['actual_duration_minutes'] as int?)
-                                  .withOpacity(0.12),
+                                  .withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
                                 color: _durationColor(workout['actual_duration_minutes'] as int?)
-                                    .withOpacity(0.4),
+                                    .withValues(alpha: 0.4),
                               ),
                             ),
                             child: Row(
@@ -448,7 +448,7 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
                   ),
 
                   Icon(Icons.chevron_right, size: 16,
-                      color: appColors.subtleText.withOpacity(0.4)),
+                      color: appColors.subtleText.withValues(alpha: 0.4)),
                 ],
               ),
             ),
@@ -546,7 +546,7 @@ class _DetailSheet extends StatelessWidget {
                 Container(
                   width: 52, height: 52,
                   decoration: BoxDecoration(
-                    color: typeColor.withOpacity(0.12),
+                    color: typeColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(typeIcon, color: typeColor, size: 26),

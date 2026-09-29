@@ -182,7 +182,7 @@ class _ProfileViewDialogState extends State<ProfileViewDialog> {
 
   Color _borderColor(String? key) =>
       _borderColors[key] ??
-      const Color(0xFF6B7280).withOpacity(0.4);
+      const Color(0xFF6B7280).withValues(alpha: 0.4);
 
   // ── Build ────────────────────────────────────────────────
   @override
@@ -267,7 +267,7 @@ class _ProfileViewDialogState extends State<ProfileViewDialog> {
                                 style: TextStyle(
                                     fontSize: 11,
                                     color: Colors.white
-                                        .withOpacity(0.65))),
+                                        .withValues(alpha: 0.65))),
                           ],
                         ],
                       ),
@@ -283,7 +283,7 @@ class _ProfileViewDialogState extends State<ProfileViewDialog> {
                           height: 28,
                           decoration: BoxDecoration(
                             color:
-                                Colors.white.withOpacity(0.15),
+                                Colors.white.withValues(alpha: 0.15),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.close,
@@ -481,11 +481,11 @@ class _ProfileViewDialogState extends State<ProfileViewDialog> {
           height: 38,
           decoration: BoxDecoration(
             color:
-                const Color(0xFFF97316).withOpacity(0.12),
+                const Color(0xFFF97316).withValues(alpha: 0.12),
             shape: BoxShape.circle,
             border: Border.all(
                 color:
-                    const Color(0xFFF97316).withOpacity(0.2),
+                    const Color(0xFFF97316).withValues(alpha: 0.2),
                 width: 0.5),
           ),
           child: Center(

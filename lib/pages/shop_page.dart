@@ -78,7 +78,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: _hexToColor(item.colorHex!),
-          border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 2),
         ),
       );
     }
@@ -445,7 +445,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
           ),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 8,
                 offset: const Offset(0, 2)),
           ],
@@ -457,7 +457,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
               child: Container(
                 decoration: BoxDecoration(
                   color: item.isOwned
-                      ? colors.successGreen.withOpacity(0.12)
+                      ? colors.successGreen.withValues(alpha: 0.12)
                       : colors.sectionBackground,
                   borderRadius:
                       const BorderRadius.vertical(top: Radius.circular(15)),
@@ -483,7 +483,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                       Positioned.fill(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
                             borderRadius: const BorderRadius.vertical(
                                 top: Radius.circular(15)),
                           ),

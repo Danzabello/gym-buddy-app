@@ -68,7 +68,7 @@ class _WardrobeAvatarWheelState extends State<WardrobeAvatarWheel> {
                       child: CustomPaint(
                         painter: _DashedCirclePainter(
                           radius: _orbitRadius,
-                          color: appColors.inkMuted.withOpacity(0.25),
+                          color: appColors.inkMuted.withValues(alpha: 0.25),
                         ),
                       ),
                     ),

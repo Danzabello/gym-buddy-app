@@ -99,8 +99,8 @@ class _AchievementsPageState extends State<AchievementsPage>
     final accentPalette = context.watch<AccentThemeProvider>().palette;
     final appColors = AppColors.of(context);
     switch (rarity) {
-      case 'uncommon':  return accentPalette.statusInfo.withOpacity(0.55);
-      case 'rare':      return accentPalette.statusInfo.withOpacity(0.75);
+      case 'uncommon':  return accentPalette.statusInfo.withValues(alpha: 0.55);
+      case 'rare':      return accentPalette.statusInfo.withValues(alpha: 0.75);
       case 'epic':      return accentPalette.statusInfo;
       case 'legendary': return const Color(0xFFD97706); // top tier keeps a fixed hue, like _categoryAccent
       default:          return appColors.subtleText;
@@ -275,7 +275,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                       height: 28,
                       decoration: BoxDecoration(
                         color: done
-                            ? accentPalette.action.withOpacity(0.15)
+                            ? accentPalette.action.withValues(alpha: 0.15)
                             : appColors.sectionBackground,
                         shape: BoxShape.circle,
                       ),
@@ -649,7 +649,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                 Expanded(
                   child: Container(
                       height: 0.5,
-                      color: accentPalette.action.withOpacity(0.25)),
+                      color: accentPalette.action.withValues(alpha: 0.25)),
                 ),
               ],
             ),
@@ -690,9 +690,9 @@ class _AchievementsPageState extends State<AchievementsPage>
                         height: 0.5, color: appColors.divider)),
                 const SizedBox(width: 8),
                 _heroBadge('$pctDisplay complete',
-                    bg: accentPalette.action.withOpacity(0.14),
+                    bg: accentPalette.action.withValues(alpha: 0.14),
                     fg: accentPalette.action,
-                    border: accentPalette.action.withOpacity(0.3)),
+                    border: accentPalette.action.withValues(alpha: 0.3)),
               ],
             ),
             const SizedBox(height: 14),
@@ -877,7 +877,7 @@ class _AchievementsPageState extends State<AchievementsPage>
             child: Text('🔥',
                 style: TextStyle(
                     fontSize: 48,
-                    color: cs.onSurface.withOpacity(0.06))),
+                    color: cs.onSurface.withValues(alpha: 0.06))),
           ),
           Padding(
             padding: const EdgeInsets.all(12),
@@ -1471,9 +1471,9 @@ class _SheetMiniCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.2), width: 0.5),
+        border: Border.all(color: color.withValues(alpha: 0.2), width: 0.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

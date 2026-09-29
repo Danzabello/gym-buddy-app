@@ -612,8 +612,8 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: statusSuccess.withOpacity(0.4)),
-          color: statusSuccess.withOpacity(0.1),
+          border: Border.all(color: statusSuccess.withValues(alpha: 0.4)),
+          color: statusSuccess.withValues(alpha: 0.1),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -764,7 +764,7 @@ class _BorderPainter extends CustomPainter {
         canvas.drawCircle(c, r, paint);
         paint
           ..strokeWidth = size.width * 0.03
-          ..color = color.withOpacity(0.4);
+          ..color = color.withValues(alpha: 0.4);
         canvas.drawCircle(c, r - size.width * 0.10, paint);
         break;
       case AvatarBorderStyle.arc:
@@ -774,7 +774,7 @@ class _BorderPainter extends CustomPainter {
         canvas.drawArc(rect, -2.36, 4.71, false, paint);
         paint
           ..style = PaintingStyle.fill
-          ..color = color.withOpacity(0.5);
+          ..color = color.withValues(alpha: 0.5);
         final capR = paint.strokeWidth * 0.5;
         canvas.drawCircle(
             Offset(c.dx - r * 0.71, c.dy + r * 0.71), capR, paint);

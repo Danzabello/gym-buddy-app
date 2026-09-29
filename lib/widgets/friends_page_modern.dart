@@ -225,7 +225,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: palette.statusWarning.withOpacity(0.12),
+              color: palette.statusWarning.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: Icon(Icons.warning_amber_rounded,
@@ -248,10 +248,10 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: palette.statusDanger.withOpacity(0.08),
+                color: palette.statusDanger.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                    color: palette.statusDanger.withOpacity(0.2),
+                    color: palette.statusDanger.withValues(alpha: 0.2),
                     width: 0.5),
               ),
               child: Column(
@@ -471,7 +471,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
             // Action rows
             _sheetAction(
               icon: Icons.chat_bubble_outline,
-              iconBg: palette.statusInfo.withOpacity(0.12),
+              iconBg: palette.statusInfo.withValues(alpha: 0.12),
               iconColor: palette.statusInfo,
               label: 'Message',
               subtitle: 'Open your chat',
@@ -485,7 +485,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
             _sheetDivider(appColors),
             _sheetAction(
               icon: Icons.fitness_center_outlined,
-              iconBg: appColors.streakOrange.withOpacity(0.12),
+              iconBg: appColors.streakOrange.withValues(alpha: 0.12),
               iconColor: appColors.streakOrange,
               label: 'Invite to workout',
               subtitle: 'Schedule a session together',
@@ -504,7 +504,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
             _sheetAction(
               icon: Icons.person_outline,
               // Brand-adjacent accent, used sparingly — not a themed role
-              iconBg: const Color(0xFF7C3AED).withOpacity(0.12),
+              iconBg: const Color(0xFF7C3AED).withValues(alpha: 0.12),
               iconColor: const Color(0xFF7C3AED),
               label: 'View profile',
               subtitle: 'Stats, achievements & history',
@@ -522,7 +522,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
             _sheetDivider(appColors),
             _sheetAction(
               icon: Icons.person_remove_outlined,
-              iconBg: palette.statusDanger.withOpacity(0.10),
+              iconBg: palette.statusDanger.withValues(alpha: 0.10),
               iconColor: palette.statusDanger,
               label: 'Remove buddy',
               subtitle: 'Deletes your shared streak',
@@ -820,14 +820,14 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     // Chip precedence: checked-in wins, then break, then at-risk.
     // "Streak at risk" on someone whose streak is protected is misleading.
     final Color chipBg = !dimmed
-        ? appColors.streakOrange.withOpacity(0.12)
+        ? appColors.streakOrange.withValues(alpha: 0.12)
         : onBreak
-            ? cs.primary.withOpacity(0.12)
+            ? cs.primary.withValues(alpha: 0.12)
             : appColors.sectionBackground;
     final Color chipBorderColor = !dimmed
-        ? appColors.streakOrange.withOpacity(0.2)
+        ? appColors.streakOrange.withValues(alpha: 0.2)
         : onBreak
-            ? cs.primary.withOpacity(0.2)
+            ? cs.primary.withValues(alpha: 0.2)
             : appColors.cardBorder;
     final Color chipTextColor = !dimmed
         ? appColors.streakOrange
@@ -925,13 +925,13 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                             color: hasNudged
                                 ? appColors.sectionBackground
                                 : appColors.streakOrange
-                                    .withOpacity(0.10),
+                                    .withValues(alpha: 0.10),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                                 color: hasNudged
                                     ? appColors.cardBorder
                                     : appColors.streakOrange
-                                        .withOpacity(0.3),
+                                        .withValues(alpha: 0.3),
                                 width: 0.5),
                           ),
                           child: Center(
@@ -984,7 +984,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   }
 
   Color _borderColor(String? borderKey) {
-    final fallback = AppColors.of(context).subtleText.withOpacity(0.4);
+    final fallback = AppColors.of(context).subtleText.withValues(alpha: 0.4);
     if (borderKey == null) return fallback;
     return _borderColors[borderKey] ?? fallback;
   }
@@ -1172,7 +1172,7 @@ class _SearchBuddiesPageState extends State<_SearchBuddiesPage> {
   }
 
   Color _borderColor(String? key) {
-    final fallback = AppColors.of(context).subtleText.withOpacity(0.4);
+    final fallback = AppColors.of(context).subtleText.withValues(alpha: 0.4);
     if (key == null) return fallback;
     return _borderColors[key] ?? fallback;
   }
@@ -1831,7 +1831,7 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
         color: appColors.cardBackground,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-            color: appColors.streakOrange.withOpacity(0.25), width: 0.5),
+            color: appColors.streakOrange.withValues(alpha: 0.25), width: 0.5),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),

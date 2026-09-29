@@ -184,7 +184,7 @@ class _WorkoutInvitesCardRedesignedState extends State<WorkoutInvitesCardRedesig
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.orange.withOpacity(0.2),
+            color: Colors.orange.withValues(alpha: 0.2),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -197,7 +197,7 @@ class _WorkoutInvitesCardRedesignedState extends State<WorkoutInvitesCardRedesig
             gradient: LinearGradient(
               colors: [
                 Colors.white,
-                Colors.orange.withOpacity(0.05),
+                Colors.orange.withValues(alpha: 0.05),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -234,7 +234,7 @@ class _WorkoutInvitesCardRedesignedState extends State<WorkoutInvitesCardRedesig
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.orange.withOpacity(0.3),
+                                color: Colors.orange.withValues(alpha: 0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -429,9 +429,9 @@ class _WorkoutInvitesCardRedesignedState extends State<WorkoutInvitesCardRedesig
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

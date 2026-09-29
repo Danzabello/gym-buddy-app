@@ -40,7 +40,7 @@ class WardrobeTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
         decoration: BoxDecoration(
           color: selected
-              ? accentColor.withOpacity(0.1)
+              ? accentColor.withValues(alpha: 0.1)
               : appColors.cardBackground,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(

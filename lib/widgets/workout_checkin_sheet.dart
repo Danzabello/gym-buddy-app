@@ -457,7 +457,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
                   boxShadow: [
                     BoxShadow(
                       color: (_hasReachedGoal ? Colors.green : Colors.orange)
-                          .withOpacity(0.3),
+                          .withValues(alpha: 0.3),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -488,7 +488,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
                               : 'Goal: $_goalMinutes min',
                           style: TextStyle(
                             fontSize: 13,
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha: 0.9),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -508,8 +508,8 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(
                     color: _hasReachedGoal
-                        ? Colors.green.withOpacity(0.3)
-                        : Colors.grey.withOpacity(0.2),
+                        ? Colors.green.withValues(alpha: 0.3)
+                        : Colors.grey.withValues(alpha: 0.2),
                     width: 2,
                   ),
                 ),
@@ -567,8 +567,8 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
                       color: _hasReachedGoal
-                          ? Colors.green.withOpacity(0.2)
-                          : Colors.blue.withOpacity(0.2),
+                          ? Colors.green.withValues(alpha: 0.2)
+                          : Colors.blue.withValues(alpha: 0.2),
                     ),
                   ),
                   child: Row(
@@ -638,7 +638,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
                       borderRadius: BorderRadius.circular(14),
                     ),
                     elevation: _hasReachedGoal ? 2 : 0,
-                    shadowColor: Colors.green.withOpacity(0.4),
+                    shadowColor: Colors.green.withValues(alpha: 0.4),
                     disabledBackgroundColor: Colors.grey[300],
                     disabledForegroundColor: Colors.grey[600],
                   ),
