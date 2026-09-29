@@ -40,7 +40,7 @@ Key modal sheets/dialogs (logic-bearing):
 | `BreakDaySection` | `lib/widgets/break_day_section.dart` | Dashboard | `BreakDayService` → `declare_break_day` |
 | `BuddyProfileSheet` / `ProfileViewDialog` | `lib/widgets/...` | FriendsPageModern | `friend_nicknames`, `user_profiles`, team tables |
 | `CoachMaxWidget` | `lib/widgets/coach_max_widget.dart` | Dashboard | `CoachMaxService` |
-| `LevelUpSheet` / `StreakCompleteSheet` / `AchievementToast` / `WorkoutCelebration` | `lib/widgets/...` | Post-check-in events | `LevelService`, `AchievementService` |
+| `StreakCompleteSheet` / `AchievementToast` / `WorkoutCelebration` | `lib/widgets/...` | Post-check-in events | `LevelService`, `AchievementService` |
 | `_WeeklyPlanDialog` | `lib/home_screen.dart:7523` | Dashboard (Monday / no plan) | `BreakDayService.setWeeklyBreakPlan` |
 
 ---
@@ -170,7 +170,7 @@ Key modal sheets/dialogs (logic-bearing):
 | `CoachMaxService` | `recompute_team_streak` | `coach_max_schedule`, `buddy_teams`, `team_members`, `team_streaks`, `daily_team_checkins` | `CoachMaxWidget`, onboarding, login, `main.dart` |
 | `AchievementService` | `verify_achievement_progress`, `award_achievement_rewards` | `achievements`, `user_achievements`, `workouts`, `daily_team_checkins`, `team_streaks`, `team_members`, `friendships`, `coin_transactions`, `user_inventory` | `AchievementsPage`, `AchievementToast`, `FriendsPageModern`, `WorkoutSelectionModal`, `main.dart`, TeamStreakService (post-check-in) |
 | `XpService` | `get_level_for_xp` | `xp_transactions`, `user_profiles`, `level_definitions`, `user_unlocked_cosmetics`, `cosmetic_unlock_conditions` | LevelService pipeline |
-| `LevelService` | `get_level_for_xp` | same as XpService | `XpProgressBar`, `LevelUpSheet`, `AvatarPickerScreen`, `AchievementsPage`, HomeScreen |
+| `LevelService` | `get_level_for_xp` | same as XpService | `XpProgressBar`, `AvatarPickerScreen`, `AchievementsPage`, HomeScreen |
 | `CoinService` | `purchase_shop_item` | `coin_transactions`, `shop_items`, `user_inventory`, `user_profiles` | `ShopPage` |
 | `WorkoutHistoryService` | — | `workout_logs`, `workout_templates` | `WorkoutHistoryPage`, `WorkoutCalendar`, `WorkoutHistoryList`, `WorkoutSelectionModal`, HomeScreen |
 | `NotificationService` | — (Edge Fn via triggers) | `device_tokens`, `notification_settings` | `main.dart`, `LoginScreen`, `NotificationSettingsPage` |
@@ -191,7 +191,7 @@ Key modal sheets/dialogs (logic-bearing):
 5. `TeamStreakService.checkInAllTeams()` → cancels today's break if any (`break_day_usage.cancelled_at`), logs `workout_logs` via `WorkoutHistoryService`, INSERTs `daily_team_checkins` (own local date) per team → trigger `notify_buddy_checkin` → `send-notification` Edge Fn → FCM to buddy
 6. Per team, when all members participated (checked in or on break) → RPC `recompute_team_streak` → UPDATE `team_streaks` → trigger `notify_streak_update`
 7. RPC `award_checkin_rewards` → `_apply_checkin_rewards` → `xp_transactions` + `coin_transactions` + `user_profiles` (xp/level/coins, daily-capped)
-8. Back in UI: `AchievementService` checks (fire-and-forget, `verify_achievement_progress`/`award_achievement_rewards`) → `AchievementToast`; `LevelUpSheet` if leveled; milestone cosmetic unlock via `LevelService`; `_loadStreakData()` refresh
+8. Back in UI: `AchievementService` checks (fire-and-forget, `verify_achievement_progress`/`award_achievement_rewards`) → `AchievementToast`; milestone cosmetic unlock via `LevelService`; `_loadStreakData()` refresh
 
 ### 7.2 Buddy workout completion (scheduled workout)
 1. `SchedulePage` → workout created via `ScheduleWorkoutSheet` (INSERT `workouts` with `buddy_id`) → trigger-less; buddy sees invite via `workout_invites` (trigger `notify_workout_invite` → push)
