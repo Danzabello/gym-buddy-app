@@ -56,3 +56,6 @@ supabase/.temp/
 # Claude Code local config
 .claude/
 .mcp.json
+
+# Instruction-file backups
+.claude-backup/
