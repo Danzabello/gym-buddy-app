@@ -59,3 +59,4 @@ supabase/.temp/
 
 # Instruction-file backups
 .claude-backup/
+.vscode/settings.json
