@@ -497,7 +497,7 @@ class _AchievementsPageState extends State<AchievementsPage>
             _SheetMiniCard(
               label: 'Earned from achievements',
               value: '$_totalCoinsEarned',
-              color: const Color(0xFFFBBF24),
+              color: appColors.warn,
               appColors: appColors,
               cs: cs,
             ),
@@ -525,10 +525,10 @@ class _AchievementsPageState extends State<AchievementsPage>
                                   color: cs.onSurface)),
                         ),
                         Text('+${a.coinReward} 🪙',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w800,
-                                color: Color(0xFFFBBF24))),
+                                color: appColors.warn)),
                       ],
                     ),
                   )),
@@ -755,7 +755,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                         icon: '🪙',
                         value: _totalCoinsEarned.toString(),
                         label: 'Coins',
-                        color: const Color(0xFFFBBF24),
+                        color: AppColors.of(context).warn,
                         onTap: () => _showCoinsSheet(context))),
               ],
             ),

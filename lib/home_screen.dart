@@ -1050,9 +1050,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       Container(
                         width: 8,
                         height: 8,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Color(0xFFFBBF24), // gold
+                          color: c.warn, // gold
                         ),
                       ),
                       const SizedBox(width: 7),
@@ -4802,7 +4802,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
         });
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Renamed to "$newName"'),
-          backgroundColor: const Color(0xFF10B981),
+          backgroundColor: AppColors.of(context).success,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8)),
@@ -4862,11 +4862,11 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
             // ── Header ──────────────────────────────────
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
                     Color(0xFFF97316),
-                    Color(0xFFEA580C)
+                    AppColors.of(context).streakOrange
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -5029,7 +5029,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
                           ]
                         : [
                             const Color(0xFFF97316),
-                            const Color(0xFFEA580C)
+                            AppColors.of(context).streakOrange
                           ],
                   ),
                 ),
@@ -5090,7 +5090,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
                     fontWeight: FontWeight.w900,
                     letterSpacing: -0.5,
                     color: isComplete
-                        ? const Color(0xFF10B981)
+                        ? appColors.success
                         : const Color(0xFFF97316)),
               ),
               Text('day streak',
@@ -5124,7 +5124,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
               height: 28,
               decoration: BoxDecoration(
                 color: isComplete
-                    ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                    ? appColors.success.withValues(alpha: 0.12)
                     : appColors.sectionBackground,
                 shape: BoxShape.circle,
               ),
@@ -5132,7 +5132,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
                 isComplete ? Icons.check : Icons.access_time,
                 size: 15,
                 color: isComplete
-                    ? const Color(0xFF10B981)
+                    ? appColors.success
                     : appColors.subtleText,
               ),
             ),

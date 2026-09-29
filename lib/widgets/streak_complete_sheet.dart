@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../theme/app_theme.dart';
 
 class StreakCompleteSheet extends StatefulWidget {
   const StreakCompleteSheet({super.key});
@@ -93,7 +94,7 @@ class _StreakCompleteSheetState extends State<StreakCompleteSheet>
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                        color: AppColors.of(context).success.withValues(alpha: 0.35),
                         blurRadius: 16,
                         spreadRadius: 2,
                       ),
@@ -171,7 +172,7 @@ class _StreakCompleteSheetState extends State<StreakCompleteSheet>
                 child: ElevatedButton(
                   onPressed: () => Navigator.pop(context),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF10B981),
+                    backgroundColor: AppColors.of(context).success,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
