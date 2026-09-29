@@ -139,6 +139,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
     HapticFeedback.heavyImpact();
 
     final results = await AchievementService().checkFeelingLucky();
+    if (!mounted) return;
     
     Navigator.pop(context);
     widget.onWorkoutSelected(_randomTemplate!, _randomDuration, null, results);

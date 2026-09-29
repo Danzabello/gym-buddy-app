@@ -78,6 +78,7 @@ class _AvatarSelectorState extends State<AvatarSelector> with SingleTickerProvid
         maxHeight: 800,
         imageQuality: 85,
       );
+      if (!mounted) return;
       
       if (image != null) {
         final File imageFile = File(image.path);
@@ -94,6 +95,7 @@ class _AvatarSelectorState extends State<AvatarSelector> with SingleTickerProvid
       }
     } catch (e) {
       debugLog('Avatar gallery pick failed: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Could not load image. Please try again.'),
@@ -111,6 +113,7 @@ class _AvatarSelectorState extends State<AvatarSelector> with SingleTickerProvid
         maxHeight: 800,
         imageQuality: 85,
       );
+      if (!mounted) return;
       
       if (image != null) {
         final File imageFile = File(image.path);
@@ -127,6 +130,7 @@ class _AvatarSelectorState extends State<AvatarSelector> with SingleTickerProvid
       }
     } catch (e) {
       debugLog('Avatar camera capture failed: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Could not take photo. Please try again.'),

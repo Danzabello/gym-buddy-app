@@ -3458,6 +3458,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
     if (result != null) {
       await _breakDayService.setWeeklyBreakPlan(result);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Set $result break day${result == 1 ? '' : 's'} for this week! 🎉'),
@@ -3905,6 +3906,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   Future<void> _acceptWorkoutInviteDash(String workoutId) async {
     final success = await _workoutService.acceptWorkoutInvitation(workoutId);
+    if (!mounted) return;
     
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3926,6 +3928,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   Future<void> _declineWorkoutInviteDash(String workoutId) async {
     final success = await _workoutService.declineWorkoutInvitation(workoutId);
+    if (!mounted) return;
     
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(

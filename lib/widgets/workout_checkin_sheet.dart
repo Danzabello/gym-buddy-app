@@ -304,6 +304,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
     } catch (e) {
       debugLog('⚠️ Could not check workout type: $e');
     }
+    if (!mounted) return;
 
     // ✅ Show context-appropriate dialog
     final confirmed = await showDialog<bool>(

@@ -189,6 +189,7 @@ class _LoginScreenState extends State<LoginScreen>
 
         unawaited(syncDeviceTimezone());
         await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
+        if (!mounted) return;
         Navigator.of(context).pushAndRemoveUntil(
           FadeSlideRoute(page: const HomeScreen()),
           (r) => false,
