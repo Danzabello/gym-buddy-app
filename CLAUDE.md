@@ -13,7 +13,6 @@ supabase functions deploy <name>   # coach-max-cron, delete-account, invite-redi
 - `lib/main.dart`: loads `.env`, inits Firebase (mobile only) + Supabase, mounts `AuthWrapper`. It checks `user_profiles.onboarding_completed` and routes to `SplashScreen` or `HomeScreen`. Deep links (`app_links`) are intercepted here; invite codes go through `InviteService.storePendingInviteCode`.
 - `lib/home_screen.dart`: 5-tab shell (Dashboard, Friends `FriendsPageModern`, Schedule, Shop, Profile).
 - `lib/services/`: plain Dart classes calling `Supabase.instance.client` directly. All business logic lives here.
-- `lib/onboarding/legacy/` is superseded; don't extend it.
 - Theming: `AppColors` ThemeExtension. Use `AppColors.of(context).x` or Material colour slots.
 
 ### Non-obvious service facts

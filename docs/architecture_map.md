@@ -28,7 +28,6 @@ Full-screen routes. Modal sheets/dialogs that carry real logic are listed separa
 | `NotificationSettingsPage` | `lib/pages/notification_settings_page.dart` | Notification category toggles + quiet hours | `ProfilePage` (two entries, home_screen:6542/6772) | — |
 | `WorkoutHistoryPage` | `lib/pages/workout_history_page.dart` | Calendar + list of logged workouts | Dashboard/Profile history entry | `WorkoutHistorySheet` |
 | `AvatarPickerScreen` | `lib/widgets/avatar_picker_screen.dart` | Avatar + border picker (level/shop gated) | `ProfilePage`, `OnboardingBasicInfoNew` | — |
-| Legacy onboarding | `lib/onboarding/legacy/*` | Superseded flow (BasicInfo → UsernameAvatar → Goals → BuddyPreferences) | not routed from live flow | `HomeScreen` |
 
 Key modal sheets/dialogs (logic-bearing):
 
