@@ -78,7 +78,6 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
   bool _isCompleting = false;
 
   // For background tracking
-  DateTime? _pausedAt;
 
   // Motivational messages that rotate
   int _currentMessageIndex = 0;
@@ -127,7 +126,6 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
-      _pausedAt = DateTime.now();
       _timer?.cancel();
     } else if (state == AppLifecycleState.resumed) {
       if (_workoutStartTime != null) {

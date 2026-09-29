@@ -2153,8 +2153,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   /// The other member of a two-person team, or null if the viewer is the only
   /// member. `get_user_streaks` filters solo teams out (migration
   /// 20260821224035), so null should be unreachable from the RPC path — but
-  /// `_getTeamStreakData` builds TeamStreaks without that filter, and the old
-  /// `orElse: members.first` failed by handing back the *viewer*, i.e. showing
+  /// the old `orElse: members.first` failed by handing back the *viewer*, i.e. showing
   /// you to yourself as your own buddy. Failing visibly beats failing silently.
   TeamMember? _buddyOf(TeamStreak streak) {
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;

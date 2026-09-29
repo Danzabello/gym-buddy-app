@@ -550,7 +550,7 @@ class _NotificationSettingsPageState
         CupertinoSwitch(
           value: value,
           onChanged: onChanged,
-          activeColor: AppColors.of(context).streakOrange,
+          activeTrackColor: AppColors.of(context).streakOrange,
         ),
       ]),
     );

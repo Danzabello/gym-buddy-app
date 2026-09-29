@@ -33,27 +33,6 @@ class WorkoutService {
     }
   }
 
-  Future<bool> _manualCheckActiveWorkout(String userId) async {
-    try {
-      final sessions = await _supabase
-          .from('active_checkin_sessions')
-          .select('id')
-          .eq('user_id', userId)
-          .limit(1);
-      if (sessions.isNotEmpty) return true;
-      final workouts = await _supabase
-          .from('workouts')
-          .select('id')
-          .eq('status', 'in_progress')
-          .or('and(user_id.eq.$userId,creator_joined.eq.true),started_by_user_id.eq.$userId')
-          .limit(1);
-      return workouts.isNotEmpty;
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error in manual check: $e');
-      return false;
-    }
-  }
-
   Future<List<Map<String, dynamic>>> getWorkoutsAwaitingCreatorJoin() async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;

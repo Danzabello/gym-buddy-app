@@ -137,7 +137,7 @@ class _OnboardingBasicInfoNewState
                           fontSize: 12, color: Colors.grey[400])),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    value: _gender,
+                    initialValue: _gender,
                     decoration: InputDecoration(
                       hintText: 'Select gender',
                       hintStyle:
@@ -1051,7 +1051,7 @@ Future<void> _createBuddyTeam(String newUserId, String inviterId) async {
                           value: _lookingForBuddy,
                           onChanged: (v) => setState(
                               () => _lookingForBuddy = v),
-                          activeColor: kObBlue,
+                          activeThumbColor: kObBlue,
                         ),
                       ],
                     ),
