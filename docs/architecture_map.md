@@ -59,7 +59,7 @@ Key modal sheets/dialogs (logic-bearing):
 | `create_invite_team(p_inviter_id, p_invitee_id)` | `OnboardingBasicInfoNew._createBuddyTeam` | — | `buddy_teams`, `team_members` (both users), `team_streaks` | uuid (team_id) |
 | `declare_break_day()` | `BreakDayService.declareBreakDay` (`BreakDaySection`, Dashboard) | `weekly_break_plans`, `break_day_usage` (advisory-locked count) | `break_day_usage` (upsert, server-computed local date) | jsonb (`success`, `used`, `max`, `reason`) |
 | `delete_own_account()` | `AuthWrapper`, `LoginScreen`, `OnboardingBasicInfoNew` (orphan cleanup) | — | deletes `user_profiles` + cascading user data + auth user | void |
-| `get_level_for_xp(total_xp)` | `XpService`, `LevelService` | `level_definitions` | — | int |
+| `get_level_for_xp(total_xp)` | `LevelService` | `level_definitions` | — | int |
 | `get_user_streaks(p_user_id)` | `TeamStreakService.getAllUserStreaks` (viewer-tz aware) | `buddy_teams`, `team_streaks`, `team_members`, `daily_team_checkins`, `user_profiles`, `workouts`, `check_ins` | — | json (all streaks + members + today's check-ins) |
 | `get_workouts_awaiting_creator_join(creator_id)` | `WorkoutService.getWorkoutsAwaitingCreatorJoin` (`WorkoutJoinChecker`) | `workouts`, `user_profiles` | — | table (join-window rows) |
 | `is_on_break_today(p_user_id)` | `home_screen.dart:2335`, `friends_page_modern.dart:135` (break badges) | `break_day_usage` | — | boolean |
@@ -169,8 +169,7 @@ Key modal sheets/dialogs (logic-bearing):
 | `WorkoutInviteService` | — | `workout_invites`, `workouts` | `WorkoutInvitesCard` |
 | `CoachMaxService` | `recompute_team_streak` | `coach_max_schedule`, `buddy_teams`, `team_members`, `team_streaks`, `daily_team_checkins` | `CoachMaxWidget`, onboarding, login, `main.dart` |
 | `AchievementService` | `verify_achievement_progress`, `award_achievement_rewards` | `achievements`, `user_achievements`, `workouts`, `daily_team_checkins`, `team_streaks`, `team_members`, `friendships`, `coin_transactions`, `user_inventory` | `AchievementsPage`, `AchievementToast`, `FriendsPageModern`, `WorkoutSelectionModal`, `main.dart`, TeamStreakService (post-check-in) |
-| `XpService` | `get_level_for_xp` | `xp_transactions`, `user_profiles`, `level_definitions`, `user_unlocked_cosmetics`, `cosmetic_unlock_conditions` | LevelService pipeline |
-| `LevelService` | `get_level_for_xp` | same as XpService | `XpProgressBar`, `AvatarPickerScreen`, `AchievementsPage`, HomeScreen |
+| `LevelService` | `get_level_for_xp` | `xp_transactions`, `user_profiles`, `level_definitions`, `user_unlocked_cosmetics`, `cosmetic_unlock_conditions` | `XpProgressBar`, `AvatarPickerScreen`, `AchievementsPage`, HomeScreen |
 | `CoinService` | `purchase_shop_item` | `coin_transactions`, `shop_items`, `user_inventory`, `user_profiles` | `ShopPage` |
 | `WorkoutHistoryService` | — | `workout_logs`, `workout_templates` | `WorkoutHistoryPage`, `WorkoutCalendar`, `WorkoutHistoryList`, `WorkoutSelectionModal`, HomeScreen |
 | `NotificationService` | — (Edge Fn via triggers) | `device_tokens`, `notification_settings` | `main.dart`, `LoginScreen`, `NotificationSettingsPage` |
