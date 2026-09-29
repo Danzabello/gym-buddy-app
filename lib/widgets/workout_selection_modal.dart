@@ -6,7 +6,6 @@ import '../services/workout_history_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
-import 'dart:async' show unawaited;
 import '../services/achievement_service.dart';
 
 class WorkoutSelectionModal extends StatefulWidget {

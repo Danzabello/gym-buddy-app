@@ -4592,7 +4592,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       WorkoutTemplate? selectedTemplate;
       int? selectedDuration;
       String? selectedNotes;
-      List<AchievementUnlockResult> _pendingAchievements = [];
+      List<AchievementUnlockResult> pendingAchievements = [];
 
       await showModalBottomSheet(
         context: context,
@@ -4603,19 +4603,19 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             selectedTemplate = template;
             selectedDuration = duration;
             selectedNotes = notes;
-            _pendingAchievements = extraAchievements;
+            pendingAchievements = extraAchievements;
           },
         ),
       );
 
       if (selectedTemplate == null || !mounted) return;
 
-      debugLog('🎲 Pending achievements count: ${_pendingAchievements.length}');
+      debugLog('🎲 Pending achievements count: ${pendingAchievements.length}');
 
       // 🏆 Show Feeling Lucky toast if randomiser was used
-      if (_pendingAchievements.isNotEmpty && mounted) {
-        AchievementToast.show(context, _pendingAchievements);
-        _pendingAchievements = [];
+      if (pendingAchievements.isNotEmpty && mounted) {
+        AchievementToast.show(context, pendingAchievements);
+        pendingAchievements = [];
       }
 
     // ✅ NOW show the timer with workout details (after modal is fully closed)
@@ -5800,7 +5800,7 @@ class _SchedulePageState extends State<SchedulePage> {
             onCancelReady: () => _setReady(workout['id'], false),
             onStartTogether: () => _startTogether(workout['id']),
           );
-        }).toList(),
+        }),
         CompletedWorkoutsSection(refreshTrigger: _completedRefreshTrigger),
       ],
     );
@@ -5930,7 +5930,7 @@ class _ProfilePageState extends State<ProfilePage>
       if (!mounted) return;
 
       setState(() {
-        _profile       = profile as Map<String, dynamic>;
+        _profile       = profile;
         _allStreaks     = streaks;
         _streakSortMode = StreakSortMode.values.firstWhere(
           (e) => e.name == profile['preferred_streak_sort'],

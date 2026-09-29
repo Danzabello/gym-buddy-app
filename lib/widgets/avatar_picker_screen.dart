@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'user_avatar.dart';
 import '../services/level_service.dart';
 import '../theme/app_theme.dart';
 

@@ -3,9 +3,7 @@ import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 import 'widgets/onboarding_splash_background.dart';
 import 'onboarding_value_props.dart';
-import '../signup_screen.dart';
 import '../login_screen.dart';
-import '../main.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});

@@ -440,7 +440,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                             fontWeight: FontWeight.w800,
                             color: cs.onSurface)),
                     Text(
-                        '${friend['fitness_level']?.toString().toUpperCase() ?? 'BEGINNER'}',
+                        friend['fitness_level']?.toString().toUpperCase() ?? 'BEGINNER',
                         style: TextStyle(
                             fontSize: 11,
                             color: appColors.subtleText)),

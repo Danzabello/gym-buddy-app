@@ -353,7 +353,7 @@ class _AchievementsPageState extends State<AchievementsPage>
             _SheetHeader(
               icon: '⚡',
               title: 'XP & level',
-              subtitle: li != null ? '${li.title}' : 'Keep going!',
+              subtitle: li != null ? li.title : 'Keep going!',
               appColors: appColors,
               cs: cs,
             ),

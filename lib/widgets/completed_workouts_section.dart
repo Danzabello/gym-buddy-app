@@ -96,27 +96,33 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
     final appColors = AppColors.of(context);
     final palette = context.read<AccentThemeProvider>().palette;
 
-    if (partnerBailed) return (
+    if (partnerBailed) {
+      return (
       label: 'buddy bailed',
       color: palette.statusWarning,
       bg: appColors.tint(palette.statusWarning),
     );
+    }
 
     final actual  = w['actual_duration_minutes'] as int?;
     final planned = w['planned_duration_minutes'] as int? ?? 60;
     final isAuto  = (w['notes'] as String? ?? '').contains('Auto-completed');
 
-    if (actual != null && !isAuto && actual < (planned * 0.8).round()) return (
+    if (actual != null && !isAuto && actual < (planned * 0.8).round()) {
+      return (
       label: 'cut short −${planned - actual}m',
       color: palette.statusDanger,
       bg: appColors.tint(palette.statusDanger),
     );
+    }
 
-    if (w['buddy_id'] != null) return (
+    if (w['buddy_id'] != null) {
+      return (
       label: 'co-op finish',
       color: palette.statusInfo,
       bg: appColors.tint(palette.statusInfo),
     );
+    }
 
     return (
       label: 'solo win',
@@ -196,7 +202,9 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
   String _coachComment(Map<String, dynamic> w) {
     final id = w['id'] as String? ?? '';
     int seed = 0;
-    for (final c in id.codeUnits) seed = (seed * 31 + c) & 0x7FFFFFFF;
+    for (final c in id.codeUnits) {
+      seed = (seed * 31 + c) & 0x7FFFFFFF;
+    }
 
     final uid = Supabase.instance.client.auth.currentUser?.id;
     final isCreator = w['user_id'] == uid;
@@ -214,12 +222,13 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
     if (partnerBailed) {
       pool = CoachComments.buddyBailed;
     } else if (w['buddy_id'] != null) {
-      if (actual != null && !isAuto && actual < (planned * 0.8).round())
+      if (actual != null && !isAuto && actual < (planned * 0.8).round()) {
         pool = CoachComments.coopShort;
-      else if (actual != null && !isAuto && actual > (planned * 1.1).round())
+      } else if (actual != null && !isAuto && actual > (planned * 1.1).round()) {
         pool = CoachComments.coopOver;
-      else
+      } else {
         pool = CoachComments.coopCrushed;
+      }
     } else {
       if (actual != null && !isAuto && actual < (planned * 0.8).round()) {
         pool = CoachComments.soloShort;
@@ -238,14 +247,21 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
         if (ts != null) {
           try {
             final hour = DateTime.parse(ts).toLocal().hour;
-            if (hour < 9) timePool = CoachComments.morning;
-            else if (hour >= 21) timePool = CoachComments.lateNight;
+            if (hour < 9) {
+              timePool = CoachComments.morning;
+            } else if (hour >= 21) {
+              timePool = CoachComments.lateNight;
+            }
           } catch (_) {}
         }
 
-        if (typePool != null && seed % 3 == 0)      pool = typePool;
-        else if (timePool != null && seed % 3 == 1) pool = timePool;
-        else                                         pool = CoachComments.soloCrushed;
+        if (typePool != null && seed % 3 == 0) {
+          pool = typePool;
+        } else if (timePool != null && seed % 3 == 1) {
+          pool = timePool;
+        } else {
+          pool = CoachComments.soloCrushed;
+        }
       }
     }
 
@@ -307,7 +323,7 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
         ),
         if (_isExpanded) ...[
           const SizedBox(height: 8),
-          ..._completedWorkouts.map(_buildCard).toList(),
+          ..._completedWorkouts.map(_buildCard),
         ],
       ],
     );
@@ -429,14 +445,14 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
                                   backgroundColor: appColors
                                       .tint(accentPalette.statusInfo),
                                   child: Text(
-                                    partnerName!.substring(0, 1).toUpperCase(),
+                                    partnerName.substring(0, 1).toUpperCase(),
                                     style: TextStyle(
                                         fontSize: 9,
                                         color: accentPalette.statusInfo),
                                   ),
                                 ),
                               const SizedBox(width: 4),
-                              Text(partnerName!,
+                              Text(partnerName,
                                   style: TextStyle(
                                       fontSize: 10,
                                       color: accentPalette.statusInfo)),

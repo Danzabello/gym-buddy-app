@@ -535,7 +535,7 @@ class _Slide1State extends State<_Slide1> {
                                 onInvite: () => widget.onInvite(u),
                                 onRemove: () => widget.onRemove(u['id']),
                               ))
-                          .toList(),
+                          ,
                     ] else if (_searchCtrl.text.isNotEmpty && !_isSearching)
                       Center(
                         child: Padding(
@@ -559,7 +559,7 @@ class _Slide1State extends State<_Slide1> {
                                 user: u,
                                 onRemove: () => widget.onRemove(u['id']),
                               ))
-                          .toList(),
+                          ,
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.all(12),

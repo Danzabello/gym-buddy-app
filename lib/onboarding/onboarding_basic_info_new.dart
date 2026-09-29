@@ -749,7 +749,7 @@ class _OnboardingGoalsState extends State<_OnboardingGoals> {
                         ),
                       ),
                     );
-                  }).toList(),
+                  }),
                 ],
               ),
             ),

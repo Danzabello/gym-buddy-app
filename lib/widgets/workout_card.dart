@@ -618,7 +618,7 @@ class _WorkoutCardState extends State<WorkoutCard> {
             Text(
               hasReachedGoal
                   ? '🎉 Goal reached! Ready to complete!'
-                  : '${remainingMinutes}:${remainingSecs.toString().padLeft(2, '0')} to go',
+                  : '$remainingMinutes:${remainingSecs.toString().padLeft(2, '0')} to go',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,

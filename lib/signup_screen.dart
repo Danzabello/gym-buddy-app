@@ -5,7 +5,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'onboarding/onboarding_theme.dart';
 import 'onboarding/onboarding_basic_info_new.dart';
 import 'onboarding/splash_screen.dart';
-import 'main.dart';
 import 'utils/input_validators.dart';
 
 // Hosted on GitHub Pages from docs/ -- same origin as invite.html.
