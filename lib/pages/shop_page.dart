@@ -158,7 +158,6 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
   }
 
   Future<bool?> _showPurchaseDialog(ShopItem item) {
-    final colors = AppColors.of(context);
     return showDialog<bool>(
       context: context,
       builder: (context) {

@@ -153,8 +153,6 @@ class TeamStreakService {
 
           // Parse today's check-ins
           final checkInsRaw = teamData['today_check_ins'] as List<dynamic>? ?? [];
-          final now = DateTime.now();
-          final today = DateTime(now.year, now.month, now.day);
           int orderIndex = 0;
           final checkIns = <CheckInStatus>[];
 
@@ -626,10 +624,6 @@ class TeamStreakService {
         debugLog('  - Total members: $totalMembers');
         debugLog('  - Checked in: $checkedInMembers');
         debugLog('  - Participating (check-in OR break): $participatingMembers');
-        for (var userId in memberIds) {
-          final onBreak = breakDayStatus[userId] ?? false;
-          final checkedIn = checkInsResponse.any((c) => c['user_id'] == userId);
-        }
       }
 
       // ✅ If all members are participating (checked in or on break), increment streak

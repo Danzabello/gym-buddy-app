@@ -392,8 +392,6 @@ class FriendService {
 
       if (kDebugMode) {
         debugLog('✅ Found ${response.length} pending requests');
-        for (var req in response) {
-        }
       }
 
       return List<Map<String, dynamic>>.from(response);

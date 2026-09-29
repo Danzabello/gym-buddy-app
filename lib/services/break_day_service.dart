@@ -112,7 +112,7 @@ class BreakDayService {
 
     debugLog('🔄 Cancelling break day for $todayStr');
 
-    final result = await _supabase
+    await _supabase
         .from('break_day_usage')
         .update({'cancelled_at': DateTime.now().toIso8601String()})
         .eq('user_id', userId)
@@ -147,8 +147,6 @@ class BreakDayService {
 
   /// Check if user needs to set their weekly plan (it's Monday and no plan exists)
   Future<bool> needsToSetWeeklyPlan() async {
-    final today = DateTime.now();
-    
     // Only prompt on Monday, or if no plan exists for current week
     final plan = await getCurrentWeekPlan();
     
