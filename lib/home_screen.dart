@@ -1314,7 +1314,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final cards = <Widget>[
       // Compact-height phones fold the persistent week card into the tray
       // itself instead of also rendering it below — see _buildDashboardBody.
-      if (_isCompactHeight(context)) _buildWeekCard(),
+      if (_isCompactHeight(context)) _buildWeekCard(inTray: true),
       if (teamStatusCard != null) teamStatusCard,
       ...orderedRotating,
     ];
@@ -1359,6 +1359,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
+  /// Extra bottom padding for a card centered inside the tray's fixed 128px
+  /// box, so its content never reaches into the dots overlay (Positioned
+  /// bottom:8, ~17px tall) at the bottom of that box.
+  static const _kTrayCardPaddingWithDots = EdgeInsets.fromLTRB(16, 12, 16, 24);
+
   /// The clay slab every tray card sits on. One shell, so the three card types
   /// can't drift apart in radius, shadow or padding.
   Widget _clayTraySlab({
@@ -1368,7 +1373,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }) {
     final c = AppColors.of(context);
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
+      // 26 (not 20) so clayShadow()'s ~20px reach (offset 6 + blur 14 on the
+      // dark side) doesn't bleed all the way to the screen edge — more
+      // visible now the Scaffold sits on the true accent background instead
+      // of the closer-toned clayBg.
+      margin: const EdgeInsets.symmetric(horizontal: 26),
       padding: padding ?? const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: BoxDecoration(
         color: color ?? c.claySurface,
@@ -1380,7 +1389,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   /// Shared [icon] · [label]/[title] · optional [trailing] row used by every
-  /// state of the workout tray card.
+  /// state of the workout tray card. [inTray] centers the content vertically
+  /// and reserves room at the bottom for the dots overlay — see
+  /// _kTrayCardPaddingWithDots — since only the workout tray states sit
+  /// inside that fixed 128px PageView box; _buildMilestoneCard's calls sit
+  /// in the normal scrolling column and don't pass it.
   Widget _trayRow({
     required Widget leading,
     required String label,
@@ -1391,12 +1404,15 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     Widget? trailing,
     Color? color,
     Widget? below,
+    bool inTray = false,
   }) {
     final c = AppColors.of(context);
     return _clayTraySlab(
       color: color,
+      padding: inTray ? _kTrayCardPaddingWithDots : null,
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: inTray ? MainAxisAlignment.center : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
@@ -1563,6 +1579,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         title: activeWorkout['workout_type'] ?? 'Workout',
         titleColor: c.streakOrange,
         trailing: _trayAction('Continue', c.streakOrange, () => _checkIn()),
+        inTray: true,
       );
     }
 
@@ -1588,6 +1605,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 () => _declineWorkoutInviteDash(pendingInvite['id'])),
           ],
         ),
+        inTray: true,
       );
     }
 
@@ -1613,6 +1631,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           height: 10,
           decoration: BoxDecoration(color: c.success, shape: BoxShape.circle),
         ),
+        inTray: true,
       );
     }
 
@@ -1640,11 +1659,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   /// Vector-icon, vertically-centered variant of the "TODAY'S WORKOUT" tray
-  /// card. Bespoke rather than a _trayRow call: _trayRow's Column has no
-  /// mainAxisAlignment set, so inside _buildInfoTray's fixed 128px PageView
-  /// box its content sits top-anchored — the same fix _buildWeekCard
-  /// already applies to itself, just not something safe to bake into
-  /// _trayRow without re-centering every other card built on it.
+  /// card. Bespoke rather than a _trayRow(inTray: true) call: this one
+  /// always needs the centering/dots-clearance treatment, so it's baked in
+  /// directly rather than threading the flag through.
   Widget _buildTodayWorkoutCard({
     required String title,
     String? subtitle,
@@ -1652,6 +1669,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }) {
     final c = AppColors.of(context);
     return _clayTraySlab(
+      padding: _kTrayCardPaddingWithDots,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1792,7 +1810,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   /// Persistent (non-swipeable) 7-day week card — see _buildDashboardBody
   /// and _buildInfoTray for where it's placed depending on screen height.
-  Widget _buildWeekCard() {
+  /// [inTray] is true only for the latter: it centers the content and
+  /// reserves room for the dots overlay in that fixed 128px box; the
+  /// standalone persistent placement sizes to its own content as before.
+  Widget _buildWeekCard({bool inTray = false}) {
     final c = AppColors.of(context);
     final danger = context.watch<AccentThemeProvider>().palette.statusDanger;
     final today = DateTime.now();
@@ -1802,9 +1823,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         week.where((d) => !d.isAfter(today) && _isDateCheckedIn(d)).length;
 
     return _clayTraySlab(
+      padding: inTray ? _kTrayCardPaddingWithDots : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: inTray ? MainAxisAlignment.center : MainAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2276,7 +2299,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final nudge = streak == null ? null : _nudgeCopy(streak);
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
+      // 26, matching _clayTraySlab — keeps clayShadow()'s ~20px reach clear
+      // of the screen edge now that the Scaffold sits on the true accent
+      // background (see _clayTraySlab's margin comment).
+      margin: const EdgeInsets.symmetric(horizontal: 26),
       padding: const EdgeInsets.fromLTRB(22, 16, 22, 14),
       decoration: BoxDecoration(
         color: c.claySurface,
@@ -3806,6 +3832,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       _buildDashboardHeader(),
                       Expanded(
                         child: SingleChildScrollView(
+                          // Explicit rather than relying on the platform
+                          // default: no iOS-style rubber-band when content
+                          // already fits (checked — nothing overrides
+                          // MaterialApp's own ClampingScrollPhysics here,
+                          // this just makes it not implicit).
+                          physics: const ClampingScrollPhysics(),
                           // The nav bar floats over the body (extendBody), so
                           // reserve its height or the last card hides under it.
                           padding: EdgeInsets.only(
