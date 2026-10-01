@@ -150,24 +150,6 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
         _workoutStartTime = DateTime.parse(existing['started_at']);
         _updateElapsedTime();
         _startTimer();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.play_arrow, color: Colors.white),
-                  const SizedBox(width: 12),
-                  Text('Resumed from ${_formatTime(_workoutStartTime!)}'),
-                ],
-              ),
-              backgroundColor: Colors.blue[600],
-              duration: const Duration(seconds: 2),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          );
-        }
       } else {
         _startNewWorkout();
       }
@@ -388,13 +370,6 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
         Navigator.pop(context, false);
       }
     }
-  }
-
-  String _formatTime(DateTime time) {
-    final hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
-    final period = time.hour >= 12 ? 'PM' : 'AM';
-    final minute = time.minute.toString().padLeft(2, '0');
-    return '$hour:$minute $period';
   }
 
   String _formatDuration(Duration duration) {
