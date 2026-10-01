@@ -141,7 +141,9 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
 
   // ✅ NEW — Custom duration picker (matches QuickScheduleSheet)
   void _showCustomDurationDialog() {
-    int tempDuration = _isCustomDuration ? _duration : 60;
+    // Same 15-min floor as the slider and the server, so thumb, label and
+    // the saved planned duration always agree.
+    int tempDuration = (_isCustomDuration ? _duration : 60).clamp(15, 180);
 
     showModalBottomSheet(
       context: context,
@@ -217,7 +219,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('10 min', style: TextStyle(color: appColors.subtleText, fontSize: 13)),
+                      Text('15 min', style: TextStyle(color: appColors.subtleText, fontSize: 13)),
                       Text('3 hours', style: TextStyle(color: appColors.subtleText, fontSize: 13)),
                     ],
                   ),

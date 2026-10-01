@@ -115,7 +115,9 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
   }
 
   void _showCustomDurationDialog() {
-    int tempDuration = _isCustomDuration ? _duration : 60;
+    // Same 15-min floor as the slider and the server, so thumb, label and
+    // the saved planned duration always agree.
+    int tempDuration = (_isCustomDuration ? _duration : 60).clamp(15, 180);
 
     showModalBottomSheet(
       context: context,
@@ -191,7 +193,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('10 min', style: TextStyle(color: appColors.subtleText, fontSize: 13)),
+                      Text('15 min', style: TextStyle(color: appColors.subtleText, fontSize: 13)),
                       Text('3 hours', style: TextStyle(color: appColors.subtleText, fontSize: 13)),
                     ],
                   ),
