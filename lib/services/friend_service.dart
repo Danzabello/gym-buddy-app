@@ -158,61 +158,16 @@ class FriendService {
   // 🔥 Modified: Create team streak and return both team and streak IDs
   Future<Map<String, String>?> _createTeamStreakAndGetIds(String userId1, String userId2) async {
     try {
+      // Team, both members and the streak row are created server-side, and
+      // only for an accepted friendship (LIVE-23/25). userId1 is the caller.
+      final result = await _supabase.rpc('create_buddy_team', params: {
+        'p_friend_id': userId2,
+      }) as Map<String, dynamic>;
 
-      // Get both users' display names
-      final user1Profile = await _supabase
-          .from('user_profiles')
-          .select('display_name')
-          .eq('id', userId1)
-          .single();
-
-      final user2Profile = await _supabase
-          .from('user_profiles')
-          .select('display_name')
-          .eq('id', userId2)
-          .single();
-
-      final user1Name = user1Profile['display_name'] as String;
-      final user2Name = user2Profile['display_name'] as String;
-
-      // Create buddy team
-      final team = await _supabase.from('buddy_teams').insert({
-        'team_name': '$user1Name & $user2Name',
-        'team_emoji': '💪',
-        'is_coach_max_team': false,
-        'max_members': 2,
-        'created_by': userId1,
-      }).select().single();
-
-      final teamId = team['id'] as String;
-      if (kDebugMode) debugLog('✅ Team created: $teamId');
-
-      // Add both members to the team
-      await _supabase.from('team_members').insert([
-        {
-          'team_id': teamId,
-          'user_id': userId1,
-          'role': 'member',
-        },
-        {
-          'team_id': teamId,
-          'user_id': userId2,
-          'role': 'member',
-        },
-      ]);
-
-      if (kDebugMode) debugLog('✅ Team members added');
-
-      // Create team streak
-      final teamStreak = await _supabase.from('team_streaks').insert({
-        'team_id': teamId,
-        'current_streak': 0,
-        'longest_streak': 0,
-        'is_active': true,
-      }).select().single();
-
-      final streakId = teamStreak['id'] as String;
-      if (kDebugMode) debugLog('✅ Team streak created: $streakId');
+      final teamId = result['team_id'] as String;
+      final streakId = result['streak_id'] as String?;
+      if (kDebugMode) debugLog('✅ Team ready: $teamId (created: ${result['created']})');
+      if (streakId == null) return null;
 
       return {
         'teamId': teamId,

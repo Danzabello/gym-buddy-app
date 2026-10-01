@@ -20,25 +20,13 @@ class CoachMaxService {
   Future<bool> initializeCoachMaxForUser(String userId) async {
     try {
 
-      // Check if user already has a Coach Max team
-      final existingTeam = await _getCoachMaxTeam(userId);
-      if (existingTeam != null) {
+      // Team, both members and the streak row are created server-side
+      // (LIVE-23/25: the client can no longer insert team rows).
+      final result = await _supabase.rpc('ensure_coach_max_team') as Map<String, dynamic>;
+      if (result['created'] != true) {
         if (kDebugMode) debugLog('✅ Coach Max team already exists');
         return true;
       }
-
-      // Step 1: Create the buddy team
-      final teamId = await _createCoachMaxTeam(userId);
-      if (teamId == null) {
-        if (kDebugMode) debugLog('❌ Failed to create Coach Max team');
-        return false;
-      }
-
-      // Step 2: Add user and Coach Max as team members
-      await _addTeamMembers(teamId, userId);
-
-      // Step 3: Create initial streak record
-      await _createInitialStreak(teamId);
 
       // Step 4: Schedule first Coach Max check-in
       await scheduleCoachMaxCheckIn(userId);
@@ -65,68 +53,6 @@ class CoachMaxService {
     } catch (e) {
       if (kDebugMode) debugLog('Error getting Coach Max team: $e');
       return null;
-    }
-  }
-
-  /// Create the Coach Max buddy team
-  Future<String?> _createCoachMaxTeam(String userId) async {
-    try {
-      final response = await _supabase
-          .from('buddy_teams')
-          .insert({
-            'team_name': 'Coach Max',
-            'team_emoji': '🤖',
-            'is_coach_max_team': true,
-            'max_members': 2,
-            'created_by': userId,
-          })
-          .select('id')
-          .single();
-
-      if (kDebugMode) debugLog('✅ Created Coach Max team: ${response['id']}');
-      return response['id'] as String;
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error creating Coach Max team: $e');
-      return null;
-    }
-  }
-
-  /// Add user and Coach Max as team members
-  Future<void> _addTeamMembers(String teamId, String userId) async {
-    try {
-      // Add user as owner
-      await _supabase.from('team_members').insert({
-        'team_id': teamId,
-        'user_id': userId,
-        'role': 'owner',
-      });
-
-      // Add Coach Max as member
-      await _supabase.from('team_members').insert({
-        'team_id': teamId,
-        'user_id': coachMaxId,
-        'role': 'coach_max',
-      });
-
-      if (kDebugMode) debugLog('✅ Added team members (user + Coach Max)');
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error adding team members: $e');
-    }
-  }
-
-  /// Create initial streak record for the team
-  Future<void> _createInitialStreak(String teamId) async {
-    try {
-      await _supabase.from('team_streaks').insert({
-        'team_id': teamId,
-        'current_streak': 0,
-        'longest_streak': 0,
-        'is_active': true,
-      });
-
-      if (kDebugMode) debugLog('✅ Created initial streak record');
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error creating streak: $e');
     }
   }
 
