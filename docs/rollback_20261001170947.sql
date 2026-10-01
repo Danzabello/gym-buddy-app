@@ -1,6 +1,6 @@
 -- ROLLBACK for supabase/migrations/20261001170947_live24_auto_complete_flags_and_input_guards.sql
 -- NOT a migration: lives in docs/ so `supabase db push` never runs it.
--- Roll back 20261001170948 (process_stale_sessions) FIRST: it uses these columns.
+-- Roll back 20261001202006 (process_stale_sessions) FIRST: it uses these columns.
 -- Drops the auto_completed / notice / push-dedup columns (their data is lost),
 -- the client guards and the daily cap, and re-grants client DELETE on
 -- coach_max_schedule. Re-opens LIVE-24 (forged has_checked_in, client-chosen

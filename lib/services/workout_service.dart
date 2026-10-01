@@ -512,57 +512,15 @@ class WorkoutService {
             .select('status')
             .eq('id', workoutId)
             .maybeSingle();
-        if (workout == null ||
-            workout['status'] == 'cancelled' ||
-            workout['status'] == 'completed') {
+        // A workout completed by the partner keeps this user's session: they
+        // are still in it and can Finish (or the server auto-completes it).
+        if (workout == null || workout['status'] == 'cancelled') {
           await _supabase.from('active_checkin_sessions').delete().eq('id', session['id']);
           if (kDebugMode) debugLog('🧹 Cleaned up orphaned session: ${session['id']}');
         }
       }
     } catch (e) {
       if (kDebugMode) debugLog('⚠️ Error cleaning up sessions: $e');
-    }
-  }
-
-  Future<void> cleanupStaleWorkouts() async {
-    try {
-      final currentUserId = _supabase.auth.currentUser?.id;
-      if (currentUserId == null) return;
-      // Bound must be UTC: a naive local string is read as UTC by timestamptz,
-      // shrinking the 3h window by the device offset (a Latvia phone swept a
-      // 5-minute-old workout as "exceeded 3 hours").
-      final threeHoursAgo = DateTime.now().toUtc().subtract(const Duration(hours: 3));
-      final staleWorkouts = await _supabase
-          .from('workouts')
-          .select('id, workout_started_at')
-          .eq('status', 'in_progress')
-          .or('user_id.eq.$currentUserId,buddy_id.eq.$currentUserId')
-          .lt('workout_started_at', threeHoursAgo.toIso8601String());
-      if (staleWorkouts.isEmpty) {
-        if (kDebugMode) debugLog('✅ No stale workouts to clean up');
-        return;
-      }
-      if (kDebugMode) debugLog('🧹 Found ${staleWorkouts.length} stale workouts, auto-completing...');
-      for (final workout in staleWorkouts) {
-        final completedAt = DateTime.now().toUtc();
-        final startedAt = DateTime.parse(workout['workout_started_at'] as String);
-        await _supabase.from('workouts').update({
-          'status': 'completed',
-          'actual_duration_minutes': completedAt.difference(startedAt).inMinutes,
-          // UTC with 'Z' suffix — see completeWorkout; naive local gets
-          // branded UTC by timestamptz and double-shifted on display.
-          'workout_completed_at': completedAt.toIso8601String(),
-          'notes': '(Auto-completed — workout exceeded 3 hour limit)',
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', workout['id']);
-        await _supabase
-            .from('active_checkin_sessions')
-            .delete()
-            .eq('workout_id', workout['id']);
-        if (kDebugMode) debugLog('✅ Auto-completed stale workout: ${workout['id']}');
-      }
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error cleaning up stale workouts: $e');
     }
   }
 

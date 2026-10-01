@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/workout_service.dart';
 import 'dart:async';
+import 'dart:math';
 import 'streak_complete_sheet.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 
@@ -104,7 +105,8 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
     {'emoji': '⭐', 'text': 'Superstar! Goal smashed!'},
   ];
 
-  int get _goalMinutes => widget.plannedDuration ?? 30;
+  // Never below 15: the server rejects completions under 15 minutes (B-1).
+  int get _goalMinutes => max(widget.plannedDuration ?? 30, 15);
   bool get _hasReachedGoal => _elapsed.inMinutes >= _goalMinutes;
 
   @override

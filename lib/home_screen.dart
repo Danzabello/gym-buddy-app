@@ -696,7 +696,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   // Add this new method
   Future<void> _initializeHomePage() async {
     await Future.wait([
-      _workoutService.cleanupStaleWorkouts(),
       _workoutService.cleanupOrphanedSessions(),
       _checkWeeklyPlan(),
       _checkForActiveWorkout(),

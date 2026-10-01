@@ -178,7 +178,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
                   ),
                   child: Slider(
                     value: tempDuration.toDouble(),
-                    min: 10, max: 180, divisions: 34,
+                    min: 15, max: 180, divisions: 33,
                     onChanged: (value) {
                       final rounded = (value / 5).round() * 5;
                       HapticFeedback.selectionClick();
