@@ -1554,7 +1554,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
     // ── Priority 1: Active workout (in_progress) ──
     final activeWorkout = _todaysWorkouts.firstWhere(
-      (w) => w['status'] == 'in_progress',
+      // Skip a workout whose MY side is cancelled (same rule as getUpcomingWorkouts).
+      (w) => w['status'] == 'in_progress' &&
+          !((w['user_id'] == currentUserId ? w['creator_cancelled'] : w['buddy_cancelled']) ?? false),
       orElse: () => {},
     );
     if (activeWorkout.isNotEmpty) {
