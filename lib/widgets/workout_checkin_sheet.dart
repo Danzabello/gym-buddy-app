@@ -236,22 +236,14 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
       return;
     }
 
-    try {
-      // Clear the active session immediately
-      await Supabase.instance.client
-          .from('active_checkin_sessions')
-          .delete()
-          .eq('user_id', userId);
-    } catch (e) {
-      debugLog('❌ Error clearing session: $e');
-    }
-
     // ✅ Close the sheet IMMEDIATELY — don't wait for check-in to finish
     if (mounted) {
       Navigator.pop(context, true);
     }
 
-    // ✅ Do the heavy check-in work in the background AFTER sheet is gone
+    // ✅ Do the heavy check-in work in the background AFTER sheet is gone.
+    // The session is cleared only afterwards: the server check-in reads its
+    // start time to credit the day the workout started (and deletes it).
     try {
       final partnerBonusEarned = await widget.onCheckInComplete();
 
@@ -263,6 +255,15 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
       }
     } catch (e) {
       debugLog('❌ Error completing check-in: $e');
+    }
+
+    try {
+      await Supabase.instance.client
+          .from('active_checkin_sessions')
+          .delete()
+          .eq('user_id', userId);
+    } catch (e) {
+      debugLog('❌ Error clearing session: $e');
     }
   }
 
