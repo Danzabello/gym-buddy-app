@@ -15,7 +15,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/invite_service.dart';
 import '../services/team_streak_service.dart';
-import '../services/presence_service.dart';
 
 class FriendsPageModern extends StatefulWidget {
   const FriendsPageModern({super.key});
@@ -617,20 +616,12 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
           icon: const Icon(Icons.search),
           tooltip: 'Search buddies',
           onPressed: () {
-            // Snapshot of who's working out right now — read only, never
-            // touch the singleton's callback/join (that's the dashboard's).
-            final ids = _friends.map((f) => f['id'] as String).toList();
-            final workingOut = PresenceService()
-                .getFriendsWorkingOut(ids)
-                .map((p) => p['user_id'] as String)
-                .toSet();
             Navigator.push(
               context,
               MaterialPageRoute(
                   builder: (_) => _SearchBuddiesPage(
                       friends: _friends,
-                      streaks: _buddyStreaks,
-                      workingOut: workingOut)),
+                      streaks: _buddyStreaks)),
             );
           },
         ),
@@ -1132,11 +1123,9 @@ void _openBuddyChat(BuildContext context, Map<String, dynamic> friend) {
 class _SearchBuddiesPage extends StatefulWidget {
   final List<Map<String, dynamic>> friends;
   final Map<String, TeamStreak> streaks;
-  final Set<String> workingOut;
   const _SearchBuddiesPage(
       {required this.friends,
-      required this.streaks,
-      required this.workingOut});
+      required this.streaks});
 
   @override
   State<_SearchBuddiesPage> createState() => _SearchBuddiesPageState();
@@ -1329,24 +1318,15 @@ class _SearchBuddiesPageState extends State<_SearchBuddiesPage> {
     final name = friend['display_name'] as String? ?? 'Buddy';
     final username = friend['username'] as String?;
     final streak = _streakOf(friend);
-    final live = widget.workingOut.contains(friend['id'] as String);
     final palette = context.watch<AccentThemeProvider>().palette;
-    final borderColor = live
-        ? appColors.successGreen
-        // Intentional tier styling, matches achievements' legendary color
-        // — not themed per accent
-        : isTop
-            ? const Color(0xFFFBBF24)
-            : _borderColor(friend['avatar_border'] as String?);
+    // Intentional tier styling, matches achievements' legendary color
+    // — not themed per accent
+    final borderColor = isTop
+        ? const Color(0xFFFBBF24)
+        : _borderColor(friend['avatar_border'] as String?);
 
     Widget subline;
-    if (live) {
-      subline = Text('🟢 Working out now',
-          style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: appColors.successGreen));
-    } else if (streak != null && streak.currentStreak > 0) {
+    if (streak != null && streak.currentStreak > 0) {
       subline = Text(
         isTop
             ? '🔥 ${streak.currentStreak}-day streak · top buddy'
@@ -1390,21 +1370,6 @@ class _SearchBuddiesPageState extends State<_SearchBuddiesPage> {
                     top: -8,
                     right: -6,
                     child: Text('👑', style: TextStyle(fontSize: 13)),
-                  ),
-                if (live)
-                  Positioned(
-                    bottom: -1,
-                    right: -1,
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: appColors.successGreen,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                            color: appColors.cardBackground, width: 2.5),
-                      ),
-                    ),
                   ),
               ],
             ),

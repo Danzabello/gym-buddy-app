@@ -51,7 +51,6 @@ import 'package:timezone/timezone.dart' as tz;
 import 'theme/app_theme.dart';
 import 'theme/accent_theme_provider.dart';
 import 'data/coach_tips.dart';
-import 'services/presence_service.dart';
 import 'services/notification_service.dart';
 import 'widgets/live_event_toast.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
@@ -623,11 +622,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   late PageController _trayController;
   Timer? _countdownTimer;
 
-  final PresenceService _presenceService = PresenceService();
-  List<String> _friendIds = [];
-
-  // Live check-in feed for the streak rings — separate from the presence
-  // channel above (that's online/working-out state, not DB rows). RLS on
+  // Live check-in feed for the streak rings. RLS on
   // daily_team_checkins already scopes each subscriber to their own teams
   // and accepted friends, so no extra client-side filter is needed here.
   RealtimeChannel? _checkinChannel;
@@ -659,11 +654,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _trayOrder = [0, 1]..shuffle();
     _trayController = PageController();
 
-    // Rebuild only: getFriendsWorkingOut reads the service, not local state.
-    _presenceService.onPresenceChanged = (_) {
-        if (mounted) setState(() {});
-    };
-    _presenceService.join();
     _subscribeToCheckIns();
     _loadLiveCheckinBannerSetting();
 
@@ -750,7 +740,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _appLifecycleListener?.dispose();
     _trayController.dispose();
     _countdownTimer?.cancel();
-    _presenceService.leave();
     if (_checkinChannel != null) {
       _supabase.removeChannel(_checkinChannel!);
     }
@@ -1591,32 +1580,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             _trayIconAction(Icons.close, danger,
                 () => _declineWorkoutInviteDash(pendingInvite['id'])),
           ],
-        ),
-        inTray: true,
-      );
-    }
-
-    // ── Priority 3: Friend working out live ──
-    final friendsWorkingOut = _presenceService.getFriendsWorkingOut(_friendIds);
-    if (friendsWorkingOut.isNotEmpty) {
-      final friend = friendsWorkingOut.first;
-      final friendId = friend['user_id'] as String;
-      final friendName = _nicknames[friendId] ??
-          _allStreaks
-              .expand((s) => s.members)
-              .firstWhere((m) => m.userId == friendId,
-                  orElse: () => _allStreaks.first.members.first)
-              .displayName;
-
-      return _trayRow(
-        leading: _trayGlyph('👀', role: c.success),
-        label: 'LIVE',
-        labelColor: c.success,
-        title: '$friendName is training right now 💪',
-        trailing: Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: c.success, shape: BoxShape.circle),
         ),
         inTray: true,
       );
@@ -3297,9 +3260,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _teamStreakService.hasCheckedInToday(),
       // [1] today's workouts
       _workoutService.getTodaysWorkouts(),
-      // [2] friend list
-      FriendService().getFriends(),
-      // [3] real check-in dates for the heatmap (last 7 days, this user)
+      // [2] real check-in dates for the heatmap (last 7 days, this user)
       // — fixes the bug where days were painted as "done" purely from
       // arithmetic on current_streak rather than real check-in history.
       currentUserId == null
@@ -3309,7 +3270,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               .select('check_in_date')
               .eq('user_id', currentUserId)
               .gte('check_in_date', sevenDaysAgoStr),
-      // [4] own uncancelled break days — heatmap third state + today badge
+      // [3] own uncancelled break days — heatmap third state + today badge
       currentUserId == null
           ? Future.value(<Map<String, dynamic>>[])
           : Supabase.instance.client
@@ -3322,12 +3283,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   
     final hasCheckedIn     = results[0] as bool;
     final todaysWorkouts   = results[1] as List<Map<String, dynamic>>;
-    final friends          = results[2] as List;
-    final checkInDateRows  = results[3] as List<Map<String, dynamic>>;
+    final checkInDateRows  = results[2] as List<Map<String, dynamic>>;
     final myCheckInDates   = checkInDateRows
         .map((r) => r['check_in_date'] as String)
         .toSet();
-    final myBreakDates     = (results[4] as List<Map<String, dynamic>>)
+    final myBreakDates     = (results[3] as List<Map<String, dynamic>>)
         .map((r) => r['break_date'] as String)
         .toSet();
 
@@ -3409,7 +3369,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _hasCheckedInToday     = hasCheckedIn;
       _teamFeeds.clear();
       _todaysWorkouts        = todaysWorkouts;
-      _friendIds = List<String>.from(friends.map((f) => f['id']));
       _isLoading             = false;
     });
   
