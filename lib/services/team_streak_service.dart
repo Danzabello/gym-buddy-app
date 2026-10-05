@@ -264,18 +264,12 @@ class TeamStreakService {
     String? workoutEmoji,
     int? durationMinutes,
     String? notes,
+    String? workoutId,
   }) async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) {
         return {'success': false, 'message': 'Not logged in'};
-      }
-
-      // ✅ Check if user is on break today and auto-cancel it
-      final onBreak = await _breakDayService.isCurrentUserOnBreakToday();
-      if (onBreak) {
-        if (kDebugMode) debugLog('🔄 User was on break, cancelling it...');
-        await _breakDayService.cancelBreakDay();
       }
 
       // The user's own local date key — matches safe_user_tz() server-side.
@@ -337,37 +331,33 @@ class TeamStreakService {
         if (kDebugMode) debugLog('✅ Workout logged to history');
       }
 
-      int successCount = 0;
-      LevelUpResult? levelUpResult;
+      // Check-in, streak, rewards, break cancel and the Coach Max mirror all
+      // run server-side in one call, credited to the local day the workout
+      // STARTED (a Finish after midnight still counts for the start day).
+      final res = Map<String, dynamic>.from(await _supabase.rpc(
+        'finish_checkin_session',
+        params: {'p_workout_id': workoutId},
+      ) as Map);
+      final creditDate = res['credit_date'] as String;
+      final successCount = res['checked_in'] as int? ?? 0;
 
-      for (final streak in streaks) {
-        if (kDebugMode) debugLog('🔄 Checking in to team: ${streak.teamName}');
-        
-        try {
-          final result = await _checkInToTeam(streak.id, streak.teamId, today);
-          successCount++;
-          levelUpResult ??= result;
-          
-          if (streak.isCoachMaxTeam) {
-            if (kDebugMode) debugLog('🤖 Auto-checking in Coach Max...');
-            // LIVE-15-adjacent fix: this used to be a direct, unvalidated
-            // daily_team_checkins insert (_checkInCoachMax) -- no gate at
-            // all beyond "hasn't Coach Max already checked in today".
-            // check_in_coach_max_with_buddy enforces server-side that Coach
-            // Max only mirrors a check-in that has genuinely already
-            // landed for this user/streak/day (true here, since
-            // _checkInToTeam above is awaited first).
-            await _supabase.rpc('check_in_coach_max_with_buddy', params: {
-              'p_user_id': currentUserId,
-            });
-          }
-        } catch (e) {
-          if (kDebugMode) debugLog('❌ Failed check-in for ${streak.teamName}: $e');
+      for (final team in List<Map<String, dynamic>>.from(res['teams'] as List)) {
+        if (team['updated'] == true) {
+          await _afterStreakUpdate(
+            streakId: team['streak_id'] as String,
+            newStreak: team['new_streak'] as int,
+            oldBestStreak: team['old_best_streak'] as int? ?? 0,
+            newBestStreak: team['new_best_streak'] as int,
+            day: creditDate,
+          );
         }
+      }
+      if (res['did_level_up'] == true) {
+        unawaited(AchievementService().checkLevelAchievements(res['new_level'] as int? ?? 1));
       }
 
       if (kDebugMode) {
-        debugLog('✅ Checked in to $successCount/${streaks.length} teams');
+        debugLog('✅ Checked in to $successCount team(s) for $creditDate');
       }
 
       // 🏆 Workout achievements are checked by the caller, after this
@@ -388,8 +378,7 @@ class TeamStreakService {
         'success': true,
         'message': 'Checked in to $successCount team${successCount == 1 ? '' : 's'}!',
         'teams_updated': successCount,
-        'break_cancelled': onBreak,
-        'level_up': levelUpResult,
+        'break_cancelled': res['break_cancelled'] == true,
         'partner_bonus_earned': partnerBonusTransaction != null,
       };
     } catch (e) {
@@ -398,204 +387,74 @@ class TeamStreakService {
     }
   }
 
-  /// Check in to a specific team
-  Future<LevelUpResult?> _checkInToTeam(String streakId, String teamId, String today) async {
+  /// Client-side follow-ups once the server has advanced a streak:
+  /// achievement checks (fire-and-forget) and milestone cosmetics.
+  Future<void> _afterStreakUpdate({
+    required String streakId,
+    required int newStreak,
+    required int oldBestStreak,
+    required int newBestStreak,
+    required String day,
+  }) async {
     try {
-      final currentUserId = _supabase.auth.currentUser?.id;
-      if (currentUserId == null) return null;
-
-      final now = DateTime.now().toUtc();
-
-      await _supabase.from('daily_team_checkins').insert({
-        'team_streak_id': streakId,
-        'user_id': currentUserId,
-        'check_in_date': today,
-        'check_in_time': now.toIso8601String(),
-      });
-
-      return await _updateTeamStreak(streakId, teamId, today);
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error checking in to team: $e');
-      return null;
-    }
-  }
-
-  /// Update team streak after check-in
-  Future<LevelUpResult?> _updateTeamStreak(String streakId, String teamId, String today) async {
-    try {
-      // Get total members (excluding Coach Max for counting)
-      final membersResponse = await _supabase
-          .from('team_members')
-          .select('user_id')
-          .eq('team_id', teamId)
-          .neq('user_id', coachMaxId);
-      
-      final memberIds = membersResponse.map((m) => m['user_id'] as String).toList();
-      final totalMembers = memberIds.length;
-
-      if (kDebugMode) debugLog('📊 Team has $totalMembers members (excluding Coach Max)');
-
-      // Get today's check-ins (excluding Coach Max)
-      final checkInsResponse = await _supabase
+      // Recomputed only to gate the co-op achievement check below — NOT
+      // used for any reward payout (those are server-side now).
+      final coopCheckIns = await _supabase
           .from('daily_team_checkins')
           .select('user_id')
           .eq('team_streak_id', streakId)
-          .eq('check_in_date', today)
+          .eq('check_in_date', day)
           .neq('user_id', coachMaxId);
+      final partnerAlsoCheckedIn = coopCheckIns.length >= 2;
 
-      final checkedInMembers = checkInsResponse.length;
+      // 🏆 Achievement checks — fire-and-forget
+      unawaited(() async {
+        final achievementService = AchievementService();
 
-      // ✅ NEW: Get break day status for all members
-      final breakDayStatus = await _breakDayService.getTeamBreakDayStatus(memberIds, today);
-      
-      // Count how many people are participating today (checked in OR on break)
-      int participatingMembers = 0;
-      for (var userId in memberIds) {
-        final onBreak = breakDayStatus[userId] ?? false;
-        final checkedIn = checkInsResponse.any((c) => c['user_id'] == userId);
-        
-        if (onBreak || checkedIn) {
-          participatingMembers++;
+        await achievementService.checkStreakAchievements(
+          currentStreak: newStreak,
+          bestStreak: newBestStreak,
+          previousBest: oldBestStreak,
+          isRealBuddy: true, // unchanged: the old caller never passed isCoachMaxTeam
+          teamStreakId: streakId,
+        );
+
+        await achievementService.checkCoinAchievements();
+
+        if (partnerAlsoCheckedIn) {
+          final checkins = await _supabase
+              .from('daily_team_checkins')
+              .select('user_id, check_in_time')
+              .eq('team_streak_id', streakId)
+              .eq('check_in_date', day);
+
+          if (checkins.length >= 2) {
+            final times = checkins
+                .map((c) => DateTime.parse(c['check_in_time'] as String))
+                .toList()
+              ..sort();
+            await achievementService.checkCoopAchievements(
+              teamStreakId: streakId,
+              myCheckInTime: times.last,
+              partnerCheckInTime: times.first,
+            );
+          }
         }
-      }
+      }());
 
-      if (kDebugMode) {
-        debugLog('📊 Team participation status:');
-        debugLog('  - Total members: $totalMembers');
-        debugLog('  - Checked in: $checkedInMembers');
-        debugLog('  - Participating (check-in OR break): $participatingMembers');
+      // Grant milestone cosmetic unlocks
+      final milestoneKey = switch (newStreak) {
+        30  => 'streak_30',
+        60  => 'streak_60',
+        90  => 'streak_90',
+        100 => 'streak_100',
+        _   => null,
+      };
+      if (milestoneKey != null) {
+        levelService.grantMilestoneUnlock(milestoneKey: milestoneKey); // fire-and-forget
       }
-
-      // ✅ If all members are participating (checked in or on break), increment streak
-      if (participatingMembers >= totalMembers) {
-        if (kDebugMode) debugLog('🎉 All members participating! Incrementing streak...');
-        return await _incrementStreak(streakId, teamId, today);
-      } else {
-        if (kDebugMode) debugLog('⏳ Waiting for more members... ($participatingMembers/$totalMembers participating)');
-      }
-      return null;
     } catch (e) {
-      if (kDebugMode) debugLog('❌ Error updating team streak: $e');
-      return null;
-    }
-  }
-
-  /// Increment streak when all members check in
-  Future<LevelUpResult?> _incrementStreak(String streakId, String teamId, String today, {bool isCoachMaxTeam = false}) async {
-    try {
-      // Streak math now lives server-side (recompute_team_streak RPC)
-      // — single source of truth shared with the Coach Max cron,
-      // CoachMaxService, and TeamSyncService. Replaces the local
-      // date-diff/break-day logic that used to live here.
-      final result = await _supabase.rpc('recompute_team_streak', params: {
-        'p_streak_id': streakId,
-        'p_check_in_date': today,
-      }) as Map<String, dynamic>?;
-
-      if (result == null || result['updated'] != true) {
-        if (kDebugMode) debugLog('ℹ️ Streak not updated: ${result?['reason']}');
-        return null;
-      }
-
-      final newStreak = result['new_streak'] as int;
-      final oldBestStreak = (result['old_best_streak'] as int?) ?? 0;
-      final newBestStreak = (result['new_best_streak'] as int?) ?? newStreak;
-
-      // Award rewards after streak update — server-validated and atomic.
-      // Replaces CoinService.awardDailyCheckIn/awardRetroactivePartnerBonus
-      // + LevelService.awardCheckInXP (S2/S3 audit fix). Also fixes a
-      // pre-existing double-XP-on-checkin bug from a since-removed
-      // DB trigger.
-      final currentUserId = _supabase.auth.currentUser?.id;
-      bool didLevelUp = false;
-      int newLevelAfterCheckin = 1;
-      if (currentUserId != null) {
-        try {
-          final rewardResult = await _supabase.rpc('award_checkin_rewards', params: {
-            'p_streak_id': streakId,
-            'p_check_in_date': today,
-          }) as Map<String, dynamic>?;
-
-          if (rewardResult != null && rewardResult['already_awarded'] != true) {
-            didLevelUp = rewardResult['did_level_up'] as bool? ?? false;
-            newLevelAfterCheckin = rewardResult['new_level'] as int? ?? 1;
-          }
-        } catch (e) {
-          debugLog('❌ Error awarding check-in rewards: $e');
-        }
-
-        // Recomputed only to gate the co-op achievement check below — NOT
-        // used for any reward payout (those are server-side now).
-        final coopCheckIns = await _supabase
-            .from('daily_team_checkins')
-            .select('user_id')
-            .eq('team_streak_id', streakId)
-            .eq('check_in_date', today)
-            .neq('user_id', coachMaxId);
-        final partnerAlsoCheckedIn = coopCheckIns.length >= 2;
-
-        // 🏆 Achievement checks — fire-and-forget
-        unawaited(() async {
-          final achievementService = AchievementService();
-
-          await achievementService.checkStreakAchievements(
-            currentStreak: newStreak,
-            bestStreak: newBestStreak,
-            previousBest: oldBestStreak,
-            isRealBuddy: !isCoachMaxTeam,
-            teamStreakId: streakId,
-          );
-
-          if (didLevelUp) {
-            await achievementService.checkLevelAchievements(newLevelAfterCheckin);
-          }
-
-          await achievementService.checkCoinAchievements();
-
-          if (!isCoachMaxTeam && partnerAlsoCheckedIn) {
-            final checkins = await _supabase
-                .from('daily_team_checkins')
-                .select('user_id, check_in_time')
-                .eq('team_streak_id', streakId)
-                .eq('check_in_date', today);
-
-            if (checkins.length >= 2) {
-              final times = checkins
-                  .map((c) => DateTime.parse(c['check_in_time'] as String))
-                  .toList()
-                ..sort();
-              await achievementService.checkCoopAchievements(
-                teamStreakId: streakId,
-                myCheckInTime: times.last,
-                partnerCheckInTime: times.first,
-              );
-            }
-          }
-        }());
-
-        // Grant milestone cosmetic unlocks
-        final milestoneKey = switch (newStreak) {
-          30  => 'streak_30',
-          60  => 'streak_60',
-          90  => 'streak_90',
-          100 => 'streak_100',
-          _   => null,
-        };
-        if (milestoneKey != null) {
-          levelService.grantMilestoneUnlock(milestoneKey: milestoneKey); // fire-and-forget
-        }
-
-        return null;
-      }
-
-      if (kDebugMode) {
-        debugLog('✅ Streak updated! Current: $newStreak, Longest: ${result['longest_streak']}');
-      }
-
-      return null;
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error incrementing streak: $e');
-      return null;
+      if (kDebugMode) debugLog('❌ Error after streak update: $e');
     }
   }
 

@@ -1554,7 +1554,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
     // ── Priority 1: Active workout (in_progress) ──
     final activeWorkout = _todaysWorkouts.firstWhere(
-      (w) => w['status'] == 'in_progress',
+      // Skip a workout whose MY side is cancelled (same rule as getUpcomingWorkouts).
+      (w) => w['status'] == 'in_progress' &&
+          !((w['user_id'] == currentUserId ? w['creator_cancelled'] : w['buddy_cancelled']) ?? false),
       orElse: () => {},
     );
     if (activeWorkout.isNotEmpty) {
@@ -3551,6 +3553,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   workoutName: activeSession['workout_type'] ?? 'Workout',
                   workoutEmoji: activeSession['workout_emoji'] ?? '💪',
                   durationMinutes: activeSession['planned_duration'] ?? 30,
+                  workoutId: linkedWorkoutId,
                 ),
               ).wait;
               result = results.$2;
@@ -5337,6 +5340,7 @@ class _SchedulePageState extends State<SchedulePage> {
             workoutName: workoutType,
             workoutEmoji: workoutEmoji,
             durationMinutes: plannedDuration,
+            workoutId: workoutId,
           ),
         ).wait;
         final result = results.$2;
@@ -5513,7 +5517,7 @@ class _SchedulePageState extends State<SchedulePage> {
         // Check in CREATOR if they didn't cancel
         if (!creatorCancelled && creatorId != null) {
           if (creatorId == currentUserId) {
-            final userResult = await teamStreakService.checkInAllTeams();
+            final userResult = await teamStreakService.checkInAllTeams(workoutId: workoutId);
             debugLog('✅ Creator (current user) check-in: ${userResult['message']}');
             // completeWorkoutWithDuration already ran above, sequentially,
             // before this — workouts.status is safely 'completed' by now.
@@ -5538,7 +5542,7 @@ class _SchedulePageState extends State<SchedulePage> {
           if (!buddyActuallyCompleted && workoutBuddyId != currentUserId) {
             debugLog('⚠️ Buddy accepted but never completed workout - NO streak credit');
           } else if (workoutBuddyId == currentUserId) {
-            final userResult = await teamStreakService.checkInAllTeams();
+            final userResult = await teamStreakService.checkInAllTeams(workoutId: workoutId);
             debugLog('✅ Buddy (current user) check-in: ${userResult['message']}');
             // completeWorkoutWithDuration already ran above, sequentially,
             // before this — workouts.status is safely 'completed' by now.
