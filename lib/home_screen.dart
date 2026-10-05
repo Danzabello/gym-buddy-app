@@ -753,7 +753,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   /// so INSERT is the only event this subscribes to.
   void _subscribeToCheckIns() {
     _checkinChannel = _supabase
-        .channel('dashboard_checkins')
+        .channel('dashboard_checkins',
+            opts: const RealtimeChannelConfig(private: true))
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
