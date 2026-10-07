@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/animated_bear.dart';
 import '../../widgets/avatar_picker_screen.dart' show AvatarBorderStyle;
 
 /// Public rewrite of AvatarPickerScreen's private `_AvatarWithBorder` /
@@ -12,6 +13,10 @@ class WardrobeAvatarRender extends StatelessWidget {
   final Color bgColor;
   final double size;
 
+  /// Show the animated bear instead of the emoji. Only the big preview should
+  /// set this; the grid tiles stay static so many bears aren't looping at once.
+  final bool animatedBear;
+
   const WardrobeAvatarRender({
     super.key,
     required this.emoji,
@@ -19,6 +24,7 @@ class WardrobeAvatarRender extends StatelessWidget {
     required this.borderColor,
     required this.bgColor,
     required this.size,
+    this.animatedBear = false,
   });
 
   @override
@@ -31,7 +37,9 @@ class WardrobeAvatarRender extends StatelessWidget {
         height: size,
         decoration: BoxDecoration(shape: BoxShape.circle, color: bgColor),
         child: Center(
-          child: Text(emoji, style: TextStyle(fontSize: size * 0.48)),
+          child: animatedBear
+              ? AnimatedBear(size: size * 0.86)
+              : Text(emoji, style: TextStyle(fontSize: size * 0.48)),
         ),
       ),
     );

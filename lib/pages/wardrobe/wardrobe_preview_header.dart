@@ -45,6 +45,7 @@ class WardrobePreviewHeader extends StatelessWidget {
               borderColor: avatar.borderColor,
               bgColor: appColors.tint(avatar.color),
               size: 108,
+              animatedBear: avatar.id == 'bear',
             ),
           ),
           const SizedBox(height: 12),

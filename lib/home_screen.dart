@@ -21,6 +21,8 @@ import 'widgets/workout_invites_card.dart';
 import 'widgets/completed_workouts_section.dart';
 import 'widgets/workout_celebration.dart';
 import 'widgets/checkin_ignite_video.dart';
+import 'widgets/animated_bear.dart';
+import 'widgets/streak_badge.dart';
 import 'widgets/custom_streak_selector.dart';
 import 'widgets/buddy_profile_sheet.dart';
 import 'services/nickname_service.dart';
@@ -1977,6 +1979,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                               child: UserAvatar(
                                 avatarId: friendMember?.avatarId ?? 'avatar_1',
                                 size: size * 0.82,
+                                animated: focused,
                               ),
                             ),
                     ),
@@ -4081,20 +4084,34 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                   ),
                   if (streak != null) ...[
                     const SizedBox(height: 16),
-                    Text(
-                      '$streak Day Streak!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.orange[700],
-                        shadows: [
-                          Shadow(
-                            color: c.streakOrange.withValues(alpha: 0.35),
-                            blurRadius: 22,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Counts up from yesterday's number once the dialog has
+                        // settled; milestone days add the burst + confetti.
+                        StreakBadge(
+                          streak: streak,
+                          size: 60,
+                          tickFrom: streak > 1 ? streak - 1 : null,
+                          celebrate: isMilestone,
+                          startDelay: const Duration(milliseconds: 450),
+                        ),
+                        const SizedBox(width: 14),
+                        Text(
+                          'Day Streak!',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange[700],
+                            shadows: [
+                              Shadow(
+                                color: c.streakOrange.withValues(alpha: 0.35),
+                                blurRadius: 22,
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ],
                   const SizedBox(height: 24),
@@ -6318,7 +6335,9 @@ class _ProfilePageState extends State<ProfilePage>
                                 border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2),
                               ),
                               child: Center(
-                                child: Text(_avatarEmoji(avatarId), style: const TextStyle(fontSize: 46)),
+                                child: avatarId == 'bear'
+                                    ? const AnimatedBear(size: 72)
+                                    : Text(_avatarEmoji(avatarId), style: const TextStyle(fontSize: 46)),
                               ),
                             ),
                             Positioned(

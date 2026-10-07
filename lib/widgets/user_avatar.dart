@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'animated_bear.dart';
+
 /// Displays a user's avatar with emoji-based profile pictures
 /// 
 /// Usage:
@@ -9,14 +11,21 @@ import 'package:flutter/material.dart';
 ///   size: 48,
 /// )
 /// ```
+///
+/// Pass `animated: true` for a hero spot (profile, dialog) to show the
+/// animated avatar where one exists (currently the bear). Leave it off in
+/// lists: the default stays the static emoji, so many rows don't each run a
+/// looping animation.
 class UserAvatar extends StatelessWidget {
   final String? avatarId;
   final double size;
+  final bool animated;
   
   const UserAvatar({
     super.key,
     this.avatarId,
     this.size = 40,
+    this.animated = false,
   });
   
   // Available avatar emojis
@@ -49,10 +58,12 @@ class UserAvatar extends StatelessWidget {
         border: Border.all(color: Colors.blue[200]!, width: 2),
       ),
       child: Center(
-        child: Text(
-          emoji,
-          style: TextStyle(fontSize: size * 0.6),
-        ),
+        child: animated && avatarId == 'bear'
+            ? AnimatedBear(size: size * 0.86)
+            : Text(
+                emoji,
+                style: TextStyle(fontSize: size * 0.6),
+              ),
       ),
     );
   }
