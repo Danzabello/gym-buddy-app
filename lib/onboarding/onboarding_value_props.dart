@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 import '../signup_screen.dart';
+import '../widgets/user_avatar.dart';
 
 class OnboardingValueProps extends StatefulWidget {
   const OnboardingValueProps({super.key});
@@ -627,16 +628,8 @@ class _UserResultTile extends StatelessWidget {
     required this.onRemove,
   });
 
-  static const _avatarEmojis = {
-    'lion': '🦁', 'bear': '🐻', 'eagle': '🦅',
-    'shark': '🦈', 'wolf': '🐺', 'gorilla': '🦍',
-    'tiger': '🐯', 'buffalo': '🦬', 'robot': '🤖',
-    'flexed': '💪', 'weightlifter': '🏋️', 'runner': '🏃',
-  };
-
   @override
   Widget build(BuildContext context) {
-    final emoji = _avatarEmojis[user['avatar_id']] ?? '🦁';
     final colors = AppColors.of(context);
     final scheme = Theme.of(context).colorScheme;
     return Container(
@@ -656,9 +649,8 @@ class _UserResultTile extends StatelessWidget {
             decoration: BoxDecoration(
                 color: colors.tint(scheme.primary, surface: colors.clayBg),
                 shape: BoxShape.circle),
-            child: Center(
-                child:
-                    Text(emoji, style: const TextStyle(fontSize: 20))),
+            child: UserAvatar(
+                avatarId: user['avatar_id'] as String?, size: 38, bare: true),
           ),
           const SizedBox(width: 10),
           Expanded(
