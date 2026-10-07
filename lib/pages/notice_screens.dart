@@ -486,7 +486,7 @@ class _InfoRow extends StatelessWidget {
       );
 }
 
-/// Fades and slides a list row in ~250 ms after the previous one; only the
+/// Fades and slides a list row in 0.5 s after the previous one (0.4 s each); only the
 /// first five rows animate. Reduce motion: shown at once.
 class _RowIn extends StatefulWidget {
   final int index;
@@ -499,7 +499,7 @@ class _RowIn extends StatefulWidget {
 
 class _RowInState extends State<_RowIn> with SingleTickerProviderStateMixin {
   late final AnimationController _c =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
   Timer? _t;
   bool _started = false;
 
@@ -511,7 +511,7 @@ class _RowInState extends State<_RowIn> with SingleTickerProviderStateMixin {
     if (widget.index >= 5 || MediaQuery.of(context).disableAnimations) {
       _c.value = 1;
     } else {
-      _t = Timer(Duration(milliseconds: 250 * widget.index), _c.forward);
+      _t = Timer(Duration(milliseconds: 500 * widget.index), _c.forward);
     }
   }
 
@@ -539,6 +539,10 @@ enum NoticeHeroKind { tick, cross, strike }
 
 double _seg(double t, double a, double b) => ((t - a) / (b - a)).clamp(0.0, 1.0);
 
+/// One controller runs 0..1 over [_heroSeconds]; phases are written in seconds.
+const _heroSeconds = 3.0;
+double _sec(double t, double a, double b) => _seg(t * _heroSeconds, a, b);
+
 class NoticeHero extends StatefulWidget {
   final NoticeHeroKind kind;
   final int value;
@@ -551,7 +555,7 @@ class NoticeHero extends StatefulWidget {
 
 class _NoticeHeroState extends State<NoticeHero> with SingleTickerProviderStateMixin {
   late final AnimationController _c =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 1000));
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 3000));
   bool _started = false;
   bool _buzzed = false;
 
@@ -559,7 +563,7 @@ class _NoticeHeroState extends State<NoticeHero> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     _c.addListener(() {
-      if (widget.kind == NoticeHeroKind.tick && !_buzzed && _c.value >= 0.34) {
+      if (widget.kind == NoticeHeroKind.tick && !_buzzed && _c.value * _heroSeconds >= 2.6) {
         _buzzed = true;
         HapticFeedback.lightImpact();
       }
@@ -600,19 +604,17 @@ class _NoticeHeroState extends State<NoticeHero> with SingleTickerProviderStateM
           double opacity, scale;
           int shown = widget.value;
           if (widget.kind == NoticeHeroKind.tick) {
-            shown = (widget.value * _seg(t, 0, 0.12)).round();
-            final out = _seg(t, 0.12, 0.18);
+            shown = (widget.value * Curves.easeOutCubic.transform(_sec(t, 0, 0.8))).round();
+            final out = _sec(t, 1.0, 1.3);
             opacity = 1 - out;
             scale = 1 - 0.4 * out;
           } else {
-            final u = _seg(t, 0, 0.12);
-            scale = u < 0.7
-                ? 0.6 + (1.08 - 0.6) * (u / 0.7)
-                : 1.08 - 0.08 * ((u - 0.7) / 0.3);
-            opacity = u *
+            final u = _sec(t, 0, 0.5);
+            scale = 0.6 + 0.4 * Curves.easeOutBack.transform(u);
+            opacity = _sec(t, 0, 0.25) *
                 (widget.kind == NoticeHeroKind.cross
-                    ? 1 - 0.7 * _seg(t, 0.36, 0.5)
-                    : 1 - 0.55 * _seg(t, 0.32, 0.44));
+                    ? 1 - 0.7 * _sec(t, 2.4, 3.0)
+                    : 1 - 0.55 * _sec(t, 2.0, 2.6));
           }
           return Stack(alignment: Alignment.center, children: [
             CustomPaint(size: const Size(132, 132), painter: _HeroPainter(widget.kind, t, widget.color)),
@@ -663,12 +665,12 @@ class _HeroPainter extends CustomPainter {
 
     switch (kind) {
       case NoticeHeroKind.tick:
-        final ring = _seg(t, 0.14, 0.26);
+        final ring = _sec(t, 1.2, 2.0);
         if (ring > 0) {
           canvas.drawArc(Rect.fromCircle(center: size.center(Offset.zero), radius: size.width / 2 - 5),
               -math.pi / 2, 2 * math.pi * ring, false, p);
         }
-        final tick = _seg(t, 0.24, 0.34);
+        final tick = _sec(t, 1.9, 2.6);
         if (tick > 0) {
           final path = Path()
             ..moveTo(size.width * 0.30, size.height * 0.52)
@@ -678,10 +680,10 @@ class _HeroPainter extends CustomPainter {
           canvas.drawPath(m.extractPath(0, m.length * tick), p);
         }
       case NoticeHeroKind.cross:
-        line(const Offset(30, 30), const Offset(102, 102), _seg(t, 0.20, 0.28));
-        line(const Offset(102, 30), const Offset(30, 102), _seg(t, 0.28, 0.36));
+        line(const Offset(30, 30), const Offset(102, 102), _sec(t, 1.0, 1.7));
+        line(const Offset(102, 30), const Offset(30, 102), _sec(t, 1.7, 2.4));
       case NoticeHeroKind.strike:
-        line(const Offset(108, 24), const Offset(24, 108), _seg(t, 0.22, 0.32));
+        line(const Offset(108, 24), const Offset(24, 108), _sec(t, 1.0, 2.0));
     }
   }
 
