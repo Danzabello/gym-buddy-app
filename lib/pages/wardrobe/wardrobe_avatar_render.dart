@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../widgets/animated_bear.dart';
+import '../../widgets/avatars/animated_bear.dart';
 import '../../widgets/avatar_picker_screen.dart' show AvatarBorderStyle;
 
 /// Public rewrite of AvatarPickerScreen's private `_AvatarWithBorder` /

@@ -21,7 +21,7 @@ import 'widgets/workout_invites_card.dart';
 import 'widgets/completed_workouts_section.dart';
 import 'widgets/workout_celebration.dart';
 import 'widgets/checkin_ignite_video.dart';
-import 'widgets/animated_bear.dart';
+import 'widgets/avatars/animated_bear.dart';
 import 'widgets/streak_badge.dart';
 import 'widgets/custom_streak_selector.dart';
 import 'widgets/buddy_profile_sheet.dart';

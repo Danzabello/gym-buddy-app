@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'animated_bear.dart';
+import 'avatars/animated_bear.dart';
 
 /// Displays a user's avatar with emoji-based profile pictures
 /// 
