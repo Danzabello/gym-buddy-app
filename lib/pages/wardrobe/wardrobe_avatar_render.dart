@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../widgets/avatars/animated_bear.dart';
+import '../../widgets/avatars/avatar_art.dart';
 import '../../widgets/avatar_picker_screen.dart' show AvatarBorderStyle;
 
 /// Public rewrite of AvatarPickerScreen's private `_AvatarWithBorder` /
@@ -13,8 +13,19 @@ class WardrobeAvatarRender extends StatelessWidget {
   final Color bgColor;
   final double size;
 
-  /// Show the animated bear instead of the emoji. Only the big preview should
-  /// set this; the grid tiles stay static so many bears aren't looping at once.
+  /// Species with illustration art (see [avatarArt]) draw it instead of
+  /// [emoji]; null keeps the emoji.
+  final String? avatarId;
+
+  /// Loop the art. Only the big preview should set this; wheel and grid tiles
+  /// stay still so many avatars aren't animating at once.
+  final bool animated;
+
+  /// Replaces the art's own label; '' when a parent already announces it.
+  final String? semanticLabel;
+
+  /// Legacy flag, replaced by [avatarId] + [animated]; removed once callers
+  /// have moved over.
   final bool animatedBear;
 
   const WardrobeAvatarRender({
@@ -24,11 +35,24 @@ class WardrobeAvatarRender extends StatelessWidget {
     required this.borderColor,
     required this.bgColor,
     required this.size,
+    this.avatarId,
+    this.animated = false,
+    this.semanticLabel,
     this.animatedBear = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    Widget? art = avatarArt(avatarId ?? (animatedBear ? 'bear' : null),
+        size: size, animate: animated || animatedBear);
+    if (art != null && semanticLabel != null) {
+      art = Semantics(
+        label: semanticLabel,
+        image: true,
+        excludeSemantics: true,
+        child: art,
+      );
+    }
     return CustomPaint(
       size: Size(size, size),
       foregroundPainter: _WardrobeBorderPainter(borderStyle, borderColor),
@@ -37,9 +61,7 @@ class WardrobeAvatarRender extends StatelessWidget {
         height: size,
         decoration: BoxDecoration(shape: BoxShape.circle, color: bgColor),
         child: Center(
-          child: animatedBear
-              ? AnimatedBear(size: size * 0.86)
-              : Text(emoji, style: TextStyle(fontSize: size * 0.48)),
+          child: art ?? Text(emoji, style: TextStyle(fontSize: size * 0.48)),
         ),
       ),
     );
