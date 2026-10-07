@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/app_theme.dart';
+import '../../widgets/avatars/avatar_art.dart';
 import 'wardrobe_selection_state.dart';
 
 /// Standard luminance-weighted greyscale matrix, applied to locked nodes.
@@ -278,7 +279,8 @@ class _AvatarUnlockTreeState extends State<AvatarUnlockTree> {
                 ),
               ),
               alignment: Alignment.center,
-              child: Text(hub.emoji, style: const TextStyle(fontSize: 28)),
+              child: avatarArt(hub.slug, size: _hubRadius * 2) ??
+                  Text(hub.emoji, style: const TextStyle(fontSize: 28)),
             ),
             if (equipped)
               Positioned(
@@ -331,7 +333,8 @@ class _AvatarUnlockTreeState extends State<AvatarUnlockTree> {
                 locked,
                 Opacity(
                   opacity: locked ? 0.45 : 1.0,
-                  child: Text(node.emoji, style: const TextStyle(fontSize: 24)),
+                  child: avatarArt(node.equipSlug, size: _nodeRadius * 2) ??
+                      Text(node.emoji, style: const TextStyle(fontSize: 24)),
                 ),
               ),
             ),
@@ -396,6 +399,12 @@ class _AvatarUnlockTreeState extends State<AvatarUnlockTree> {
     _showNodeSheet(hubNode, hubPath, appColors);
   }
 
+  /// The sheet's title text already names the species, so hide the art's label.
+  Widget? _sheetArt(_TreeNode node) {
+    final art = avatarArt(node.equipSlug, size: 56);
+    return art == null ? null : ExcludeSemantics(child: art);
+  }
+
   void _showNodeSheet(_TreeNode node, _PathLayout path, AppColors appColors) {
     HapticFeedback.selectionClick();
     // Read outside the sheet builder — showModalBottomSheet's builder context
@@ -431,7 +440,8 @@ class _AvatarUnlockTreeState extends State<AvatarUnlockTree> {
                         border: Border.all(color: pathColor, width: 2),
                       ),
                       alignment: Alignment.center,
-                      child: Text(node.emoji, style: const TextStyle(fontSize: 28)),
+                      child: _sheetArt(node) ??
+                          Text(node.emoji, style: const TextStyle(fontSize: 28)),
                     ),
                   ),
                   const SizedBox(width: 14),
