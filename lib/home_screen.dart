@@ -21,7 +21,6 @@ import 'widgets/workout_invites_card.dart';
 import 'widgets/completed_workouts_section.dart';
 import 'widgets/workout_celebration.dart';
 import 'widgets/checkin_ignite_video.dart';
-import 'widgets/avatars/animated_bear.dart';
 import 'widgets/streak_badge.dart';
 import 'widgets/custom_streak_selector.dart';
 import 'widgets/buddy_profile_sheet.dart';
@@ -5941,16 +5940,6 @@ class _ProfilePageState extends State<ProfilePage>
       ? 0
       : _allStreaks.map((s) => s.bestStreak).reduce((a, b) => a > b ? a : b);
 
-  String _avatarEmoji(String? id) {
-    const map = {
-      'lion': '🦁', 'wolf': '🐺', 'bear': '🐻',
-      'eagle': '🦅', 'shark': '🦈', 'gorilla': '🦍',
-      'tiger': '🐯', 'buffalo': '🦬', 'robot': '🤖',
-      'flexed': '💪', 'weightlifter': '🏋️', 'runner': '🏃',
-    };
-    return map[id] ?? '🦁';
-  }
-
   List<Color> _levelGradient(int level) {
     if (level >= 91) return [const Color(0xFF7F77DD), const Color(0xFF534AB7)];
     if (level >= 76) return [const Color(0xFFD85A30), const Color(0xFF993C1D)];
@@ -6335,9 +6324,13 @@ class _ProfilePageState extends State<ProfilePage>
                                 border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2),
                               ),
                               child: Center(
-                                child: avatarId == 'bear'
-                                    ? const AnimatedBear(size: 72)
-                                    : Text(_avatarEmoji(avatarId), style: const TextStyle(fontSize: 46)),
+                                child: UserAvatar(
+                                  avatarId: avatarId,
+                                  size: 86,
+                                  bare: true,
+                                  animated: true,
+                                  semanticLabel: '',
+                                ),
                               ),
                             ),
                             Positioned(
@@ -6622,7 +6615,7 @@ class _ProfilePageState extends State<ProfilePage>
   // Category keys/labels mirror WorkoutSelectionModal._categoryDefs (the
   // canonical "10 category tile" list from the check-in grid). Not shared as
   // a common lookup — this page only touches its own file, matching
-  // _avatarEmoji/_titleIcon above.
+  // _titleIcon above.
   //
   // The per-category emoji lookup that used to live here is gone: rows are
   // ranked 1/2/3 by number now, and neither of the two new cards uses emoji.
