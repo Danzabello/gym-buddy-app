@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/level_service.dart';
 import '../theme/app_theme.dart';
+import 'avatars/avatar_art.dart';
 
 
 enum AvatarBorderStyle { simple, bold, arc }
@@ -288,6 +289,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                   children: [
                     _AvatarWithBorder(
                       emoji: a.emoji,
+                      avatarId: a.id,
                       borderStyle: isSelected ? _selectedBorder : AvatarBorderStyle.simple,
                       borderColor: a.borderColor,
                       bgColor: avatarTint,
@@ -334,6 +336,8 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                 scale: _bounceAnim,
                 child: _AvatarWithBorder(
                   emoji: a.emoji,
+                  avatarId: a.id,
+                  animated: true,
                   borderStyle: _selectedBorder,
                   borderColor: a.borderColor,
                   bgColor: avatarTint,
@@ -425,6 +429,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
                                 opacity: isLocked ? 0.4 : 1.0,
                                 child: _AvatarWithBorder(
                                   emoji: a.emoji,
+                                  avatarId: a.id,
                                   borderStyle: style,
                                   borderColor: a.borderColor,
                                   bgColor: avatarTint,
@@ -708,6 +713,10 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
 // ── Avatar with border renderer ─────────────────────────────────────────────
 class _AvatarWithBorder extends StatelessWidget {
   final String emoji;
+  // Species with illustration art draw it instead of [emoji]; still unless
+  // [animated] (only the single large preview sets that).
+  final String? avatarId;
+  final bool animated;
   final AvatarBorderStyle borderStyle;
   final Color borderColor;
   final Color bgColor;
@@ -715,6 +724,8 @@ class _AvatarWithBorder extends StatelessWidget {
 
   const _AvatarWithBorder({
     required this.emoji,
+    this.avatarId,
+    this.animated = false,
     required this.borderStyle,
     required this.borderColor,
     required this.bgColor,
@@ -731,7 +742,8 @@ class _AvatarWithBorder extends StatelessWidget {
         height: size,
         decoration: BoxDecoration(shape: BoxShape.circle, color: bgColor),
         child: Center(
-          child: Text(emoji, style: TextStyle(fontSize: size * 0.48)),
+          child: avatarArt(avatarId, size: size, animate: animated) ??
+              Text(emoji, style: TextStyle(fontSize: size * 0.48)),
         ),
       ),
     );
