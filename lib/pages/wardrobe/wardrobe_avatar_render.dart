@@ -24,10 +24,6 @@ class WardrobeAvatarRender extends StatelessWidget {
   /// Replaces the art's own label; '' when a parent already announces it.
   final String? semanticLabel;
 
-  /// Legacy flag, replaced by [avatarId] + [animated]; removed once callers
-  /// have moved over.
-  final bool animatedBear;
-
   const WardrobeAvatarRender({
     super.key,
     required this.emoji,
@@ -38,13 +34,11 @@ class WardrobeAvatarRender extends StatelessWidget {
     this.avatarId,
     this.animated = false,
     this.semanticLabel,
-    this.animatedBear = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    Widget? art = avatarArt(avatarId ?? (animatedBear ? 'bear' : null),
-        size: size, animate: animated || animatedBear);
+    Widget? art = avatarArt(avatarId, size: size, animate: animated);
     if (art != null && semanticLabel != null) {
       art = Semantics(
         label: semanticLabel,
