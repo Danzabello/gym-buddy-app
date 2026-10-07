@@ -33,6 +33,7 @@ import 'widgets/workout_selection_modal.dart';
 import 'widgets/workout_join_checker.dart';
 import 'pages/notification_settings_page.dart';
 import 'pages/shop_page.dart';
+import 'pages/notice_screens.dart';
 import 'pages/workout_history_page.dart';
 import 'pages/account_page.dart';
 import 'pages/wardrobe/wardrobe_page.dart';
@@ -3644,6 +3645,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _buildDashboardHeader(),
+                      const NoticeHomeCard(),
                       Expanded(
                         child: SingleChildScrollView(
                           // Explicit rather than relying on the platform
