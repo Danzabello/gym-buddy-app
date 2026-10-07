@@ -24,20 +24,25 @@ enum BearMood {
 /// it where one or two avatars are on screen (profile hero, dialogs) — keep
 /// static avatars in lists.
 ///
+/// [animate] false paints a single still frame and never creates an
+/// AnimationController, so list rows can show the bear for free.
+///
 /// Reduced motion: no ticker runs; shows the static pose for [mood].
 ///
 /// COLOURS: the fur/muzzle/eye colours below are illustration colours, like the
-/// pixels of an image, so they are raw hex in this file only. They do not
-/// follow the accent skin. This needs your sign-off against the "no raw hex"
-/// rule, or the bear should move to an asset (Rive/SVG) later.
+/// pixels of an image, so they are raw hex under `lib/widgets/avatars/` only
+/// (the second permitted raw hex in CLAUDE.md). They do not follow the accent
+/// skin.
 class AnimatedBear extends StatefulWidget {
   final double size;
   final BearMood mood;
+  final bool animate;
 
   const AnimatedBear({
     super.key,
     this.size = 80,
     this.mood = BearMood.idle,
+    this.animate = true,
   });
 
   @override
@@ -48,26 +53,40 @@ class _AnimatedBearState extends State<AnimatedBear>
     with SingleTickerProviderStateMixin {
   // One long looping ticker; every motion is derived from elapsed seconds.
   static const _periodSeconds = 3600;
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: _periodSeconds),
-  );
+  // Created on first need, so a still bear never owns a controller.
+  AnimationController? _c;
   bool _reduce = false;
+
+  bool get _running => widget.animate && !_reduce;
+
+  void _syncTicker() {
+    if (_running) {
+      final c = _c ??= AnimationController(
+        vsync: this,
+        duration: const Duration(seconds: _periodSeconds),
+      );
+      if (!c.isAnimating) c.repeat();
+    } else {
+      _c?.stop();
+    }
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _reduce = MediaQuery.of(context).disableAnimations;
-    if (_reduce) {
-      _c.stop();
-    } else if (!_c.isAnimating) {
-      _c.repeat();
-    }
+    _syncTicker();
+  }
+
+  @override
+  void didUpdateWidget(AnimatedBear old) {
+    super.didUpdateWidget(old);
+    if (old.animate != widget.animate) _syncTicker();
   }
 
   @override
   void dispose() {
-    _c.dispose();
+    _c?.dispose();
     super.dispose();
   }
 
@@ -80,10 +99,10 @@ class _AnimatedBearState extends State<AnimatedBear>
           dimension: widget.size,
           child: RepaintBoundary(
             child: AnimatedBuilder(
-              animation: _c,
+              animation: _c ?? const AlwaysStoppedAnimation<double>(0),
               builder: (context, _) => CustomPaint(
                 painter: _BearPainter(
-                  t: _reduce ? 0 : _c.value * _periodSeconds,
+                  t: _running ? _c!.value * _periodSeconds : 0,
                   mood: widget.mood,
                 ),
                 size: Size.square(widget.size),

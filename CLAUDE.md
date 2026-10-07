@@ -43,7 +43,7 @@ GRANT  EXECUTE ON FUNCTION public.<fn>(<args>) TO authenticated;  -- anon only i
 **Known gap:** leaked-password protection is off (needs Pro plan). Enable it before public launch.
 
 ## Rules
-- **Coach Max gradient** `0xFF1D4ED8` → `0xFF7C3AED` is scoped to his badge/avatar. Never change or tokenise it; it doesn't follow the accent skin and isn't app-wide. This is the only permitted raw hex. Everything else uses `AppColors`/`colorScheme`. Warm/orange is for the primary CTA only.
+- **Coach Max gradient** `0xFF1D4ED8` → `0xFF7C3AED` is scoped to his badge/avatar. Never change or tokenise it; it doesn't follow the accent skin and isn't app-wide. This is the first permitted raw hex. Everything else uses `AppColors`/`colorScheme`. Warm/orange is for the primary CTA only.
 - **Avatar illustration colours** (`lib/widgets/avatars/`) are the second permitted raw hex, alongside the Coach Max gradient. Everything else uses AppColors/colorScheme.
 - One page at a time: touch only the file asked about.
 - UI changes: show or describe the plan and wait for approval before code.
