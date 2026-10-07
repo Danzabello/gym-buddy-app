@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/accent_theme_provider.dart';
@@ -144,13 +147,15 @@ class _NoticeHomeCardState extends State<NoticeHomeCard>
         _others.value = 0;
         return;
       }
-      final nav = appNavigatorKey.currentState;
-      if (nav == null) return;
+      // The navigator's own context can't find a Navigator; its overlay can.
+      final ctx = appNavigatorKey.currentState?.overlay?.context;
+      if (ctx == null) return;
       _others.value = 0;
-      await nav.push(MaterialPageRoute<void>(
-        fullscreenDialog: true,
-        builder: (_) => NoticeScreen(notice),
-      ));
+      await showDialog<void>(
+        // ignore: use_build_context_synchronously
+        context: ctx, // overlay of a global key, not a widget context
+        builder: (_) => NoticeDialog(notice),
+      );
       _others.value = notice.others;
     } catch (_) {
       // Offline / 401: no screen, no snackbar.
@@ -165,320 +170,521 @@ class _NoticeHomeCardState extends State<NoticeHomeCard>
       valueListenable: _others,
       builder: (context, n, _) {
         if (n <= 0) return const SizedBox.shrink();
-        final p = context.watch<AccentThemeProvider>().palette;
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: Material(
-            color: p.cardBackground,
+        final c = AppColors.of(context);
+        final violet = context.read<AccentThemeProvider>().palette.secondaryAccent;
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          padding: const EdgeInsets.only(left: 16, right: 4),
+          decoration: BoxDecoration(
+            color: c.cardBackground,
             borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: _check,
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 48),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(children: [
-                  Expanded(
-                    child: Text(
-                      n == 1 ? 'You have 1 more update' : 'You have $n more updates',
-                      style: TextStyle(color: p.subtleText, fontSize: 14),
-                    ),
-                  ),
-                  Icon(Icons.chevron_right, color: p.subtleText),
-                ]),
+            border: Border.all(color: c.cardBorder, width: 0.5),
+          ),
+          child: Row(children: [
+            Expanded(
+              child: Text(
+                n == 1 ? 'You have 1 more update' : 'You have $n more updates',
+                style: TextStyle(color: c.subtleText, fontSize: 14),
               ),
             ),
-          ),
+            TextButton(
+              style: TextButton.styleFrom(minimumSize: const Size(64, 44), foregroundColor: violet),
+              onPressed: _check,
+              child: const Text('View', style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ]),
         );
       },
     );
   }
 }
 
-// ── Screens ───────────────────────────────────────────────────────────────
 
-class NoticeScreen extends StatelessWidget {
+// ── Dialog (same shell as the Monday _WeeklyPlanDialog) ───────────────────
+
+/// Same orange as _WeeklyPlanDialog's label and button.
+const _kOrange = Color(0xFFF97316);
+
+Future<void> _markSeen(List<String> ids) =>
+    Supabase.instance.client.rpc('mark_notice_seen', params: {'p_ids': ids});
+
+class NoticeDialog extends StatefulWidget {
   final Notice notice;
-  const NoticeScreen(this.notice, {super.key});
+  final Future<void> Function(List<String> ids) onSeen;
+  const NoticeDialog(this.notice, {super.key, this.onSeen = _markSeen});
 
-  Future<void> _dismiss(BuildContext context) async {
+  @override
+  State<NoticeDialog> createState() => _NoticeDialogState();
+}
+
+class _NoticeDialogState extends State<NoticeDialog> {
+  bool _closing = false;
+
+  // Button, Back and barrier tap all land here (PopScope blocks the plain pop).
+  Future<void> _dismiss() async {
+    if (_closing) return;
+    _closing = true;
     final nav = Navigator.of(context);
     try {
-      await Supabase.instance.client
-          .rpc('mark_notice_seen', params: {'p_ids': notice.ids});
+      await widget.onSeen(widget.notice.ids);
     } catch (_) {
       // Server keeps it pending; it shows again on the next open.
     }
-    if (nav.mounted && nav.canPop()) nav.pop();
+    if (nav.mounted) nav.pop();
+  }
+
+  static String _short(String name) {
+    final u = name.toUpperCase();
+    return u.length > 14 ? '${u.substring(0, 13)}…' : u;
   }
 
   @override
   Widget build(BuildContext context) {
-    final p = context.watch<AccentThemeProvider>().palette;
-    final first = notice.items.first;
-    final n = notice.items.length;
-    final Widget art;
-    final String title, body, primary;
-    final List<(String, String, Color?)> rows;
-    String? tip;
-    var showClose = true;
+    final c = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final violet = context.read<AccentThemeProvider>().palette.secondaryAccent;
+    final n = widget.notice;
+    final first = n.items.first;
+
+    late final String label, line1, line2, body;
+    late final Color line2Color;
+    NoticeHeroKind? heroKind;
+    var heroValue = 0;
+    Color heroColor = c.danger;
+    String? caption, tip;
+    Color boxColor = c.danger;
+    List<Widget>? rows;
     List<NoticeItem>? list;
 
-    switch (notice.kind) {
+    switch (n.kind) {
       case 'auto_completed':
-        art = _Ring(color: p.statusSuccess, child: Icon(Icons.check, size: 48, color: p.statusSuccess));
-        title = 'We completed your check-in';
+        label = 'AUTO CHECK-IN';
+        line1 = 'CHECK-IN';
+        line2 = 'COMPLETED';
+        line2Color = c.success;
+        heroKind = NoticeHeroKind.tick;
+        heroValue = first.minutes ?? 0;
+        heroColor = c.success;
+        caption = 'MINUTES COUNTED';
         body = "You started a workout and didn't finish it in the app. "
             "We trusted you, so today's check-in counts.";
+        boxColor = c.success;
         rows = [
-          if (first.minutes != null) ('Workout goal', '${first.minutes} min', null),
-          ('Counted for', countedFor(first.date, DateTime.now()), null),
-          ('Streak', 'Still going', p.statusSuccess),
+          _InfoRow('Counted for', countedFor(first.date, DateTime.now()), cs.onSurface),
+          _InfoRow('Streak', 'Still going', c.success),
         ];
-        primary = 'Got it';
         tip = "Tip: tap Finish when you're done, so your workout time is exact.";
-        showClose = false;
       case 'own':
-        art = _Ring(color: p.statusDanger, child: Icon(Icons.close, size: 48, color: p.statusDanger));
-        title = 'You lost the streak';
-        body = "Your streak with ${first.buddy} ended because yesterday's check-in was missed.";
-        rows = [
-          ('Streak that ended', daysLabel(first.lost), p.statusDanger),
-          if (first.best != null) ('Your best', '${daysLabel(first.best!)}, kept', null),
-        ];
-        primary = 'Start a new streak';
+        label = 'STREAK ENDED';
+        line1 = 'YOU LOST';
+        line2 = 'THE STREAK';
+        line2Color = c.danger;
+        heroKind = NoticeHeroKind.cross;
+        heroValue = first.lost;
+        caption = 'DAY STREAK WITH ${first.buddy.toUpperCase()}';
+        body = "Yesterday's check-in was missed, so your streak with ${first.buddy} ended. "
+            'Check in today to start a new one.';
       case 'friend':
         // A shared streak of n days means both of you checked in n times, and
         // a 'friend' event means they were the one who missed yesterday.
         final proven = first.lost > 0;
-        art = _BrokenPair(me: _myInitial(), buddy: first.missedName, color: p.statusWarning);
-        title = 'Your streak with ${first.buddy} ended';
+        label = 'STREAK ENDED';
+        line1 = 'YOUR STREAK';
+        line2 = 'WITH ${_short(first.buddy)} ENDED';
+        line2Color = violet;
+        heroKind = NoticeHeroKind.strike;
+        heroValue = first.lost;
+        heroColor = c.warn;
+        caption = 'DAY STREAK';
         body = proven
             ? '${first.missedName} missed yesterday, so your shared streak reset. You did your part.'
             : 'Your shared streak with ${first.buddy} reset yesterday.';
-        rows = [
-          ('Streak that ended', daysLabel(first.lost), p.statusWarning),
-          if (proven) ('Your check-ins', 'All ${first.lost} done', p.statusSuccess),
-        ];
-        primary = 'Restart with ${first.buddy}';
+        boxColor = c.warn;
+        if (proven) rows = [_InfoRow('Your check-ins', 'All ${first.lost} done', c.success)];
       default: // many
-        art = _Ring(color: p.statusDanger, child: Text('$n', style: TextStyle(fontSize: 44, fontWeight: FontWeight.w700, color: p.statusDanger)));
-        title = 'You lost $n streaks';
-        body = "Yesterday's check-ins were missed. Here's what ended.";
-        rows = const [];
-        list = notice.items;
-        primary = 'Start fresh today';
+        label = 'STREAKS ENDED';
+        line1 = 'YOU LOST';
+        line2 = '${n.items.length} STREAKS';
+        line2Color = c.danger;
+        body = "Yesterday's check-ins were missed. Here is what ended.";
+        list = n.items;
     }
+
+    Widget gap = const SizedBox(height: 14);
+    final kids = <Widget>[
+      if (heroKind != null) NoticeHero(kind: heroKind, value: heroValue, color: heroColor),
+      if (caption != null)
+        Text(caption,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: c.subtleText)),
+      Text(body,
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 15, height: 1.4, color: cs.onSurface)),
+      if (rows != null) _InfoBox(color: boxColor, child: Column(children: _divided(rows, boxColor))),
+      if (list != null)
+        _InfoBox(
+          color: boxColor,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 220),
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              itemCount: list.length,
+              separatorBuilder: (_, __) => _line(boxColor),
+              itemBuilder: (_, i) {
+                final it = list![i];
+                return _RowIn(
+                  index: i,
+                  child: _InfoRow(it.buddy, daysLabel(it.lost), it.kind == 'own' ? c.danger : c.warn,
+                      labelColor: cs.onSurface),
+                );
+              },
+            ),
+          ),
+        ),
+      if (tip != null)
+        Text(tip,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: c.subtleText, height: 1.4)),
+    ];
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _dismiss(context);
+        if (!didPop) _dismiss();
       },
-      child: Scaffold(
-        backgroundColor: p.background,
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(28, 56, 28, 36),
-            child: Column(children: [
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, box) => SingleChildScrollView(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: box.maxHeight),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          art,
-                          const SizedBox(height: 28),
-                          Text(title,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: p.primaryText)),
-                          const SizedBox(height: 12),
-                          Text(body,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 16, height: 1.4, color: p.subtleText)),
-                          const SizedBox(height: 24),
-                          _Card(
-                            color: p.cardBackground,
-                            child: list != null
-                                ? ConstrainedBox(
-                                    constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.3),
-                                    child: ListView.separated(
-                                      shrinkWrap: true,
-                                      padding: EdgeInsets.zero,
-                                      itemCount: list.length,
-                                      separatorBuilder: (_, __) => Divider(height: 1, color: p.divider),
-                                      itemBuilder: (_, i) => _ManyRow(list![i], p),
-                                    ),
-                                  )
-                                : Column(children: [
-                                    for (var i = 0; i < rows.length; i++) ...[
-                                      if (i > 0) Divider(height: 1, color: p.divider),
-                                      _Row(rows[i].$1, rows[i].$2, rows[i].$3 ?? p.primaryText, p.subtleText),
-                                    ],
-                                  ]),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: Container(
+          decoration: BoxDecoration(
+            color: c.cardBackground,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: c.cardBorder, width: 0.5),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                decoration: BoxDecoration(
+                  border: Border(bottom: BorderSide(color: c.cardBorder, width: 0.5)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: const TextStyle(
+                            fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.4, color: _kOrange)),
+                    const SizedBox(height: 4),
+                    _TitleLine(line1, cs.onSurface),
+                    _TitleLine(line2, line2Color),
+                  ],
                 ),
               ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: p.action,
-                    foregroundColor: AppColors.of(context).readableForeground(p.action),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  onPressed: () => _dismiss(context),
-                  child: Text(primary, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: Column(children: [
+                    for (var i = 0; i < kids.length; i++) ...[if (i > 0) gap, kids[i]],
+                  ]),
                 ),
               ),
-              if (tip != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(tip, textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 13, color: p.subtleText)),
-                ),
-              if (showClose)
-                SizedBox(
-                  width: double.infinity,
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: SizedBox(
                   height: 48,
-                  child: TextButton(
-                    onPressed: () => _dismiss(context),
-                    child: Text('Close', style: TextStyle(fontSize: 16, color: p.subtleText)),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _kOrange,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: _dismiss,
+                    child: const Text('Got it', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                   ),
                 ),
-            ]),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  static String _myInitial() {
-    final u = Supabase.instance.client.auth.currentUser;
-    final meta = u?.userMetadata;
-    final s = (meta?['display_name'] ?? meta?['username'] ?? u?.email ?? '') as String;
-    return s.trim().isEmpty ? 'Y' : s.trim();
-  }
+  static Widget _line(Color c) =>
+      Divider(height: 1, thickness: 0.5, color: c.withValues(alpha: 0.28));
+
+  static List<Widget> _divided(List<Widget> rows, Color c) =>
+      [for (var i = 0; i < rows.length; i++) ...[if (i > 0) _line(c), rows[i]]];
 }
 
-class _Ring extends StatelessWidget {
+class _TitleLine extends StatelessWidget {
+  final String text;
   final Color color;
-  final Widget child;
-  const _Ring({required this.color, required this.child});
+  const _TitleLine(this.text, this.color);
 
+  // FittedBox: a long buddy name or a huge system font shrinks the line
+  // instead of wrapping it into a third line.
   @override
-  Widget build(BuildContext context) => Container(
-        width: 112,
-        height: 112,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: color, width: 6)),
-        child: child,
+  Widget build(BuildContext context) => FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(text,
+            maxLines: 1,
+            style: TextStyle(
+                fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: -1.5, height: 0.95, color: color)),
       );
 }
 
-class _BrokenPair extends StatelessWidget {
-  final String me, buddy;
-  final Color color;
-  const _BrokenPair({required this.me, required this.buddy, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.watch<AccentThemeProvider>().palette;
-    Widget av(String name, {bool dim = false}) => Opacity(
-          opacity: dim ? 0.55 : 1,
-          child: Container(
-            width: 64,
-            height: 64,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: p.cardBackground,
-              border: Border.all(color: dim ? color : p.divider, width: 3),
-            ),
-            child: Text(name.characters.first.toUpperCase(),
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: p.primaryText)),
-          ),
-        );
-    Widget dash() => Container(width: 14, height: 3, color: color);
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      av(me),
-      const SizedBox(width: 8),
-      dash(),
-      const SizedBox(width: 10),
-      dash(),
-      const SizedBox(width: 8),
-      av(buddy, dim: true),
-    ]);
-  }
-}
-
-class _Card extends StatelessWidget {
+class _InfoBox extends StatelessWidget {
   final Color color;
   final Widget child;
-  const _Card({required this.color, required this.child});
+  const _InfoBox({required this.color, required this.child});
 
   @override
   Widget build(BuildContext context) => Container(
         width: double.infinity,
-        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(14)),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.28), width: 0.5),
+        ),
         clipBehavior: Clip.antiAlias,
         child: child,
       );
 }
 
-class _Row extends StatelessWidget {
+class _InfoRow extends StatelessWidget {
   final String label, value;
-  final Color valueColor, labelColor;
-  const _Row(this.label, this.value, this.valueColor, this.labelColor);
+  final Color valueColor;
+  final Color? labelColor;
+  const _InfoRow(this.label, this.value, this.valueColor, {this.labelColor});
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(children: [
-          Expanded(child: Text(label, style: TextStyle(fontSize: 16, color: labelColor))),
+          Expanded(
+            child: Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 14, color: labelColor ?? AppColors.of(context).subtleText)),
+          ),
           const SizedBox(width: 12),
           Flexible(
-            child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: valueColor)),
+            child: Text(value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: valueColor)),
           ),
         ]),
       );
 }
 
-class _ManyRow extends StatelessWidget {
-  final NoticeItem item;
-  final AccentPalette p;
-  const _ManyRow(this.item, this.p);
+/// Fades and slides a list row in ~250 ms after the previous one; only the
+/// first five rows animate. Reduce motion: shown at once.
+class _RowIn extends StatefulWidget {
+  final int index;
+  final Widget child;
+  const _RowIn({required this.index, required this.child});
+
+  @override
+  State<_RowIn> createState() => _RowInState();
+}
+
+class _RowInState extends State<_RowIn> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
+  Timer? _t;
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (widget.index >= 5 || MediaQuery.of(context).disableAnimations) {
+      _c.value = 1;
+    } else {
+      _t = Timer(Duration(milliseconds: 250 * widget.index), _c.forward);
+    }
+  }
+
+  @override
+  void dispose() {
+    _t?.cancel();
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+        opacity: _c,
+        child: SlideTransition(
+          position: Tween(begin: const Offset(0, 0.3), end: Offset.zero)
+              .animate(CurvedAnimation(parent: _c, curve: Curves.easeOut)),
+          child: widget.child,
+        ),
+      );
+}
+
+// ── NoticeHero: big number with one-shot motion ───────────────────────────
+
+enum NoticeHeroKind { tick, cross, strike }
+
+double _seg(double t, double a, double b) => ((t - a) / (b - a)).clamp(0.0, 1.0);
+
+class NoticeHero extends StatefulWidget {
+  final NoticeHeroKind kind;
+  final int value;
+  final Color color;
+  const NoticeHero({super.key, required this.kind, required this.value, required this.color});
+
+  @override
+  State<NoticeHero> createState() => _NoticeHeroState();
+}
+
+class _NoticeHeroState extends State<NoticeHero> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1000));
+  bool _started = false;
+  bool _buzzed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _c.addListener(() {
+      if (widget.kind == NoticeHeroKind.tick && !_buzzed && _c.value >= 0.34) {
+        _buzzed = true;
+        HapticFeedback.lightImpact();
+      }
+    });
+  }
+
+  // Once per State: rebuilds and theme changes never restart it.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (MediaQuery.of(context).disableAnimations) {
+      _buzzed = true;
+      _c.value = 1;
+    } else {
+      _c.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final own = item.kind == 'own';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(children: [
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(item.buddy, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: p.primaryText)),
-            Text(own ? 'You missed a check-in' : '${item.missedName} missed a check-in',
-                maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 13, color: p.subtleText)),
-          ]),
-        ),
-        const SizedBox(width: 12),
-        Text(daysLabel(item.lost),
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700,
-                color: own ? p.statusDanger : p.statusWarning)),
-      ]),
+    final digits = widget.value.toString().length;
+    final size = digits <= 2 ? 72.0 : (digits == 3 ? 56.0 : 44.0);
+    return SizedBox(
+      width: 132,
+      height: 132,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          final t = _c.value;
+          double opacity, scale;
+          int shown = widget.value;
+          if (widget.kind == NoticeHeroKind.tick) {
+            shown = (widget.value * _seg(t, 0, 0.12)).round();
+            final out = _seg(t, 0.12, 0.18);
+            opacity = 1 - out;
+            scale = 1 - 0.4 * out;
+          } else {
+            final u = _seg(t, 0, 0.12);
+            scale = u < 0.7
+                ? 0.6 + (1.08 - 0.6) * (u / 0.7)
+                : 1.08 - 0.08 * ((u - 0.7) / 0.3);
+            opacity = u *
+                (widget.kind == NoticeHeroKind.cross
+                    ? 1 - 0.7 * _seg(t, 0.36, 0.5)
+                    : 1 - 0.55 * _seg(t, 0.32, 0.44));
+          }
+          return Stack(alignment: Alignment.center, children: [
+            CustomPaint(size: const Size(132, 132), painter: _HeroPainter(widget.kind, t, widget.color)),
+            Opacity(
+              opacity: opacity,
+              child: Transform.scale(
+                scale: scale,
+                child: SizedBox(
+                  width: 100,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('$shown',
+                        style: TextStyle(
+                          fontSize: size,
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                          color: widget.color,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        )),
+                  ),
+                ),
+              ),
+            ),
+          ]);
+        },
+      ),
     );
   }
+}
+
+class _HeroPainter extends CustomPainter {
+  final NoticeHeroKind kind;
+  final double t;
+  final Color color;
+  _HeroPainter(this.kind, this.t, this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = color
+      ..strokeWidth = kind == NoticeHeroKind.strike ? 8 : 9;
+    void line(Offset a, Offset b, double prog) {
+      if (prog > 0) canvas.drawLine(a, Offset.lerp(a, b, prog)!, p);
+    }
+
+    switch (kind) {
+      case NoticeHeroKind.tick:
+        final ring = _seg(t, 0.14, 0.26);
+        if (ring > 0) {
+          canvas.drawArc(Rect.fromCircle(center: size.center(Offset.zero), radius: size.width / 2 - 5),
+              -math.pi / 2, 2 * math.pi * ring, false, p);
+        }
+        final tick = _seg(t, 0.24, 0.34);
+        if (tick > 0) {
+          final path = Path()
+            ..moveTo(size.width * 0.30, size.height * 0.52)
+            ..lineTo(size.width * 0.44, size.height * 0.66)
+            ..lineTo(size.width * 0.70, size.height * 0.38);
+          final m = path.computeMetrics().first;
+          canvas.drawPath(m.extractPath(0, m.length * tick), p);
+        }
+      case NoticeHeroKind.cross:
+        line(const Offset(30, 30), const Offset(102, 102), _seg(t, 0.20, 0.28));
+        line(const Offset(102, 30), const Offset(30, 102), _seg(t, 0.28, 0.36));
+      case NoticeHeroKind.strike:
+        line(const Offset(108, 24), const Offset(24, 108), _seg(t, 0.22, 0.32));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_HeroPainter old) => old.t != t || old.color != color || old.kind != kind;
 }

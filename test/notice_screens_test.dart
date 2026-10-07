@@ -1,4 +1,9 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:gym_buddy_app/theme/accent_theme_provider.dart';
+import 'package:gym_buddy_app/theme/app_theme.dart';
 import 'package:gym_buddy_app/pages/notice_screens.dart';
 
 Map<String, dynamic> ev(String id, String kind, int lost, {String? buddy, bool coach = false, String? best}) => {
@@ -48,5 +53,105 @@ void main() {
     expect(countedFor('2026-10-07', now), 'Today');
     expect(countedFor('2026-10-06', now), 'Tuesday');
     expect(countedFor(null, now), 'Today');
+  });
+
+  group('dialogs', () {
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+
+    Future<void> open(WidgetTester t, Widget Function(BuildContext) dialog,
+        {bool still = true, double scale = 1}) async {
+      t.view.physicalSize = const Size(360, 800);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      await t.pumpWidget(ChangeNotifierProvider(
+        create: (_) => AccentThemeProvider(),
+        child: Consumer<AccentThemeProvider>(
+          builder: (_, a, __) => MaterialApp(
+            theme: AppTheme.fromAccent(a.palette),
+            builder: (ctx, child) => MediaQuery(
+              data: MediaQuery.of(ctx).copyWith(disableAnimations: still, textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: Builder(
+              builder: (ctx) => TextButton(
+                onPressed: () => showDialog<void>(context: ctx, builder: dialog),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await t.tap(find.text('open'));
+      await t.pumpAndSettle();
+    }
+
+    double heroOpacity(WidgetTester t, String text) =>
+        t.widget<Opacity>(find.ancestor(of: find.text(text), matching: find.byType(Opacity)).first).opacity;
+
+    final one = {'kind': 'own', 'items': [ev('a', 'own', 12, buddy: 'Sam')]};
+    final all = <String, Map<String, dynamic>>{
+      'own': one,
+      'friend': {'kind': 'friend', 'items': [ev('a', 'friend', 8, buddy: 'B' * 60)]},
+      'many': {'kind': 'many', 'items': [for (var i = 0; i < 12; i++) ev('m$i', i.isEven ? 'own' : 'friend', i + 1, buddy: 'Buddy $i ${'x' * 40}')]},
+      'auto': {'kind': 'auto_completed', 'items': [{'id': 'x', 'workout_date': '2026-10-06', 'minutes': 15}]},
+    };
+
+    testWidgets('reduce motion shows each hero end state', (t) async {
+      for (final (kind, text, expected) in [
+        (NoticeHeroKind.tick, '15', 0.0),
+        (NoticeHeroKind.cross, '12', 0.3),
+        (NoticeHeroKind.strike, '12', 0.45),
+      ]) {
+        await open(t, (_) => Dialog(child: NoticeHero(kind: kind, value: int.parse(text), color: Colors.red)));
+        expect(heroOpacity(t, text), closeTo(expected, 0.001), reason: '$kind');
+        await t.tapAt(const Offset(2, 2));
+        await t.pumpAndSettle();
+      }
+    });
+
+    testWidgets('3 and 4 digit numbers do not overflow', (t) async {
+      for (final v in [123, 4567]) {
+        await open(t, (_) => Dialog(child: NoticeHero(kind: NoticeHeroKind.cross, value: v, color: Colors.red)));
+        expect(t.takeException(), isNull);
+        await t.tapAt(const Offset(2, 2));
+        await t.pumpAndSettle();
+      }
+    });
+
+    testWidgets('button marks seen with the shown ids and closes', (t) async {
+      List<String>? seen;
+      await open(t, (_) => NoticeDialog(Notice.parse(one)!, onSeen: (ids) async => seen = ids));
+      await t.tap(find.text('Got it'));
+      await t.pumpAndSettle();
+      expect(seen, ['a']);
+      expect(find.byType(NoticeDialog), findsNothing);
+    });
+
+    testWidgets('barrier tap marks seen and closes; a failing call still closes', (t) async {
+      var calls = 0;
+      await open(t, (_) => NoticeDialog(Notice.parse(one)!, onSeen: (_) async { calls++; throw Exception('offline'); }));
+      await t.tapAt(const Offset(2, 2));
+      await t.pumpAndSettle();
+      expect(calls, 1);
+      expect(find.byType(NoticeDialog), findsNothing);
+    });
+
+    testWidgets('many list is capped and scrolls inside the box', (t) async {
+      await open(t, (_) => NoticeDialog(Notice.parse(all['many'])!, onSeen: (_) async {}));
+      expect(t.getSize(find.byType(ListView)).height, lessThanOrEqualTo(220));
+      final pos = t.state<ScrollableState>(find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable))).position;
+      expect(pos.maxScrollExtent, greaterThan(0));
+      expect(find.text('Got it'), findsOneWidget);
+    });
+
+    testWidgets('text scale 2.0 at 360 dp does not overflow any notice', (t) async {
+      for (final e in all.entries) {
+        await open(t, (_) => NoticeDialog(Notice.parse(e.value)!, onSeen: (_) async {}), scale: 2.0);
+        expect(t.takeException(), isNull, reason: e.key);
+        expect(find.text('Got it'), findsOneWidget, reason: e.key);
+        await t.tapAt(const Offset(2, 2));
+        await t.pumpAndSettle();
+      }
+    });
   });
 }
