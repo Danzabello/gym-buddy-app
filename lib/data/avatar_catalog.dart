@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 /// Shared avatar data — mirrors the starter/earnable lists baked into
 /// AvatarPickerScreen (lib/widgets/avatar_picker_screen.dart), duplicated
 /// here so the Wardrobe screens can render the same catalog without
-/// touching that file (its onboarding usage must stay byte-for-byte as-is).
+/// depending on that file. The picker's layout, selection logic, borders and
+/// copy stay as they are; only avatar rendering may change, via `avatarArt`
+/// (lib/widgets/avatars/avatar_art.dart).
 class AvatarCatalogEntry {
   final String id;
   final String emoji;
