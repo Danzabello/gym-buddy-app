@@ -117,6 +117,8 @@ class _WardrobeAvatarWheelState extends State<WardrobeAvatarWheel> {
             ),
             child: WardrobeAvatarRender(
               emoji: center.emoji,
+              avatarId: center.id,
+              semanticLabel: '', // the name below announces it
               borderStyle: state.border,
               borderColor: center.borderColor,
               bgColor: appColors.tint(center.color),
@@ -180,6 +182,7 @@ class _WardrobeAvatarWheelState extends State<WardrobeAvatarWheel> {
                 opacity: locked ? 0.5 : 1.0,
                 child: WardrobeAvatarRender(
                   emoji: a.emoji,
+                  avatarId: a.id,
                   borderStyle: AvatarBorderStyle.simple,
                   borderColor: a.borderColor,
                   bgColor: appColors.tint(a.color),
