@@ -54,6 +54,8 @@ class WardrobeBorderScreen extends StatelessWidget {
                 caption: locked ? 'Level ${_borderUnlockLevel[style]}' : null,
                 preview: WardrobeAvatarRender(
                   emoji: avatar.emoji,
+                  avatarId: avatar.id,
+                  semanticLabel: '', // the tile label announces it
                   borderStyle: style,
                   borderColor: avatar.borderColor,
                   bgColor: appColors.tint(avatar.color),
