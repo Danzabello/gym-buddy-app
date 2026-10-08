@@ -122,6 +122,32 @@ final List<AndroidNotificationChannel> kPushChannels = [
 AndroidNotificationChannel channelFor(String? id) =>
     kPushChannels.firstWhere((c) => c.id == id, orElse: () => kPushChannels.first);
 
+/// Group a push is a child of: its channel, except that invites split into
+/// still-pending ones ('gym_buddy_invites') and answered ones (..._done).
+String groupKeyFor(PushPayload p) {
+  final channel = channelFor(p.channel).id;
+  final pending = p.type == 'invite_received' || p.type == 'invite_rescheduled';
+  return channel == 'gym_buddy_invites' && !pending ? 'gym_buddy_invites_done' : channel;
+}
+
+String summaryLabelFor(String group) {
+  switch (group) {
+    case 'gym_buddy_invites':
+      return 'invites';
+    case 'gym_buddy_invites_done':
+      return 'invite updates';
+    case 'gym_buddy_handshake':
+      return 'workout updates';
+    case 'gym_buddy_streaks':
+      return 'streak updates';
+    case 'gym_buddy_friends':
+      return 'friend updates';
+    case 'gym_buddy_coach_max':
+      return 'messages';
+  }
+  return 'updates';
+}
+
 /// Home tab a tapped push opens: 0 Workout Schedule, 1 Friends, 2 Dashboard.
 int? tabForType(String? type) {
   switch (type) {
@@ -244,7 +270,7 @@ class NotificationService {
   /// A tapped push asks HomeScreen for this tab; HomeScreen clears it.
   static final ValueNotifier<int?> tabRequest = ValueNotifier<int?>(null);
 
-  static const String _invitesSummaryTag = 'invites_summary';
+  static const String _summaryPrefix = 'summary_';
 
   Future<void> initialize() async {
     debugLog('🚀 NotificationService.initialize() STARTING');
@@ -355,7 +381,8 @@ class NotificationService {
           )
         : BigTextStyleInformation(p.body);
 
-    final pendingInvite = p.type == 'invite_received' || p.type == 'invite_rescheduled';
+    final pendingInvite = _isPendingInvite(p.type);
+    final group = groupKeyFor(p);
     final details = AndroidNotificationDetails(
       channel.id,
       channel.name,
@@ -367,9 +394,9 @@ class NotificationService {
       largeIcon: avatar == null || p.style == 'messaging' ? null : ByteArrayAndroidBitmap(avatar),
       styleInformation: style,
       tag: p.tag.isEmpty ? null : p.tag,
-      // Only pending invites join the stack; a resolved one replaces its own
-      // invite (same tag) with no group, so it drops out of the count.
-      groupKey: pendingInvite ? channel.id : null,
+      // Always a child of a group, even alone, so it gets the compact grouped
+      // look (avatar on the left). See _syncSummary for the summary side.
+      groupKey: group,
     );
     final payload = jsonEncode({'type': p.type, 'reference_id': p.referenceId});
     // With a tag, (tag, id) is the identity: a new push with the same tag
@@ -378,65 +405,80 @@ class NotificationService {
     await _localNotifications.show(id, p.title, p.body, NotificationDetails(android: details),
         payload: payload);
 
-    if (p.type == 'workout_cancelled' && p.referenceId.isNotEmpty) {
-      await _localNotifications.cancel(1, tag: 'invite_${p.referenceId}');
+    // A cancelled workout takes its pending invite out of the tray.
+    final cancelledInviteTag = p.type == 'workout_cancelled' && p.referenceId.isNotEmpty
+        ? 'invite_${p.referenceId}'
+        : null;
+    if (cancelledInviteTag != null) {
+      await _localNotifications.cancel(1, tag: cancelledInviteTag);
     }
-    if (pendingInvite || channel.id == 'gym_buddy_invites' || p.type == 'workout_cancelled') {
-      await _showInvitesSummary(channelFor('gym_buddy_invites'),
-          leavingTag: pendingInvite
-              ? null
-              : p.type == 'workout_cancelled' ? 'invite_${p.referenceId}' : p.tag);
+
+    // Groups whose children may have changed: this push's own, and for an
+    // invite answer / cancel the pending-invites group it just left.
+    const pendingGroup = 'gym_buddy_invites';
+    final leaving = cancelledInviteTag ?? (p.tag.isEmpty ? null : p.tag);
+    await _syncSummary(group, leavingTag: group == pendingGroup ? null : leaving);
+    if (!pendingInvite && (channel.id == pendingGroup || cancelledInviteTag != null)) {
+      await _syncSummary(pendingGroup, leavingTag: leaving);
     }
   }
 
-  /// Invites from several friends collapse into one stack with a count. Only
-  /// PENDING invites count: a resolved one (accepted, declined, expired)
-  /// replaces its own invite notification (same tag), and a cancelled
-  /// workout removes it, so what is left of type invite_received /
-  /// invite_rescheduled is exactly the invites still waiting.
-  static Future<void> _showInvitesSummary(AndroidNotificationChannel channel,
-      {String? leavingTag}) async {
+  static bool _isPendingInvite(String type) =>
+      type == 'invite_received' || type == 'invite_rescheduled';
+
+  /// One summary per group, posted while the group has children and
+  /// cancelled when the last one leaves (no ghost summary). Android shows a
+  /// lone child on its own and the summary only once there are two. Pending
+  /// invites are a group of their own, so "N invites" counts exactly the
+  /// invites still waiting.
+  static Future<void> _syncSummary(String group, {String? leavingTag}) async {
     try {
       final android = _localNotifications
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
       final active = await android?.getActiveNotifications() ?? const [];
-      // Android's active-notification data has no payload, but it does carry
-      // the group key, and only pending invites are posted into the group.
-      bool pending(ActiveNotification n) =>
-          n.channelId == channel.id &&
-          n.tag != _invitesSummaryTag &&
-          n.tag != leavingTag && // being replaced or cancelled right now: the system may not have dropped it yet
-          n.groupKey == channel.id;
-
-      final invites = active.where(pending).toList();
-      if (invites.length < 2) {
-        await _localNotifications.cancel(2, tag: _invitesSummaryTag);
+      // Android gives no payload for active notifications, but it does carry
+      // the group key. leavingTag: being replaced or cancelled right now, the
+      // system may not have dropped it yet.
+      final children = active
+          .where((n) =>
+              n.groupKey == group &&
+              !(n.tag ?? '').startsWith(_summaryPrefix) &&
+              n.tag != leavingTag)
+          .toList();
+      final summaryTag = '$_summaryPrefix$group';
+      if (children.isEmpty) {
+        await _localNotifications.cancel(2, tag: summaryTag);
         return;
       }
+      final channel = channelFor(group.replaceAll('_done', ''));
+      final label = summaryLabelFor(group);
       await _localNotifications.show(
         2,
-        '${invites.length} invites',
-        'Tap to see who wants to train',
+        '${children.length} $label',
+        children.map((n) => n.title ?? '').join(', '),
         NotificationDetails(
           android: AndroidNotificationDetails(
             channel.id,
             channel.name,
             icon: 'ic_stat_gym_buddy',
-            color: kindColors['lavender'],
-            tag: _invitesSummaryTag,
-            groupKey: channel.id,
+            color: kindColors['grey'],
+            tag: summaryTag,
+            groupKey: group,
             setAsGroupSummary: true,
+            groupAlertBehavior: GroupAlertBehavior.children, // the summary itself never alerts
             onlyAlertOnce: true,
+            playSound: false,
+            enableVibration: false,
             styleInformation: InboxStyleInformation(
-              [for (final n in invites) n.title ?? ''],
-              summaryText: '${invites.length} invites',
+              [for (final n in children) '${n.title ?? ''} ${n.body ?? ''}'],
+              summaryText: '${children.length} $label',
             ),
           ),
         ),
-        payload: jsonEncode({'type': 'invite_received'}),
+        payload: jsonEncode({'type': group == 'gym_buddy_invites' ? 'invite_received' : ''}),
       );
     } catch (e) {
-      debugLog('⚠️ invites summary failed: $e');
+      debugLog('⚠️ summary failed: $e');
     }
   }
 

@@ -86,6 +86,28 @@ void main() {
     });
   });
 
+  group('groups', () {
+    PushPayload p(String type, String channel) =>
+        PushPayload(title: 't', body: 'b', type: type, channel: channel);
+    test('every push is a child of its channel group', () {
+      expect(groupKeyFor(p('nudge', 'gym_buddy_handshake')), 'gym_buddy_handshake');
+      expect(groupKeyFor(p('friend_request', 'gym_buddy_friends')), 'gym_buddy_friends');
+      expect(groupKeyFor(p('buddy_checked_in', 'gym_buddy_streaks')), 'gym_buddy_streaks');
+      expect(groupKeyFor(p('coach_max_motivational', 'gym_buddy_coach_max')), 'gym_buddy_coach_max');
+    });
+    test('pending invites are their own group; answered ones leave it', () {
+      expect(groupKeyFor(p('invite_received', 'gym_buddy_invites')), 'gym_buddy_invites');
+      expect(groupKeyFor(p('invite_rescheduled', 'gym_buddy_invites')), 'gym_buddy_invites');
+      for (final t in ['invite_accepted', 'invite_declined', 'invite_expired']) {
+        expect(groupKeyFor(p(t, 'gym_buddy_invites')), 'gym_buddy_invites_done', reason: t);
+      }
+    });
+    test('summary labels', () {
+      expect(summaryLabelFor('gym_buddy_invites'), 'invites');
+      expect(summaryLabelFor('nope'), 'updates');
+    });
+  });
+
   group('tap routing', () {
     test('handshake and invite types open the Workout Schedule tab', () {
       for (final t in ['invite_received', 'invite_accepted', 'time_to_start', 'nudge',
