@@ -410,16 +410,27 @@ class NotificationService {
         ? 'invite_${p.referenceId}'
         : null;
     if (cancelledInviteTag != null) {
-      await _localNotifications.cancel(1, tag: cancelledInviteTag);
+      await _cancel(1, cancelledInviteTag);
     }
 
     // Groups whose children may have changed: this push's own, and for an
     // invite answer / cancel the pending-invites group it just left.
     const pendingGroup = 'gym_buddy_invites';
     final leaving = cancelledInviteTag ?? (p.tag.isEmpty ? null : p.tag);
-    await _syncSummary(group, leavingTag: group == pendingGroup ? null : leaving);
+    await _syncSummary(group,
+        leavingTag: group == pendingGroup ? null : leaving, joining: (p.tag, p.title, p.body));
     if (!pendingInvite && (channel.id == pendingGroup || cancelledInviteTag != null)) {
       await _syncSummary(pendingGroup, leavingTag: leaving);
+    }
+  }
+
+  /// cancel() can throw after it has already removed the notification (see
+  /// proguard-rules.pro); never let that abort the summary bookkeeping.
+  static Future<void> _cancel(int id, String tag) async {
+    try {
+      await _localNotifications.cancel(id, tag: tag);
+    } catch (e) {
+      debugLog('⚠️ cancel failed (notification is gone anyway): $e');
     }
   }
 
@@ -431,7 +442,8 @@ class NotificationService {
   /// lone child on its own and the summary only once there are two. Pending
   /// invites are a group of their own, so "N invites" counts exactly the
   /// invites still waiting.
-  static Future<void> _syncSummary(String group, {String? leavingTag}) async {
+  static Future<void> _syncSummary(String group,
+      {String? leavingTag, (String, String, String)? joining}) async {
     try {
       final android = _localNotifications
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
@@ -445,17 +457,23 @@ class NotificationService {
               !(n.tag ?? '').startsWith(_summaryPrefix) &&
               n.tag != leavingTag)
           .toList();
+      final lines = [for (final n in children) (n.title ?? '', n.body ?? '')];
+      // The push that was just posted may not be in the active list yet, and
+      // a lone push would otherwise see an empty group and get no summary.
+      if (joining != null && !children.any((n) => n.tag == joining.$1)) {
+        lines.add((joining.$2, joining.$3));
+      }
       final summaryTag = '$_summaryPrefix$group';
-      if (children.isEmpty) {
-        await _localNotifications.cancel(2, tag: summaryTag);
+      if (lines.isEmpty) {
+        await _cancel(2, summaryTag);
         return;
       }
       final channel = channelFor(group.replaceAll('_done', ''));
       final label = summaryLabelFor(group);
       await _localNotifications.show(
         2,
-        '${children.length} $label',
-        children.map((n) => n.title ?? '').join(', '),
+        '${lines.length} $label',
+        lines.map((l) => l.$1).join(', '),
         NotificationDetails(
           android: AndroidNotificationDetails(
             channel.id,
@@ -470,8 +488,8 @@ class NotificationService {
             playSound: false,
             enableVibration: false,
             styleInformation: InboxStyleInformation(
-              [for (final n in children) '${n.title ?? ''} ${n.body ?? ''}'],
-              summaryText: '${children.length} $label',
+              [for (final l in lines) '${l.$1} ${l.$2}'],
+              summaryText: '${lines.length} $label',
             ),
           ),
         ),
