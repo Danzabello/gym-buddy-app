@@ -122,31 +122,15 @@ final List<AndroidNotificationChannel> kPushChannels = [
 AndroidNotificationChannel channelFor(String? id) =>
     kPushChannels.firstWhere((c) => c.id == id, orElse: () => kPushChannels.first);
 
-/// Group a push is a child of: its channel, except that invites split into
-/// still-pending ones ('gym_buddy_invites') and answered ones (..._done).
-String groupKeyFor(PushPayload p) {
-  final channel = channelFor(p.channel).id;
-  final pending = p.type == 'invite_received' || p.type == 'invite_rescheduled';
-  return channel == 'gym_buddy_invites' && !pending ? 'gym_buddy_invites_done' : channel;
-}
-
-String summaryLabelFor(String group) {
-  switch (group) {
-    case 'gym_buddy_invites':
-      return 'invites';
-    case 'gym_buddy_invites_done':
-      return 'invite updates';
-    case 'gym_buddy_handshake':
-      return 'workout updates';
-    case 'gym_buddy_streaks':
-      return 'streak updates';
-    case 'gym_buddy_friends':
-      return 'friend updates';
-    case 'gym_buddy_coach_max':
-      return 'messages';
-  }
-  return 'updates';
-}
+/// Only pending invites are grouped (so "N invites" counts exactly the ones
+/// still waiting). Grouping every push as a child was tried and reverted:
+/// Android shows a lone child as a normal notification (avatar on the right)
+/// and hides its summary, so it bought nothing.
+String? groupKeyFor(PushPayload p) =>
+    channelFor(p.channel).id == 'gym_buddy_invites' &&
+            (p.type == 'invite_received' || p.type == 'invite_rescheduled')
+        ? 'gym_buddy_invites'
+        : null;
 
 /// Home tab a tapped push opens: 0 Workout Schedule, 1 Friends, 2 Dashboard.
 int? tabForType(String? type) {
@@ -381,7 +365,6 @@ class NotificationService {
           )
         : BigTextStyleInformation(p.body);
 
-    final pendingInvite = _isPendingInvite(p.type);
     final group = groupKeyFor(p);
     final details = AndroidNotificationDetails(
       channel.id,
@@ -394,8 +377,6 @@ class NotificationService {
       largeIcon: avatar == null || p.style == 'messaging' ? null : ByteArrayAndroidBitmap(avatar),
       styleInformation: style,
       tag: p.tag.isEmpty ? null : p.tag,
-      // Always a child of a group, even alone, so it gets the compact grouped
-      // look (avatar on the left). See _syncSummary for the summary side.
       groupKey: group,
     );
     final payload = jsonEncode({'type': p.type, 'reference_id': p.referenceId});
@@ -413,14 +394,13 @@ class NotificationService {
       await _cancel(1, cancelledInviteTag);
     }
 
-    // Groups whose children may have changed: this push's own, and for an
-    // invite answer / cancel the pending-invites group it just left.
+    // The pending-invites stack: a new pending invite joins it; an answer or
+    // a cancelled workout takes its own notification out of the count.
     const pendingGroup = 'gym_buddy_invites';
-    final leaving = cancelledInviteTag ?? (p.tag.isEmpty ? null : p.tag);
-    await _syncSummary(group,
-        leavingTag: group == pendingGroup ? null : leaving, joining: (p.tag, p.title, p.body));
-    if (!pendingInvite && (channel.id == pendingGroup || cancelledInviteTag != null)) {
-      await _syncSummary(pendingGroup, leavingTag: leaving);
+    if (group != null) {
+      await _syncSummary(pendingGroup, joining: (p.tag, p.title, p.body));
+    } else if (channel.id == pendingGroup || cancelledInviteTag != null) {
+      await _syncSummary(pendingGroup, leavingTag: cancelledInviteTag ?? p.tag);
     }
   }
 
@@ -434,14 +414,8 @@ class NotificationService {
     }
   }
 
-  static bool _isPendingInvite(String type) =>
-      type == 'invite_received' || type == 'invite_rescheduled';
-
-  /// One summary per group, posted while the group has children and
-  /// cancelled when the last one leaves (no ghost summary). Android shows a
-  /// lone child on its own and the summary only once there are two. Pending
-  /// invites are a group of their own, so "N invites" counts exactly the
-  /// invites still waiting.
+  /// The summary of the pending-invites stack: posted while it has children,
+  /// cancelled when the last one leaves (no ghost summary).
   static Future<void> _syncSummary(String group,
       {String? leavingTag, (String, String, String)? joining}) async {
     try {
@@ -468,8 +442,8 @@ class NotificationService {
         await _cancel(2, summaryTag);
         return;
       }
-      final channel = channelFor(group.replaceAll('_done', ''));
-      final label = summaryLabelFor(group);
+      final channel = channelFor(group);
+      const label = 'invites';
       await _localNotifications.show(
         2,
         '${lines.length} $label',
@@ -493,7 +467,7 @@ class NotificationService {
             ),
           ),
         ),
-        payload: jsonEncode({'type': group == 'gym_buddy_invites' ? 'invite_received' : ''}),
+        payload: jsonEncode({'type': 'invite_received'}),
       );
     } catch (e) {
       debugLog('⚠️ summary failed: $e');
