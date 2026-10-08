@@ -93,10 +93,21 @@ class _HomeScreenState extends State<HomeScreen> {
       const ShopPage(),
       const ProfilePage(),
     ];
+    NotificationService.tabRequest.addListener(_openRequestedTab);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openRequestedTab());
+  }
+
+  /// A tapped push asked for a tab (see NotificationService.tabRequest).
+  void _openRequestedTab() {
+    final tab = NotificationService.tabRequest.value;
+    if (tab == null || !mounted) return;
+    NotificationService.tabRequest.value = null;
+    _onTabChanged(tab);
   }
 
   @override
   void dispose() {
+    NotificationService.tabRequest.removeListener(_openRequestedTab);
     _tabPageController.dispose();
     LiveEventToast.dashboardTabActive = false;
     super.dispose();

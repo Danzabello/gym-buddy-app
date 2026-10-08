@@ -152,7 +152,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'bad_request' }), { status: 400 })
     }
     // data: only these keys are forwarded, each a short string (or absent).
-    const DATA_KEYS = ['avatar_id', 'avatar_border', 'ring_hex', 'sender_name', 'streak']
+    const DATA_KEYS = ['avatar_id', 'avatar_border', 'ring_hex', 'sender_name', 'streak', 'style']
     const extra: Record<string, string> = {}
     if (data != null) {
       if (typeof data !== 'object' || Array.isArray(data)) {
@@ -417,6 +417,7 @@ function buildMessage(mode: string, p: {
       ring_hex: p.extra.ring_hex ?? '',
       sender_name: p.extra.sender_name ?? '',
       streak: p.extra.streak ?? '',
+      style: p.extra.style ?? '',
     },
     android: { priority: 'high', ttl: `${ttl}s` },
   }

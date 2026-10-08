@@ -1,17 +1,231 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import '../widgets/avatars/animated_bear.dart';
 import '../widgets/live_event_toast.dart';
+import '../widgets/user_avatar.dart';
 
-// Handle background messages (must be top-level function)
+// ── Push payload (data-only pushes from send-notification) ──────────────────
+
+/// One push as send-notification's data message carries it. Every field is a
+/// string; missing ones are ''.
+class PushPayload {
+  final String title, body, type, referenceId, kind, color, channel, tag;
+  final String avatarId, avatarBorder, ringHex, senderName, streak, style;
+
+  const PushPayload({
+    required this.title,
+    required this.body,
+    this.type = '',
+    this.referenceId = '',
+    this.kind = '',
+    this.color = '',
+    this.channel = '',
+    this.tag = '',
+    this.avatarId = '',
+    this.avatarBorder = '',
+    this.ringHex = '',
+    this.senderName = '',
+    this.streak = '',
+    this.style = '',
+  });
+
+  /// Null when there is nothing to show (no title): a notification-mode push
+  /// the system already drew, or a malformed one.
+  static PushPayload? fromData(Map<String, dynamic> d) {
+    String s(String k) => (d[k] ?? '').toString();
+    if (s('title').isEmpty) return null;
+    return PushPayload(
+      title: s('title'),
+      body: s('body'),
+      type: s('type'),
+      referenceId: s('reference_id'),
+      kind: s('kind'),
+      color: s('color'),
+      channel: s('channel'),
+      tag: s('tag'),
+      avatarId: s('avatar_id'),
+      avatarBorder: s('avatar_border'),
+      ringHex: s('ring_hex'),
+      senderName: s('sender_name'),
+      streak: s('streak'),
+      style: s('style'),
+    );
+  }
+
+  bool get hasSender => senderName.isNotEmpty || avatarId.isNotEmpty;
+}
+
+/// Notification accent per kind. The server sends `color` too; this is the
+/// fallback when it doesn't. (Raw hex: notification accents, not app UI.)
+const Map<String, Color> kindColors = {
+  'orange': Color(0xFFEA580C), // your move
+  'lavender': Color(0xFFA99BF5), // people
+  'emerald': Color(0xFF50C878), // done
+  'amber': Color(0xFFFBBF24), // running out of time
+  'red': Color(0xFFF87171), // ended
+  'grey': Color(0xFFB9CFC3), // info
+};
+
+/// Ring when the sender has no Ring Color equipped.
+const Color kDefaultRingColor = Color(0xFF50C878);
+
+Color? parseHexColor(String? hex) {
+  final m = RegExp(r'^#([0-9A-Fa-f]{6})$').firstMatch(hex ?? '');
+  return m == null ? null : Color(0xFF000000 | int.parse(m.group(1)!, radix: 16));
+}
+
+Color colorForPush(PushPayload p) =>
+    parseHexColor(p.color) ?? kindColors[p.kind] ?? kindColors['grey']!;
+
+const String kLegacyChannelId = 'gym_buddy_high_importance';
+
+/// The app's channels. Vibration and sound are fixed once a channel exists
+/// on a device, so they are set here and never changed in place.
+final List<AndroidNotificationChannel> kPushChannels = [
+  const AndroidNotificationChannel(kLegacyChannelId, 'Gym Buddy Notifications',
+      description: 'Streak alerts, buddy check-ins, and workout reminders',
+      importance: Importance.high),
+  AndroidNotificationChannel('gym_buddy_handshake', 'Workouts with a buddy',
+      description: "Time to start, your buddy is here, nudges",
+      importance: Importance.high,
+      vibrationPattern: Int64List.fromList([0, 150, 120, 150])), // two short
+  AndroidNotificationChannel('gym_buddy_invites', 'Workout invites',
+      description: 'Invites and their answers',
+      importance: Importance.high,
+      vibrationPattern: Int64List.fromList([0, 250])), // one
+  AndroidNotificationChannel('gym_buddy_streaks', 'Streaks',
+      description: 'Check-ins, milestones and streak warnings',
+      importance: Importance.defaultImportance,
+      playSound: false,
+      vibrationPattern: Int64List.fromList([0, 700])), // one long, no sound
+  AndroidNotificationChannel('gym_buddy_friends', 'Friends',
+      description: 'Friend requests',
+      importance: Importance.high,
+      vibrationPattern: Int64List.fromList([0, 250])),
+  AndroidNotificationChannel('gym_buddy_coach_max', 'Coach Max',
+      description: 'Coach Max check-ins',
+      importance: Importance.defaultImportance,
+      vibrationPattern: Int64List.fromList([0, 250])),
+];
+
+AndroidNotificationChannel channelFor(String? id) =>
+    kPushChannels.firstWhere((c) => c.id == id, orElse: () => kPushChannels.first);
+
+/// Home tab a tapped push opens: 0 Workout Schedule, 1 Friends, 2 Dashboard.
+int? tabForType(String? type) {
+  switch (type) {
+    case 'invite_received':
+    case 'invite_accepted':
+    case 'invite_declined':
+    case 'invite_expired':
+    case 'invite_rescheduled':
+    case 'workout_cancelled':
+    case 'time_to_start':
+    case 'buddy_tapped_first':
+    case 'started':
+    case 'nudge':
+    case 'cant_make_it':
+    case 'buddy_left':
+    case 'buddy_finished':
+    case 'still_going':
+    case 'before_auto':
+    case 'workout_overtime':
+    case 'workout_invite':
+    case 'workout_accepted':
+    case 'workout_declined':
+      return 0;
+    case 'friend_request':
+    case 'friend_accepted':
+      return 1;
+    case 'buddy_checked_in':
+    case 'buddy_nudge':
+    case 'streak_milestone':
+    case 'streak_broken':
+    case 'streak_danger':
+    case 'coach_max_motivational':
+      return 2;
+  }
+  return null;
+}
+
+// ── Avatar bitmap for the large icon ────────────────────────────────────────
+
+/// Same fill as the avatar circles on the dashboard (Emerald Ink clay surface).
+const Color _avatarFill = Color(0xFF1D4A35);
+
+/// The sender's avatar as the app draws it (bear painter, else the emoji
+/// glyph) in a ring of [ringHex] (default emerald; thicker for 'bold').
+/// Cached on disk per avatar + border + ring.
+Future<Uint8List> renderAvatarPng(String? avatarId, String? border, String? ringHex,
+    {int size = 192, bool useCache = true}) async {
+  final ring = parseHexColor(ringHex) ?? kDefaultRingColor;
+  final key = '${avatarId ?? 'none'}_${border ?? 'simple'}_${ring.toARGB32().toRadixString(16)}_$size';
+  File? cached;
+  if (useCache) {
+    try {
+      cached = File('${Directory.systemTemp.path}/push_avatar_$key.png');
+      if (await cached.exists()) return await cached.readAsBytes();
+    } catch (_) {
+      cached = null;
+    }
+  }
+
+  final s = size.toDouble();
+  final center = Offset(s / 2, s / 2);
+  final stroke = s * (border == 'bold' ? 0.10 : 0.06);
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  canvas.drawCircle(center, s / 2, Paint()..color = _avatarFill);
+  canvas.save();
+  canvas.clipPath(Path()..addOval(Rect.fromCircle(center: center, radius: s / 2 - stroke)));
+  final inner = s - 2 * stroke;
+  if (avatarId == 'bear') {
+    final art = inner * 0.86; // same share as avatarArt
+    canvas.translate((s - art) / 2, (s - art) / 2);
+    paintStillBear(canvas, Size.square(art));
+  } else {
+    final tp = TextPainter(
+      text: TextSpan(
+          text: UserAvatar.avatars[avatarId] ?? UserAvatar.avatars['lion'],
+          style: TextStyle(fontSize: inner * 0.6)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
+  }
+  canvas.restore();
+  canvas.drawCircle(
+      center,
+      s / 2 - stroke / 2,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..color = ring);
+
+  final image = await recorder.endRecording().toImage(size, size);
+  final png = (await image.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List();
+  try {
+    await cached?.writeAsBytes(png, flush: true);
+  } catch (_) {}
+  return png;
+}
+
+// ── Background handler ──────────────────────────────────────────────────────
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  if (kDebugMode) debugLog('🔔 Background message: ${message.notification?.title}');
+  final push = PushPayload.fromData(message.data);
+  if (push == null) return; // notification message: the system already showed it
+  await NotificationService.showPush(push);
 }
 
 class NotificationService {
@@ -20,16 +234,15 @@ class NotificationService {
   NotificationService._internal();
 
   FirebaseMessaging? _fcm;
-  final FlutterLocalNotificationsPlugin _localNotifications =
+  static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
+  static bool _localReady = false;
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
-    'gym_buddy_high_importance',
-    'Gym Buddy Notifications',
-    description: 'Streak alerts, buddy check-ins, and workout reminders',
-    importance: Importance.high,
-  );
+  /// A tapped push asks HomeScreen for this tab; HomeScreen clears it.
+  static final ValueNotifier<int?> tabRequest = ValueNotifier<int?>(null);
+
+  static const String _invitesSummaryTag = 'invites_summary';
 
   Future<void> initialize() async {
     debugLog('🚀 NotificationService.initialize() STARTING');
@@ -72,32 +285,141 @@ class NotificationService {
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
       FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
 
+      // Cold start from a tap: a system-drawn push, or one this app drew.
+      final initial = await _fcm?.getInitialMessage();
+      if (initial != null) _handleNotificationTap(initial);
+      final launch = await _localNotifications.getNotificationAppLaunchDetails();
+      if (launch?.didNotificationLaunchApp == true) {
+        _routePayload(launch!.notificationResponse?.payload);
+      }
+
       debugLog('✅ NotificationService initialized!');
     } catch (e) {
       debugLog('❌ NotificationService error: $e');
     }
   }
 
-  Future<void> _setupLocalNotifications() async {
-    final androidPlugin = _localNotifications
+  /// Plugin init + channels, idempotent. Runs in the main isolate and again
+  /// in the background isolate (each has its own plugin state).
+  static Future<void> _ensureLocal() async {
+    if (_localReady) return;
+    final android = _localNotifications
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    await androidPlugin?.createNotificationChannel(_channel);
-
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(android: androidSettings);
-
+    for (final c in kPushChannels) {
+      await android?.createNotificationChannel(c);
+    }
     await _localNotifications.initialize(
-      initSettings,
-      onDidReceiveNotificationResponse: (details) {
-        debugLog('🔔 Notification tapped: ${details.payload}');
-      },
+      const InitializationSettings(
+          android: AndroidInitializationSettings('ic_stat_gym_buddy')),
+      onDidReceiveNotificationResponse: (r) => _routePayload(r.payload),
     );
+    _localReady = true;
+  }
 
+  Future<void> _setupLocalNotifications() async {
+    await _ensureLocal();
     await _fcm?.setForegroundNotificationPresentationOptions(
       alert: true,
       badge: true,
       sound: true,
     );
+  }
+
+  /// Draws one data-only push. Always shows something: if the avatar fails
+  /// or is slow, the same notification goes out without it.
+  static Future<void> showPush(PushPayload p) async {
+    await _ensureLocal();
+    final channel = channelFor(p.channel);
+
+    Uint8List? avatar;
+    if (p.hasSender) {
+      try {
+        avatar = await renderAvatarPng(p.avatarId, p.avatarBorder, p.ringHex)
+            .timeout(const Duration(seconds: 3));
+      } catch (e) {
+        debugLog('⚠️ push avatar failed, showing without it: $e');
+      }
+    }
+
+    // Spike: MessagingStyle puts the sender (avatar) at the left of the card.
+    final StyleInformation style = p.style == 'messaging' && avatar != null
+        ? MessagingStyleInformation(
+            Person(name: p.senderName, icon: ByteArrayAndroidIcon(avatar)),
+            conversationTitle: p.title,
+            messages: [
+              Message(p.body, DateTime.now(),
+                  Person(name: p.title, icon: ByteArrayAndroidIcon(avatar))),
+            ],
+          )
+        : BigTextStyleInformation(p.body);
+
+    final details = AndroidNotificationDetails(
+      channel.id,
+      channel.name,
+      channelDescription: channel.description,
+      importance: channel.importance,
+      priority: channel.importance == Importance.high ? Priority.high : Priority.defaultPriority,
+      icon: 'ic_stat_gym_buddy',
+      color: colorForPush(p),
+      largeIcon: avatar == null || p.style == 'messaging' ? null : ByteArrayAndroidBitmap(avatar),
+      styleInformation: style,
+      tag: p.tag.isEmpty ? null : p.tag,
+      groupKey: channel.id,
+    );
+    final payload = jsonEncode({'type': p.type, 'reference_id': p.referenceId});
+    // With a tag, (tag, id) is the identity: a new push with the same tag
+    // replaces the old one instead of stacking.
+    final id = p.tag.isEmpty ? DateTime.now().millisecondsSinceEpoch ~/ 1000 : 1;
+    await _localNotifications.show(id, p.title, p.body, NotificationDetails(android: details),
+        payload: payload);
+
+    if (channel.id == 'gym_buddy_invites') await _showInvitesSummary(channel);
+  }
+
+  /// Invites from several friends collapse into one stack with a count.
+  static Future<void> _showInvitesSummary(AndroidNotificationChannel channel) async {
+    try {
+      final android = _localNotifications
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      final active = await android?.getActiveNotifications() ?? const [];
+      final invites = active
+          .where((n) => n.channelId == channel.id && n.tag != _invitesSummaryTag)
+          .toList();
+      if (invites.length < 2) return;
+      await _localNotifications.show(
+        2,
+        '${invites.length} invites',
+        'Tap to see who wants to train',
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            channel.id,
+            channel.name,
+            icon: 'ic_stat_gym_buddy',
+            color: kindColors['lavender'],
+            tag: _invitesSummaryTag,
+            groupKey: channel.id,
+            setAsGroupSummary: true,
+            onlyAlertOnce: true,
+            styleInformation: InboxStyleInformation(
+              [for (final n in invites) n.title ?? ''],
+              summaryText: '${invites.length} invites',
+            ),
+          ),
+        ),
+        payload: jsonEncode({'type': 'invite_received'}),
+      );
+    } catch (e) {
+      debugLog('⚠️ invites summary failed: $e');
+    }
+  }
+
+  static void _routePayload(String? payload) {
+    if (payload == null || payload.isEmpty) return;
+    try {
+      final type = (jsonDecode(payload) as Map<String, dynamic>)['type'] as String?;
+      final tab = tabForType(type);
+      if (tab != null) tabRequest.value = tab;
+    } catch (_) {}
   }
 
   Future<void> _saveTokenToSupabase() async {
@@ -150,10 +472,12 @@ class NotificationService {
   /// user is on. No category filtering here: send-notification has already
   /// checked the user's settings before the push was ever sent.
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
-    debugLog('🔔 Foreground message: ${message.notification?.title}');
-
     final notification = message.notification;
-    if (notification == null) return;
+    // Data-only pushes carry their text in data.
+    final title = notification?.title ?? message.data['title'] as String?;
+    final body = notification?.body ?? message.data['body'] as String?;
+    debugLog('🔔 Foreground message: $title');
+    if (title == null || title.isEmpty) return;
 
     final type = message.data['type'] as String?;
 
@@ -166,14 +490,16 @@ class NotificationService {
     }
 
     LiveEventToast.show(
-      title: notification.title ?? 'Gym Buddy',
-      subtitle: notification.body,
+      title: title,
+      subtitle: body,
       icon: LiveEventToast.iconForType(type),
     );
   }
 
   void _handleNotificationTap(RemoteMessage message) {
     debugLog('🔔 Notification tapped: ${message.data['type']}');
+    final tab = tabForType(message.data['type'] as String?);
+    if (tab != null) tabRequest.value = tab;
   }
 
   Future<Map<String, dynamic>> getSettings() async {
