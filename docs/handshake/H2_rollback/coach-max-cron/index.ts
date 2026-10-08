@@ -6,16 +6,10 @@ const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 const COACH_MAX_ID = '00000000-0000-0000-0000-000000000001'
 
-// Coach Max fires between 07:00 and 17:00 in EACH HUMAN MEMBER'S OWN
-// timezone (user_profiles.timezone — trigger-validated IANA name; fallback
-// Europe/Dublin, matching the DB-side safe_user_tz()). DST-correct via the
-// IANA tz database — never a hardcoded UTC offset.
 const DEFAULT_ACTIVE_START = 7
 const DEFAULT_ACTIVE_END = 17
 const FALLBACK_TZ = 'Europe/Dublin'
 
-// Streak-danger cutoff, in the MEMBER'S OWN zone (PART 3) — not UTC. Their
-// local midnight is what actually ends the day, per reconcile_stale_streaks.
 const DANGER_HOUR = 18
 
 function tzParts(d: Date, tz: string): Record<string, string> {
@@ -32,15 +26,12 @@ function tzParts(d: Date, tz: string): Record<string, string> {
   return Object.fromEntries(fmt.formatToParts(d).map((x) => [x.type, x.value]))
 }
 
-// Wall-clock "HH:MM:SS" in the given zone.
 function localTimeOfDay(d: Date, tz: string): string {
   const p = tzParts(d, tz)
-  const hh = p.hour === '24' ? '00' : p.hour // en-GB midnight edge
+  const hh = p.hour === '24' ? '00' : p.hour
   return `${hh}:${p.minute}:${p.second}`
 }
 
-// Calendar date "YYYY-MM-DD" in the given zone — matches the per-user
-// check_in_date labels (safe_user_tz frame) used by the streak RPCs.
 function localDateStr(d: Date, tz: string): string {
   const p = tzParts(d, tz)
   return `${p.year}-${p.month}-${p.day}`
@@ -48,16 +39,6 @@ function localDateStr(d: Date, tz: string): string {
 
 serve(async (req) => {
   try {
-    // ============================================
-    // AUTHORIZATION (same pattern as send-notification)
-    // This is a scheduled service job, never called by a user. verify_jwt=true
-    // is NOT a gate on its own: the anon key is a valid project JWT and ships
-    // in plaintext inside the APK's bundled .env, so anyone with the APK could
-    // invoke this and force Coach Max check-ins, create schedule rows, and fan
-    // out streak-danger pushes. Only the service-role key may
-    // run it. pg_cron sends exactly that -- see cron.job id 1, which reads
-    // vault.decrypted_secrets 'service_role_key'.
-    // ============================================
     const bearer = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim()
     if (bearer !== SUPABASE_SERVICE_KEY) {
       console.log('⛔ coach-max-cron: caller is not the service role')
@@ -67,16 +48,11 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
     const now = new Date()
-    // The UTC date is a log label and a lower bound for range queries, nothing
-    // more. Every date this job acts on — scheduled_date, check_in_date, the
-    // danger cutoff in PART 3 — is a per-user local date in that member's own
-    // tz, matching the safe_user_tz labels the streak RPCs use.
     const todayStr = now.toISOString().split('T')[0]
     const recentDateStr = new Date(now.getTime() - 2 * 86400000).toISOString().split('T')[0]
 
     console.log(`⏰ Coach Max cron: UTC ${todayStr} ${now.toISOString().split('T')[1].slice(0, 8)}`)
 
-    // ── PART 1: Create today's schedule per member, in THEIR local today ──
     const { data: coachMaxTeamMembers } = await supabase
       .from('team_members')
       .select('user_id, buddy_teams!inner(is_coach_max_team)')
@@ -85,8 +61,6 @@ serve(async (req) => {
 
     const memberIds = [...new Set((coachMaxTeamMembers ?? []).map((m: any) => m.user_id))]
 
-    // One tz lookup for everyone (column is trigger-validated; fallback
-    // mirrors safe_user_tz).
     const { data: tzRows } = await supabase
       .from('user_profiles')
       .select('id, timezone')
@@ -95,8 +69,6 @@ serve(async (req) => {
       (tzRows ?? []).map((r: any) => [r.id, r.timezone || FALLBACK_TZ]),
     )
 
-    // Existing schedules near today — a date range covers every tz's "today"
-    // (the old single-date .eq can't, now that dates are per-user).
     const { data: allSchedules } = await supabase
       .from('coach_max_schedule')
       .select('user_id, scheduled_date')
@@ -128,10 +100,6 @@ serve(async (req) => {
       console.log(`📅 Scheduled Coach Max for user ${userId} at ${scheduledTime} (${tz} ${userToday})`)
     }
 
-    // ── PART 2: Process pending check-ins where time has passed ──
-    // Fire when the schedule's date is the member's CURRENT local date and
-    // the wall-clock time has passed in the member's own zone. (Stale
-    // schedules from previous local days are ignored, as before.)
     const { data: pendingSchedules, error: fetchError } = await supabase
       .from('coach_max_schedule')
       .select('id, user_id, scheduled_date, scheduled_time')
@@ -188,9 +156,6 @@ serve(async (req) => {
           const streakId = streak.id
           const currentStreak = streak.current_streak ?? 0
 
-          // Coach Max's row is dated in the HUMAN member's local today
-          // (userToday = the schedule's per-user date), so it lands on the
-          // same label as the human's own check-in.
           const { data: existingCheckIn } = await supabase
             .from('daily_team_checkins')
             .select('id')
@@ -232,12 +197,21 @@ serve(async (req) => {
             await _updateStreak(supabase, streakId, userToday)
           }
 
-          // Copy lives in push_templates (coach_max_*), emojis removed.
-          await supabase.rpc('_send_push', {
-            p_user: user_id, p_key: _coachMaxKey(currentStreak),
-            p_vars: { n: currentStreak, next: currentStreak + 1 },
-            p_kind: 'emerald', p_channel: 'coach_max', p_type: 'coach_max_motivational',
-            p_ref: user_id, p_tag: `coach_${user_id}`, p_urgent: false, p_sender: COACH_MAX_ID,
+          const message = _getMotivationalMessage(currentStreak)
+
+          await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+            },
+            body: JSON.stringify({
+              user_id,
+              title: '🤖 Coach Max',
+              body: message,
+              type: 'coach_max_motivational',
+              batch_key: `coach_max_daily_${userToday}_${user_id}`,
+            }),
           })
 
           console.log(`✅ Processed Coach Max check-in for user ${user_id}`)
@@ -252,17 +226,6 @@ serve(async (req) => {
       console.log('✅ No due Coach Max check-ins right now')
     }
 
-    // ── PART 3: Streak danger, at 18:00 in EACH MEMBER'S OWN timezone ──
-    // Was one global fire at 18:00 UTC matching check-ins against the UTC
-    // date. That reached far-from-UTC members at the wrong local time: UTC+13
-    // got "check in before midnight" at 07:00 the following local morning,
-    // about a day that had already closed, and looked for a UTC-labelled row
-    // their own check-in would never have carried. Cutoff and date label are
-    // now both resolved in the member's own zone — the same
-    // user_profiles.timezone value safe_user_tz reads, so the same frame
-    // reconcile_stale_streaks judges the lapse in. The job runs hourly and
-    // every zone's 18:00 falls in exactly one of those runs (offsets are whole
-    // or half hours, so none is skipped).
     console.log('🚨 Streak danger sweep (per-member local cutoff)...')
 
     const { data: activeStreaks } = await supabase
@@ -272,9 +235,6 @@ serve(async (req) => {
       .gt('current_streak', 0)
 
     if (activeStreaks && activeStreaks.length > 0) {
-      // Members and zones for every team in play, in two lookups instead of
-      // per-streak queries inside the loop. PART 1's tzByUser only covers
-      // Coach Max teams, so danger needs its own.
       const dangerTeamIds = [...new Set(activeStreaks.map((s: any) => s.team_id))]
 
       const { data: dangerMembers } = await supabase
@@ -305,14 +265,11 @@ serve(async (req) => {
           const humanMembers = membersByTeam.get(teamId) ?? []
           if (humanMembers.length === 0) continue
 
-          // Whose local clock has just struck the cutoff? On most runs, nobody.
           const dueMembers = humanMembers.filter(
             (id: string) => Number(localTimeOfDay(now, zoneOf(id)).slice(0, 2)) === DANGER_HOUR,
           )
           if (dueMembers.length === 0) continue
 
-          // Two members in different zones can be on different local dates at
-          // the same instant, so fetch every date in play and match per member.
           const dueDates = [...new Set(dueMembers.map((id: string) => localDateStr(now, zoneOf(id))))]
 
           const { data: dueCheckIns } = await supabase
@@ -328,9 +285,6 @@ serve(async (req) => {
             checkedInByDate.set(c.check_in_date, forDate)
           }
 
-          // Same table/columns the break-day feature reads elsewhere
-          // (break_day_service.dart, reconcile_stale_streaks): an uncancelled
-          // row for the member's own local date means that day isn't at risk.
           const { data: dueBreaks } = await supabase
             .from('break_day_usage')
             .select('user_id, break_date')
@@ -345,10 +299,6 @@ serve(async (req) => {
             onBreakByDate.set(b.break_date, forDate)
           }
 
-          // Per-member, independent of any buddy: each member's push depends
-          // only on THEIR OWN check-in (and break) status for their own local
-          // day — a buddy checking in (or not) never silences this member's
-          // push, and vice versa.
           for (const userId of dueMembers) {
             const memberToday = localDateStr(now, zoneOf(userId))
             const checkedIn = checkedInByDate.get(memberToday) ?? new Set<string>()
@@ -356,11 +306,22 @@ serve(async (req) => {
             if (checkedIn.has(userId)) continue
             if (onBreakByDate.get(memberToday)?.has(userId)) continue
 
-            await supabase.rpc('_send_push', {
-              p_user: userId, p_key: currentStreak === 1 ? 'streak_danger_first' : 'streak_danger',
-              p_vars: { n: currentStreak }, p_kind: 'amber', p_channel: 'streaks',
-              p_type: 'streak_danger', p_ref: streakId, p_tag: `danger_${userId}`,
-              p_urgent: false, p_sender: null,
+            await fetch(`${SUPABASE_URL}/functions/v1/send-notification`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+              },
+              body: JSON.stringify({
+                user_id: userId,
+                title: '🔥 Streak in Danger!',
+                body: currentStreak === 1
+                  ? `Don't lose your first streak day! Check in before midnight!`
+                  : `Your ${currentStreak}-day streak ends at midnight — check in now!`,
+                type: 'streak_danger',
+                reference_id: streakId,
+                batch_key: `streak_danger_${userId}_${memberToday}`,
+              }),
             })
 
             console.log(
@@ -386,10 +347,6 @@ serve(async (req) => {
   }
 })
 
-// ── Generate random time within user's active (non-quiet) hours ──────────
-// Hours are the USER'S OWN local wall-clock (default 07:00–17:00); the
-// scheduled_time is later compared against localTimeOfDay(now, userTz), so
-// generation and firing share the same per-user frame.
 function _generateActiveWindowTime(notifSettings: any): string {
   let activeStart = DEFAULT_ACTIVE_START
   let activeEnd = DEFAULT_ACTIVE_END
@@ -415,7 +372,6 @@ function _generateActiveWindowTime(notifSettings: any): string {
   return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`
 }
 
-// ── Update streak when both have checked in ───────────────────────────────
 async function _updateStreak(supabase: any, streakId: string, today: string) {
   const { data, error } = await supabase.rpc('recompute_team_streak', {
     p_streak_id: streakId,
@@ -430,10 +386,26 @@ async function _updateStreak(supabase: any, streakId: string, today: string) {
   console.log(`🔥 Streak updated via recompute_team_streak →`, data)
 }
 
-// ── Motivational message template key (same tiers as before) ─────────────
-function _coachMaxKey(currentStreak: number): string {
-  return currentStreak === 0 ? 'coach_max_day1'
-    : currentStreak >= 30 ? 'coach_max_legend'
-    : currentStreak >= 7 ? 'coach_max_strong'
-    : 'coach_max_daily'
+function _getMotivationalMessage(currentStreak: number): string {
+  const messages =
+    currentStreak === 0 ? [
+      "Day 1 starts now! Let's build something great! 💪",
+      "Every champion started somewhere. Today is your day!",
+      "Ready to begin? Let's go! 🚀",
+    ] : currentStreak >= 30 ? [
+      `${currentStreak} DAYS! You're a legend! 🏆`,
+      `This ${currentStreak}-day streak is INSANE! Keep it alive! 🔥`,
+      `Champion mentality! ${currentStreak} days strong! 👑`,
+    ] : currentStreak >= 7 ? [
+      `${currentStreak} days strong! You're building something special! 🔥`,
+      `Look at that ${currentStreak}-day streak! Consistency is key! 💪`,
+      `${currentStreak} consecutive days! You're on fire! 🔥`,
+    ] : [
+      "Ready to work? Let's do this! 💪",
+      "Another day, another opportunity! Let's go!",
+      `Day ${currentStreak + 1} awaits! Let's make it count! 🔥`,
+      "Keep the momentum going! 🚀",
+    ]
+
+  return messages[Math.floor(Math.random() * messages.length)]
 }
