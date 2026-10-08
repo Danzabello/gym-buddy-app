@@ -626,24 +626,6 @@ class TeamStreakService {
     }
   }
 
-  /// Check in [userId] (a co-op partner) across all their active teams.
-  /// Validated server-side against the real [workoutId] session that
-  /// proves they're a genuine participant — replaces the old
-  /// friend-on-shared-team client insert (S3 audit fix).
-  Future<int> checkInAllTeamsForUser(String userId, {required String workoutId}) async {
-    try {
-      final count = await _supabase.rpc('checkin_team_for_user', params: {
-        'p_target_user_id': userId,
-        'p_workout_id': workoutId,
-      });
-      debugLog('✅ Proxy check-in: $count teams for $userId');
-      return count as int? ?? 0;
-    } catch (e) {
-      debugLog('❌ Error in checkInAllTeamsForUser: $e');
-      return 0;
-    }
-  }
-
   /// Find the team that contains both the current user and their buddy
   /// Returns the team ID or null if not found
   Future<String?> findTeamWithBuddy(String userId, String buddyId) async {

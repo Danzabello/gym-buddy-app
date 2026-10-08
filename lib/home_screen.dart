@@ -17,21 +17,18 @@ import 'services/team_sync_service.dart';
 import 'package:flutter/foundation.dart';
 import 'services/break_day_service.dart';
 import 'widgets/friends_page_modern.dart';
-import 'widgets/workout_invites_card.dart';
-import 'widgets/completed_workouts_section.dart';
-import 'widgets/workout_celebration.dart';
+import 'pages/schedule_page.dart';
+import 'services/handshake_service.dart';
 import 'widgets/checkin_ignite_video.dart';
 import 'widgets/streak_badge.dart';
 import 'widgets/custom_streak_selector.dart';
 import 'widgets/buddy_profile_sheet.dart';
 import 'services/nickname_service.dart';
 import 'services/nudge_service.dart';
-import 'widgets/workout_card.dart';
 import 'widgets/schedule_workout_sheet.dart';
 import 'widgets/workout_checkin_sheet.dart';
 import 'services/workout_history_service.dart';
 import 'widgets/workout_selection_modal.dart';
-import 'widgets/workout_join_checker.dart';
 import 'pages/notification_settings_page.dart';
 import 'pages/shop_page.dart';
 import 'pages/notice_screens.dart';
@@ -689,10 +686,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _confettiControllerRight = ConfettiController(duration: const Duration(seconds: 3));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupAppLifecycleListener();
-
-      if (mounted) {
-        WorkoutJoinChecker.checkForPendingJoins(context);
-      }
     });
   }
 
@@ -1557,7 +1550,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
     // ── Priority 1: Active workout (in_progress) ──
     final activeWorkout = _todaysWorkouts.firstWhere(
-      // Skip a workout whose MY side is cancelled (same rule as getUpcomingWorkouts).
+      // Skip a workout whose MY side is cancelled (same rule as get_workout_card).
       (w) => w['status'] == 'in_progress' &&
           !((w['user_id'] == currentUserId ? w['creator_cancelled'] : w['buddy_cancelled']) ?? false),
       orElse: () => {},
@@ -1589,10 +1582,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           mainAxisSize: MainAxisSize.min,
           children: [
             _trayIconAction(Icons.check, c.success,
-                () => _acceptWorkoutInviteDash(pendingInvite['id'])),
+                () => _answerInviteDash(pendingInvite['id'], accept: true)),
             const SizedBox(width: 8),
             _trayIconAction(Icons.close, danger,
-                () => _declineWorkoutInviteDash(pendingInvite['id'])),
+                () => _answerInviteDash(pendingInvite['id'], accept: false)),
           ],
         ),
         inTray: true,
@@ -3501,7 +3494,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         // ✅ Active workout exists - go directly to timer with saved details
         if (!mounted) return;
 
-        final linkedWorkoutId = activeSession['workout_id'] as String?;
+        // A shared workout is run and finished from the Workout Schedule card.
+        if (activeSession['workout_id'] != null) {
+          final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+          homeState?._onTabChanged(0);
+          return;
+        }
 
         final completed = await WorkoutCheckInSheet.show(
           context,
@@ -3509,35 +3507,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           workoutEmoji: activeSession['workout_emoji'] ?? '💪',
           plannedDuration: activeSession['planned_duration'] ?? 30,
           onCheckInComplete: () async {
-            // A session linked to a workouts row must complete that row too —
-            // otherwise it hangs in_progress until the 3-hour sweep, blocking
-            // both users and losing the partner-completion credit.
-            //
-            // completeWorkoutWithDuration and checkInAllTeams don't depend on
-            // each other's results (verified: checkInAllTeams and everything
-            // it calls never touch the workouts table), so they run
-            // concurrently. Workout achievements DO read workouts.status —
-            // so that check is pulled out and sequenced after both finish,
-            // never run from inside checkInAllTeams itself.
-            final Map<String, dynamic> result;
-            if (linkedWorkoutId != null) {
-              final results = await (
-                _workoutService.completeWorkoutWithDuration(linkedWorkoutId),
-                _teamStreakService.checkInAllTeams(
-                  workoutName: activeSession['workout_type'] ?? 'Workout',
-                  workoutEmoji: activeSession['workout_emoji'] ?? '💪',
-                  durationMinutes: activeSession['planned_duration'] ?? 30,
-                  workoutId: linkedWorkoutId,
-                ),
-              ).wait;
-              result = results.$2;
-            } else {
-              result = await _teamStreakService.checkInAllTeams(
-                workoutName: activeSession['workout_type'] ?? 'Workout',
-                workoutEmoji: activeSession['workout_emoji'] ?? '💪',
-                durationMinutes: activeSession['planned_duration'] ?? 30,
-              );
-            }
+            final result = await _teamStreakService.checkInAllTeams(
+              workoutName: activeSession['workout_type'] ?? 'Workout',
+              workoutEmoji: activeSession['workout_emoji'] ?? '💪',
+              durationMinutes: activeSession['planned_duration'] ?? 30,
+            );
 
             if (result['success'] == true) {
               HapticFeedback.heavyImpact();
@@ -3548,8 +3522,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               await _showCheckInConfirmation(
                   result['message'] ?? 'Check-in successful!');
 
-              // 🏆 Show workout achievement toasts — checked now that both
-              // completeWorkoutWithDuration and checkInAllTeams are done.
+              // 🏆 Show workout achievement toasts.
               if ((result['teams_updated'] as int? ?? 0) > 0) {
                 final workoutAchievements = await AchievementService().checkWorkoutAchievements(
                   durationMinutes: activeSession['planned_duration'] ?? 30,
@@ -3880,48 +3853,26 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
-  Future<void> _acceptWorkoutInviteDash(String workoutId) async {
-    final success = await _workoutService.acceptWorkoutInvitation(workoutId);
-    if (!mounted) return;
-    
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Workout invitation accepted! 🎉'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      _loadStreakData();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to accept invitation'),
-          backgroundColor: Colors.red,
-        ),
-      );
+  /// Accept/decline from the tray go through the same server RPCs as the
+  /// Workout Schedule card. An overlap is decided there, not here.
+  Future<void> _answerInviteDash(String workoutId, {required bool accept}) async {
+    final svc = HandshakeService();
+    final home = context.findAncestorStateOfType<_HomeScreenState>();
+    String text;
+    try {
+      final r = accept ? await svc.accept(workoutId) : await svc.decline(workoutId);
+      text = r['state'] == 'overlap'
+          ? 'This overlaps with another workout. Open Workout Schedule to decide.'
+          : accept ? 'Workout invitation accepted' : 'Workout invitation declined';
+      if (r['state'] == 'overlap') {
+        home?._onTabChanged(0);
+      }
+    } catch (e) {
+      text = HandshakeError.from(e).message();
     }
-  }
-
-  Future<void> _declineWorkoutInviteDash(String workoutId) async {
-    final success = await _workoutService.declineWorkoutInvitation(workoutId);
     if (!mounted) return;
-    
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Workout invitation declined'),
-          backgroundColor: Colors.grey,
-        ),
-      );
-      _loadStreakData();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to decline invitation'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    _loadStreakData();
   }
 
   void _showAllStreaks() {
@@ -5131,704 +5082,6 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
     );
   }
 }
-
-// Schedule Page with Real Functionality
-class SchedulePage extends StatefulWidget {
-  const SchedulePage({super.key});
-
-  @override
-  State<SchedulePage> createState() => _SchedulePageState();
-}
-
-class _SchedulePageState extends State<SchedulePage> {
-  final WorkoutService _workoutService = WorkoutService();
-
-  int _completedRefreshTrigger = 0;
-
-  
-  List<Map<String, dynamic>> _upcomingWorkouts = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    loadData();
-    _debugCheckInvites();
-  }
-
-  Future<void> _debugCheckInvites() async {
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    
-    final allInvites = await Supabase.instance.client
-        .from('workout_invites')
-        .select('*');
-    
-    debugLog('🔍 DEBUG: ALL invites in database: $allInvites');
-    
-    final myInvites = await Supabase.instance.client
-        .from('workout_invites')
-        .select('*')
-        .eq('recipient_id', currentUserId!);
-    
-    debugLog('🔍 DEBUG: My invites as recipient: $myInvites');
-  }
-
-  Future<void> loadData() async {
-    if (!mounted) return; // ✅ CHECK MOUNTED at start
-    
-    setState(() {
-      _isLoading = true;
-    });
-
-    final workouts = await _workoutService.getUpcomingWorkouts();
-
-    if (!mounted) return; // ✅ CHECK MOUNTED before setState
-    
-    setState(() {
-      _upcomingWorkouts = workouts.where((w) => 
-        w['status'] != 'completed' && w['status'] != 'cancelled'
-      ).toList();
-      _isLoading = false;
-      _completedRefreshTrigger++;
-    });
-  }
-
-  void _showCreateWorkoutDialog() {
-    ScheduleWorkoutSheet.show(
-      context,
-      onWorkoutScheduled: loadData,
-    );
-  }
-
-  Future<void> _startWorkout(String workoutId) async {
-    // Get the workout details first
-    final workout = _upcomingWorkouts.firstWhere(
-      (w) => w['id'] == workoutId,
-      orElse: () => {},
-    );
-    
-    if (workout.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Workout not found'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    // Check if buddy has accepted (if this is a buddy workout)
-    if (workout['buddy_id'] != null && workout['buddy_status'] != 'accepted') {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Your buddy needs to accept the workout invitation first!'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    // Mark workout as in_progress in the database
-    final started = await _workoutService.startWorkout(workoutId);
-    if (!started) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to start workout'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    // Get workout details for the timer
-    final workoutType = workout['workout_type'] ?? 'Workout';
-    final plannedDuration = workout['planned_duration_minutes'] ?? 30;
-    
-    // Map workout type to emoji
-    String workoutEmoji = '💪';
-    switch (workoutType.toLowerCase()) {
-      case 'cardio':
-        workoutEmoji = '🏃';
-        break;
-      case 'strength':
-        workoutEmoji = '💪';
-        break;
-      case 'hiit':
-        workoutEmoji = '⚡';
-        break;
-      case 'leg day':
-      case 'lower body':
-        workoutEmoji = '🦵';
-        break;
-      case 'upper body':
-        workoutEmoji = '💪';
-        break;
-      case 'full body':
-        workoutEmoji = '🏋️';
-        break;
-      case 'yoga':
-        workoutEmoji = '🧘';
-        break;
-      default:
-        workoutEmoji = '🏋️';
-    }
-
-    // Get buddy name for display
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    final isCreator = workout['user_id'] == currentUserId;
-    String? buddyName;
-    if (isCreator && workout['buddy'] != null) {
-      buddyName = workout['buddy']['display_name'];
-    } else if (!isCreator && workout['creator'] != null) {
-      buddyName = workout['creator']['display_name'];
-    }
-
-    // Link + anchor this user's session to the workout row before opening
-    // the sheet: the timer then resumes the real clock (not zero), and the
-    // sheet's cancel path takes the fair cancelWorkout logic instead of the
-    // solo sweep.
-    try {
-      final fresh = await Supabase.instance.client
-          .from('workouts')
-          .select('workout_started_at')
-          .eq('id', workoutId)
-          .single();
-      await Supabase.instance.client.from('active_checkin_sessions').upsert({
-        'user_id': currentUserId,
-        'started_at': fresh['workout_started_at'] ??
-            DateTime.now().toUtc().toIso8601String(),
-        'planned_duration': plannedDuration,
-        'workout_type': workoutType,
-        'workout_emoji': workoutEmoji,
-        'workout_id': workoutId,
-      }, onConflict: 'user_id');
-    } catch (e) {
-      debugLog('⚠️ Could not link session to workout: $e');
-    }
-
-    if (!mounted) return;
-
-    // ✅ Open the WorkoutCheckInSheet timer!
-    final completed = await WorkoutCheckInSheet.show(
-      context,
-      workoutType: buddyName != null ? '$workoutType with $buddyName' : workoutType,
-      workoutEmoji: workoutEmoji,
-      plannedDuration: plannedDuration,
-      onCheckInComplete: () async {
-        // Complete the scheduled workout and check in to all team streaks
-        // concurrently — neither depends on the other's result. Workout
-        // achievements DO read workouts.status though, so that check is
-        // sequenced after both finish rather than run from inside
-        // checkInAllTeams itself.
-        final teamStreakService = TeamStreakService();
-        final results = await (
-          _workoutService.completeWorkoutWithDuration(workoutId),
-          teamStreakService.checkInAllTeams(
-            workoutName: workoutType,
-            workoutEmoji: workoutEmoji,
-            durationMinutes: plannedDuration,
-            workoutId: workoutId,
-          ),
-        ).wait;
-        final result = results.$2;
-
-        if (result['success'] == true) {
-          HapticFeedback.heavyImpact();
-          if ((result['teams_updated'] as int? ?? 0) > 0) {
-            await AchievementService().checkWorkoutAchievements(
-              durationMinutes: plannedDuration,
-              workoutType: workoutType,
-            );
-          }
-        }
-        return result['partner_bonus_earned'] == true;
-      },
-    );
-
-    // Refresh the list regardless of completion
-    if (mounted) {
-      loadData();
-      
-      if (completed == true) {
-        // Show celebration for buddy workouts!
-        final buddy = workout['buddy'];
-        final creator = workout['creator'];
-        String? celebrationBuddyName;
-        
-        if (isCreator && buddy != null) {
-          celebrationBuddyName = buddy['display_name'];
-        } else if (!isCreator && creator != null) {
-          celebrationBuddyName = creator['display_name'];
-        }
-        
-        WorkoutCelebration.show(
-          context,
-          workoutType: workoutType,
-          duration: plannedDuration,
-          buddyName: celebrationBuddyName,
-        );
-      }
-    }
-  }
-
-  Future<void> _completeWorkout(String workoutId) async {
-    final workout = _upcomingWorkouts.firstWhere(
-      (w) => w['id'] == workoutId,
-      orElse: () => <String, dynamic>{},
-    );
-    
-    if (workout.isEmpty) {
-      debugLog('❌ Workout not found in list');
-      return;
-    }
-    
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    
-    // Check if this workout has a buddy and if they've accepted
-    if (workout['buddy_id'] != null && workout['buddy_status'] != 'accepted') {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Your buddy needs to accept the workout invitation first!'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-    
-    // If workout is still scheduled (not started), use the timer flow
-    if (workout['status'] == 'scheduled') {
-      await _startWorkout(workoutId);
-      return;
-    }
-    
-    // If workout is in_progress, check if THIS user can complete
-    if (workout['status'] == 'in_progress') {
-      final isCreator = workout['user_id'] == currentUserId;
-      final creatorCancelled = workout['creator_cancelled'] ?? false;
-      final buddyCancelled = workout['buddy_cancelled'] ?? false;
-      
-      // Check if THIS user has cancelled - they can't complete!
-      final thisUserCancelled = isCreator ? creatorCancelled : buddyCancelled;
-      
-      if (thisUserCancelled) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You cancelled this workout - cannot complete'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-      
-      // Open timer to continue the workout
-      
-      final startedAt = workout['workout_started_at'];
-      if (startedAt != null) {
-        await _startWorkout(workoutId);
-        return;
-      }
-    }
-    
-    // Fallback: complete directly (for edge cases)
-    await _doCompleteWorkout(workoutId, workout);
-  }
-
-  Future<void> _doCompleteWorkout(String workoutId, Map<String, dynamic> workout) async {
-    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    if (currentUserId == null) return;
-    
-    // Get cancellation status
-    final isCreator = workout['user_id'] == currentUserId;
-    final creatorCancelled = workout['creator_cancelled'] ?? false;
-    final buddyCancelled = workout['buddy_cancelled'] ?? false;
-    
-    // Complete the workout in database
-    final success = await _workoutService.completeWorkoutWithDuration(workoutId);
-    if (!success) {
-      debugLog('❌ Failed to complete workout');
-      return;
-    }
-    
-    // Get workout details for celebration
-    final workoutType = workout['workout_type'] ?? 'Workout';
-    final startedAt = workout['workout_started_at'];
-    int duration = 0;
-    if (startedAt != null) {
-      duration = DateTime.now().difference(DateTime.parse(startedAt)).inMinutes;
-    }
-    
-    // Get buddy info
-    String? buddyName;
-    String? buddyId;
-    final buddy = workout['buddy'];
-    final creator = workout['creator'];
-    
-    if (isCreator) {
-      buddyId = workout['buddy_id'];
-      if (buddy != null) {
-        buddyName = buddy['display_name'];
-      }
-    } else {
-      buddyId = workout['user_id'];
-      if (creator != null) {
-        buddyName = creator['display_name'];
-      }
-    }
-    
-    if (!mounted) return;
-    
-    // Remove from local list for instant UI feedback
-    setState(() {
-      _upcomingWorkouts.removeWhere((w) => w['id'] == workoutId);
-    });
-    
-    if (!mounted) return;
-    
-    // 🎉 Show celebration!
-    WorkoutCelebration.show(
-      context,
-      workoutType: workoutType,
-      duration: duration,
-      buddyName: buddyName,
-    );
-    
-    // ✅ FAIR CHECK-IN: Only check in users who DIDN'T cancel
-    if (buddyId != null && workout['buddy_status'] == 'accepted') {
-      try {
-        final teamStreakService = TeamStreakService();
-        final creatorId = workout['user_id'] as String?;
-        final workoutBuddyId = workout['buddy_id'] as String?;
-        
-        // Check in CREATOR if they didn't cancel
-        if (!creatorCancelled && creatorId != null) {
-          if (creatorId == currentUserId) {
-            final userResult = await teamStreakService.checkInAllTeams(workoutId: workoutId);
-            debugLog('✅ Creator (current user) check-in: ${userResult['message']}');
-            // completeWorkoutWithDuration already ran above, sequentially,
-            // before this — workouts.status is safely 'completed' by now.
-            if ((userResult['teams_updated'] as int? ?? 0) > 0) {
-              await AchievementService().checkWorkoutAchievements(
-                durationMinutes: 0,
-                workoutType: 'workout',
-              );
-            }
-          } else {
-            final result = await teamStreakService.checkInAllTeamsForUser(creatorId, workoutId: workoutId);
-            debugLog('✅ Creator check-in: Checked in to $result teams');
-          }
-        } else if (creatorCancelled) {
-          debugLog('⚠️ Creator cancelled - NO streak credit');
-        }
-        
-        // Check in BUDDY if they didn't cancel
-        if (!buddyCancelled && workoutBuddyId != null) {
-          final buddyActuallyCompleted = workout['buddy_completed_at'] != null;
-          
-          if (!buddyActuallyCompleted && workoutBuddyId != currentUserId) {
-            debugLog('⚠️ Buddy accepted but never completed workout - NO streak credit');
-          } else if (workoutBuddyId == currentUserId) {
-            final userResult = await teamStreakService.checkInAllTeams(workoutId: workoutId);
-            debugLog('✅ Buddy (current user) check-in: ${userResult['message']}');
-            // completeWorkoutWithDuration already ran above, sequentially,
-            // before this — workouts.status is safely 'completed' by now.
-            if ((userResult['teams_updated'] as int? ?? 0) > 0) {
-              await AchievementService().checkWorkoutAchievements(
-                durationMinutes: 0,
-                workoutType: 'workout',
-              );
-            }
-          } else {
-            final result = await teamStreakService.checkInAllTeamsForUser(workoutBuddyId, workoutId: workoutId);
-            debugLog('✅ Buddy check-in: Checked in to $result teams');
-          }
-        } else if (buddyCancelled) {
-          debugLog('⚠️ Buddy cancelled - NO streak credit');
-        }
-        
-      } catch (e) {
-        debugLog('❌ Auto check-in error: $e');
-      }
-    }
-    
-    if (!mounted) return;
-    
-    // Refresh UI
-    await Future.delayed(const Duration(milliseconds: 300));
-    
-    if (!mounted) return;
-    
-    loadData();
-  }
-
-  Future<void> _cancelWorkout(String workoutId) async {
-    if (!mounted) return; // ✅ CHECK MOUNTED
-    
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel Workout'),
-        content: const Text('Are you sure you want to cancel this workout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('No'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Yes, Cancel'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      final success = await _workoutService.cancelWorkout(workoutId);
-      if (success) {
-        // Solo workout — force status to cancelled (no buddy to protect)
-        final workout = _upcomingWorkouts.firstWhere(
-          (w) => w['id'] == workoutId,
-          orElse: () => <String, dynamic>{},
-        );
-        if (workout.isNotEmpty && workout['buddy_id'] == null) {
-          await Supabase.instance.client
-              .from('workouts')
-              .update({'status': 'cancelled'})
-              .eq('id', workoutId);
-        }
-        setState(() {
-          _upcomingWorkouts.removeWhere((w) => w['id'] == workoutId);
-        });
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Workout cancelled'),
-            backgroundColor: Colors.grey,
-          ),
-        );
-        loadData();
-      }
-    }
-  }
-
-  // ── Mutual ready check handlers ─────────────────────────────────────────
-
-  Future<void> _setReady(String workoutId, bool ready) async {
-    final err = await _workoutService.setCreatorReady(
-        workoutId: workoutId, ready: ready);
-    if (!mounted) return;
-    if (err == null) {
-      HapticFeedback.mediumImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ready
-              ? "You're ready! Waiting for your buddy to confirm…"
-              : 'Ready check cancelled'),
-          backgroundColor: ready ? Colors.green : Colors.grey,
-        ),
-      );
-      loadData();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $err'), backgroundColor: Colors.red),
-      );
-    }
-  }
-
-  Future<void> _startTogether(String workoutId) async {
-    final err = await _workoutService.setBuddyReady(workoutId: workoutId);
-    if (!mounted) return;
-    if (err == null) {
-      HapticFeedback.heavyImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Workout started — timers are live! 💪'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      loadData();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $err'), backgroundColor: Colors.red),
-      );
-    }
-  }
-
-  Future<void> _joinWorkout(String workoutId) async {
-    final result = await _workoutService.creatorJoinWorkout(workoutId);
-    if (!mounted) return;
-    if (result['success'] == true) {
-      HapticFeedback.heavyImpact();
-      loadData();
-      final completed = await WorkoutCheckInSheet.show(
-        context,
-        workoutType: result['workoutType'] ?? 'Workout',
-        workoutEmoji: result['emoji'] ?? '💪',
-        plannedDuration: result['remainingMinutes'] ?? 5,
-        onCheckInComplete: () async {
-          await _completeWorkout(workoutId);
-          return true;
-        },
-      );
-      if (completed == true) loadData();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['error'] ?? 'Could not join'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _acceptInvitation(String workoutId) async {
-    final success = await _workoutService.acceptWorkoutInvitation(workoutId);
-    if (success) {
-      if (!mounted) return; // ✅ CHECK MOUNTED
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Workout invitation accepted!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      loadData();
-    }
-  }
-
-  Future<void> _declineInvitation(String workoutId) async {
-    final success = await _workoutService.declineWorkoutInvitation(workoutId);
-    if (success) {
-      if (!mounted) return; // ✅ CHECK MOUNTED
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Workout invitation declined'),
-          backgroundColor: Colors.grey,
-        ),
-      );
-      loadData();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        // Inherits transparent bg + foreground from appBarTheme
-        title: const Text(
-          'Workout Schedule',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showCreateWorkoutDialog,
-        icon: const Icon(Icons.add),
-        label: const Text('New Workout'),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: loadData,
-              child: _buildWorkoutList(),
-            ),
-    );
-  }
-
-  Widget _buildWorkoutList() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // ✅ NEW: Redesigned invites card
-        WorkoutInvitesCardRedesigned(
-          onInviteAction: () {
-            debugLog('📋 Schedule page: Invite action triggered, reloading data...');
-            loadData();
-          },
-        ),
-        const SizedBox(height: 16),
-
-      if (_upcomingWorkouts.isEmpty)
-        _buildEmptyWorkoutsCard()  // New method we'll create
-      else
-        
-        // YOUR EXISTING WORKOUTS - Now using .map instead of ListView.builder
-        ..._upcomingWorkouts.map((workout) {
-          final creator = workout['creator'];
-          final buddy = workout['buddy'];
-          final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-          final isCreator = workout['user_id'] == currentUserId;
-          final isBuddy = workout['buddy_id'] == currentUserId;
-          final buddyStatus = workout['buddy_status'];
-          final workoutStatus = workout['status'];
-
-          // Get partner name
-          String partnerName = 'Solo';
-          if (buddy != null && isCreator) {
-            partnerName = buddy['display_name'] ?? 'Unknown';
-          } else if (creator != null && isBuddy) {
-            partnerName = creator['display_name'] ?? 'Unknown';
-          }
-
-          return WorkoutCard(
-            key: ValueKey(workout['id']),
-            workout: workout,
-            partnerName: partnerName,
-            isCreator: isCreator,
-            isBuddy: isBuddy,
-            buddyStatus: buddyStatus,
-            workoutStatus: workoutStatus,
-            onStart: () => _startWorkout(workout['id']),
-            onComplete: () => _completeWorkout(workout['id']),
-            onOpenTimer: () => _completeWorkout(workout['id']),
-            onCancel: () => _cancelWorkout(workout['id']),
-            onAccept: () => _acceptInvitation(workout['id']),
-            onDecline: () => _declineInvitation(workout['id']),
-            onJoin: () => _joinWorkout(workout['id']),
-            onReady: () => _setReady(workout['id'], true),
-            onCancelReady: () => _setReady(workout['id'], false),
-            onStartTogether: () => _startTogether(workout['id']),
-          );
-        }),
-        CompletedWorkoutsSection(refreshTrigger: _completedRefreshTrigger),
-      ],
-    );
-  }
-
-  Widget _buildEmptyWorkoutsCard() {
-    final appColors = AppColors.of(context);
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          children: [
-            Icon(Icons.calendar_today, size: 64, color: appColors.subtleText),
-            const SizedBox(height: 16),
-            Text(
-              'No scheduled workouts',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Tap + to schedule a workout',
-              style: TextStyle(fontSize: 14, color: appColors.subtleText),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-}
-
 
 // Profile Page
 class ProfilePage extends StatefulWidget {

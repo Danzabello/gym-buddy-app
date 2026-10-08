@@ -79,6 +79,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
       time: timeString,
       plannedDurationMinutes: _duration,
       buddyId: widget.buddyUserId,
+      buddyName: widget.buddyDisplayName,
     );
 
     setState(() => _isCreating = false);

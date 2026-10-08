@@ -102,6 +102,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
       time: timeString,
       plannedDurationMinutes: _duration,
       buddyId: _selectedBuddyId,
+      buddyName: _selectedBuddyName,
     );
 
     setState(() => _isCreating = false);
