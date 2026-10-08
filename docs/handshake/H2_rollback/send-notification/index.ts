@@ -100,9 +100,6 @@ serve(async (req) => {
     const payload = await req.json()
 
     const { user_id, title, body, type, reference_id, batch_key } = payload
-    // H2 fields, all optional: a caller that omits them gets today's behaviour.
-    const { kind, color, channel, tag, data } = payload
-    const urgent = payload.urgent === true
 
     // ============================================
     // INPUT GUARD — user_id must be a UUID (feeds PostgREST filters below)
@@ -139,35 +136,12 @@ serve(async (req) => {
     // (notification_log, unbounded text columns) and forwarded (FCM data) —
     // cap them so they can't be a free-text channel. Legit max ≈ 84 chars
     // (nudge batch_key: two UUIDs + date).
-    for (const [k, v] of Object.entries({ type, reference_id, batch_key, kind, color, channel, tag })) {
+    for (const [k, v] of Object.entries({ type, reference_id, batch_key })) {
       if (v != null && (typeof v !== 'string' || v.length > 128)) {
         console.log(`⛔ send-notification: oversized/non-string ${k}`)
         return new Response(JSON.stringify({ error: 'bad_request' }), { status: 400 })
       }
     }
-    if (color != null && !/^#[0-9A-Fa-f]{6}$/.test(color)) {
-      return new Response(JSON.stringify({ error: 'bad_request' }), { status: 400 })
-    }
-    if (channel != null && !/^gym_buddy_[a-z_]{1,40}$/.test(channel)) {
-      return new Response(JSON.stringify({ error: 'bad_request' }), { status: 400 })
-    }
-    // data: only these keys are forwarded, each a short string (or absent).
-    const DATA_KEYS = ['avatar_id', 'avatar_border', 'ring_hex', 'sender_name', 'streak', 'style']
-    const extra: Record<string, string> = {}
-    if (data != null) {
-      if (typeof data !== 'object' || Array.isArray(data)) {
-        return new Response(JSON.stringify({ error: 'bad_request' }), { status: 400 })
-      }
-      for (const k of DATA_KEYS) {
-        const v = data[k]
-        if (v == null) continue
-        if (typeof v !== 'string' || v.length > 64) {
-          return new Response(JSON.stringify({ error: 'bad_request' }), { status: 400 })
-        }
-        extra[k] = sanitize(v)
-      }
-    }
-    const dedupeMinutes = Math.min(Math.max(Number(payload.dedupe_minutes) || 60, 1), 1440)
 
     // ============================================
     // AUTHORIZATION
@@ -207,8 +181,7 @@ serve(async (req) => {
       .maybeSingle()
 
     if (settings) {
-      // Time-critical handshake pushes (urgent) ignore quiet hours.
-      if (settings.quiet_hours_enabled && !urgent) {
+      if (settings.quiet_hours_enabled) {
         // Recipient's own local hour, not the server's — a UTC hour was
         // being compared against a quiet-hours window the user configured
         // in their own local time, which is wrong for anyone far from UTC.
@@ -241,21 +214,6 @@ serve(async (req) => {
         'buddy_started_workout': 'notif_workouts',
         'join_window_expiring': 'notif_workouts',
         'workout_overtime': 'notif_workouts',
-        'invite_received': 'notif_workouts',
-        'invite_accepted': 'notif_workouts',
-        'invite_declined': 'notif_workouts',
-        'invite_expired': 'notif_workouts',
-        'invite_rescheduled': 'notif_workouts',
-        'workout_cancelled': 'notif_workouts',
-        'time_to_start': 'notif_workouts',
-        'buddy_tapped_first': 'notif_workouts',
-        'started': 'notif_workouts',
-        'nudge': 'notif_workouts',
-        'cant_make_it': 'notif_workouts',
-        'buddy_left': 'notif_workouts',
-        'buddy_finished': 'notif_workouts',
-        'still_going': 'notif_workouts',
-        'before_auto': 'notif_workouts',
         'buddy_checked_in': 'notif_streaks',
         'streak_complete': 'notif_streaks',
         'streak_milestone': 'notif_streaks',
@@ -277,19 +235,18 @@ serve(async (req) => {
     // ============================================
     // BATCHING CHECK
     // ============================================
-    // A count, not maybeSingle(): with two matching rows maybeSingle() errors,
-    // returns no data, and the dedupe silently let the push through.
     if (batch_key) {
-      const since = new Date(Date.now() - dedupeMinutes * 60 * 1000).toISOString()
-      const { count } = await supabase
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+      const { data: recentLog } = await supabase
         .from('notification_log')
-        .select('id', { count: 'exact', head: true })
+        .select('id')
         .eq('user_id', user_id)
         .eq('batch_key', batch_key)
-        .gte('sent_at', since)
+        .gte('sent_at', oneHourAgo)
+        .maybeSingle()
 
-      if ((count ?? 0) > 0) {
-        console.log(`📦 Already sent ${batch_key} within ${dedupeMinutes} min - batching`)
+      if (recentLog) {
+        console.log(`📦 Already sent ${batch_key} within last hour - batching`)
         return new Response(JSON.stringify({ skipped: 'batched' }), { status: 200 })
       }
     }
@@ -316,12 +273,7 @@ serve(async (req) => {
     const projectId = FIREBASE_SERVICE_ACCOUNT.project_id
     const fcmUrl = `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`
 
-    const message = buildMessage(Deno.env.get('PUSH_MODE') ?? 'data', {
-      title: cleanTitle, body: cleanBody, type, reference_id, kind, color, channel, tag, extra,
-    })
-
     const results = []
-    let delivered = 0
     for (const { token } of tokens) {
       const fcmResponse = await fetch(fcmUrl, {
         method: 'POST',
@@ -329,12 +281,23 @@ serve(async (req) => {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: { token, ...message } }),
+        body: JSON.stringify({
+          message: {
+            token,
+            notification: { title: cleanTitle, body: cleanBody },
+            data: { type, reference_id: reference_id ?? '' },
+            android: {
+              priority: 'high',
+              notification: {
+                channel_id: 'gym_buddy_high_importance',
+              }
+            }
+          }
+        }),
       })
 
       const result = await fcmResponse.json()
       results.push(result)
-      if (result?.name) delivered++
 
       // Clean up stale tokens
       if (result?.error?.details?.[0]?.errorCode === 'UNREGISTERED') {
@@ -350,13 +313,8 @@ serve(async (req) => {
     }
 
     // ============================================
-    // LOG IT: only when FCM accepted it for at least one token, so a failed
-    // send neither counts as sent nor blocks a retry through the dedupe.
+    // LOG IT
     // ============================================
-    if (delivered === 0) {
-      console.log(`❌ No token accepted the push for user ${user_id}`)
-      return new Response(JSON.stringify({ sent: false, results }), { status: 200 })
-    }
     await supabase.from('notification_log').insert({
       user_id,
       notification_type: type,
@@ -372,56 +330,6 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 })
   }
 })
-
-// ── FCM MESSAGE ───────────────────────────────────────────────────────────
-// PUSH_MODE=data (default): data-only, the app draws the notification
-// (channel, colour, tag, avatar). PUSH_MODE=notification: the kill switch,
-// a plain notification message the system draws, still with channel, colour
-// and tag. Everything in `data` must be a string for FCM.
-function buildMessage(mode: string, p: {
-  title: string, body: string, type?: string, reference_id?: string, kind?: string,
-  color?: string, channel?: string, tag?: string, extra: Record<string, string>,
-}) {
-  const channelId = p.channel ?? 'gym_buddy_high_importance'
-  // Stale nudges are worse than none; invites stay useful for a day.
-  const ttl = p.type === 'nudge' || p.type === 'time_to_start' ? 600
-    : channelId === 'gym_buddy_handshake' ? 3600 : 86400
-
-  if (mode === 'notification') {
-    return {
-      notification: { title: p.title, body: p.body },
-      data: { type: p.type ?? '', reference_id: p.reference_id ?? '' },
-      android: {
-        priority: 'high',
-        ttl: `${ttl}s`,
-        notification: {
-          channel_id: channelId,
-          ...(p.color ? { color: p.color } : {}),
-          ...(p.tag ? { tag: p.tag } : {}),
-        },
-      },
-    }
-  }
-  return {
-    data: {
-      title: p.title,
-      body: p.body,
-      type: p.type ?? '',
-      reference_id: p.reference_id ?? '',
-      kind: p.kind ?? '',
-      color: p.color ?? '',
-      channel: channelId,
-      tag: p.tag ?? '',
-      avatar_id: p.extra.avatar_id ?? '',
-      avatar_border: p.extra.avatar_border ?? '',
-      ring_hex: p.extra.ring_hex ?? '',
-      sender_name: p.extra.sender_name ?? '',
-      streak: p.extra.streak ?? '',
-      style: p.extra.style ?? '',
-    },
-    android: { priority: 'high', ttl: `${ttl}s` },
-  }
-}
 
 // ── AUTHORIZATION HELPER ──────────────────────────────────────────────────
 // True if a and b are accepted friends OR share a buddy team.

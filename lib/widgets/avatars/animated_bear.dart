@@ -115,6 +115,11 @@ class _AnimatedBearState extends State<AnimatedBear>
   }
 }
 
+/// The still bear (idle pose, frame 0) painted straight onto [canvas], for
+/// places with no widget tree, e.g. the push notification avatar.
+void paintStillBear(Canvas canvas, Size size) =>
+    _BearPainter(t: 0, mood: BearMood.idle).paint(canvas, size);
+
 /// Illustration palette (see the note on [AnimatedBear]).
 class _Ink {
   static const furLight = Color(0xFFC48D50);

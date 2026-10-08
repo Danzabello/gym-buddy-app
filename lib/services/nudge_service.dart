@@ -60,12 +60,12 @@ class NudgeService {
       // ── 3. Get sender display name ────────────────────────
       final senderProfile = await _supabase
           .from('user_profiles')
-          .select('display_name')
+          .select('display_name, avatar_id, avatar_border')
           .eq('id', currentUserId)
           .maybeSingle();
 
-      final senderName =
-          senderProfile?['display_name'] as String? ?? 'Your buddy';
+      final displayName = (senderProfile?['display_name'] as String? ?? '').trim();
+      final senderName = displayName.isEmpty ? 'Your buddy' : displayName.split(' ').first;
 
       // ── 4. Record nudge ───────────────────────────────────
       await _supabase.from('buddy_nudges').insert({
@@ -79,12 +79,21 @@ class NudgeService {
         'send-notification',
         body: {
           'user_id': targetUserId,
-          'title': '🔥 Don\'t break the streak!',
-          'body':
-              '$senderName is waiting on your check-in — keep it going!',
+          // Same copy as push_templates 'buddy_nudge' (no emojis).
+          'title': senderName,
+          'body': 'is waiting on your check-in. Keep it going.',
           'type': 'buddy_nudge',
           'reference_id': currentUserId,
           'batch_key': 'nudge_${currentUserId}_${targetUserId}_$today',
+          'kind': 'orange',
+          'color': '#EA580C',
+          'channel': 'gym_buddy_streaks',
+          'tag': 'nudge_$currentUserId',
+          'data': {
+            'avatar_id': senderProfile?['avatar_id'],
+            'avatar_border': senderProfile?['avatar_border'],
+            'sender_name': senderName,
+          },
         },
       );
 
