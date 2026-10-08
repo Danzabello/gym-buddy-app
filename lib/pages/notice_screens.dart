@@ -80,6 +80,23 @@ class Notice {
   }
 }
 
+/// Darkens [fg] until it reads on [bg] (4.5:1). Dark skins pass untouched.
+Color readableOn(Color fg, Color bg) {
+  double ratio(Color a) {
+    final x = a.computeLuminance() + 0.05, y = bg.computeLuminance() + 0.05;
+    return x > y ? x / y : y / x;
+  }
+
+  final hsl = HSLColor.fromColor(fg);
+  var l = hsl.lightness;
+  var out = fg;
+  while (ratio(out) < 4.5 && l > 0.05) {
+    l -= 0.02;
+    out = hsl.withLightness(l).toColor();
+  }
+  return out;
+}
+
 String daysLabel(int n) => '$n ${n == 1 ? 'day' : 'days'}';
 
 const _weekdays = [
@@ -245,6 +262,8 @@ class _NoticeDialogState extends State<NoticeDialog> {
     final violet = context.read<AccentThemeProvider>().palette.secondaryAccent;
     final n = widget.notice;
     final first = n.items.first;
+    // The skin's success green is too pale for a light card.
+    final green = readableOn(c.success, c.cardBackground);
 
     late final String label, line1, line2, body;
     late final Color line2Color;
@@ -261,17 +280,17 @@ class _NoticeDialogState extends State<NoticeDialog> {
         label = 'AUTO CHECK-IN';
         line1 = 'CHECK-IN';
         line2 = 'COMPLETED';
-        line2Color = c.success;
+        line2Color = green;
         heroKind = NoticeHeroKind.tick;
         heroValue = first.minutes ?? 0;
-        heroColor = c.success;
+        heroColor = green;
         caption = 'MINUTES COUNTED';
         body = "You started a workout and didn't finish it in the app. "
             "We trusted you, so today's check-in counts.";
-        boxColor = c.success;
+        boxColor = green;
         rows = [
           _InfoRow('Counted for', countedFor(first.date, DateTime.now()), cs.onSurface),
-          _InfoRow('Streak', 'Still going', c.success),
+          _InfoRow('Streak', 'Still going', green),
         ];
         tip = "Tip: tap Finish when you're done, so your workout time is exact.";
       case 'own':
@@ -300,7 +319,7 @@ class _NoticeDialogState extends State<NoticeDialog> {
             ? '${first.missedName} missed yesterday, so your shared streak reset. You did your part.'
             : 'Your shared streak with ${first.buddy} reset yesterday.';
         boxColor = c.warn;
-        if (proven) rows = [_InfoRow('Your check-ins', 'All ${first.lost} done', c.success)];
+        if (proven) rows = [_InfoRow('Your check-ins', 'All ${first.lost} done', green)];
       default: // many
         label = 'STREAKS ENDED';
         line1 = 'YOU LOST';
