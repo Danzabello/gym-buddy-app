@@ -65,7 +65,9 @@ class PushPayload {
 }
 
 /// Notification accent per kind. The server sends `color` too; this is the
-/// fallback when it doesn't. (Raw hex: notification accents, not app UI.)
+/// fallback when it doesn't. Raw hex on purpose (owner-approved 2026-10-08):
+/// these colours go to the Android system tray, outside the app theme, so
+/// AppColors can't supply them. All six live in this one map.
 const Map<String, Color> kindColors = {
   'orange': Color(0xFFEA580C), // your move
   'lavender': Color(0xFFA99BF5), // people
@@ -373,19 +375,39 @@ class NotificationService {
     await _localNotifications.show(id, p.title, p.body, NotificationDetails(android: details),
         payload: payload);
 
-    if (channel.id == 'gym_buddy_invites') await _showInvitesSummary(channel);
+    if (p.type == 'workout_cancelled' && p.referenceId.isNotEmpty) {
+      await _localNotifications.cancel(1, tag: 'invite_${p.referenceId}');
+    }
+    if (channel.id == 'gym_buddy_invites' || p.type == 'workout_cancelled') {
+      await _showInvitesSummary(channelFor('gym_buddy_invites'));
+    }
   }
 
-  /// Invites from several friends collapse into one stack with a count.
+  /// Invites from several friends collapse into one stack with a count. Only
+  /// PENDING invites count: a resolved one (accepted, declined, expired)
+  /// replaces its own invite notification (same tag), and a cancelled
+  /// workout removes it, so what is left of type invite_received /
+  /// invite_rescheduled is exactly the invites still waiting.
   static Future<void> _showInvitesSummary(AndroidNotificationChannel channel) async {
     try {
       final android = _localNotifications
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
       final active = await android?.getActiveNotifications() ?? const [];
-      final invites = active
-          .where((n) => n.channelId == channel.id && n.tag != _invitesSummaryTag)
-          .toList();
-      if (invites.length < 2) return;
+      bool pending(ActiveNotification n) {
+        if (n.channelId != channel.id || n.tag == _invitesSummaryTag) return false;
+        try {
+          final type = (jsonDecode(n.payload ?? '{}') as Map<String, dynamic>)['type'];
+          return type == 'invite_received' || type == 'invite_rescheduled';
+        } catch (_) {
+          return false;
+        }
+      }
+
+      final invites = active.where(pending).toList();
+      if (invites.length < 2) {
+        await _localNotifications.cancel(2, tag: _invitesSummaryTag);
+        return;
+      }
       await _localNotifications.show(
         2,
         '${invites.length} invites',
