@@ -382,7 +382,10 @@ class NotificationService {
       await _localNotifications.cancel(1, tag: 'invite_${p.referenceId}');
     }
     if (pendingInvite || channel.id == 'gym_buddy_invites' || p.type == 'workout_cancelled') {
-      await _showInvitesSummary(channelFor('gym_buddy_invites'));
+      await _showInvitesSummary(channelFor('gym_buddy_invites'),
+          leavingTag: pendingInvite
+              ? null
+              : p.type == 'workout_cancelled' ? 'invite_${p.referenceId}' : p.tag);
     }
   }
 
@@ -391,7 +394,8 @@ class NotificationService {
   /// replaces its own invite notification (same tag), and a cancelled
   /// workout removes it, so what is left of type invite_received /
   /// invite_rescheduled is exactly the invites still waiting.
-  static Future<void> _showInvitesSummary(AndroidNotificationChannel channel) async {
+  static Future<void> _showInvitesSummary(AndroidNotificationChannel channel,
+      {String? leavingTag}) async {
     try {
       final android = _localNotifications
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
@@ -399,7 +403,10 @@ class NotificationService {
       // Android's active-notification data has no payload, but it does carry
       // the group key, and only pending invites are posted into the group.
       bool pending(ActiveNotification n) =>
-          n.channelId == channel.id && n.tag != _invitesSummaryTag && n.groupKey == channel.id;
+          n.channelId == channel.id &&
+          n.tag != _invitesSummaryTag &&
+          n.tag != leavingTag && // being replaced or cancelled right now: the system may not have dropped it yet
+          n.groupKey == channel.id;
 
       final invites = active.where(pending).toList();
       if (invites.length < 2) {
