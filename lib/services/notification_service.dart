@@ -355,6 +355,7 @@ class NotificationService {
           )
         : BigTextStyleInformation(p.body);
 
+    final pendingInvite = p.type == 'invite_received' || p.type == 'invite_rescheduled';
     final details = AndroidNotificationDetails(
       channel.id,
       channel.name,
@@ -366,7 +367,9 @@ class NotificationService {
       largeIcon: avatar == null || p.style == 'messaging' ? null : ByteArrayAndroidBitmap(avatar),
       styleInformation: style,
       tag: p.tag.isEmpty ? null : p.tag,
-      groupKey: channel.id,
+      // Only pending invites join the stack; a resolved one replaces its own
+      // invite (same tag) with no group, so it drops out of the count.
+      groupKey: pendingInvite ? channel.id : null,
     );
     final payload = jsonEncode({'type': p.type, 'reference_id': p.referenceId});
     // With a tag, (tag, id) is the identity: a new push with the same tag
@@ -378,7 +381,7 @@ class NotificationService {
     if (p.type == 'workout_cancelled' && p.referenceId.isNotEmpty) {
       await _localNotifications.cancel(1, tag: 'invite_${p.referenceId}');
     }
-    if (channel.id == 'gym_buddy_invites' || p.type == 'workout_cancelled') {
+    if (pendingInvite || channel.id == 'gym_buddy_invites' || p.type == 'workout_cancelled') {
       await _showInvitesSummary(channelFor('gym_buddy_invites'));
     }
   }
@@ -393,15 +396,10 @@ class NotificationService {
       final android = _localNotifications
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
       final active = await android?.getActiveNotifications() ?? const [];
-      bool pending(ActiveNotification n) {
-        if (n.channelId != channel.id || n.tag == _invitesSummaryTag) return false;
-        try {
-          final type = (jsonDecode(n.payload ?? '{}') as Map<String, dynamic>)['type'];
-          return type == 'invite_received' || type == 'invite_rescheduled';
-        } catch (_) {
-          return false;
-        }
-      }
+      // Android's active-notification data has no payload, but it does carry
+      // the group key, and only pending invites are posted into the group.
+      bool pending(ActiveNotification n) =>
+          n.channelId == channel.id && n.tag != _invitesSummaryTag && n.groupKey == channel.id;
 
       final invites = active.where(pending).toList();
       if (invites.length < 2) {
