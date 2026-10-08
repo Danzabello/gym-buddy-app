@@ -3494,8 +3494,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         // ✅ Active workout exists - go directly to timer with saved details
         if (!mounted) return;
 
-        // A shared workout is run and finished from the Workout Schedule card.
-        if (activeSession['workout_id'] != null) {
+        // A workout tied to a workouts row is finished from the Workout Schedule card.
+        if (runsOnScheduleCard(activeSession)) {
           final homeState = context.findAncestorStateOfType<_HomeScreenState>();
           homeState?._onTabChanged(0);
           return;

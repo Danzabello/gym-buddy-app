@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Client side of the server-driven workout handshake. The server decides the
@@ -78,6 +81,11 @@ class ServerClock {
   DateTime now() => _local().add(offset);
 }
 
+/// A running session tied to a workouts row (shared or scheduled) is run and
+/// finished from the Workout Schedule card. A session with no workout_id is
+/// the dashboard's own solo check-in and keeps using the check-in sheet.
+bool runsOnScheduleCard(Map<String, dynamic>? session) => session?['workout_id'] != null;
+
 /// complete_workout worked but finish_checkin_session did not: retry with
 /// `finish(..., alreadyCompleted: true)`.
 class CreditPending implements Exception {
@@ -112,6 +120,29 @@ class WorkoutCardData {
         openInviteCount: (j['open_invite_count'] as num?)?.toInt() ?? 0,
         serverNow: DateTime.parse(j['server_now'] as String),
       );
+}
+
+/// complete_workout worked but the credit call has not yet: kept on the phone
+/// so the next launch or resume can finish the job (credit only, never twice).
+class PendingFinish {
+  final String id;
+  final int minutes;
+  const PendingFinish(this.id, this.minutes);
+  static const _key = 'pending_finish';
+
+  static Future<void> save(String id, int minutes) async =>
+      (await SharedPreferences.getInstance())
+          .setString(_key, jsonEncode({'id': id, 'minutes': minutes}));
+
+  static Future<PendingFinish?> load() async {
+    final raw = (await SharedPreferences.getInstance()).getString(_key);
+    if (raw == null) return null;
+    final m = jsonDecode(raw) as Map;
+    return PendingFinish(m['id'] as String, (m['minutes'] as num).toInt());
+  }
+
+  static Future<void> clear() async =>
+      (await SharedPreferences.getInstance()).remove(_key);
 }
 
 class HandshakeService {
@@ -152,17 +183,23 @@ class HandshakeService {
       });
 
   /// Finish = complete_workout, THEN finish_checkin_session (the partner is
-  /// only credited by the second). Pass [alreadyCompleted] to retry just the
-  /// second after it failed, so nothing is completed or credited twice. The
+  /// only credited by the second). A [PendingFinish] is kept between the two.
+  /// Pass [alreadyCompleted] to retry just the second, so nothing is
+  /// completed or credited twice. The
   /// only place the client calls the credit path.
   Future<Map<String, dynamic>> finish(String id, int minutes,
       {bool alreadyCompleted = false}) async {
     if (!alreadyCompleted) {
       await _call('complete_workout', {'p_workout_id': id, 'p_actual_minutes': minutes});
+      await PendingFinish.save(id, minutes);
     }
     try {
-      return await _call('finish_checkin_session', {'p_workout_id': id});
+      final r = await _call('finish_checkin_session', {'p_workout_id': id});
+      await PendingFinish.clear();
+      return r;
     } on HandshakeError catch (e) {
+      // Nothing left to credit for a workout that is gone or not mine.
+      if (e.code == 'not_found' || e.code == 'not_participant') await PendingFinish.clear();
       throw CreditPending(e);
     }
   }

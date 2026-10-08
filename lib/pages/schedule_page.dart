@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/achievement_service.dart';
 import '../services/coin_service.dart';
 import '../services/handshake_service.dart';
 import '../services/team_streak_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/completed_workouts_section.dart';
 import '../widgets/schedule_workout_sheet.dart';
+import '../widgets/streak_complete_sheet.dart';
 import '../widgets/workout_celebration.dart';
 import '../widgets/workout_invites_list.dart';
 import '../widgets/workout_schedule_card.dart';
@@ -33,7 +35,8 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
   bool _fetching = false, _again = false;
   int _completedTrigger = 0;
   final Map<String, Map<String, dynamic>> _overlaps = {};
-  String? _creditId; // complete_workout worked, finish_checkin_session did not
+  PendingFinish? _pending; // complete_workout worked, finish_checkin_session did not
+  bool _finishing = false; // quiet 'Finishing your last workout' state
   RealtimeChannel? _channel;
   Timer? _poll;
 
@@ -46,6 +49,7 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
     WidgetsBinding.instance.addObserver(this);
     _refresh();
     _loadMe();
+    _resumePending();
     // Realtime: any workouts change visible to me -> refetch the card.
     final client = Supabase.instance.client;
     _channel = client
@@ -71,7 +75,10 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState s) {
-    if (s == AppLifecycleState.resumed) _refresh();
+    if (s == AppLifecycleState.resumed) {
+      _refresh();
+      _resumePending();
+    }
   }
 
   Future<void> _loadMe() async {
@@ -161,27 +168,61 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
     }
   }
 
-  Future<void> _finish(String id, {bool retry = false}) async {
+  Future<void> _finish(String id) async {
     final w = _data!.workout!;
-    final type = w['workout_type'] as String? ?? 'Workout';
-    final name = _name;
     final started = DateTime.parse(w['workout_started_at'] as String);
     final minutes = _clock.now().difference(started).inMinutes;
-    setState(() => _busy = true);
+    await _finishFlow(id, minutes,
+        type: w['workout_type'] as String? ?? 'Workout', name: _name);
+  }
+
+  /// A finish that was cut short (credit failed, or the app closed): redo
+  /// only finish_checkin_session.
+  Future<void> _resumePending() async {
+    if (_finishing) return;
+    final p = await PendingFinish.load();
+    if (p == null || !mounted) return;
+    setState(() => _pending = p);
+    await _finishFlow(p.id, p.minutes, completed: true);
+  }
+
+  Future<void> _finishFlow(String id, int minutes,
+      {bool completed = false, String type = 'Workout', String? name}) async {
+    setState(() {
+      _busy = true;
+      _finishing = completed;
+    });
     try {
-      await _svc.finish(id, minutes, alreadyCompleted: retry);
-      _creditId = null;
+      final res = await _svc.finish(id, minutes, alreadyCompleted: completed);
+      _pending = null;
+      final streaks = TeamStreakService();
+      final r = await streaks.applyFinishResult(res);
+      if ((r['teams_updated'] as int? ?? 0) > 0) {
+        unawaited(AchievementService()
+            .checkWorkoutAchievements(durationMinutes: minutes, workoutType: type));
+      }
       if (!mounted) return;
-      WorkoutCelebration.show(context, workoutType: type, duration: minutes, buddyName: name);
+      if (!completed) {
+        WorkoutCelebration.show(context, workoutType: type, duration: minutes, buddyName: name);
+      }
       _completedTrigger++;
       _loadMe();
+      if (r['partner_bonus_earned'] == true) {
+        await Future.delayed(const Duration(milliseconds: 400));
+        if (mounted) await StreakCompleteSheet.show(context);
+      }
     } on CreditPending {
-      _creditId = id;
+      _pending = PendingFinish(id, minutes);
       if (mounted) _toast('Workout saved, but your streak credit did not go through.');
     } catch (e) {
       if (mounted) _toast(HandshakeError.from(e).message(name: name));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _finishing = false;
+        });
+      }
       _refresh();
     }
   }
@@ -221,7 +262,10 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
                 setState(() => _completedTrigger++);
               },
               child: ListView(padding: const EdgeInsets.all(16), children: [
-                if (_creditId != null) _creditRetry(),
+                if (_finishing) _quiet('Finishing your last workout')
+                else if (_pending != null) _creditRetry(),
+                if (d.openInviteCount >= 3)
+                  _quiet('You have ${d.openInviteCount} of 5 invites out'),
                 WorkoutInvitesList(
                   invites: received,
                   overlaps: _overlaps,
@@ -261,7 +305,7 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
           FilledButton(
             style: FilledButton.styleFrom(
                 minimumSize: const Size.fromHeight(48), backgroundColor: c.streakOrange),
-            onPressed: _busy ? null : () => _retryCredit(),
+            onPressed: _busy ? null : () => _finishFlow(_pending!.id, _pending!.minutes, completed: true),
             child: const Text('Retry'),
           ),
         ]),
@@ -269,21 +313,12 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
     );
   }
 
-  /// Only finish_checkin_session again: the workout is already completed.
-  Future<void> _retryCredit() async {
-    final id = _creditId!;
-    setState(() => _busy = true);
-    try {
-      await _svc.finish(id, 0, alreadyCompleted: true);
-      _creditId = null;
-      _completedTrigger++;
-      _loadMe();
-    } catch (e) {
-      if (mounted) _toast('Still could not add your streak credit. Try again.');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
+  Widget _quiet(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Text(text,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.of(context).subtleText)),
+      );
 
   Widget _empty() {
     final c = AppColors.of(context);

@@ -4,6 +4,7 @@ import 'package:gym_buddy_app/services/handshake_service.dart';
 import 'package:gym_buddy_app/theme/app_theme.dart';
 import 'package:gym_buddy_app/widgets/workout_invites_list.dart';
 import 'package:gym_buddy_app/widgets/workout_schedule_card.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 final _now = DateTime.utc(2026, 10, 10, 12, 0, 0);
@@ -224,20 +225,14 @@ void main() {
       ));
     }
 
-    testWidgets('five invites: N of 5 and the footer', (t) async {
+    testWidgets('received count only: no N of 5, no limit footer', (t) async {
       await show(t, 5);
       expect(find.text('Invitations'), findsOneWidget);
-      expect(find.text('5 of 5'), findsOneWidget);
-      expect(find.text('Five invites is the limit. Decline one to make room for the next.'),
-          findsOneWidget);
+      expect(find.text('5'), findsOneWidget);
+      expect(find.textContaining(' of 5'), findsNothing);
+      expect(find.textContaining('Five invites'), findsNothing);
       expect(find.text('Accept'), findsNWidgets(5));
       expect(find.text('Decline'), findsNWidgets(5));
-    });
-
-    testWidgets('fewer than five: no footer', (t) async {
-      await show(t, 2);
-      expect(find.text('2 of 5'), findsOneWidget);
-      expect(find.textContaining('Five invites'), findsNothing);
     });
 
     testWidgets('overlap: amber note, Accept anyway forces', (t) async {
@@ -286,6 +281,63 @@ void main() {
       await pump(t, card('goal_reached', w: workout('goal_reached', startedAgo: '46')));
       expect(t.getSize(find.byType(FinishButton)).height, greaterThanOrEqualTo(48));
     });
+  });
+
+  group('pending finish', () {
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+
+    test('saved once complete_workout worked, cleared when the credit worked', () async {
+      final seen = <PendingFinish?>[];
+      final svc = HandshakeService(rpc: (fn, p) async {
+        if (fn == 'finish_checkin_session') seen.add(await PendingFinish.load());
+        return <String, dynamic>{};
+      });
+      await svc.finish('w1', 46);
+      expect(seen.single?.id, 'w1');
+      expect(seen.single?.minutes, 46);
+      expect(await PendingFinish.load(), isNull);
+    });
+
+    test('credit failure keeps the record; a later launch retries only the credit', () async {
+      final calls = <String>[];
+      var fail = true;
+      final svc = HandshakeService(rpc: (fn, p) async {
+        calls.add(fn);
+        if (fn == 'finish_checkin_session' && fail) throw const PostgrestException(message: 'boom');
+        return <String, dynamic>{};
+      });
+      await expectLater(svc.finish('w1', 46), throwsA(isA<CreditPending>()));
+      final p = await PendingFinish.load();
+      expect((p?.id, p?.minutes), ('w1', 46));
+      // next launch (new service, same storage)
+      fail = false;
+      await HandshakeService(rpc: (fn, _) async { calls.add(fn); return <String, dynamic>{}; })
+          .finish(p!.id, p.minutes, alreadyCompleted: true);
+      expect(calls, ['complete_workout', 'finish_checkin_session', 'finish_checkin_session']);
+      expect(await PendingFinish.load(), isNull);
+    });
+
+    test('a failed complete_workout leaves no record', () async {
+      final svc = HandshakeService(rpc: (fn, p) async => throw const PostgrestException(message: 'too_early'));
+      await expectLater(svc.finish('w1', 5), throwsA(isA<HandshakeError>()));
+      expect(await PendingFinish.load(), isNull);
+    });
+
+    test('a workout that is gone is dropped, not retried forever', () async {
+      final svc = HandshakeService(rpc: (fn, p) async {
+        if (fn == 'finish_checkin_session') throw const PostgrestException(message: 'not_found');
+        return <String, dynamic>{};
+      });
+      await expectLater(svc.finish('w1', 46), throwsA(isA<CreditPending>()));
+      expect(await PendingFinish.load(), isNull);
+    });
+  });
+
+  test('dashboard: only a session with no workout_id stays on the check-in sheet', () {
+    expect(runsOnScheduleCard({'workout_id': null, 'started_at': 'x'}), isFalse); // dashboard solo
+    expect(runsOnScheduleCard({'started_at': 'x'}), isFalse);
+    expect(runsOnScheduleCard(null), isFalse);
+    expect(runsOnScheduleCard({'workout_id': 'w1'}), isTrue);
   });
 
   test('avatars: waiting at the top, tapper rides, both meet', () {
@@ -351,6 +403,8 @@ void main() {
   });
 
   group('service', () {
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+
     test('finish: complete_workout, then finish_checkin_session, in that order', () async {
       final calls = <String>[];
       final svc = HandshakeService(rpc: (fn, p) async { calls.add(fn); return <String, dynamic>{}; });

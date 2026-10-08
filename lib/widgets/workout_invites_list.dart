@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'workout_schedule_card.dart';
 
-const kInviteLimit = 5;
-
 String hhmm(DateTime t) =>
     '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
@@ -47,14 +45,9 @@ class WorkoutInvitesList extends StatelessWidget {
           Row(children: [
             const Expanded(
               child: Text('Invitations', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
-            Text('${invites.length} of $kInviteLimit', style: TextStyle(color: c.subtleText)),
+            Text('${invites.length}', style: TextStyle(color: c.subtleText)),
           ]),
           for (final i in invites) _row(context, c, i),
-          if (invites.length >= kInviteLimit) ...[
-            const SizedBox(height: 8),
-            Text('Five invites is the limit. Decline one to make room for the next.',
-                style: TextStyle(fontSize: 13, color: c.subtleText)),
-          ],
         ]),
       ),
     );
