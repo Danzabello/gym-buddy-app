@@ -5,10 +5,11 @@ import 'package:flutter/scheduler.dart';
 
 import '../services/handshake_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/workout_time.dart';
 import 'user_avatar.dart';
+import 'workout_menu.dart';
 
-/// Everything a button on the card can ask the page to do.
-enum CardAction { imHere, cantMakeIt, nudge, goSolo, cancel, leave, abandon, finish, changeTime }
+export 'workout_menu.dart' show CardAction;
 
 /// One side of the ring: who, and their equipped Ring Color (null = theme default).
 class Person {
@@ -29,25 +30,38 @@ Color? ringFromHex(String? hex) {
 
 const kNudgeCooldown = Duration(minutes: 10);
 
-/// Where each avatar sits on the ring, as radians clockwise from 12 o'clock.
-/// Both start at the top; whoever taps rides to their place; together they
-/// meet at the top.
-({double me, double them}) avatarAngles(String state) {
-  const apart = 0.3, meet = 0.12;
+/// States where the timer is (or was just) running.
+bool isRunningState(String state) => const {'solo', 'running', 'goal_reached'}.contains(state);
+
+/// Where the avatars sit on the ring, in degrees clockwise from 12 o'clock
+/// (so 330 is 11 o'clock, 30 is 1, 210 is 7, 150 is 5, 180 is 6), and who has
+/// tapped. A pure function of the server state, never of the timer: the
+/// avatars are not progress markers. Angles are chosen so the ride between two
+/// states goes the right way round (me anticlockwise down the left, the buddy
+/// clockwise down the right).
+class AvatarSpots {
+  final double me;
+  final double? them;
+  final bool meIn, themIn;
+  const AvatarSpots(this.me, this.them, {this.meIn = false, this.themIn = false});
+}
+
+/// Roles do not matter: "me" is always the left-hand avatar.
+AvatarSpots avatarSpots(String state, {required bool solo}) {
+  const meet = 14.0; // each avatar's offset from 6 o'clock when they fist bump
+  if (solo) {
+    return isRunningState(state) ? const AvatarSpots(180, null, meIn: true) : const AvatarSpots(360, null);
+  }
   switch (state) {
     case 'i_am_here':
-      return (me: -math.pi / 2, them: apart);
+      return const AvatarSpots(210, 30, meIn: true);
     case 'buddy_is_here':
-      return (me: -apart, them: math.pi / 2);
+      return const AvatarSpots(330, 150, themIn: true);
     case 'running':
     case 'goal_reached':
-      return (me: -meet, them: meet);
-    case 'solo':
-      return (me: 0, them: 0);
-    case 'buddy_cant_make_it':
-      return (me: -meet, them: math.pi);
-    default:
-      return (me: -apart, them: apart);
+      return const AvatarSpots(180 + meet, 180 - meet, meIn: true, themIn: true);
+    default: // waiting_start_time, time_to_start, buddy_cant_make_it
+      return const AvatarSpots(330, 30);
   }
 }
 
@@ -57,6 +71,7 @@ class WorkoutScheduleCard extends StatefulWidget {
   final Person me;
   final int streakDays;
   final bool busy;
+  final bool showHeader; // the workout page has its own header
   final void Function(CardAction) onAction;
 
   /// Fired once when the clock passes the moment the server state changes by
@@ -71,6 +86,7 @@ class WorkoutScheduleCard extends StatefulWidget {
     required this.onAction,
     this.streakDays = 0,
     this.busy = false,
+    this.showHeader = true,
     this.onDue,
   });
 
@@ -156,11 +172,6 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
     return n == null ? Duration.zero : n.add(kNudgeCooldown).difference(widget.clock.now());
   }
 
-  static String _startsIn(Duration d) {
-    final m = math.max(1, d.inMinutes + (d.inSeconds % 60 > 0 ? 1 : 0));
-    return m >= 60 ? '${m ~/ 60}h ${(m % 60).toString().padLeft(2, '0')}m' : '${m}m';
-  }
-
   String _titleLine() {
     final type = _w['workout_type'] as String? ?? 'Workout';
     final at = _t('planned_at')?.toLocal();
@@ -180,7 +191,7 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
       case 'waiting_start_time':
         final left = _t('planned_at')?.difference(widget.clock.now());
         return (
-          left == null || left.isNegative ? 'Waiting for $n to accept' : 'Starts in ${_startsIn(left)}',
+          left == null || left.isNegative ? 'Waiting for $n to accept' : 'Starts in ${startsInText(left)}',
           ''
         );
       case 'time_to_start':
@@ -203,81 +214,17 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
     }
   }
 
-  bool get _dashed => const {'time_to_start', 'i_am_here', 'buddy_is_here'}.contains(_state);
-  bool get _running => const {'solo', 'running', 'goal_reached'}.contains(_state);
+  bool get _running => isRunningState(_state);
+  // dashed until the timer runs (and while a buddy has cancelled)
+  bool get _dashed => !_running && _state != 'buddy_cant_make_it';
 
   // ── menu ───────────────────────────────────────────────────────────────
-  List<({CardAction action, String title, String line})> _menuOptions() {
-    final n = _otherName ?? 'your buddy';
-    final scheduled = !_running;
-    if (scheduled && _iAmCreator) {
-      return [
-        if (_other != null)
-          (action: CardAction.changeTime, title: 'Change time',
-           line: '$n gets a notification and can accept or decline.'),
-        (action: CardAction.cancel, title: 'Cancel workout',
-         line: _other == null
-             ? 'Cancels this workout.'
-             : 'Cancels it for you and $n. $n gets a notification.'),
-      ];
-    }
-    if (scheduled) {
-      return [
-        (action: CardAction.cantMakeIt, title: "Can't make it",
-         line: 'Frees $n up. $n can still work out solo. No penalty.'),
-      ];
-    }
-    if (_state == 'solo' || _other == null) {
-      return [
-        (action: CardAction.abandon, title: 'Abandon workout',
-         line: "Your timer stops and this workout doesn't count."),
-      ];
-    }
-    return [
-      (action: CardAction.leave, title: 'Leave workout',
-       line: "Your timer stops and this workout doesn't count for you. $n keeps going."),
-    ];
-  }
-
   Future<void> _openMenu() async {
-    final options = _menuOptions();
-    final c = AppColors.of(context);
-    final picked = await showModalBottomSheet<CardAction>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (ctx) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(_titleLine().split(',').first,
-                style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            for (final o in options) ...[
-              _MenuBox(title: o.title, line: o.line, onTap: () => Navigator.pop(ctx, o.action)),
-              const SizedBox(height: 8),
-            ],
-            _MenuBox(title: 'Keep workout', line: null, color: c.subtleText, onTap: () => Navigator.pop(ctx)),
-          ]),
-        ),
-      ),
-    );
-    if (picked == null || !mounted) return;
-    if (picked == CardAction.changeTime) return widget.onAction(picked);
-    final chosen = options.firstWhere((o) => o.action == picked);
-    final title = chosen.title;
-    final sure = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Are you sure?'),
-        content: Text(chosen.line),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep workout')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(title)),
-        ],
-      ),
-    );
-    if (sure == true && mounted) widget.onAction(picked);
+    final a = await pickWorkoutAction(context,
+        title: _titleLine().split(',').first,
+        options: menuOptionsFor(
+            iAmCreator: _iAmCreator, running: _running, hasBuddy: _other != null, otherName: _otherName));
+    if (a != null && mounted) widget.onAction(a);
   }
 
   // ── build ──────────────────────────────────────────────────────────────
@@ -288,7 +235,7 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
     final reduce = MediaQuery.disableAnimationsOf(context);
     final (headline, sub) = _copy();
     final goalMin = _goal.inMinutes;
-    final angles = avatarAngles(_state);
+    final spots = avatarSpots(_state, solo: _other == null);
     final progress = _running
         ? (_elapsed.inMilliseconds / math.max(1, _goal.inMilliseconds)).clamp(0.0, 1.0)
         : 0.0;
@@ -304,6 +251,7 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (widget.showHeader) ...[
           Row(children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -320,15 +268,20 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
             ),
           ]),
           const SizedBox(height: 12),
+          ],
           Center(
             child: SizedBox.square(
               dimension: 220,
               child: Stack(alignment: Alignment.center, children: [
-                CustomPaint(
-                  size: const Size.square(220),
-                  painter: _RingPainter(
-                    progress: progress, dashed: _dashed,
-                    track: c.divider, fill: scheme.primary),
+                AnimatedBuilder(
+                  animation: _pulse,
+                  builder: (_, __) => CustomPaint(
+                    size: const Size.square(220),
+                    painter: _RingPainter(
+                      progress: progress, dashed: _dashed,
+                      track: c.divider, fill: scheme.primary,
+                      glow: math.sin(_pulse.value * math.pi)),
+                  ),
                 ),
                 Column(mainAxisSize: MainAxisSize.min, children: [
                   Text(timer, style: const TextStyle(
@@ -339,13 +292,14 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
                 ]),
                 if (_other != null)
                   _RingAvatar(
-                    angle: angles.them, reduce: reduce, pulse: _pulse,
+                    degrees: spots.them!, isIn: spots.themIn, reduce: reduce, pulse: _pulse,
                     person: Person(
                       name: _otherName,
                       avatarId: _other!['avatar_id'] as String?,
                       ring: ringFromHex(_other!['ring_color'] as String?)),
                     dim: _state == 'buddy_cant_make_it'),
-                _RingAvatar(angle: angles.me, reduce: reduce, pulse: _pulse, person: widget.me),
+                _RingAvatar(
+                    degrees: spots.me, isIn: spots.meIn, reduce: reduce, pulse: _pulse, person: widget.me),
               ]),
             ),
           ),
@@ -413,71 +367,70 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
   }
 }
 
-class _MenuBox extends StatelessWidget {
-  final String title;
-  final String? line;
-  final Color? color;
-  final VoidCallback onTap;
-  const _MenuBox({required this.title, required this.line, required this.onTap, this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = AppColors.of(context);
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 48),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          border: Border.all(color: c.cardBorder),
-          borderRadius: BorderRadius.circular(12)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: color)),
-          if (line != null) ...[
-            const SizedBox(height: 2),
-            Text(line!, style: TextStyle(fontSize: 13, color: c.subtleText)),
-          ],
-        ]),
-      ),
-    );
-  }
-}
-
-/// Avatar parked on the ring at [angle]; it rides there when the angle changes (M2).
-class _RingAvatar extends StatelessWidget {
-  final double angle;
-  final bool reduce, dim;
+/// Avatar parked on the ring at [degrees]. It rides there when the position
+/// changes (only while the page is open: the first build never animates) and
+/// pops once when it flips from waiting (dashed border) to in (solid).
+class _RingAvatar extends StatefulWidget {
+  final double degrees;
+  final bool isIn, reduce, dim;
   final Animation<double> pulse;
   final Person person;
   const _RingAvatar({
-    required this.angle, required this.reduce, required this.pulse,
+    required this.degrees, required this.isIn, required this.reduce, required this.pulse,
     required this.person, this.dim = false});
+
+  @override
+  State<_RingAvatar> createState() => _RingAvatarState();
+}
+
+class _RingAvatarState extends State<_RingAvatar> with SingleTickerProviderStateMixin {
+  late final AnimationController _pop =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
+
+  @override
+  void didUpdateWidget(_RingAvatar old) {
+    super.didUpdateWidget(old);
+    if (!old.isIn && widget.isIn && !widget.reduce) _pop.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _pop.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
-      tween: Tween(end: angle),
-      duration: reduce ? Duration.zero : const Duration(milliseconds: 700),
+      tween: Tween(end: widget.degrees),
+      duration: widget.reduce ? Duration.zero : const Duration(milliseconds: 700),
       curve: Curves.easeInOutCubic,
-      builder: (_, a, __) => Transform.translate(
-        offset: Offset(math.sin(a) * 100, -math.cos(a) * 100),
-        child: AnimatedBuilder(
-          animation: pulse,
-          builder: (_, child) =>
-              Transform.scale(scale: 1 + 0.15 * math.sin(pulse.value * math.pi), child: child),
-          child: Opacity(opacity: dim ? 0.4 : 1, child: RingAvatar(person: person, size: 44)),
-        ),
-      ),
+      builder: (_, deg, __) {
+        final a = deg * math.pi / 180;
+        return Transform.translate(
+          offset: Offset(math.sin(a) * 98, -math.cos(a) * 98),
+          child: AnimatedBuilder(
+            animation: Listenable.merge([widget.pulse, _pop]),
+            builder: (_, child) => Transform.scale(
+                scale: 1 + 0.15 * math.sin(widget.pulse.value * math.pi) + 0.18 * math.sin(_pop.value * math.pi),
+                child: child),
+            child: Opacity(
+                opacity: widget.dim ? 0.4 : 1,
+                child: RingAvatar(person: widget.person, size: 44, dashed: !widget.isIn)),
+          ),
+        );
+      },
     );
   }
 }
 
-/// Real avatar inside a glow in the user's equipped Ring Color (theme primary if none).
+/// Real avatar inside a glow in the user's equipped Ring Color (theme primary
+/// if none). [dashed] draws the border dashed (not tapped yet).
 class RingAvatar extends StatelessWidget {
   final Person person;
   final double size;
-  const RingAvatar({super.key, required this.person, this.size = 44});
+  final bool dashed;
+  const RingAvatar({super.key, required this.person, this.size = 44, this.dashed = false});
 
   @override
   Widget build(BuildContext context) {
@@ -487,38 +440,68 @@ class RingAvatar extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: AppColors.of(context).cardBackground,
-        border: Border.all(color: ring, width: 3),
-        boxShadow: [BoxShadow(color: ring.withValues(alpha: 0.5), blurRadius: 10)],
+        border: dashed ? null : Border.all(color: ring, width: 3),
+        boxShadow: dashed ? null : [BoxShadow(color: ring.withValues(alpha: 0.5), blurRadius: 10)],
       ),
+      foregroundDecoration: dashed ? _DashedCircle(ring) : null,
       child: ClipOval(child: UserAvatar(avatarId: person.avatarId, size: size - 6, bare: true)),
     );
   }
 }
 
+class _DashedCircle extends Decoration {
+  final Color color;
+  const _DashedCircle(this.color);
+  @override
+  BoxPainter createBoxPainter([VoidCallback? onChanged]) => _DashedPainter(color);
+}
+
+class _DashedPainter extends BoxPainter {
+  final Color color;
+  _DashedPainter(this.color);
+  @override
+  void paint(Canvas canvas, Offset offset, ImageConfiguration cfg) {
+    final size = cfg.size ?? Size.zero;
+    final r = (offset & size).deflate(1.5);
+    final p = Paint()..style = PaintingStyle.stroke..strokeWidth = 3..color = color;
+    const n = 14;
+    for (var i = 0; i < n; i++) {
+      canvas.drawArc(r, i * 2 * math.pi / n, math.pi / n, false, p);
+    }
+  }
+}
+
 class _RingPainter extends CustomPainter {
-  final double progress;
+  final double progress, glow;
   final bool dashed;
   final Color track, fill;
-  const _RingPainter({required this.progress, required this.dashed, required this.track, required this.fill});
+  const _RingPainter({
+    required this.progress, required this.dashed, required this.track, required this.fill, this.glow = 0});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final r = rect.deflate(14);
+    final r = (Offset.zero & size).deflate(14);
     final p = Paint()..style = PaintingStyle.stroke..strokeWidth = 8..color = track..strokeCap = StrokeCap.round;
     if (dashed) {
       const n = 36;
       for (var i = 0; i < n; i++) {
         canvas.drawArc(r, -math.pi / 2 + i * 2 * math.pi / n, math.pi / n, false, p);
       }
-    } else {
-      canvas.drawArc(r, 0, 2 * math.pi, false, p);
-      canvas.drawArc(r, -math.pi / 2, 2 * math.pi * progress, false, p..color = fill);
+      return;
     }
+    if (glow > 0) {
+      canvas.drawCircle(r.center, r.width / 2, Paint()
+        ..style = PaintingStyle.stroke..strokeWidth = 14
+        ..color = fill.withValues(alpha: 0.55 * glow)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10));
+    }
+    canvas.drawArc(r, 0, 2 * math.pi, false, p);
+    canvas.drawArc(r, -math.pi / 2, 2 * math.pi * progress, false, p..color = fill);
   }
 
   @override
-  bool shouldRepaint(_RingPainter o) => o.progress != progress || o.dashed != dashed || o.track != track || o.fill != fill;
+  bool shouldRepaint(_RingPainter o) =>
+      o.progress != progress || o.dashed != dashed || o.track != track || o.fill != fill || o.glow != glow;
 }
 
 /// M4: one button. Grey label, an orange layer wipes across it left to right

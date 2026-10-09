@@ -132,6 +132,17 @@ String? groupKeyFor(PushPayload p) =>
         ? 'gym_buddy_invites'
         : null;
 
+/// Workout pushes whose reference_id is the workout: tapping one opens that
+/// workout's page. Invite pushes (and anything about a workout that is gone)
+/// open the Workout Schedule list instead.
+const _workoutPageTypes = {
+  'time_to_start', 'buddy_tapped_first', 'started', 'nudge', 'cant_make_it', 'buddy_left',
+  'buddy_finished', 'still_going', 'before_auto', 'workout_overtime', 'invite_accepted',
+};
+
+String? workoutIdForPush(String? type, String? referenceId) =>
+    _workoutPageTypes.contains(type) && referenceId != null && referenceId.isNotEmpty ? referenceId : null;
+
 /// Home tab a tapped push opens: 0 Workout Schedule, 1 Friends, 2 Dashboard.
 int? tabForType(String? type) {
   switch (type) {
@@ -253,6 +264,18 @@ class NotificationService {
 
   /// A tapped push asks HomeScreen for this tab; HomeScreen clears it.
   static final ValueNotifier<int?> tabRequest = ValueNotifier<int?>(null);
+
+  /// A tapped workout push asks HomeScreen for that workout's page.
+  static final ValueNotifier<String?> workoutRequest = ValueNotifier<String?>(null);
+
+  /// Tap routing, from an FCM data map or a local notification payload.
+  static void routeTap(Map<String, dynamic> data) {
+    final type = data['type'] as String?;
+    final tab = tabForType(type);
+    if (tab == null) return;
+    tabRequest.value = tab;
+    workoutRequest.value = workoutIdForPush(type, data['reference_id'] as String?);
+  }
 
   static const String _summaryPrefix = 'summary_';
 
@@ -477,9 +500,7 @@ class NotificationService {
   static void _routePayload(String? payload) {
     if (payload == null || payload.isEmpty) return;
     try {
-      final type = (jsonDecode(payload) as Map<String, dynamic>)['type'] as String?;
-      final tab = tabForType(type);
-      if (tab != null) tabRequest.value = tab;
+      routeTap(jsonDecode(payload) as Map<String, dynamic>);
     } catch (_) {}
   }
 
@@ -559,8 +580,7 @@ class NotificationService {
 
   void _handleNotificationTap(RemoteMessage message) {
     debugLog('🔔 Notification tapped: ${message.data['type']}');
-    final tab = tabForType(message.data['type'] as String?);
-    if (tab != null) tabRequest.value = tab;
+    routeTap(message.data);
   }
 
   Future<Map<String, dynamic>> getSettings() async {

@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart';
 import 'services/break_day_service.dart';
 import 'widgets/friends_page_modern.dart';
 import 'pages/schedule_page.dart';
+import 'pages/workout_page.dart';
 import 'services/handshake_service.dart';
 import 'widgets/checkin_ignite_video.dart';
 import 'widgets/streak_badge.dart';
@@ -91,7 +92,11 @@ class _HomeScreenState extends State<HomeScreen> {
       const ProfilePage(),
     ];
     NotificationService.tabRequest.addListener(_openRequestedTab);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _openRequestedTab());
+    NotificationService.workoutRequest.addListener(_openRequestedWorkout);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _openRequestedTab();
+      _openRequestedWorkout();
+    });
   }
 
   /// A tapped push asked for a tab (see NotificationService.tabRequest).
@@ -102,8 +107,18 @@ class _HomeScreenState extends State<HomeScreen> {
     _onTabChanged(tab);
   }
 
+  /// A tapped workout push asked for that workout's page (see
+  /// NotificationService.workoutRequest). Only a tap ever sets it.
+  void _openRequestedWorkout() {
+    final id = NotificationService.workoutRequest.value;
+    if (id == null || !mounted) return;
+    NotificationService.workoutRequest.value = null;
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => WorkoutPage(workoutId: id)));
+  }
+
   @override
   void dispose() {
+    NotificationService.workoutRequest.removeListener(_openRequestedWorkout);
     NotificationService.tabRequest.removeListener(_openRequestedTab);
     _tabPageController.dispose();
     LiveEventToast.dashboardTabActive = false;
@@ -694,7 +709,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     await Future.wait([
       _workoutService.cleanupOrphanedSessions(),
       _checkWeeklyPlan(),
-      _checkForActiveWorkout(),
     ]);
   
     await _loadStreakData();
@@ -3494,10 +3508,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         // ✅ Active workout exists - go directly to timer with saved details
         if (!mounted) return;
 
-        // A workout tied to a workouts row is finished from the Workout Schedule card.
+        // A workout tied to a workouts row runs on its own workout page. This
+        // only happens when the user taps Continue or the check-in button;
+        // nothing opens it automatically.
         if (runsOnScheduleCard(activeSession)) {
-          final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-          homeState?._onTabChanged(0);
+          await Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => WorkoutPage(workoutId: activeSession['workout_id'] as String)));
           return;
         }
 
@@ -3593,27 +3609,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     } catch (e) {
       debugLog('⚠️ Could not adopt live buddy workout session: $e');
       return null;
-    }
-  }
-
-  Future<void> _checkForActiveWorkout() async {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
-    if (userId == null) return;
-    
-    try {
-      final existing = await Supabase.instance.client
-          .from('active_checkin_sessions')
-          .select()
-          .eq('user_id', userId)
-          .maybeSingle();
-      
-      if (existing != null && mounted) {
-        // Active workout exists - just open the timer sheet directly
-        // It will automatically show the correct elapsed time
-        _checkIn();
-      }
-    } catch (e) {
-      debugLog('Error checking for active workout: $e');
     }
   }
 

@@ -340,13 +340,6 @@ void main() {
     expect(runsOnScheduleCard({'workout_id': 'w1'}), isTrue);
   });
 
-  test('avatars: waiting at the top, tapper rides, both meet', () {
-    expect(avatarAngles('time_to_start').me.abs(), lessThan(0.5));
-    expect(avatarAngles('i_am_here').me, lessThan(-1));
-    expect(avatarAngles('buddy_is_here').them, greaterThan(1));
-    expect((avatarAngles('running').them - avatarAngles('running').me).abs(), lessThan(0.5));
-  });
-
   test('ring colour: hex parsed, junk falls back to null (theme emerald)', () {
     expect(ringFromHex('#FF6F5E'), const Color(0xFFFF6F5E));
     expect(ringFromHex(null), isNull);
