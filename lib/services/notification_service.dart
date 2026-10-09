@@ -268,6 +268,29 @@ class NotificationService {
   /// A tapped workout push asks HomeScreen for that workout's page.
   static final ValueNotifier<String?> workoutRequest = ValueNotifier<String?>(null);
 
+  /// The tap that launched the app is routed once per process. initialize()
+  /// runs again after login or onboarding, and Android keeps reporting the
+  /// launching notification for the life of the activity, so without this a
+  /// later initialize() would replay the tap.
+  static bool _launchRouted = false;
+  static bool _listening = false;
+
+  static void routeLaunch(Map<String, dynamic> data) {
+    if (_launchRouted) return;
+    _launchRouted = true;
+    routeTap(data);
+  }
+
+  @visibleForTesting
+  static void resetLaunchForTest() => _launchRouted = false;
+
+  /// HomeScreen takes a requested workout exactly once.
+  static String? takeWorkoutRequest() {
+    final id = workoutRequest.value;
+    workoutRequest.value = null;
+    return id;
+  }
+
   /// Tap routing, from an FCM data map or a local notification payload.
   static void routeTap(Map<String, dynamic> data) {
     final type = data['type'] as String?;
@@ -317,15 +340,23 @@ class NotificationService {
         _saveTokenToSupabase();
       });
 
-      FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-      FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+      if (!_listening) {
+        _listening = true; // initialize() can run again; listen once
+        FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+        FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+      }
 
       // Cold start from a tap: a system-drawn push, or one this app drew.
-      final initial = await _fcm?.getInitialMessage();
-      if (initial != null) _handleNotificationTap(initial);
-      final launch = await _localNotifications.getNotificationAppLaunchDetails();
-      if (launch?.didNotificationLaunchApp == true) {
-        _routePayload(launch!.notificationResponse?.payload);
+      if (!_launchRouted) {
+        final initial = await _fcm?.getInitialMessage();
+        if (initial != null) routeLaunch(initial.data);
+        final launch = await _localNotifications.getNotificationAppLaunchDetails();
+        if (launch?.didNotificationLaunchApp == true) {
+          final payload = launch!.notificationResponse?.payload;
+          if (payload != null && payload.isNotEmpty) {
+            routeLaunch(jsonDecode(payload) as Map<String, dynamic>);
+          }
+        }
       }
 
       debugLog('✅ NotificationService initialized!');
@@ -574,7 +605,6 @@ class NotificationService {
     LiveEventToast.show(
       title: title,
       subtitle: body,
-      icon: LiveEventToast.iconForType(type),
     );
   }
 

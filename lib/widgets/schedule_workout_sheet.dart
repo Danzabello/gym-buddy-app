@@ -119,8 +119,8 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(_selectedBuddyId != null
-                      ? 'Workout invite sent to $_selectedBuddyName! 🎉'
-                      : 'Workout scheduled! 💪'),
+                      ? 'Workout invite sent to $_selectedBuddyName.'
+                      : 'Workout scheduled.'),
                 ),
               ],
             ),

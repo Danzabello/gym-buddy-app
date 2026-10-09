@@ -182,16 +182,12 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
     final upcoming = [for (final w in _rows) if (w != nowRow) w]
       ..sort((a, b) => (a['planned_at'] as String).compareTo(b['planned_at'] as String));
     final outCount = head?.openInviteCount ?? 0;
+    final isEmpty = nowRow == null && upcoming.isEmpty && received.isEmpty;
     final c = AppColors.of(context);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Workout Schedule', style: TextStyle(fontWeight: FontWeight.bold)),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => ScheduleWorkoutSheet.show(context, onWorkoutScheduled: _refresh),
-        icon: const Icon(Icons.add),
-        label: const Text('New Workout'),
       ),
       body: !_loaded
           ? const Center(child: CircularProgressIndicator())
@@ -201,6 +197,7 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
                 setState(() => _completedTrigger++);
               },
               child: ListView(padding: const EdgeInsets.all(16), children: [
+                if (!isEmpty) ...[_newWorkoutButton(), const SizedBox(height: 16)],
                 if (_finishing)
                   _quiet('Finishing your last workout')
                 else if (_pending != null)
@@ -231,12 +228,20 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
                   onDecline: (id) => _answer(id, accept: false),
                 ),
                 if (received.isNotEmpty) const SizedBox(height: 16),
-                if (nowRow == null && upcoming.isEmpty && received.isEmpty) _empty(),
+                if (isEmpty) _empty(),
                 _deps.completed(_completedTrigger),
               ]),
             ),
     );
   }
+
+  /// Always reachable: top of the list, or inside the empty state.
+  Widget _newWorkoutButton() => FilledButton(
+        style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(48), backgroundColor: AppColors.of(context).streakOrange),
+        onPressed: () => ScheduleWorkoutSheet.show(context, onWorkoutScheduled: _refresh),
+        child: const Text('New workout'),
+      );
 
   Widget _quiet(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 16),
@@ -277,7 +282,9 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
                   fontSize: 18, fontWeight: FontWeight.bold,
                   color: Theme.of(context).colorScheme.onSurface)),
           const SizedBox(height: 8),
-          Text('Tap + to schedule a workout', style: TextStyle(fontSize: 14, color: c.subtleText)),
+          Text('Schedule one with a buddy or on your own.', style: TextStyle(fontSize: 14, color: c.subtleText)),
+          const SizedBox(height: 16),
+          _newWorkoutButton(),
         ]),
       ),
     );

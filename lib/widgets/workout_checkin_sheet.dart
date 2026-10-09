@@ -503,7 +503,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
                     const SizedBox(height: 10),
                     Text(
                       _hasReachedGoal
-                          ? '🎉 Goal reached! Ready to check in!'
+                          ? 'Goal reached. Ready to check in.'
                           : '${_formatRemainingTime()} until goal',
                       style: TextStyle(
                         fontSize: 14,

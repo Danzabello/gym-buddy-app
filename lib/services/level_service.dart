@@ -98,7 +98,7 @@ class LevelService {
         userId: userId,
         amount: xpWorkout,
         reason: 'workout_$workoutId',
-        reasons: ['+$xpWorkout XP workout completed 🏋️'],
+        reasons: ['+$xpWorkout XP workout completed'],
       );
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error awarding workout XP: $e');

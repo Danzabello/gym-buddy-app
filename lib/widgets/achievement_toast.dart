@@ -143,7 +143,7 @@ class _AchievementToastWidgetState extends State<_AchievementToastWidget>
                           Row(
                             children: [
                               Text(
-                                '🏆 Achievement Unlocked',
+                                'Achievement Unlocked',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,

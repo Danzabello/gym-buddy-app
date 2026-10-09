@@ -118,7 +118,7 @@ class _StreakCompleteSheetState extends State<StreakCompleteSheet>
               ),
               const SizedBox(height: 6),
               Text(
-                'Both buddies checked in today 💪',
+                'Both buddies checked in today',
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey[600],
@@ -181,7 +181,7 @@ class _StreakCompleteSheetState extends State<StreakCompleteSheet>
                     elevation: 0,
                   ),
                   child: const Text(
-                    'Thanks! 🙌',
+                    'Thanks',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,

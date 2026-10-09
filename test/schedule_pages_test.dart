@@ -508,6 +508,61 @@ void main() {
     expect(t.getCenter(find.byType(RingAvatar).first).dy, closeTo(ring.dy + 98, 2));
   });
 
+  group('New workout button', () {
+    testWidgets('empty list: inside the empty state', (t) async {
+      await t.pumpWidget(app(SchedulePage(deps: Fake([]).deps())));
+      await settle(t);
+      expect(find.text('New workout'), findsOneWidget);
+      expect(t.widget<FilledButton>(find.widgetWithText(FilledButton, 'New workout')).onPressed, isNotNull);
+    });
+
+    testWidgets('list with workouts: at the top, once', (t) async {
+      await t.pumpWidget(app(SchedulePage(deps: Fake([wk('a', 'waiting_start_time')]).deps())));
+      await settle(t);
+      expect(find.text('New workout'), findsOneWidget);
+      expect(t.getTopLeft(find.text('New workout')).dy, lessThan(t.getTopLeft(find.text('Upcoming')).dy));
+    });
+
+    testWidgets('invites only: still reachable', (t) async {
+      await t.pumpWidget(app(SchedulePage(deps: Fake([], invites: [inv(0)]).deps())));
+      await settle(t);
+      expect(find.text('New workout'), findsOneWidget);
+    });
+  });
+
+  group('nothing opens a workout page by itself', () {
+    testWidgets('resume, poll and realtime-style refetches never push the page', (t) async {
+      final f = Fake([wk('r', 'running', startedAgoMin: 5, startsIn: const Duration(minutes: -5))]);
+      await t.pumpWidget(app(SchedulePage(deps: f.deps())));
+      await settle(t);
+      for (final s in [AppLifecycleState.inactive, AppLifecycleState.paused, AppLifecycleState.resumed]) {
+        t.binding.handleAppLifecycleStateChanged(s);
+        await t.pump(const Duration(seconds: 1));
+      }
+      await t.pump(const Duration(seconds: 65)); // two polls
+      expect(find.byType(WorkoutPage), findsNothing);
+      expect(f.calls.where((c) => c == 'get_workout_card').length, greaterThan(3)); // it did refetch
+    });
+
+    test('a handled launch tap is never replayed (initialize() runs again after login)', () {
+      NotificationService.tabRequest.value = null;
+      NotificationService.workoutRequest.value = null;
+      NotificationService.resetLaunchForTest();
+      NotificationService.routeLaunch({'type': 'buddy_tapped_first', 'reference_id': 'w1'});
+      expect(NotificationService.takeWorkoutRequest(), 'w1');
+      NotificationService.routeLaunch({'type': 'buddy_tapped_first', 'reference_id': 'w1'}); // second initialize()
+      expect(NotificationService.takeWorkoutRequest(), isNull);
+    });
+
+    test('a requested workout is taken exactly once', () {
+      NotificationService.workoutRequest.value = null;
+      NotificationService.routeTap({'type': 'nudge', 'reference_id': 'w2'});
+      expect(NotificationService.takeWorkoutRequest(), 'w2');
+      expect(NotificationService.takeWorkoutRequest(), isNull);
+      expect(NotificationService.workoutRequest.value, isNull);
+    });
+  });
+
   group('push taps', () {
     setUp(() {
       NotificationService.tabRequest.value = null;

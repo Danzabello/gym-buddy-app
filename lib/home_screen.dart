@@ -110,9 +110,9 @@ class _HomeScreenState extends State<HomeScreen> {
   /// A tapped workout push asked for that workout's page (see
   /// NotificationService.workoutRequest). Only a tap ever sets it.
   void _openRequestedWorkout() {
-    final id = NotificationService.workoutRequest.value;
-    if (id == null || !mounted) return;
-    NotificationService.workoutRequest.value = null;
+    if (!mounted) return;
+    final id = NotificationService.takeWorkoutRequest();
+    if (id == null) return;
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => WorkoutPage(workoutId: id)));
   }
 
@@ -2240,8 +2240,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     if (others.isEmpty) return null;
 
     final first = _nicknames[others.first.userId] ?? others.first.displayName;
-    if (others.length == 1) return '🔥 $first already checked in — keep pace';
-    return '🔥 $first +${others.length - 1} already checked in — keep pace';
+    if (others.length == 1) return '$first already checked in, keep pace';
+    return '$first +${others.length - 1} already checked in, keep pace';
   }
 
   /// ✅ The clay check-in slab: focused streak's name and count, the nudge,
@@ -2701,7 +2701,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final c = AppColors.of(context);
     final palette = context.read<AccentThemeProvider>().palette;
     final (message, background) = switch (result) {
-      NudgeResult.sent => ('Nudge sent to $name! 🔔', c.success),
+      NudgeResult.sent => ('Nudge sent to $name.', c.success),
       NudgeResult.alreadySent => ('Already nudged $name today', c.inkMuted),
       NudgeResult.tooEarly =>
         ('Too early to nudge — try after 10am', palette.statusWarning),
@@ -3060,7 +3060,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 Icon(Icons.bedtime, color: Colors.white),
                 SizedBox(width: 12),
                 Expanded(
-                  child: Text('Break day taken! Your streak is safe 💤'),
+                  child: Text('Break day taken. Your streak is safe.'),
                 ),
               ],
             ),
@@ -3442,7 +3442,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Set $result break day${result == 1 ? '' : 's'} for this week! 🎉'),
+          content: Text('Set $result break day${result == 1 ? '' : 's'} for this week.'),
           backgroundColor: Colors.green,
         ),
       );
@@ -3484,7 +3484,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       if (_hasCheckedInToday) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('You already checked in today! 💪'),
+            content: Text('You already checked in today.'),
             backgroundColor: Colors.orange,
             duration: Duration(seconds: 2),
           ),
@@ -3691,7 +3691,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             accentPrefix: _nicknames[_bannerBuddy!.userId]?.isNotEmpty == true
                 ? _nicknames[_bannerBuddy!.userId]!
                 : _bannerBuddy!.displayName,
-            title: ' just checked in 🔥',
+            title: ' just checked in',
             subtitle: 'Your streak is safe today',
             onDismissed: () {
               if (mounted) setState(() => _bannerBuddy = null);
@@ -4480,7 +4480,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           SnackBar(
             content: Text(
               newFavoriteStatus 
-                  ? '⭐ ${streak.teamName} added to favorites!' 
+                  ? '${streak.teamName} added to favorites.' 
                   : '${streak.teamName} removed from favorites',
             ),
             duration: const Duration(seconds: 2),

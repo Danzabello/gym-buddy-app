@@ -94,7 +94,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
               children: [
                 const Icon(Icons.check_circle, color: Colors.white),
                 const SizedBox(width: 12),
-                Expanded(child: Text('Workout invite sent to ${widget.buddyDisplayName}! 🎉')),
+                Expanded(child: Text('Workout invite sent to ${widget.buddyDisplayName}.')),
               ],
             ),
             backgroundColor: AppColors.of(context).successGreen,
