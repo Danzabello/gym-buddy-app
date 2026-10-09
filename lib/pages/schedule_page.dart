@@ -120,7 +120,7 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
       _pending = p;
       _finishing = true;
     });
-    final r = await finishWorkout(context, _deps.svc, id: p.id, minutes: p.minutes, completed: true);
+    final r = await finishWorkout(context, _deps.svc, id: p.id, minutes: p.minutes, completed: true, hooks: _deps.finishHooks);
     if (!mounted) return;
     setState(() {
       _finishing = false;

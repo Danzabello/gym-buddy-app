@@ -5,6 +5,7 @@ import '../services/coin_service.dart';
 import '../services/handshake_service.dart';
 import '../services/team_streak_service.dart';
 import '../widgets/completed_workouts_section.dart';
+import 'finish_flow.dart';
 import '../widgets/workout_schedule_card.dart';
 
 typedef Unsubscribe = void Function();
@@ -54,6 +55,9 @@ class ScheduleDeps {
   /// The "Recent completed workouts" section at the bottom of the list.
   final Widget Function(int refreshTrigger) completed;
 
+  /// What happens after a finish succeeds (celebration, streak sheet, ...).
+  final FinishHooks? finishHooks;
+
   const ScheduleDeps({
     required this.svc,
     required this.listen,
@@ -61,6 +65,7 @@ class ScheduleDeps {
     required this.loadStreak,
     required this.listIds,
     required this.completed,
+    this.finishHooks,
   });
 
   factory ScheduleDeps.live() {

@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gym_buddy_app/pages/finish_flow.dart';
 import 'package:gym_buddy_app/pages/schedule_deps.dart';
 import 'package:gym_buddy_app/pages/schedule_page.dart';
 import 'package:gym_buddy_app/pages/workout_page.dart';
@@ -52,7 +55,8 @@ class Fake {
         'server_now': _iso(DateTime.now().toUtc()),
       };
 
-  ScheduleDeps deps() => ScheduleDeps(
+  ScheduleDeps deps({FinishHooks? hooks}) => ScheduleDeps(
+        finishHooks: hooks,
         svc: HandshakeService(rpc: (fn, p) async {
           calls.add(fn);
           final custom = onRpc?.call(fn, p);
@@ -345,6 +349,48 @@ void main() {
       await t.pump(const Duration(seconds: 65)); // poll timers and refetches
       expect(find.byType(WorkoutPage), findsNothing);
       expect(find.text('open'), findsOneWidget);
+    });
+
+    testWidgets('Finish: the page goes back only after the celebration and the streak sheet are dismissed', (t) async {
+      final w = wk('w', 'goal_reached', startedAgoMin: 50, startsIn: const Duration(minutes: -50));
+      final f = Fake([w]);
+      final celebration = Completer<void>(), sheet = Completer<void>();
+      final steps = <String>[];
+      final hooks = FinishHooks(
+        apply: (_) async => {'teams_updated': 1, 'partner_bonus_earned': true},
+        achievements: (_, __) {},
+        celebrate: (_, __, ___, ____) { steps.add('celebration'); return celebration.future; },
+        streakSheet: (_) { steps.add('streak sheet'); return sheet.future; },
+      );
+      await t.pumpWidget(const SizedBox());
+      final key = GlobalKey<NavigatorState>();
+      await t.pumpWidget(MaterialApp(
+        navigatorKey: key,
+        theme: ThemeData(extensions: [AppColors.fromAccent(AccentPalette.emeraldInk)]),
+        home: const Scaffold(body: Text('home')),
+      ));
+      key.currentState!.push(MaterialPageRoute(
+          builder: (_) => WorkoutPage(workoutId: 'w', deps: f.deps(hooks: hooks))));
+      await go(t);
+      await t.tap(find.text('Finish workout'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 100));
+      // order on the server: complete, then credit
+      expect(f.calls.where((c) => c == 'complete_workout' || c == 'finish_checkin_session').toList(),
+          ['complete_workout', 'finish_checkin_session']);
+      expect(steps, ['celebration']);
+      await go(t);
+      expect(find.byType(WorkoutPage), findsOneWidget, reason: 'celebration still up');
+      celebration.complete();
+      await t.pump(const Duration(milliseconds: 100));
+      expect(steps, ['celebration', 'streak sheet']);
+      await go(t);
+      expect(find.byType(WorkoutPage), findsOneWidget, reason: 'streak sheet still up');
+      sheet.complete();
+      await t.pump(const Duration(milliseconds: 100));
+      await go(t);
+      expect(find.byType(WorkoutPage), findsNothing);
+      expect(find.text('home'), findsOneWidget);
     });
 
     testWidgets('a closed workout shows a plain message, still leaveable', (t) async {

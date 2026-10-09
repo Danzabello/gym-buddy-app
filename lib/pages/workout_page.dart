@@ -94,7 +94,8 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
         final started = DateTime.parse(_w['workout_started_at'] as String);
         final minutes = _clock.now().difference(started).inMinutes;
         final r = await finishWorkout(context, _deps.svc,
-            id: widget.workoutId, minutes: minutes, type: _type, name: _name);
+            id: widget.workoutId, minutes: minutes, type: _type, name: _name,
+            hooks: _deps.finishHooks);
         if (r != FinishResult.failed && mounted) Navigator.of(context).maybePop();
         return;
       }
