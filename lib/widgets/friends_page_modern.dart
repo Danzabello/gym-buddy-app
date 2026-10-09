@@ -177,7 +177,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
       case NudgeResult.sent:
         HapticFeedback.mediumImpact();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Nudge sent to $name! 🔔'),
+          content: Text('Nudge sent to $name.'),
           backgroundColor: appColors.successGreen,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -1107,7 +1107,7 @@ void _openBuddyChat(BuildContext context, Map<String, dynamic> friend) {
   HapticFeedback.selectionClick();
   final name = friend['display_name'] as String? ?? 'Buddy';
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    content: Text('Chat with $name — coming soon! 💬'),
+    content: Text('Chat with $name is coming soon.'),
     behavior: SnackBarBehavior.floating,
     backgroundColor: AppColors.of(context).subtleText,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1495,7 +1495,7 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
           content: const Row(children: [
             Icon(Icons.check_circle, color: Colors.white),
             SizedBox(width: 12),
-            Text('Friend request sent! 🎉'),
+            Text('Friend request sent.'),
           ]),
           backgroundColor: appColors.successGreen,
           behavior: SnackBarBehavior.floating,
@@ -1559,7 +1559,7 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
         content: const Row(children: [
           Icon(Icons.celebration, color: Colors.white),
           SizedBox(width: 12),
-          Text('Buddy added! 🎉'),
+          Text('Buddy added.'),
         ]),
         backgroundColor: appColors.successGreen,
         behavior: SnackBarBehavior.floating,

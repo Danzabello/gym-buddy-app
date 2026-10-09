@@ -60,3 +60,6 @@ supabase/.temp/
 # Instruction-file backups
 .claude-backup/
 .vscode/settings.json
+
+# graphify
+graphify-out/

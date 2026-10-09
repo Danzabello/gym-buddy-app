@@ -32,43 +32,11 @@ class LiveEventToast {
   static bool get dashboardOwnsCheckIns =>
       dashboardTabActive && dashboardCheckInBannerEnabled;
 
-  /// Emoji for a push's `data['type']`. Types come from the categoryMap in
-  /// supabase/functions/send-notification/index.ts.
-  static String iconForType(String? type) {
-    switch (type) {
-      case 'friend_request':
-      case 'friend_accepted':
-        return '👋';
-      case 'workout_invite':
-      case 'workout_accepted':
-      case 'workout_declined':
-      case 'workout_starting_soon':
-      case 'buddy_started_workout':
-      case 'join_window_expiring':
-        return '🏋️';
-      case 'buddy_checked_in':
-      case 'streak_complete':
-      case 'streak_milestone':
-      case 'streak_danger':
-      case 'streak_broken':
-      case 'buddy_nudge':
-        return '🔥';
-      case 'break_day_taken':
-        return '🛡';
-      case 'coach_max_checked_in':
-      case 'coach_max_motivational':
-        return '🤖';
-      default:
-        return '🔔';
-    }
-  }
-
   /// Shows a toast in the navigator overlay — works from any screen, and from
   /// callers with no BuildContext. No-op if no overlay is mounted yet.
   static void show({
     required String title,
     String? subtitle,
-    String icon = '🔔',
   }) {
     final overlay = appNavigatorKey.currentState?.overlay;
     if (overlay == null) return;
@@ -76,7 +44,6 @@ class LiveEventToast {
     late OverlayEntry entry;
     entry = OverlayEntry(
       builder: (_) => LiveEventToastCard(
-        leading: Text(icon, style: const TextStyle(fontSize: 26)),
         title: title,
         subtitle: subtitle,
         onDismissed: () => entry.remove(),
@@ -89,8 +56,8 @@ class LiveEventToast {
 /// The card itself. Used directly by the dashboard (which renders it inside its
 /// own Stack with a buddy avatar) and by [LiveEventToast.show] via an overlay.
 class LiveEventToastCard extends StatefulWidget {
-  /// Avatar or emoji shown at the left edge.
-  final Widget leading;
+  /// Avatar shown at the left edge (the dashboard banner); none for plain pushes.
+  final Widget? leading;
 
   /// Rendered in the accent colour, immediately before [title]. Used for the
   /// buddy's name on the check-in banner; null for generic pushes.
@@ -101,7 +68,7 @@ class LiveEventToastCard extends StatefulWidget {
 
   const LiveEventToastCard({
     super.key,
-    required this.leading,
+    this.leading,
     this.accentPrefix,
     required this.title,
     this.subtitle,
@@ -192,8 +159,10 @@ class _LiveEventToastCardState extends State<LiveEventToastCard>
                         padding: const EdgeInsets.fromLTRB(14, 12, 16, 12),
                         child: Row(
                           children: [
-                            widget.leading,
-                            const SizedBox(width: 12),
+                            if (widget.leading != null) ...[
+                              widget.leading!,
+                              const SizedBox(width: 12),
+                            ],
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,

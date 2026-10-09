@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/workout_service.dart';
+import '../services/handshake_service.dart';
 import 'dart:async';
 import 'dart:math';
 import 'streak_complete_sheet.dart';
@@ -343,30 +343,14 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
     if (confirmed == true) {
       // Cancel the workout
       if (workoutId != null) {
-        // Buddy workout - use fair cancel logic
-        final workoutService = WorkoutService();
-        await workoutService.cancelWorkout(workoutId);
+        // Buddy workout: the server marks my side as left.
+        await HandshakeService().leave(workoutId);
       } else {
         // Solo workout - just delete the session
         await Supabase.instance.client
             .from('active_checkin_sessions')
             .delete()
             .eq('user_id', userId);
-
-        // Also cancel the user's own solo in_progress workout records.
-        // buddy_id must be null: this sheet has no workout_id, so it can
-        // only speak for solo workouts — shared workouts are cancelled
-        // through cancelWorkout's fair logic, never swept from here.
-        try {
-          await Supabase.instance.client
-              .from('workouts')
-              .update({'status': 'cancelled', 'creator_cancelled': true})
-              .eq('user_id', userId)
-              .eq('status', 'in_progress')
-              .isFilter('buddy_id', null);
-        } catch (e) {
-          debugLog('⚠️ Could not cancel workout record: $e');
-        }
       }
 
       if (mounted) {
@@ -519,7 +503,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
                     const SizedBox(height: 10),
                     Text(
                       _hasReachedGoal
-                          ? '🎉 Goal reached! Ready to check in!'
+                          ? 'Goal reached. Ready to check in.'
                           : '${_formatRemainingTime()} until goal',
                       style: TextStyle(
                         fontSize: 14,

@@ -84,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() {
       _isLockedOut = true;
       _lockoutSecondsRemaining = (remainingMs / 1000).ceil();
-      _errorMessage = '🔒 Too many attempts. Try again in ${_lockoutSecondsRemaining}s.';
+      _errorMessage = 'Too many attempts. Try again in ${_lockoutSecondsRemaining}s.';
     });
     _runLockoutTimer();
   }
@@ -223,7 +223,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   void _startLockoutCountdown() {
     _lockoutSecondsRemaining = 60;
-    _errorMessage = '🔒 Too many attempts. Try again in ${_lockoutSecondsRemaining}s.';
+    _errorMessage = 'Too many attempts. Try again in ${_lockoutSecondsRemaining}s.';
     _persistLockoutUntil(DateTime.now().add(const Duration(seconds: 60)));
     _runLockoutTimer();
   }
@@ -254,7 +254,7 @@ class _LoginScreenState extends State<LoginScreen>
           timer.cancel();
           _clearPersistedLockout();
         } else {
-          _errorMessage = '🔒 Too many attempts. Try again in ${_lockoutSecondsRemaining}s.';
+          _errorMessage = 'Too many attempts. Try again in ${_lockoutSecondsRemaining}s.';
         }
       });
     });

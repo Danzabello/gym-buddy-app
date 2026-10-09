@@ -8,17 +8,20 @@ import 'package:confetti/confetti.dart';
 class WorkoutCelebration {
   static OverlayEntry? _overlayEntry;
   static bool _isShowing = false;
+  static Completer<void>? _done;
 
-  /// Show the celebration overlay
-  static void show(
+  /// Show the celebration overlay. The future completes when it is dismissed
+  /// (tap or the 4 s auto-dismiss).
+  static Future<void> show(
     BuildContext context, {
     required String workoutType,
     int? duration,
     String? buddyName,
   }) {
     // Don't show if already showing
-    if (_isShowing) return;
+    if (_isShowing) return _done!.future;
     _isShowing = true;
+    _done = Completer<void>();
 
     // Haptic feedback
     HapticFeedback.heavyImpact();
@@ -38,6 +41,7 @@ class WorkoutCelebration {
     Future.delayed(const Duration(seconds: 4), () {
       hide();
     });
+    return _done!.future;
   }
 
   /// Hide the celebration overlay
@@ -46,6 +50,7 @@ class WorkoutCelebration {
     _isShowing = false;
     _overlayEntry?.remove();
     _overlayEntry = null;
+    _done?.complete();
   }
 }
 

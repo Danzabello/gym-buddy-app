@@ -102,6 +102,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
       time: timeString,
       plannedDurationMinutes: _duration,
       buddyId: _selectedBuddyId,
+      buddyName: _selectedBuddyName,
     );
 
     setState(() => _isCreating = false);
@@ -118,8 +119,8 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(_selectedBuddyId != null
-                      ? 'Workout invite sent to $_selectedBuddyName! 🎉'
-                      : 'Workout scheduled! 💪'),
+                      ? 'Workout invite sent to $_selectedBuddyName.'
+                      : 'Workout scheduled.'),
                 ),
               ],
             ),

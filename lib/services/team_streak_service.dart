@@ -338,6 +338,18 @@ class TeamStreakService {
         'finish_checkin_session',
         params: {'p_workout_id': workoutId},
       ) as Map);
+      return await applyFinishResult(res);
+    } catch (e) {
+      if (kDebugMode) debugLog('❌ Error checking in: $e');
+      return {'success': false, 'message': 'Could not complete check-in. Please try again.'};
+    }
+  }
+
+  /// Everything the client does after finish_checkin_session answers:
+  /// achievements, milestone cosmetics, and the partner-bonus flag. Shared by
+  /// the dashboard check-in and the Workout Schedule card's Finish.
+  Future<Map<String, dynamic>> applyFinishResult(Map<String, dynamic> res) async {
+    final today = localTodayString();
       final creditDate = res['credit_date'] as String;
       final successCount = res['checked_in'] as int? ?? 0;
 
@@ -369,7 +381,7 @@ class TeamStreakService {
       final partnerBonusTransaction = await _supabase
           .from('coin_transactions')
           .select('id')
-          .eq('user_id', currentUserId)
+          .eq('user_id', _supabase.auth.currentUser!.id)
           .eq('transaction_type', 'partner_bonus')
           .gte('created_at', '${today}T00:00:00Z')
           .maybeSingle();
@@ -381,10 +393,6 @@ class TeamStreakService {
         'break_cancelled': res['break_cancelled'] == true,
         'partner_bonus_earned': partnerBonusTransaction != null,
       };
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error checking in: $e');
-      return {'success': false, 'message': 'Could not complete check-in. Please try again.'};
-    }
   }
 
   /// Client-side follow-ups once the server has advanced a streak:
@@ -623,24 +631,6 @@ class TeamStreakService {
       }
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error checking streak status: $e');
-    }
-  }
-
-  /// Check in [userId] (a co-op partner) across all their active teams.
-  /// Validated server-side against the real [workoutId] session that
-  /// proves they're a genuine participant — replaces the old
-  /// friend-on-shared-team client insert (S3 audit fix).
-  Future<int> checkInAllTeamsForUser(String userId, {required String workoutId}) async {
-    try {
-      final count = await _supabase.rpc('checkin_team_for_user', params: {
-        'p_target_user_id': userId,
-        'p_workout_id': workoutId,
-      });
-      debugLog('✅ Proxy check-in: $count teams for $userId');
-      return count as int? ?? 0;
-    } catch (e) {
-      debugLog('❌ Error in checkInAllTeamsForUser: $e');
-      return 0;
     }
   }
 
