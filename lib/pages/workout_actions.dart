@@ -29,8 +29,6 @@ Future<bool> runWorkoutAction(
     switch (a) {
       case CardAction.imHere: await svc.imHere(id);
       case CardAction.goSolo: await svc.goSolo(id);
-      case CardAction.cantMakeIt || CardAction.cancel || CardAction.leave || CardAction.abandon:
-        await sendEndAction(svc, a, id);
       case CardAction.nudge:
         await svc.nudge(id);
         toast('Nudge sent to ${otherName ?? 'your buddy'}.');
@@ -48,6 +46,8 @@ Future<bool> runWorkoutAction(
         toast('New time sent. ${otherName ?? 'Your buddy'} can accept or decline.');
       case CardAction.finish:
         return false; // finishing has its own flow (finish_flow.dart)
+      case CardAction.cantMakeIt || CardAction.cancel || CardAction.leave || CardAction.abandon:
+        return false; // these go through the slide sheet (sendEndAction)
     }
     return true;
   } catch (e) {

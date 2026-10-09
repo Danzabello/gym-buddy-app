@@ -100,9 +100,8 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
         if (r != FinishResult.failed && mounted) Navigator.of(context).maybePop();
         return;
       }
-      final ok = await runWorkoutAction(context, _deps.svc, a, widget.workoutId,
+      await runWorkoutAction(context, _deps.svc, a, widget.workoutId,
           otherName: _name, now: _clock.now());
-      if (ok && (a == CardAction.cancel || a == CardAction.cantMakeIt) && mounted) Navigator.of(context).maybePop();
     } finally {
       if (mounted) setState(() => _busy = false);
       _refresh();
@@ -119,6 +118,7 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
             otherName: _name),
         me: _me,
         buddy: _w['other_person'] == null ? null : otherPerson(_w),
+        progress: isRunningState(_data!.state) ? workoutProgress(_w, _clock.now()) : null,
         run: (a) => sendEndAction(_deps.svc, a, widget.workoutId));
     if (a == null || !mounted) return;
     if (a == CardAction.changeTime) {
@@ -164,6 +164,8 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
                     busy: _busy,
                     showHeader: false,
                     onAction: _onAction,
+                    runEnd: (a) => sendEndAction(_deps.svc, a, widget.workoutId),
+                    onEnded: (_) => Navigator.of(context).maybePop(),
                     onDue: _refresh,
                   ),
                 ]),

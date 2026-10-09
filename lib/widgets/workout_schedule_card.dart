@@ -6,6 +6,8 @@ import 'package:flutter/scheduler.dart';
 import '../services/handshake_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/workout_time.dart';
+import 'confirm_slide_sheet.dart';
+import 'schedule_rows.dart' show otherPerson;
 import 'user_avatar.dart';
 import 'workout_menu.dart';
 
@@ -27,6 +29,23 @@ Color? ringFromHex(String? hex) {
   final v = int.tryParse(h, radix: 16);
   return v == null ? null : Color(0xFF000000 | v);
 }
+
+/// How long the timer has run, and its goal, from a workout card map.
+Duration workoutElapsed(Map<String, dynamic> w, DateTime now) {
+  final s = w['workout_started_at'] as String?;
+  return s == null ? Duration.zero : now.difference(DateTime.parse(s));
+}
+
+Duration workoutGoal(Map<String, dynamic> w) {
+  final s = w['workout_started_at'] as String?, g = w['goal_at'] as String?;
+  return s != null && g != null
+      ? DateTime.parse(g).difference(DateTime.parse(s))
+      : Duration(minutes: (w['planned_duration_minutes'] as num?)?.toInt() ?? 30);
+}
+
+/// Ring progress 0..1; 0 until the timer runs.
+double workoutProgress(Map<String, dynamic> w, DateTime now) =>
+    (workoutElapsed(w, now).inMilliseconds / math.max(1, workoutGoal(w).inMilliseconds)).clamp(0.0, 1.0);
 
 const kNudgeCooldown = Duration(minutes: 10);
 
@@ -74,6 +93,13 @@ class WorkoutScheduleCard extends StatefulWidget {
   final bool showHeader; // the workout page has its own header
   final void Function(CardAction) onAction;
 
+  /// Runs Leave, Abandon, Cancel or Can't make it from the slide sheet; throws
+  /// if the server refuses. Without it the sheet hands the action to [onAction].
+  final Future<void> Function(CardAction)? runEnd;
+
+  /// Called once such an action has run.
+  final void Function(CardAction)? onEnded;
+
   /// Fired once when the clock passes the moment the server state changes by
   /// itself (window opens, goal reached): the page refetches.
   final VoidCallback? onDue;
@@ -84,6 +110,8 @@ class WorkoutScheduleCard extends StatefulWidget {
     required this.clock,
     required this.me,
     required this.onAction,
+    this.runEnd,
+    this.onEnded,
     this.streakDays = 0,
     this.busy = false,
     this.showHeader = true,
@@ -155,17 +183,8 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
     widget.onDue?.call();
   }
 
-  Duration get _elapsed {
-    final s = _t('workout_started_at');
-    return s == null ? Duration.zero : widget.clock.now().difference(s);
-  }
-
-  Duration get _goal {
-    final s = _t('workout_started_at'), g = _t('goal_at');
-    return s != null && g != null
-        ? g.difference(s)
-        : Duration(minutes: (_w['planned_duration_minutes'] as num?)?.toInt() ?? 30);
-  }
+  Duration get _elapsed => workoutElapsed(_w, widget.clock.now());
+  Duration get _goal => workoutGoal(_w);
 
   Duration get _nudgeLeft {
     final n = _t('last_nudge_at');
@@ -219,18 +238,30 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
   bool get _dashed => !_running && _state != 'buddy_cant_make_it';
 
   // ── menu ───────────────────────────────────────────────────────────────
+  Future<void> _runEnd(CardAction a) async => widget.runEnd != null ? widget.runEnd!(a) : widget.onAction(a);
+
+  Person? get _buddy => _other == null ? null : otherPerson(_w);
+  double? get _progressNow => _running ? workoutProgress(_w, widget.clock.now()) : null;
+
+  /// Cancel workout / Can't make it buttons: straight to the slide sheet.
+  Future<void> _confirmEnd(CardAction a) async {
+    final ran = await showConfirmSlideSheet(context,
+        action: a, workout: _titleLine().split(',').first, me: widget.me,
+        buddy: _buddy, progress: _progressNow, run: () => _runEnd(a));
+    if (ran && mounted) widget.onEnded?.call(a);
+  }
+
   Future<void> _openMenu() async {
     final a = await pickWorkoutAction(context,
         title: _titleLine().split(',').first,
         options: menuOptionsFor(
             iAmCreator: _iAmCreator, running: _running, hasBuddy: _other != null, otherName: _otherName),
-        me: widget.me,
-        buddy: _other == null ? null : Person(
-            name: _otherName,
-            avatarId: _other!['avatar_id'] as String?,
-            ring: ringFromHex(_other!['ring_color'] as String?)),
-        run: (a) async => widget.onAction(a)); // the page runs it
-    if (a == CardAction.changeTime && mounted) widget.onAction(CardAction.changeTime);
+        me: widget.me, buddy: _buddy, progress: _progressNow, run: _runEnd);
+    if (a == CardAction.changeTime && mounted) {
+      widget.onAction(CardAction.changeTime);
+    } else if (a != null && mounted) {
+      widget.onEnded?.call(a);
+    }
   }
 
   // ── build ──────────────────────────────────────────────────────────────
@@ -242,9 +273,7 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
     final (headline, sub) = _copy();
     final goalMin = _goal.inMinutes;
     final spots = avatarSpots(_state, solo: _other == null);
-    final progress = _running
-        ? (_elapsed.inMilliseconds / math.max(1, _goal.inMilliseconds)).clamp(0.0, 1.0)
-        : 0.0;
+    final progress = _running ? workoutProgress(_w, widget.clock.now()) : 0.0;
     final timer = clockText(_running ? _elapsed : Duration.zero);
     final caption = _state == 'goal_reached'
         ? 'Goal reached'
@@ -347,7 +376,9 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
         );
     Widget secondary(String label, CardAction? a) => OutlinedButton(
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-          onPressed: a == null || off ? null : () => widget.onAction(a),
+          onPressed: a == null || off
+              ? null
+              : () => a == CardAction.cantMakeIt || a == CardAction.cancel ? _confirmEnd(a) : widget.onAction(a),
           child: Text(label),
         );
     const gap = SizedBox(height: 8);

@@ -173,6 +173,31 @@ void main() {
     expect(actions, isEmpty);
   });
 
+  testWidgets('card buttons Cancel workout and Can\'t make it open the slide sheet', (t) async {
+    var actions = await pump(t, card('buddy_cant_make_it'));
+    await t.tap(find.widgetWithText(OutlinedButton, 'Cancel workout'));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
+    expect(find.text('Cancel Strength with Sam?'), findsOneWidget);
+    expect(actions, isEmpty);
+    await t.drag(find.byType(RingAvatar).last, const Offset(600, 0));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
+    expect(actions, [CardAction.cancel]);
+
+    await t.pumpWidget(const SizedBox());
+    actions = await pump(t, card('time_to_start', w: workout('time_to_start', creator: false)));
+    await t.tap(find.widgetWithText(OutlinedButton, "Can't make it"));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
+    expect(find.text("Can't make it?"), findsOneWidget);
+    expect(actions, isEmpty);
+    await t.drag(find.byType(RingAvatar).last, const Offset(600, 0));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
+    expect(actions, [CardAction.cantMakeIt]);
+  });
+
   testWidgets('menu: change time asks the page directly', (t) async {
     final actions = await pump(t, card('time_to_start'));
     await openMenu(t);

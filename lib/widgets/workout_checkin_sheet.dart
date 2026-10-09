@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../pages/schedule_deps.dart';
 import '../services/handshake_service.dart';
 import 'dart:async';
 import 'dart:math';
+import 'confirm_slide_sheet.dart';
+import 'schedule_rows.dart' show otherPerson;
 import 'streak_complete_sheet.dart';
+import 'workout_schedule_card.dart' show CardAction, Person;
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 
@@ -289,74 +293,44 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
     }
     if (!mounted) return;
 
-    // ✅ Show context-appropriate dialog
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange[700], size: 28),
-            const SizedBox(width: 12),
-            const Text('Cancel Workout?'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'You\'ve been working out for ${_formatDuration(_elapsed)}.',
-              style: const TextStyle(fontSize: 15),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              isBuddyWorkout
-                  ? 'If you cancel now, this progress won\'t count towards YOUR streak.'
-                  : 'If you cancel now, this progress won\'t count towards your streak.',
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-            ),
-            // ✅ Only show buddy message for buddy workouts
-            if (isBuddyWorkout) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Your buddy can still complete their workout.',
-                style: TextStyle(fontSize: 13, color: Colors.blue[600], fontStyle: FontStyle.italic),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep Going'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(isBuddyWorkout ? 'Cancel My Workout' : 'Cancel Workout'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      // Cancel the workout
+    // The buddy's name and my avatar for the sheet; plain fallbacks if the lookups fail.
+    Person me = const Person();
+    Person? buddy;
+    String workout = widget.workoutType ?? 'Workout';
+    try {
+      me = await ScheduleDeps.live().loadMe();
       if (workoutId != null) {
-        // Buddy workout: the server marks my side as left.
-        await HandshakeService().leave(workoutId);
-      } else {
-        // Solo workout - just delete the session
-        await Supabase.instance.client
-            .from('active_checkin_sessions')
-            .delete()
-            .eq('user_id', userId);
+        final w = (await HandshakeService().card(workoutId)).workout;
+        if (w != null && w['other_person'] != null) {
+          buddy = otherPerson(w);
+          workout = '${w['workout_type'] ?? workout} with ${buddy.name}';
+        }
       }
-
-      if (mounted) {
-        Navigator.pop(context, false);
-      }
+    } catch (e) {
+      debugLog('⚠️ Could not load people for the cancel sheet: $e');
     }
+    if (!mounted) return;
+
+    final ran = await showConfirmSlideSheet(
+      context,
+      action: isBuddyWorkout ? CardAction.leave : CardAction.abandon,
+      workout: workout,
+      me: me,
+      buddy: buddy,
+      progress: (_elapsed.inSeconds / Duration(minutes: _goalMinutes).inSeconds).clamp(0.0, 1.0),
+      run: () async {
+        if (workoutId != null) {
+          // Buddy workout: the server marks my side as left.
+          await HandshakeService().leave(workoutId);
+        } else {
+          await Supabase.instance.client
+              .from('active_checkin_sessions')
+              .delete()
+              .eq('user_id', userId);
+        }
+      },
+    );
+    if (ran && mounted) Navigator.pop(context, false);
   }
 
   String _formatDuration(Duration duration) {

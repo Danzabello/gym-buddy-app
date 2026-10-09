@@ -37,6 +37,7 @@ Future<bool> showConfirmSlideSheet(
   required String workout,
   required Person me,
   Person? buddy,
+  double? progress,
   required Future<void> Function() run,
 }) async {
   final c = AppColors.of(context);
@@ -51,7 +52,7 @@ Future<bool> showConfirmSlideSheet(
       side: BorderSide(color: c.cardBorder),
     ),
     builder: (_) => ConfirmSlideSheet(
-        action: action, workout: workout, me: me, buddy: buddy, run: run),
+        action: action, workout: workout, me: me, buddy: buddy, progress: progress, run: run),
   );
   return ok == true;
 }
@@ -61,10 +62,13 @@ class ConfirmSlideSheet extends StatefulWidget {
   final String workout;
   final Person me;
   final Person? buddy;
+
+  /// Real ring progress for Leave and Abandon; null draws an illustrative arc.
+  final double? progress;
   final Future<void> Function() run;
   const ConfirmSlideSheet({
     super.key, required this.action, required this.workout, required this.me,
-    this.buddy, required this.run});
+    this.buddy, this.progress, required this.run});
 
   @override
   State<ConfirmSlideSheet> createState() => _ConfirmSlideSheetState();
@@ -110,7 +114,7 @@ class _ConfirmSlideSheetState extends State<ConfirmSlideSheet> {
             style: text.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         Center(child: FittedBox(fit: BoxFit.scaleDown, child: _NowAfter(
-            action: widget.action, me: widget.me, buddy: widget.buddy))),
+            action: widget.action, me: widget.me, buddy: widget.buddy, progress: widget.progress ?? 0.6))),
         const SizedBox(height: 16),
         Text(copy.line, textAlign: TextAlign.center, style: text.bodyMedium),
         const SizedBox(height: 20),
@@ -284,7 +288,8 @@ class _NowAfter extends StatelessWidget {
   final CardAction action;
   final Person me;
   final Person? buddy;
-  const _NowAfter({required this.action, required this.me, required this.buddy});
+  final double progress;
+  const _NowAfter({required this.action, required this.me, required this.buddy, required this.progress});
 
   @override
   Widget build(BuildContext context) {
@@ -305,15 +310,15 @@ class _NowAfter extends StatelessWidget {
 
     return ExcludeSemantics(
       child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
-        column('Now', _MiniRing(action: action, me: me, them: them, spots: spots, p: 0, running: running)),
+        column('Now', _MiniRing(action: action, me: me, them: them, spots: spots, p: 0, running: running, progress: progress)),
         Padding(
           padding: const EdgeInsets.only(bottom: 62),
           child: Icon(Icons.arrow_forward, color: c.subtleText),
         ),
         reduce
-            ? column('After', _MiniRing(action: action, me: me, them: them, spots: spots, p: 1, running: running))
+            ? column('After', _MiniRing(action: action, me: me, them: them, spots: spots, p: 1, running: running, progress: progress))
             : _LoopingAfter(builder: (p) => column('After',
-                _MiniRing(action: action, me: me, them: them, spots: spots, p: p, running: running))),
+                _MiniRing(action: action, me: me, them: them, spots: spots, p: p, running: running, progress: progress))),
       ]),
     );
   }
@@ -359,9 +364,10 @@ class _MiniRing extends StatelessWidget {
   final AvatarSpots spots;
   final double p;
   final bool running;
+  final double progress;
   const _MiniRing({
     required this.action, required this.me, required this.them, required this.spots,
-    required this.p, required this.running});
+    required this.p, required this.running, required this.progress});
 
   Widget _at(double deg, Widget child, {double out = 0}) {
     final a = deg * math.pi / 180;
@@ -384,7 +390,7 @@ class _MiniRing extends StatelessWidget {
         child: CustomPaint(
           size: const Size.square(220),
           painter: RingPainter(
-              progress: running ? 0.6 : 0, dashed: waiting, track: c.divider, fill: scheme.primary),
+              progress: running ? progress : 0, dashed: waiting, track: c.divider, fill: scheme.primary),
         ),
       ),
       if (them != null)

@@ -57,6 +57,7 @@ Future<CardAction?> pickWorkoutAction(
   required List<MenuOption> options,
   required Person me,
   Person? buddy,
+  double? progress,
   required Future<void> Function(CardAction) run,
 }) async {
   final c = AppColors.of(context);
@@ -81,7 +82,7 @@ Future<CardAction?> pickWorkoutAction(
   );
   if (picked == null || picked == CardAction.changeTime || !context.mounted) return picked;
   final ran = await showConfirmSlideSheet(context,
-      action: picked, workout: title, me: me, buddy: buddy, run: () => run(picked));
+      action: picked, workout: title, me: me, buddy: buddy, progress: progress, run: () => run(picked));
   return ran ? picked : null;
 }
 
