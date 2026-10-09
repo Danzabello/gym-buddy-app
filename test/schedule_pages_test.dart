@@ -227,7 +227,7 @@ void main() {
       expect(sent?['p_force'], true);
     });
 
-    testWidgets('row menu per role, with Are you sure', (t) async {
+    testWidgets('row menu per role, with the slide sheet', (t) async {
       final f = Fake([
         wk('mine', 'waiting_start_time', startsIn: const Duration(hours: 2)),
         wk('theirs', 'waiting_start_time', type: 'Yoga', other: 'Cleo', creator: false, startsIn: const Duration(hours: 4)),
@@ -245,10 +245,10 @@ void main() {
       expect(find.text('More'), findsNothing);
       await t.tap(find.text('Cancel workout'));
       await go(t);
-      expect(find.text('Are you sure?'), findsOneWidget);
+      expect(find.text('Cancel Strength with Alex?'), findsOneWidget);
       expect(f.calls.contains('cancel_workout'), isFalse);
-      await t.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Cancel workout')));
-      await settle(t);
+      await t.drag(find.byType(RingAvatar).last, const Offset(600, 0));
+      await go(t);
       expect(f.calls.contains('cancel_workout'), isTrue);
 
       await menu(1);

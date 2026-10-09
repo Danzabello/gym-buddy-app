@@ -11,7 +11,8 @@ String _title(Map<String, dynamic> w) {
   return n == null ? type : '$type with $n';
 }
 
-Person _other(Map<String, dynamic> w) {
+/// The other person on a workout card/row, from `other_person`.
+Person otherPerson(Map<String, dynamic> w) {
   final p = (w['other_person'] as Map?)?.cast<String, dynamic>();
   return Person(
       name: p?['display_name'] as String?,
@@ -67,7 +68,7 @@ class NowRow extends StatelessWidget {
               height: 44,
               child: Stack(children: [
                 RingAvatar(person: me, size: 40),
-                if (hasOther) Positioned(left: 26, child: RingAvatar(person: _other(workout), size: 40)),
+                if (hasOther) Positioned(left: 26, child: RingAvatar(person: otherPerson(workout), size: 40)),
               ]),
             ),
             const SizedBox(width: 12),
@@ -110,7 +111,7 @@ class UpcomingRow extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
           child: Row(children: [
-            RingAvatar(person: workout['other_person'] == null ? me : _other(workout), size: 40),
+            RingAvatar(person: workout['other_person'] == null ? me : otherPerson(workout), size: 40),
             const SizedBox(width: 12),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

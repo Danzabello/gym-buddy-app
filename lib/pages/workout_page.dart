@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/handshake_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/workout_time.dart';
+import '../widgets/schedule_rows.dart';
 import '../widgets/workout_menu.dart';
 import '../widgets/workout_schedule_card.dart';
 import 'finish_flow.dart';
@@ -101,8 +102,7 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
       }
       final ok = await runWorkoutAction(context, _deps.svc, a, widget.workoutId,
           otherName: _name, now: _clock.now());
-      const leaving = {CardAction.cancel, CardAction.leave, CardAction.abandon, CardAction.cantMakeIt};
-      if (ok && leaving.contains(a) && mounted) Navigator.of(context).maybePop();
+      if (ok && (a == CardAction.cancel || a == CardAction.cantMakeIt) && mounted) Navigator.of(context).maybePop();
     } finally {
       if (mounted) setState(() => _busy = false);
       _refresh();
@@ -116,8 +116,16 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
             iAmCreator: _w['i_am_creator'] == true,
             running: isRunningState(_data!.state),
             hasBuddy: _w['other_person'] != null,
-            otherName: _name));
-    if (a != null && mounted) _onAction(a);
+            otherName: _name),
+        me: _me,
+        buddy: _w['other_person'] == null ? null : otherPerson(_w),
+        run: (a) => sendEndAction(_deps.svc, a, widget.workoutId));
+    if (a == null || !mounted) return;
+    if (a == CardAction.changeTime) {
+      _onAction(a);
+    } else {
+      Navigator.of(context).maybePop(); // the sheet already ran it
+    }
   }
 
   @override

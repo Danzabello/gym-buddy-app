@@ -146,11 +146,15 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
             iAmCreator: w['i_am_creator'] == true,
             running: false,
             hasBuddy: w['other_person'] != null,
-            otherName: name));
-    if (a == null || !mounted) return;
-    await runWorkoutAction(context, _deps.svc, a, w['workout_id'] as String,
-        otherName: name, now: _clock.now());
-    _refresh();
+            otherName: name),
+        me: _me,
+        buddy: w['other_person'] == null ? null : otherPerson(w),
+        run: (a) => sendEndAction(_deps.svc, a, w['workout_id'] as String));
+    if (a == CardAction.changeTime && mounted) {
+      await runWorkoutAction(context, _deps.svc, CardAction.changeTime, w['workout_id'] as String,
+          otherName: name, now: _clock.now());
+    }
+    if (a != null) _refresh();
   }
 
   Future<void> _answer(String id, {required bool accept, bool force = false}) async {

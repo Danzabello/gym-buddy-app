@@ -223,8 +223,14 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
     final a = await pickWorkoutAction(context,
         title: _titleLine().split(',').first,
         options: menuOptionsFor(
-            iAmCreator: _iAmCreator, running: _running, hasBuddy: _other != null, otherName: _otherName));
-    if (a != null && mounted) widget.onAction(a);
+            iAmCreator: _iAmCreator, running: _running, hasBuddy: _other != null, otherName: _otherName),
+        me: widget.me,
+        buddy: _other == null ? null : Person(
+            name: _otherName,
+            avatarId: _other!['avatar_id'] as String?,
+            ring: ringFromHex(_other!['ring_color'] as String?)),
+        run: (a) async => widget.onAction(a)); // the page runs it
+    if (a == CardAction.changeTime && mounted) widget.onAction(CardAction.changeTime);
   }
 
   // ── build ──────────────────────────────────────────────────────────────
@@ -277,7 +283,7 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
                   animation: _pulse,
                   builder: (_, __) => CustomPaint(
                     size: const Size.square(220),
-                    painter: _RingPainter(
+                    painter: RingPainter(
                       progress: progress, dashed: _dashed,
                       track: c.divider, fill: scheme.primary,
                       glow: math.sin(_pulse.value * math.pi)),
@@ -471,11 +477,11 @@ class _DashedPainter extends BoxPainter {
   }
 }
 
-class _RingPainter extends CustomPainter {
+class RingPainter extends CustomPainter {
   final double progress, glow;
   final bool dashed;
   final Color track, fill;
-  const _RingPainter({
+  const RingPainter({
     required this.progress, required this.dashed, required this.track, required this.fill, this.glow = 0});
 
   @override
@@ -500,7 +506,7 @@ class _RingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_RingPainter o) =>
+  bool shouldRepaint(RingPainter o) =>
       o.progress != progress || o.dashed != dashed || o.track != track || o.fill != fill || o.glow != glow;
 }
 
