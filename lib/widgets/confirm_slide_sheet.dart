@@ -243,9 +243,9 @@ class _SlideToConfirmState extends State<_SlideToConfirm> with SingleTickerProvi
                         border: Border.all(color: c.danger, width: 2)),
                     ),
                   ),
-                  // red fill: left edge to the middle of the thumb
+                  // red fill: from the left edge to inside the thumb, nothing showing at rest
                   Positioned(
-                    left: 0, top: 0, bottom: 0, width: x + _thumb / 2,
+                    left: 0, top: 0, bottom: 0, width: x + _thumb * _v.value,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: c.danger, borderRadius: BorderRadius.circular(_trackH / 2)),
