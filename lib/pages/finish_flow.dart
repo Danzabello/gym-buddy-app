@@ -47,8 +47,9 @@ Future<FinishResult> finishWorkout(
   try {
     final res = await svc.finish(id, minutes, alreadyCompleted: completed);
     // The server had nothing to credit (FIN-1): no celebration, leave as usual.
-    if (res['result'] == 'nothing_to_finish') {
-      toast(kNothingToFinishMessage);
+    final noop = finishNoopMessage(res);
+    if (noop != null) {
+      toast(noop);
       return FinishResult.done;
     }
     final h = hooks ?? FinishHooks.live;

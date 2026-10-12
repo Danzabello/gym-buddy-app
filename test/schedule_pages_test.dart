@@ -393,36 +393,42 @@ void main() {
       expect(find.text('home'), findsOneWidget);
     });
 
-    testWidgets('Finish with nothing to credit: plain sentence, no celebration, page closes', (t) async {
-      final w = wk('w', 'goal_reached', startedAgoMin: 50, startsIn: const Duration(minutes: -50));
-      final f = Fake([w], onRpc: (fn, _) =>
-          fn == 'finish_checkin_session' ? {'result': 'nothing_to_finish', 'checked_in': 0, 'teams': []} : null);
-      final steps = <String>[];
-      final hooks = FinishHooks(
-        apply: (_) async { steps.add('apply'); return {}; },
-        achievements: (_, __) => steps.add('achievements'),
-        celebrate: (_, __, ___, ____) async => steps.add('celebration'),
-        streakSheet: (_) async => steps.add('streak sheet'),
-      );
-      await t.pumpWidget(const SizedBox());
-      final key = GlobalKey<NavigatorState>();
-      await t.pumpWidget(MaterialApp(
-        navigatorKey: key,
-        theme: ThemeData(extensions: [AppColors.fromAccent(AccentPalette.emeraldInk)]),
-        home: const Scaffold(body: Text('home')),
-      ));
-      key.currentState!.push(MaterialPageRoute(
-          builder: (_) => WorkoutPage(workoutId: 'w', deps: f.deps(hooks: hooks))));
-      await go(t);
-      await t.tap(find.text('Finish workout'));
-      await t.pump();
-      await t.pump(const Duration(milliseconds: 100));
-      await go(t);
-      expect(steps, isEmpty);
-      expect(find.text('Nothing new to check in.'), findsOneWidget);
-      expect(find.byType(WorkoutPage), findsNothing);
-      expect(find.text('home'), findsOneWidget);
-    });
+    for (final (result, sentence) in [
+      ('nothing_to_finish', 'Nothing new to check in.'),
+      ('too_early', 'It is too early for that.'),
+    ]) {
+      testWidgets('Finish credited nothing ($result): plain sentence, no celebration, page closes', (t) async {
+        final w = wk('w', 'goal_reached', startedAgoMin: 50, startsIn: const Duration(minutes: -50));
+        final f = Fake([w], onRpc: (fn, _) =>
+            fn == 'finish_checkin_session' ? {'result': result, 'checked_in': 0, 'teams': []} : null);
+        final steps = <String>[];
+        final hooks = FinishHooks(
+          apply: (_) async { steps.add('apply'); return {}; },
+          achievements: (_, __) => steps.add('achievements'),
+          celebrate: (_, __, ___, ____) async => steps.add('celebration'),
+          streakSheet: (_) async => steps.add('streak sheet'),
+        );
+        await t.pumpWidget(const SizedBox());
+        final key = GlobalKey<NavigatorState>();
+        await t.pumpWidget(MaterialApp(
+          navigatorKey: key,
+          theme: ThemeData(extensions: [AppColors.fromAccent(AccentPalette.emeraldInk)]),
+          home: const Scaffold(body: Text('home')),
+        ));
+        key.currentState!.push(MaterialPageRoute(
+            builder: (_) => WorkoutPage(workoutId: 'w', deps: f.deps(hooks: hooks))));
+        await go(t);
+        await t.tap(find.text('Finish workout'));
+        await t.pump();
+        await t.pump(const Duration(milliseconds: 100));
+        await go(t);
+        expect(steps, isEmpty);
+        expect(find.text(sentence), findsOneWidget);
+        expect(find.textContaining(result), findsNothing);
+        expect(find.byType(WorkoutPage), findsNothing);
+        expect(find.text('home'), findsOneWidget);
+      });
+    }
 
     testWidgets('a closed workout shows a plain message, still leaveable', (t) async {
       await open(t, wk('w', 'closed'));

@@ -396,6 +396,89 @@ BEGIN
   PERFORM pg_temp.fx('n7: not paid a second time', A, bA, 0, 0, 0);
 END $f$;
 
+-- ═════════ FIN-1 follow-up (session 15-minute floor, completion window) ═════════
+-- n8. own session at 14 minutes: too_early, nothing written
+CREATE FUNCTION pg_temp.s_n8() RETURNS void LANGUAGE plpgsql AS $f$
+DECLARE A uuid := pg_temp.ua(); bA jsonb := pg_temp.sn(A); n0 text; r text;
+BEGIN
+  r := pg_temp.u(A, format('INSERT INTO active_checkin_sessions (user_id, workout_type, planned_duration) VALUES (%L, ''Strength'', 30) RETURNING id::text', A));
+  UPDATE active_checkin_sessions SET started_at = now() - interval '14 minutes' WHERE user_id = A;
+  n0 := pg_temp.nrows(A);
+  PERFORM pg_temp.eq('n8: finish at 14 min', pg_temp.res(pg_temp.fin(A, NULL)), 'too_early/ci=0/p=0');
+  PERFORM pg_temp.eq('n8: nothing written, session kept', pg_temp.nrows(A), n0);
+  PERFORM pg_temp.fx('n8: no credit', A, bA, 0, 0, 0);
+END $f$;
+
+-- n9. own session at 15 minutes: credited once
+CREATE FUNCTION pg_temp.s_n9() RETURNS void LANGUAGE plpgsql AS $f$
+DECLARE A uuid := pg_temp.ua(); bA jsonb := pg_temp.sn(A); r text;
+BEGIN
+  r := pg_temp.u(A, format('INSERT INTO active_checkin_sessions (user_id, workout_type, planned_duration) VALUES (%L, ''Strength'', 15) RETURNING id::text', A));
+  UPDATE active_checkin_sessions SET started_at = now() - interval '15 minutes' WHERE user_id = A;
+  PERFORM pg_temp.eq('n9: finish at 15 min', pg_temp.res(pg_temp.fin(A, NULL)), 'credited/ci=2/p=0');
+  PERFORM pg_temp.fx('n9: credited once (coach 10; T1 not complete)', A, bA, 2, 10, 10);
+  bA := pg_temp.sn(A);
+  PERFORM pg_temp.eq('n9: repeat finish', pg_temp.res(pg_temp.fin(A, NULL)), 'nothing_to_finish/ci=0/p=0');
+  PERFORM pg_temp.fx('n9: repeat credits nothing', A, bA, 0, 0, 0);
+END $f$;
+
+-- n10. completed at 3h29, Finish at 3h35: credited once, on the start day, partner too
+CREATE FUNCTION pg_temp.s_n10() RETURNS void LANGUAGE plpgsql AS $f$
+DECLARE A uuid := pg_temp.ua(); B uuid := pg_temp.ub(); w uuid := pg_temp.run2(215); bA jsonb; bB jsonb; r text;
+BEGIN
+  PERFORM pg_temp.eq('n10: A completes', pg_temp.st(pg_temp.call(A, 'complete_workout', w, ', 30')), 'completed');
+  UPDATE workouts SET workout_completed_at = workout_started_at + interval '209 minutes' WHERE id = w;
+  bA := pg_temp.sn(A); bB := pg_temp.sn(B);
+  r := pg_temp.fin(A, w);
+  PERFORM pg_temp.eq('n10: finish at 3h35', pg_temp.res(r), 'credited/ci=2/p=2');
+  PERFORM pg_temp.eq('n10: credit day = start day', r::jsonb->>'credit_date',
+    ((SELECT workout_started_at FROM workouts WHERE id = w) AT TIME ZONE public.safe_user_tz(A))::date::text);
+  PERFORM pg_temp.fx('n10: A credited once (coach 10 + T1 15)', A, bA, 2, 25, 25);
+  PERFORM pg_temp.fx('n10: B credited once via partner', B, bB, 2, 25, 25);
+  bA := pg_temp.sn(A);
+  PERFORM pg_temp.eq('n10: second finish', pg_temp.res(pg_temp.fin(A, w)), 'credited/ci=0/p=0');
+  PERFORM pg_temp.fx('n10: second finish credits nothing', A, bA, 0, 0, 0);
+END $f$;
+
+-- n11. completed at 3h45: not credited
+CREATE FUNCTION pg_temp.s_n11() RETURNS void LANGUAGE plpgsql AS $f$
+DECLARE A uuid := pg_temp.ua(); B uuid := pg_temp.ub(); w uuid := pg_temp.run2(250); bA jsonb; bB jsonb;
+BEGIN
+  PERFORM pg_temp.eq('n11: A completes', pg_temp.st(pg_temp.call(A, 'complete_workout', w, ', 30')), 'completed');
+  UPDATE workouts SET workout_completed_at = workout_started_at + interval '225 minutes' WHERE id = w;
+  bA := pg_temp.sn(A); bB := pg_temp.sn(B);
+  PERFORM pg_temp.eq('n11: finish, completed at 3h45', pg_temp.res(pg_temp.fin(A, w)), 'nothing_to_finish/ci=0/p=0');
+  PERFORM pg_temp.eq('n11: B finish too', pg_temp.res(pg_temp.fin(B, w)), 'nothing_to_finish/ci=0/p=0');
+  PERFORM pg_temp.fx('n11: A not credited', A, bA, 0, 0, 0);
+  PERFORM pg_temp.fx('n11: B not credited', B, bB, 0, 0, 0);
+END $f$;
+
+-- n12. direct start-and-immediately-finish through the API
+CREATE FUNCTION pg_temp.s_n12() RETURNS void LANGUAGE plpgsql AS $f$
+DECLARE A uuid := pg_temp.ua(); bA jsonb := pg_temp.sn(A); w uuid; r text;
+BEGIN
+  r := pg_temp.u(A, format('INSERT INTO active_checkin_sessions (user_id, workout_type, planned_duration) VALUES (%L, ''Strength'', 15) RETURNING id::text', A));
+  PERFORM pg_temp.eq('n12: session start, immediate finish', pg_temp.res(pg_temp.fin(A, NULL)), 'too_early/ci=0/p=0');
+  DELETE FROM active_checkin_sessions WHERE user_id = A;
+  w := pg_temp.mk(A, NULL, '0', 'accepted');
+  UPDATE workouts SET buddy_status = NULL WHERE id = w;
+  PERFORM pg_temp.eq('n12: solo starts', pg_temp.st(pg_temp.call(A, 'im_here', w)), 'started');
+  PERFORM pg_temp.eq('n12: immediate complete', pg_temp.st(pg_temp.call(A, 'complete_workout', w, ', 30')), 'ERR:too_early');
+  PERFORM pg_temp.eq('n12: immediate finish with workout id', pg_temp.res(pg_temp.fin(A, w)), 'too_early/ci=0/p=0');
+  PERFORM pg_temp.fx('n12: no credit', A, bA, 0, 0, 0);
+END $f$;
+
+-- n13. a workout the cron auto-completed stays with the cron: manual Finish adds nothing
+CREATE FUNCTION pg_temp.s_n13() RETURNS void LANGUAGE plpgsql AS $f$
+DECLARE A uuid := pg_temp.ua(); w uuid := pg_temp.run2(240); bA jsonb;
+BEGIN
+  PERFORM public.process_stale_sessions(now());
+  PERFORM pg_temp.eq('n13: auto-completed', (SELECT status || '/auto=' || auto_completed FROM workouts WHERE id = w), 'completed/auto=true');
+  bA := pg_temp.sn(A);
+  PERFORM pg_temp.eq('n13: manual finish after auto-complete', pg_temp.res(pg_temp.fin(A, w)), 'nothing_to_finish/ci=0/p=0');
+  PERFORM pg_temp.fx('n13: nothing extra', A, bA, 0, 0, 0);
+END $f$;
+
 DO $probe$
 DECLARE
   A constant uuid := '5e67f64d-16e3-4b09-9b00-ddc49df8c3f6';
@@ -417,7 +500,7 @@ BEGIN
   INSERT INTO team_streaks (team_id, is_active) VALUES (v_team, true) RETURNING id INTO v_t1;
   PERFORM set_config('h4.t1', v_t1::text, true);
 
-  FOREACH s IN ARRAY ARRAY['a', 'b', 'b2', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7'] LOOP
+  FOREACH s IN ARRAY ARRAY['a', 'b', 'b2', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10', 'n11', 'n12', 'n13'] LOOP
     BEGIN
       PERFORM set_config('h4.scn', s, true);
       EXECUTE format('SELECT pg_temp.s_%s()', s);

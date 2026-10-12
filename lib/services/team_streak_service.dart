@@ -5,6 +5,7 @@ import 'workout_history_service.dart';
 import 'level_service.dart';
 import 'dart:async' show unawaited;
 import 'achievement_service.dart';
+import 'handshake_service.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
 
@@ -106,6 +107,14 @@ class TeamStreak {
 
 /// Shown when finish_checkin_session had nothing to credit (FIN-1).
 const kNothingToFinishMessage = 'Nothing new to check in.';
+
+/// A plain sentence for a finish_checkin_session result that credited
+/// nothing (FIN-1), else null.
+String? finishNoopMessage(Map<String, dynamic> res) => switch (res['result']) {
+      'nothing_to_finish' => kNothingToFinishMessage,
+      'too_early' => const HandshakeError('too_early').message(),
+      _ => null,
+    };
 
 class TeamStreakService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -352,9 +361,8 @@ class TeamStreakService {
   /// achievements, milestone cosmetics, and the partner-bonus flag. Shared by
   /// the dashboard check-in and the Workout Schedule card's Finish.
   Future<Map<String, dynamic>> applyFinishResult(Map<String, dynamic> res) async {
-    if (res['result'] == 'nothing_to_finish') {
-      return {'success': false, 'nothing_to_finish': true, 'message': kNothingToFinishMessage};
-    }
+    final noop = finishNoopMessage(res);
+    if (noop != null) return {'success': false, 'noop': true, 'message': noop};
     final today = localTodayString();
       final creditDate = res['credit_date'] as String;
       final successCount = res['checked_in'] as int? ?? 0;

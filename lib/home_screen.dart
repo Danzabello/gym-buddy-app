@@ -3549,7 +3549,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               await _loadStreakData();
               return result['partner_bonus_earned'] == true;
             }
-            if (result['nothing_to_finish'] == true && mounted) {
+            if (result['noop'] == true && mounted) {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message'] as String)));
             }
             return false;
@@ -4594,7 +4594,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           await _loadStreakData();
           return result['partner_bonus_earned'] == true;
         }
-        if (result['nothing_to_finish'] == true && mounted) {
+        if (result['noop'] == true && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['message'] as String)));
         }
         return false;
