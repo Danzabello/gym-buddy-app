@@ -828,9 +828,8 @@ Future<void> _finish() async {
         final existingUser = Supabase.instance.client.auth.currentUser;
         if (existingUser != null) {
           final hasProfile = await Supabase.instance.client
-              .from('user_profiles')
+              .rpc('get_my_profile')
               .select('onboarding_completed')
-              .eq('id', existingUser.id)
               .maybeSingle();
           final completed = hasProfile?['onboarding_completed'] == true;
           if (!completed) {
@@ -864,7 +863,7 @@ Future<void> _finish() async {
     // ── Step 2: Save complete profile in one go ────────────────────────────
     await Supabase.instance.client
         .from('user_profiles')
-        .upsert({
+        .insert({
       'id': user.id,
       'display_name': widget.userData['display_name'],
       'username': widget.userData['username'],

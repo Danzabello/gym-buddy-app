@@ -17,9 +17,8 @@ class CoinService {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return 0;
       final result = await _supabase
-          .from('user_profiles')
+          .rpc('get_my_profile')
           .select('coin_balance')
-          .eq('id', userId)
           .single();
       return result['coin_balance'] as int? ?? 0;
     } catch (e) {
