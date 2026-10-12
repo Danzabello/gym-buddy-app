@@ -3,11 +3,65 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+// Constant-time service-key check. Both sides are hashed to 32 bytes first, so a length
+// mismatch cannot short-circuit; timingSafeEqual is Deno-specific, the loop is the fallback.
+async function isServiceKey(bearer: string): Promise<boolean> {
+  const enc = new TextEncoder()
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(bearer)),
+    crypto.subtle.digest('SHA-256', enc.encode(SUPABASE_SERVICE_KEY)),
+  ])
+  const tse = (crypto.subtle as any).timingSafeEqual
+  if (typeof tse === 'function') return tse.call(crypto.subtle, a, b)
+  const x = new Uint8Array(a), y = new Uint8Array(b)
+  let d = 0
+  for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i]
+  return d === 0
+}
 const FIREBASE_SERVICE_ACCOUNT = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT')!)
 
 // Fallback for a missing/unset user_profiles.timezone — same as
 // coach-max-cron / workout-overtime-cron.
 const FALLBACK_TZ = 'Europe/Dublin'
+
+// Types a client (non-service) caller may send; keep in sync with categoryMap below.
+const CLIENT_TYPES = new Set([
+  'friend_request',
+  'friend_accepted',
+  'workout_invite',
+  'workout_accepted',
+  'workout_declined',
+  'workout_starting_soon',
+  'buddy_started_workout',
+  'join_window_expiring',
+  'workout_overtime',
+  'invite_received',
+  'invite_accepted',
+  'invite_declined',
+  'invite_expired',
+  'invite_rescheduled',
+  'workout_cancelled',
+  'time_to_start',
+  'buddy_tapped_first',
+  'started',
+  'nudge',
+  'cant_make_it',
+  'buddy_left',
+  'buddy_finished',
+  'still_going',
+  'before_auto',
+  'buddy_checked_in',
+  'streak_complete',
+  'streak_milestone',
+  'streak_danger',
+  'streak_broken',
+  'break_day_taken',
+  'coach_max_checked_in',
+  'coach_max_motivational',
+  'buddy_nudge',
+])
+const CLIENT_HOURLY_CAP = 10
 
 // ── tz helpers, copied verbatim from coach-max-cron / workout-overtime-cron
 // (kept in sync there — each edge function deploys standalone, so no shared
@@ -178,12 +232,31 @@ serve(async (req) => {
     const authHeader = req.headers.get('Authorization') ?? ''
     const bearer = authHeader.replace(/^Bearer\s+/i, '').trim()
 
-    if (bearer !== SUPABASE_SERVICE_KEY) {
+    if (!(await isServiceKey(bearer))) {
       const { data: userData, error: authErr } = await supabase.auth.getUser(bearer)
       const callerId = userData?.user?.id
       if (authErr || !callerId) {
         console.log('⛔ send-notification: invalid caller JWT')
         return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
+      }
+
+      // S-15: client callers may only send known notification types, and at most
+      // CLIENT_HOURLY_CAP per hour per target. ponytail: notification_log has no sender
+      // column, so the cap is per target+type, not per caller; add sender_id for a true per-caller cap.
+      if (typeof type !== 'string' || !CLIENT_TYPES.has(type)) {
+        console.log(`⛔ send-notification: client type not allowed: ${String(type).slice(0, 40)}`)
+        return new Response(JSON.stringify({ error: 'bad_request' }), { status: 400 })
+      }
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+      const { count: recent } = await supabase
+        .from('notification_log')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user_id)
+        .eq('notification_type', type)
+        .gte('sent_at', hourAgo)
+      if ((recent ?? 0) >= CLIENT_HOURLY_CAP) {
+        console.log(`⛔ send-notification: hourly cap reached for ${user_id} / ${type}`)
+        return new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429 })
       }
 
       if (callerId !== user_id) {
@@ -369,7 +442,7 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('❌ Error:', error)
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 })
+    return new Response(JSON.stringify({ error: 'internal_error' }), { status: 500 })
   }
 })
 

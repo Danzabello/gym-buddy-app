@@ -4,6 +4,22 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
+// Constant-time service-key check. Both sides are hashed to 32 bytes first, so a length
+// mismatch cannot short-circuit; timingSafeEqual is Deno-specific, the loop is the fallback.
+async function isServiceKey(bearer: string): Promise<boolean> {
+  const enc = new TextEncoder()
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(bearer)),
+    crypto.subtle.digest('SHA-256', enc.encode(SUPABASE_SERVICE_KEY)),
+  ])
+  const tse = (crypto.subtle as any).timingSafeEqual
+  if (typeof tse === 'function') return tse.call(crypto.subtle, a, b)
+  const x = new Uint8Array(a), y = new Uint8Array(b)
+  let d = 0
+  for (let i = 0; i < x.length; i++) d |= x[i] ^ y[i]
+  return d === 0
+}
+
 // "Still going?" fires 15+ minutes past a workout's planned duration, then
 // every 30 minutes after that, capped at 3 nags total (see
 // workouts.overtime_nag_count). "Before auto check-in" fires once at 3h15,
@@ -22,7 +38,7 @@ serve(async (req) => {
     // vault.decrypted_secrets 'service_role_key'.
     // ============================================
     const bearer = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim()
-    if (bearer !== SUPABASE_SERVICE_KEY) {
+    if (!(await isServiceKey(bearer))) {
       console.log('⛔ workout-overtime-cron: caller is not the service role')
       return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 })
     }
@@ -38,7 +54,7 @@ serve(async (req) => {
 
     if (fetchError) {
       console.error('❌ Error fetching in-progress workouts:', fetchError)
-      return new Response(JSON.stringify({ error: fetchError.message }), { status: 500 })
+      return new Response(JSON.stringify({ error: 'internal_error' }), { status: 500 })
     }
 
     // Both people, minus anyone who left. Quiet hours, settings and the
@@ -100,6 +116,6 @@ serve(async (req) => {
     return new Response(JSON.stringify({ sent, before_auto: warned }), { status: 200 })
   } catch (error) {
     console.error('❌ Fatal error:', error)
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 })
+    return new Response(JSON.stringify({ error: 'internal_error' }), { status: 500 })
   }
 })

@@ -52,7 +52,10 @@ serve(async (req) => {
     .select('onboarding_completed')
     .eq('id', uid)
     .maybeSingle()
-  if (profileErr) return json({ error: 'profile_check_failed', detail: profileErr.message }, 500)
+  if (profileErr) {
+    console.error('delete-account profile_check_failed:', profileErr.message)
+    return json({ error: 'internal_error' }, 500)
+  }
 
   // Self-serve exception. AccountPage's "Delete Account" (behind a typed
   // DELETE confirmation) is the one caller that legitimately deletes a fully
@@ -88,6 +91,7 @@ serve(async (req) => {
 
     return json({ deleted: true, user_id: uid })
   } catch (e) {
-    return json({ error: 'delete_failed', detail: String((e as Error).message ?? e) }, 500)
+    console.error('delete-account delete_failed:', String((e as Error).message ?? e))
+    return json({ error: 'internal_error' }, 500)
   }
 })
