@@ -60,7 +60,7 @@ void main() {
         'Your timer stops and this workout does not count.', 'Slide to leave'],
       CardAction.cancel: ['CANCEL WORKOUT', 'Cancel Strength with Sam?',
         'Cancels it for you and Sam. Sam gets a notification.', 'Slide to cancel'],
-      CardAction.cantMakeIt: ["CAN'T MAKE IT", "Can't make it?",
+      CardAction.cantMakeIt: ['WORKOUT INVITE', "Can't make it?",
         'Frees Sam up. Sam can still work out solo. No penalty.', 'Slide to confirm'],
     };
     for (final e in cases.entries) {

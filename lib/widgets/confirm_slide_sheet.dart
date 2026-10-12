@@ -24,7 +24,7 @@ ConfirmCopy confirmCopyFor(CardAction a, {required String workout, String? other
       return (label: 'Cancel workout', title: 'Cancel $workout?', slide: 'Slide to cancel',
           line: other == null ? 'Cancels this workout.' : 'Cancels it for you and $n. $n gets a notification.');
     default:
-      return (label: "Can't make it", title: "Can't make it?", slide: 'Slide to confirm',
+      return (label: 'Workout invite', title: "Can't make it?", slide: 'Slide to confirm',
           line: 'Frees $n up. $n can still work out solo. No penalty.');
   }
 }

@@ -1,37 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'handshake_service.dart';
 
 class WorkoutService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  /// [userId] and [insert] are test seams; both default to Supabase.
+  WorkoutService({this.userId, this.insert});
+  final String? Function()? userId;
+  final Future<void> Function(Map<String, dynamic> row)? insert;
 
-  // ============================================================
-  // BUDDY JOIN SYSTEM
-  // ============================================================
-
-  Future<bool> isUserInActiveWorkout(String userId) async {
-    try {
-      final activeSessions = await _supabase
-          .from('active_checkin_sessions')
-          .select('id')
-          .eq('user_id', userId);
-      if (activeSessions.isNotEmpty) {
-        return true;
-      }
-      final inProgressWorkouts = await _supabase
-          .from('workouts')
-          .select('id')
-          .eq('status', 'in_progress')
-          .or('user_id.eq.$userId,buddy_id.eq.$userId');
-      if (inProgressWorkouts.isNotEmpty) {
-        return true;
-      }
-      return false;
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error checking active workout: $e');
-      return false;
-    }
-  }
+  SupabaseClient get _supabase => Supabase.instance.client;
 
   // ============================================================
   // CORE WORKOUT METHODS
@@ -46,21 +24,10 @@ class WorkoutService {
     String? buddyName,
   }) async {
     try {
-      final currentUserId = _supabase.auth.currentUser?.id;
-      if (currentUserId == null) return 'Not logged in';
-      if (buddyId != null) {
-        final buddyInWorkout = await isUserInActiveWorkout(buddyId);
-        if (buddyInWorkout) {
-          return 'BUDDY_IN_WORKOUT';
-        }
-      }
-      final userInWorkout = await isUserInActiveWorkout(currentUserId);
-      if (userInWorkout) {
-        if (kDebugMode) debugLog('⚠️ Current user is already in an active workout');
-        return 'USER_IN_WORKOUT';
-      }
+      final currentUserId = userId != null ? userId!() : _supabase.auth.currentUser?.id;
+      if (currentUserId == null) return 'Please sign in again.';
       final dateStr = date.toIso8601String().split('T')[0];
-      final response = await _supabase.from('workouts').insert({
+      final row = {
         'user_id': currentUserId,
         'workout_type': workoutType,
         'workout_date': dateStr,
@@ -69,16 +36,14 @@ class WorkoutService {
         'status': 'scheduled',
         'buddy_id': buddyId,
         'buddy_status': buddyId != null ? 'pending' : null,
-      }).select().single();
-      if (kDebugMode) debugLog('✅ Workout created: ${response['id']}');
+      };
+      await (insert ?? (r) => _supabase.from('workouts').insert(r).select().single())(row);
+      if (kDebugMode) debugLog('✅ Workout created');
       return null;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error creating workout: $e');
-      // The invite cap is the sender's; the buddy is never told.
-      if (e is PostgrestException && e.message.contains('invite_cap_reached')) {
-        return '${buddyName ?? 'Your buddy'} has too many invites waiting. Try again later.';
-      }
-      return 'Could not save workout. Please try again.';
+      // A plain sentence for the person, never a raw code (the invite cap is the sender's).
+      return HandshakeError.from(e).message(name: buddyName);
     }
   }
 

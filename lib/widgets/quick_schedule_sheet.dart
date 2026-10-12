@@ -9,9 +9,11 @@ class QuickScheduleSheet extends StatefulWidget {
   final String buddyUserId;
   final String buddyDisplayName;
   final VoidCallback? onWorkoutScheduled;
+  final WorkoutService? workoutService; // tests pass a fake
 
   const QuickScheduleSheet({
     super.key,
+    this.workoutService,
     required this.buddyUserId,
     required this.buddyDisplayName,
     this.onWorkoutScheduled,
@@ -41,7 +43,7 @@ class QuickScheduleSheet extends StatefulWidget {
 }
 
 class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
-  final WorkoutService _workoutService = WorkoutService();
+  late final WorkoutService _workoutService = widget.workoutService ?? WorkoutService();
 
   String _selectedType = 'Strength';
   DateTime _selectedDate = DateTime.now();
@@ -107,7 +109,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Error: $error'),
+              content: Text(error),
               backgroundColor:
                   context.read<AccentThemeProvider>().palette.statusDanger),
         );

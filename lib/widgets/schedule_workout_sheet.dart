@@ -132,7 +132,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Error: $error'),
+              content: Text(error),
               backgroundColor:
                   context.read<AccentThemeProvider>().palette.statusDanger),
         );
