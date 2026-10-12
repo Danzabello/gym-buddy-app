@@ -15,6 +15,25 @@ import '../services/invite_service.dart';
 import '../services/notification_service.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 
+/// Profile columns other users may read (LIVE-10 allowlist), as far as the
+/// onboarding payload carries them.
+const kDiscoveryProfileFields = {
+  'display_name', 'username', 'avatar_id', 'avatar_border', 'fitness_level',
+  'looking_for_buddy',
+};
+
+/// True when the profile insert hit this user's existing row (primary key),
+/// not the username unique key.
+bool isOwnProfileDuplicate(Object e) =>
+    e is PostgrestException &&
+    e.code == '23505' &&
+    e.message.contains('user_profiles_pkey');
+
+Map<String, dynamic> discoveryFieldsOf(Map<String, dynamic> profile) => {
+      for (final k in kDiscoveryProfileFields)
+        if (profile.containsKey(k)) k: profile[k],
+    };
+
 // ═══════════════════════════════════════════════════════════════════════════
 // STEP 1 — Basic info
 // ═══════════════════════════════════════════════════════════════════════════
@@ -828,9 +847,8 @@ Future<void> _finish() async {
         final existingUser = Supabase.instance.client.auth.currentUser;
         if (existingUser != null) {
           final hasProfile = await Supabase.instance.client
-              .from('user_profiles')
+              .rpc('get_my_profile')
               .select('onboarding_completed')
-              .eq('id', existingUser.id)
               .maybeSingle();
           final completed = hasProfile?['onboarding_completed'] == true;
           if (!completed) {
@@ -862,9 +880,7 @@ Future<void> _finish() async {
     if (user == null) throw Exception('Authentication failed');
 
     // ── Step 2: Save complete profile in one go ────────────────────────────
-    await Supabase.instance.client
-        .from('user_profiles')
-        .upsert({
+    final profile = {
       'id': user.id,
       'display_name': widget.userData['display_name'],
       'username': widget.userData['username'],
@@ -878,7 +894,17 @@ Future<void> _finish() async {
       'preferred_workout_style': _style,
       'onboarding_completed': true,
       'updated_at': DateTime.now().toIso8601String(),
-    });
+    };
+    try {
+      await Supabase.instance.client.from('user_profiles').insert(profile);
+    } catch (e) {
+      if (!isOwnProfileDuplicate(e)) rethrow;
+      // A completed account re-running signup: refresh the public fields only.
+      await Supabase.instance.client
+          .from('user_profiles')
+          .update(discoveryFieldsOf(profile))
+          .eq('id', user.id);
+    }
 
     // Capture the device timezone for this brand-new profile.
     await syncDeviceTimezone();

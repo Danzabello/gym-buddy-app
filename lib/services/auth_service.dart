@@ -99,9 +99,8 @@ class AuthService {
   Future<bool?> checkOnboardingStatus(String userId) async {
     try {
       final response = await _supabase
-          .from('user_profiles')
+          .rpc('get_my_profile')
           .select('onboarding_completed')
-          .eq('id', userId)
           .single();
       return response['onboarding_completed'] == true;
     } catch (e) {

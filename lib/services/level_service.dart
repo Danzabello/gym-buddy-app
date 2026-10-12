@@ -132,9 +132,8 @@ class LevelService {
       if (userId == null) return null;
 
       final profile = await _supabase
-          .from('user_profiles')
+          .rpc('get_my_profile')
           .select('xp, level')
-          .eq('id', userId)
           .single();
 
       final currentXp = profile['xp'] as int? ?? 1;
@@ -191,9 +190,8 @@ class LevelService {
     try {
       // Get current state
       final profile = await _supabase
-          .from('user_profiles')
+          .rpc('get_my_profile')
           .select('xp, level')
-          .eq('id', userId)
           .single();
 
       final currentXp = profile['xp'] as int? ?? 0;

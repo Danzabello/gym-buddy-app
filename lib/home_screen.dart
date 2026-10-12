@@ -2883,9 +2883,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           .maybeSingle(),
       // Weekly plan, to know the goal breaks are counted against
       Supabase.instance.client
-          .from('user_profiles')
+          .rpc('get_my_profile')
           .select('current_weekly_goal')
-          .eq('id', currentUserId)
           .single(),
       // Breaks already taken this week
       Supabase.instance.client
@@ -3204,9 +3203,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     if (userId != null) {
       try {
         final prefs = await Supabase.instance.client
-            .from('user_profiles')
+            .rpc('get_my_profile')
             .select('preferred_streak_sort, custom_streak_order')
-            .eq('id', userId)
             .single();
   
         final savedMode = prefs['preferred_streak_sort'];
@@ -3341,12 +3339,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final buddyZones = <String, String>{};
     if (buddyIds.isNotEmpty) {
       try {
-        final rows = await Supabase.instance.client
-            .from('user_profiles')
-            .select('id, timezone')
-            .inFilter('id', buddyIds.toList());
-        for (final row in rows) {
-          buddyZones[row['id'] as String] =
+        final rows = await Supabase.instance.client.rpc(
+            'get_teammate_timezones',
+            params: {'p_user_ids': buddyIds.toList()});
+        for (final row in rows as List) {
+          buddyZones[row['user_id'] as String] =
               (row['timezone'] as String?) ?? _kFallbackTz;
         }
       } catch (_) {
@@ -5143,9 +5140,8 @@ class _ProfilePageState extends State<ProfilePage>
       if (uid == null) return;
 
       final profileFuture = Supabase.instance.client
-          .from('user_profiles')
+          .rpc('get_my_profile')
           .select('avatar_id, display_name, created_at, xp, level, preferred_streak_sort')
-          .eq('id', uid)
           .single();
 
       final streaksFuture = TeamStreakService().getAllUserStreaks();

@@ -120,7 +120,7 @@ class _AvatarUnlockTreeState extends State<AvatarUnlockTree> {
       final userId = client.auth.currentUser!.id;
 
       final results = await Future.wait<dynamic>([
-        client.from('user_profiles').select('level').eq('id', userId).single(),
+        client.rpc('get_my_profile').select('level').single(),
         client
             .from('shop_items')
             .select('name, emoji, asset_id, unlock_level, unlock_achievement_id, unlock_path, unlock_tier')
