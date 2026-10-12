@@ -1,0 +1,22 @@
+1 | DROP TABLE workout_invites | 22 rows; 2 triggers, 4 policies, 3 indexes; code callers: 0 (Dart hits are the widget file workout_invites_list.dart)
+2 | DROP FUNCTION get_workouts_awaiting_creator_join(creator_id uuid) | callers in other functions: 0; policies: 0; cron: 0; Dart/edge: 0
+2 | DROP FUNCTION is_user_in_active_workout(check_user_id uuid) | callers in other functions: 0; policies: 0; cron: 0; Dart/edge: 0
+2 | DROP FUNCTION notify_workout_invite() | callers in other functions: 0; policies: 0; cron: 0; Dart/edge: 0
+2 | DROP FUNCTION notify_workout_invite_response() | callers in other functions: 0; policies: 0; cron: 0; Dart/edge: 0
+3 | DROP COLUMN user_profiles.workout_join_popups_enabled | 0 rows differ from default; column grants INSERT/UPDATE to authenticated go with it; get_my_profile() is SELECT * so it follows
+3 | DROP COLUMN workouts.creator_popup_shown | 5 true values; only reader is get_workouts_awaiting_creator_join (dropped above)
+3 | DROP COLUMN workouts.ready_expires_at | 6 non-null values; references: 0
+4 | KEEP creator_ready / buddy_ready | still used by 12 live handshake functions
+5 | DELETE team 05c20a6a | SKIPPED (non-test member or protected streak) members=1 [newtestaccount2] streaks=1 checkins=4 streak_events=1 workout_logs=0
+5 | DELETE team 0e596a48 | APPROVED members=0 [none] streaks=0 checkins=0 streak_events=0 workout_logs=0
+5 | DELETE team 2a45a481 | APPROVED members=1 [Coach Max] streaks=1 checkins=1 streak_events=0 workout_logs=0
+5 | DELETE team 3847194a | SKIPPED (non-test member or protected streak) members=1 [newtestaccount3] streaks=1 checkins=3 streak_events=0 workout_logs=0
+5 | DELETE team a3ae42dc | SKIPPED (non-test member or protected streak) members=1 [sophtest] streaks=1 checkins=0 streak_events=0 workout_logs=0
+5 | DELETE team bd6736f1 | APPROVED members=1 [Coach Max] streaks=1 checkins=153 streak_events=0 workout_logs=0
+5 | DELETE team c06f57ea | SKIPPED (non-test member or protected streak) members=1 [testtest6] streaks=1 checkins=0 streak_events=0 workout_logs=0
+5 | DELETE team c2e4b37e | APPROVED members=0 [none] streaks=0 checkins=0 streak_events=0 workout_logs=0
+5 | DELETE team d168695d | APPROVED members=1 [mijotest] streaks=1 checkins=15 streak_events=0 workout_logs=0
+5 | DELETE team dc1ee1ab | APPROVED members=1 [Coach Max] streaks=1 checkins=2 streak_events=0 workout_logs=0
+6 | TOTAL approved team deletes | 6 teams; checkins 171; streaks 4; members 4
+7 | DELETE vault secret by id | fbae4dec-efe3-48ca-9230-9f326a206e48 created 2026-04-20; value is IDENTICAL to service_role_key; JWT role claim: service_role; consumers found: 0
+8 | CREATE trigger scrub team_name | BEFORE DELETE ON user_profiles; replaces the deleted user's display name in "A & B" team names with "Former buddy" (non-Coach-Max teams only)
