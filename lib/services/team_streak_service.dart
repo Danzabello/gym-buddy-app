@@ -104,6 +104,9 @@ class TeamStreak {
 // TEAM STREAK SERVICE
 // ============================================
 
+/// Shown when finish_checkin_session had nothing to credit (FIN-1).
+const kNothingToFinishMessage = 'Nothing new to check in.';
+
 class TeamStreakService {
   final SupabaseClient _supabase = Supabase.instance.client;
   final BreakDayService _breakDayService = BreakDayService();
@@ -349,6 +352,9 @@ class TeamStreakService {
   /// achievements, milestone cosmetics, and the partner-bonus flag. Shared by
   /// the dashboard check-in and the Workout Schedule card's Finish.
   Future<Map<String, dynamic>> applyFinishResult(Map<String, dynamic> res) async {
+    if (res['result'] == 'nothing_to_finish') {
+      return {'success': false, 'nothing_to_finish': true, 'message': kNothingToFinishMessage};
+    }
     final today = localTodayString();
       final creditDate = res['credit_date'] as String;
       final successCount = res['checked_in'] as int? ?? 0;
