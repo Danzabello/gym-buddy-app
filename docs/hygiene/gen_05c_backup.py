@@ -27,16 +27,16 @@ ddl += "ALTER TABLE public.workout_invites ENABLE ROW LEVEL SECURITY;\n"
 for p in q("select policyname, cmd, permissive, roles::text, qual, with_check from pg_policies where tablename='workout_invites'"):
     ddl += f"CREATE POLICY \"{p['policyname']}\" ON public.workout_invites FOR {p['cmd']}" + (f" USING ({p['qual']})" if p['qual'] else "") + (f" WITH CHECK ({p['with_check']})" if p['with_check'] else "") + ";\n"
 for t in q("select pg_get_triggerdef(oid) d from pg_trigger where tgrelid='public.workout_invites'::regclass and not tgisinternal"): ddl += t["d"] + ";\n"
-ddl += "REVOKE ALL ON public.workout_invites FROM PUBLIC;\nGRANT SELECT ON public.workout_invites TO anon;\nGRANT DELETE, INSERT, SELECT, UPDATE ON public.workout_invites TO authenticated;\nGRANT ALL ON public.workout_invites TO service_role;\n"
+ddl += "REVOKE ALL ON public.workout_invites FROM PUBLIC, anon, authenticated, service_role;\nGRANT SELECT ON public.workout_invites TO anon;\nGRANT DELETE, INSERT, SELECT, UPDATE ON public.workout_invites TO authenticated;\nGRANT ALL ON public.workout_invites TO service_role;\n"
 n_inv, data = rows_restore("public.workout_invites", "true")
-open(f"{OUT}/01_workout_invites.sql", "w").write("-- Restore order: functions (02) first, then this file (its triggers call them).\n" + ddl + data)
+open(f"{OUT}/01_workout_invites.sql", "w", newline="").write("-- Restore order: functions (02) first, then this file (its triggers call them).\n" + ddl + data)
 
 # 2 functions
 fx = "-- Functions to restore (definitions as captured). ACL note: original ACL was PUBLIC+anon+authenticated+service_role on the first three;\n-- notify_* were revoked from PUBLIC/anon/authenticated by 05a/05a2, so the rollback of 05c re-applies the grants below.\n"
 for name in ("notify_workout_invite", "notify_workout_invite_response", "is_user_in_active_workout", "get_workouts_awaiting_creator_join"):
     for r in q(f"select pg_get_functiondef(p.oid) d, p.proacl::text acl, pg_get_function_identity_arguments(p.oid) a from pg_proc p where p.pronamespace='public'::regnamespace and p.proname='{name}'"):
         fx += f"-- {name}({r['a']}) acl at capture: {r['acl']}\n{r['d']};\n"
-open(f"{OUT}/02_functions.sql", "w").write(fx)
+open(f"{OUT}/02_functions.sql", "w", newline="").write(fx)
 
 # 3 columns
 cdefs = q("select table_name, column_name, data_type, column_default, is_nullable from information_schema.columns where table_schema='public' and ((table_name='workouts' and column_name in ('ready_expires_at','creator_popup_shown')) or (table_name='user_profiles' and column_name='workout_join_popups_enabled')) order by 1,2")

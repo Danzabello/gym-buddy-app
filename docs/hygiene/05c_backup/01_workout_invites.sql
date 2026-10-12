@@ -22,7 +22,7 @@ CREATE POLICY "Users can update their own invites" ON public.workout_invites FOR
 CREATE POLICY "Users can view their own invites" ON public.workout_invites FOR SELECT USING (((auth.uid() = sender_id) OR (auth.uid() = recipient_id)));
 CREATE TRIGGER on_workout_invite AFTER INSERT ON public.workout_invites FOR EACH ROW WHEN ((new.status = 'pending'::text)) EXECUTE FUNCTION notify_workout_invite();
 CREATE TRIGGER on_workout_invite_response AFTER UPDATE ON public.workout_invites FOR EACH ROW EXECUTE FUNCTION notify_workout_invite_response();
-REVOKE ALL ON public.workout_invites FROM PUBLIC;
+REVOKE ALL ON public.workout_invites FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON public.workout_invites TO anon;
 GRANT DELETE, INSERT, SELECT, UPDATE ON public.workout_invites TO authenticated;
 GRANT ALL ON public.workout_invites TO service_role;
