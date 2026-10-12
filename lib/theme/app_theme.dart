@@ -28,6 +28,7 @@ class AppColors extends ThemeExtension<AppColors> {
   final Color success;
   final Color warn;
   final Color danger;
+  final Color secondaryAccent; // identity lavender
 
   const AppColors({
     required this.cardBackground,
@@ -51,6 +52,7 @@ class AppColors extends ThemeExtension<AppColors> {
     this.success          = const Color(0xFF4ADE80),
     this.warn             = const Color(0xFFFBBF24),
     this.danger           = const Color(0xFFEF4444),
+    this.secondaryAccent  = const Color(0xFFA78BFA),
   });
 
   /// Lightness offsets (HSL points /100) that define the clay stack. Measured
@@ -111,6 +113,7 @@ class AppColors extends ThemeExtension<AppColors> {
       success: p.statusSuccess,
       warn: p.statusWarning,
       danger: p.statusDanger,
+      secondaryAccent: p.secondaryAccent,
     );
   }
 
@@ -138,6 +141,7 @@ class AppColors extends ThemeExtension<AppColors> {
     Color? success,
     Color? warn,
     Color? danger,
+    Color? secondaryAccent,
   }) {
     return AppColors(
       cardBackground: cardBackground ?? this.cardBackground,
@@ -159,6 +163,7 @@ class AppColors extends ThemeExtension<AppColors> {
       success: success ?? this.success,
       warn: warn ?? this.warn,
       danger: danger ?? this.danger,
+      secondaryAccent: secondaryAccent ?? this.secondaryAccent,
     );
   }
 
@@ -185,6 +190,7 @@ class AppColors extends ThemeExtension<AppColors> {
       success: Color.lerp(success, other.success, t)!,
       warn: Color.lerp(warn, other.warn, t)!,
       danger: Color.lerp(danger, other.danger, t)!,
+      secondaryAccent: Color.lerp(secondaryAccent, other.secondaryAccent, t)!,
     );
   }
 

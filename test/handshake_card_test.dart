@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_buddy_app/services/handshake_service.dart';
 import 'package:gym_buddy_app/theme/app_theme.dart';
+import 'package:gym_buddy_app/widgets/confirm_slide_sheet.dart';
 import 'package:gym_buddy_app/widgets/workout_invites_list.dart';
 import 'package:gym_buddy_app/widgets/workout_schedule_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -148,28 +149,53 @@ void main() {
     expect(find.text('Cancels it for you and Sam. Sam gets a notification.'), findsOneWidget);
     expect(find.text('Keep workout'), findsOneWidget);
     expect(find.text('More'), findsNothing);
-    // destructive: Are you sure first, nothing sent until confirmed
+    // destructive: the slide sheet opens, nothing sent until the slider is confirmed
     await t.tap(find.text('Cancel workout'));
     await t.pump();
     await t.pump(const Duration(milliseconds: 400));
-    expect(find.text('Are you sure?'), findsOneWidget);
+    expect(find.text('Cancel Strength with Sam?'), findsOneWidget);
     expect(actions, isEmpty);
-    await t.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Cancel workout')));
+    await t.drag(find.byType(RingAvatar).last, const Offset(600, 0));
     await t.pump();
     await t.pump(const Duration(milliseconds: 400));
     expect(actions, [CardAction.cancel]);
   });
 
-  testWidgets('menu: Are you sure can be declined', (t) async {
+  testWidgets('menu: Keep workout on the slide sheet sends nothing', (t) async {
     final actions = await pump(t, card('time_to_start'));
     await openMenu(t);
     await t.tap(find.text('Cancel workout'));
     await t.pump();
     await t.pump(const Duration(milliseconds: 400));
-    await t.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Keep workout')));
+    await t.tap(find.descendant(of: find.byType(ConfirmSlideSheet), matching: find.text('Keep workout')));
     await t.pump();
     await t.pump(const Duration(milliseconds: 400));
     expect(actions, isEmpty);
+  });
+
+  testWidgets('card buttons Cancel workout and Can\'t make it open the slide sheet', (t) async {
+    var actions = await pump(t, card('buddy_cant_make_it'));
+    await t.tap(find.widgetWithText(OutlinedButton, 'Cancel workout'));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
+    expect(find.text('Cancel Strength with Sam?'), findsOneWidget);
+    expect(actions, isEmpty);
+    await t.drag(find.byType(RingAvatar).last, const Offset(600, 0));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
+    expect(actions, [CardAction.cancel]);
+
+    await t.pumpWidget(const SizedBox());
+    actions = await pump(t, card('time_to_start', w: workout('time_to_start', creator: false)));
+    await t.tap(find.widgetWithText(OutlinedButton, "Can't make it"));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
+    expect(find.text("Can't make it?"), findsOneWidget);
+    expect(actions, isEmpty);
+    await t.drag(find.byType(RingAvatar).last, const Offset(600, 0));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
+    expect(actions, [CardAction.cantMakeIt]);
   });
 
   testWidgets('menu: change time asks the page directly', (t) async {
@@ -179,7 +205,7 @@ void main() {
     await t.pump();
     await t.pump(const Duration(milliseconds: 400));
     expect(actions, [CardAction.changeTime]);
-    expect(find.text('Are you sure?'), findsNothing);
+    expect(find.byType(ConfirmSlideSheet), findsNothing);
   });
 
   testWidgets('menu: invited person before start', (t) async {

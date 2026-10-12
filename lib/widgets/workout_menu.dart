@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'confirm_slide_sheet.dart';
+import 'workout_schedule_card.dart' show Person;
 
 /// Everything a button or menu entry on a workout can ask for.
 enum CardAction { imHere, cantMakeIt, nudge, goSolo, cancel, leave, abandon, finish, changeTime }
@@ -45,12 +47,18 @@ List<MenuOption> menuOptionsFor({
   ];
 }
 
-/// Bottom sheet of bordered boxes plus Keep workout; every option except
-/// Change time asks "Are you sure?" first. Returns the confirmed action.
+/// Bottom sheet of bordered boxes plus Keep workout. Change time returns
+/// right away; every other option opens the slide-to-confirm sheet, which runs
+/// [run] (it throws if the server refuses). Returns Change time, or the action
+/// once it ran; null if nothing happened.
 Future<CardAction?> pickWorkoutAction(
   BuildContext context, {
   required String title,
   required List<MenuOption> options,
+  required Person me,
+  Person? buddy,
+  double? progress,
+  required Future<void> Function(CardAction) run,
 }) async {
   final c = AppColors.of(context);
   final picked = await showModalBottomSheet<CardAction>(
@@ -73,19 +81,9 @@ Future<CardAction?> pickWorkoutAction(
     ),
   );
   if (picked == null || picked == CardAction.changeTime || !context.mounted) return picked;
-  final chosen = options.firstWhere((o) => o.action == picked);
-  final sure = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Are you sure?'),
-      content: Text(chosen.line),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep workout')),
-        TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(chosen.title)),
-      ],
-    ),
-  );
-  return sure == true ? picked : null;
+  final ran = await showConfirmSlideSheet(context,
+      action: picked, workout: title, me: me, buddy: buddy, progress: progress, run: () => run(picked));
+  return ran ? picked : null;
 }
 
 class _MenuBox extends StatelessWidget {
