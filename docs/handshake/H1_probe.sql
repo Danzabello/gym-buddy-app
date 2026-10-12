@@ -372,13 +372,12 @@ BEGIN
 
   -- ── S15: Phase B (lockdown) inside this transaction ──
   w16 := pg_temp.mk(A, B, '2 hours', 'pending');
-  PERFORM pg_temp.ck('before B: forgery possible (H0 hole)',
-    pg_temp.u(A, format('UPDATE workouts SET buddy_ready = true WHERE id = %L RETURNING buddy_ready::text', w16)) = 'true');
+  -- Phase B is a migration now (20261012190000); this section re-states it idempotently.
   UPDATE workouts SET buddy_ready = false WHERE id = w16;
   REVOKE UPDATE ON public.workouts FROM authenticated, anon;
-  DROP POLICY "Users can update own or buddy workouts" ON public.workouts;
-  DROP POLICY "Users can update their workouts" ON public.workouts;
-  PERFORM cron.unschedule('reset-expired-ready');
+  DROP POLICY IF EXISTS "Users can update own or buddy workouts" ON public.workouts;
+  DROP POLICY IF EXISTS "Users can update their workouts" ON public.workouts;
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'reset-expired-ready') THEN PERFORM cron.unschedule('reset-expired-ready'); END IF;
   r := pg_temp.u(B, format('UPDATE workouts SET buddy_status = ''accepted'' WHERE id = %L RETURNING id::text', w16));
   PERFORM pg_temp.ck('B: forged buddy_status by invitee denied', r LIKE 'ERR:permission denied%', r);
   r := pg_temp.u(A, format('UPDATE workouts SET buddy_ready = true WHERE id = %L RETURNING id::text', w16));

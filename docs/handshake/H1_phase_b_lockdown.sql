@@ -1,4 +1,4 @@
--- H1 Phase B: workouts lock-down. NOT APPLIED. Apply in H4, after the new app
+-- H1 Phase B: workouts lock-down. APPLIED as migration 20261012190000_handshake_phase_b_lockdown (H4a); this file is the original draft.
 -- (every handshake step through the H1 RPCs) is installed. Kept out of
 -- supabase/migrations/ so `db push` can't pick it up; move it there with a
 -- fresh timestamp when it goes live.
