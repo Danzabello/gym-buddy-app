@@ -46,6 +46,12 @@ Future<FinishResult> finishWorkout(
   void toast(String t) => messenger.showSnackBar(SnackBar(content: Text(t)));
   try {
     final res = await svc.finish(id, minutes, alreadyCompleted: completed);
+    // The server had nothing to credit (FIN-1): no celebration, leave as usual.
+    final noop = finishNoopMessage(res);
+    if (noop != null) {
+      toast(noop);
+      return FinishResult.done;
+    }
     final h = hooks ?? FinishHooks.live;
     final r = await h.apply(res);
     if ((r['teams_updated'] as int? ?? 0) > 0) h.achievements(type, minutes);
