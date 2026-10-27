@@ -5,6 +5,7 @@ Flutter (Dart, Material 3) app on **Supabase** (Postgres + Auth + Realtime) and 
 ## Commands
 ```bash
 flutter analyze && flutter test
+# release: see docs/release_build.md (archive build/symbols per shipped build)
 supabase functions deploy <name>   # coach-max-cron, delete-account, invite-redirect, send-notification, workout-overtime-cron
 ```
 `db reset` fails (see Migrations).
