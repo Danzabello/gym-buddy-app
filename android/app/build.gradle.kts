@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.gym_buddy_app"
+    namespace = "com.gymbuddy.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
