@@ -16,6 +16,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/invite_service.dart';
 import '../services/team_streak_service.dart';
 
+/// Messaging isn't built yet; flip to bring back the chat entry points.
+const kShowChatEntryPoints = false;
+
 class FriendsPageModern extends StatefulWidget {
   const FriendsPageModern({super.key});
 
@@ -470,20 +473,22 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
             ]),
             const SizedBox(height: 20),
             // Action rows
-            _sheetAction(
-              icon: Icons.chat_bubble_outline,
-              iconBg: palette.statusInfo.withValues(alpha: 0.12),
-              iconColor: palette.statusInfo,
-              label: 'Message',
-              subtitle: 'Open your chat',
-              onTap: () {
-                Navigator.pop(context);
-                _openChat(friend);
-              },
-              appColors: appColors,
-              cs: cs,
-            ),
-            _sheetDivider(appColors),
+            if (kShowChatEntryPoints) ...[
+              _sheetAction(
+                icon: Icons.chat_bubble_outline,
+                iconBg: palette.statusInfo.withValues(alpha: 0.12),
+                iconColor: palette.statusInfo,
+                label: 'Message',
+                subtitle: 'Open your chat',
+                onTap: () {
+                  Navigator.pop(context);
+                  _openChat(friend);
+                },
+                appColors: appColors,
+                cs: cs,
+              ),
+              _sheetDivider(appColors),
+            ],
             _sheetAction(
               icon: Icons.fitness_center_outlined,
               iconBg: appColors.streakOrange.withValues(alpha: 0.12),
@@ -612,7 +617,9 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
         elevation: 0,
         centerTitle: true,
         // ── Left: search → opens dedicated finder page ──
-        leading: IconButton(
+        leading: !kShowChatEntryPoints
+            ? null
+            : IconButton(
           icon: const Icon(Icons.search),
           tooltip: 'Search buddies',
           onPressed: () {
@@ -826,7 +833,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     return Opacity(
       opacity: dimmed ? 0.5 : 1.0,
       child: GestureDetector(
-        onTap: () => _openChat(friend),
+        onTap: kShowChatEntryPoints ? () => _openChat(friend) : null,
         onLongPress: () {
           HapticFeedback.mediumImpact();
           _showBuddySheet(friend);

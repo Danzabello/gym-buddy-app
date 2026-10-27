@@ -6,7 +6,7 @@
 | A2 App label | DONE |
 | A3 Package / namespace | DONE |
 | B1 Google button | DONE |
-| B2 Chat "coming soon" | NEEDS-DECISION (no edit made) |
+| B2 Chat "coming soon" | DONE (owner decision: gate all four) |
 | B3 Best streak | DONE |
 | B4 Placeholder unlock nodes | DONE |
 | C Obfuscated release build | DONE |
@@ -41,13 +41,8 @@ Pre-flight: `git status --short` showed only `android_icons/` untracked.
 ## B1 Google button
 `lib/signup_screen.dart`: removed `_GoogleButton`, `_GoogleLogo`, `_GooglePainter`, `_Divider` and the spacing around them. No Google button or text in `login_screen.dart`, onboarding files, or anywhere else in `lib/`.
 
-## B2 Chat coming-soon: NEEDS-DECISION
-Not an isolated button. `_openBuddyChat` (`lib/widgets/friends_page_modern.dart`, ~L1106) is the "coming soon" snackbar, reached from four places:
-1. Buddy options sheet "Message / Open your chat" row (+ its divider), ~L474.
-2. Tapping a buddy card, ~L836 (`onTap: _openChat`).
-3. The search icon in the buddies header (~L616) opens `_SearchBuddiesPage`, whose purpose is "find a buddy and message them"; its rows call `_openBuddyChat` and show a chat icon (~L1353, L1391).
-4. The `_openChat` wrapper (~L388).
-Removing 1+2 only leaves a search page that still shows the snackbar; removing 3 removes a whole page and header icon, which is beyond "remove the chat action and nothing else". Tell me: remove all four (search page + header icon too), or only 1, 2 and the rows' tap/icon?
+## B2 Chat coming-soon: DONE
+`kShowChatEntryPoints = false` in `lib/widgets/friends_page_modern.dart` gates all four entry points. The header search icon is hidden (`leading: null`, title is centred so no gap), which makes `_SearchBuddiesPage` unreachable. The "Message" row and its divider in the buddy options sheet are hidden. The buddy-card tap is a no-op (`onTap: null`), long-press still opens the sheet. `_openBuddyChat`, `_openChat` and `_SearchBuddiesPage` are kept. The only other caller of `_openBuddyChat` is the search page's row tap, which is unreachable. No other code references the snackbar text. No layout gap, no new UI.
 
 ## B3 Best streak
 Removed the second summary tile, its `SizedBox`, and `_bestStreak()`. The remaining "Checked in today" tile is a lone `Expanded` in a `Row`, so it now spans the full width. No layout change made beyond that; say if you want it narrower.
