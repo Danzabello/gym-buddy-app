@@ -1,8 +1,11 @@
 // lib/pages/notification_settings_page.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../services/notification_service.dart';
 import 'package:app_settings/app_settings.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
@@ -15,8 +18,8 @@ class NotificationSettingsPage extends StatefulWidget {
       _NotificationSettingsPageState();
 }
 
-class _NotificationSettingsPageState
-    extends State<NotificationSettingsPage> {
+class _NotificationSettingsPageState extends State<NotificationSettingsPage>
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   final NotificationService _notificationService = NotificationService();
 
   bool _isLoading = true;
@@ -34,10 +37,60 @@ class _NotificationSettingsPageState
   int _quietHoursStart = 23;
   int _quietHoursEnd = 7;
 
+  /// 1 = banner fully open, 0 = collapsed.
+  late final AnimationController _banner =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 350), value: 1);
+  Timer? _bannerTimer;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadSettings();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _bannerTimer?.cancel();
+    _banner.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_isLoading) _refreshPermission();
+  }
+
+  Future<void> _refreshPermission() async {
+    final granted = await _notificationService.checkOsPermission();
+    if (!mounted || granted == _osPermissionGranted) return;
+    setState(() => _osPermissionGranted = granted);
+    _bannerTimer?.cancel();
+    if (!granted) {
+      _banner.value = 1;
+    } else if (MediaQuery.disableAnimationsOf(context)) {
+      _banner.value = 0;
+    } else {
+      _bannerTimer = Timer(const Duration(milliseconds: 120), () {
+        if (mounted) _banner.reverse();
+      });
+    }
+  }
+
+  /// Banner button, and a tap on any switch while the OS permission is off.
+  Future<void> _enableNotifications() async {
+    final started = DateTime.now();
+    final status = await _notificationService.requestPermissionFromUser();
+    if (!mounted) return;
+    // Android reports only authorized/denied, never "not determined". A denial
+    // that comes back at once means no dialog was shown (permanently denied),
+    // so the only way forward is the system settings page.
+    final instant = DateTime.now().difference(started) < const Duration(milliseconds: 400);
+    if (instant && status != null && status != AuthorizationStatus.authorized) {
+      await AppSettings.openAppSettings(type: AppSettingsType.notification);
+    }
+    await _refreshPermission();
   }
 
   Future<void> _loadSettings() async {
@@ -46,6 +99,7 @@ class _NotificationSettingsPageState
     if (mounted) {
       setState(() {
         _osPermissionGranted = granted;
+        _banner.value = granted ? 0 : 1;
         _notifSocial = settings['notif_social'] ?? true;
         _notifWorkouts = settings['notif_workouts'] ?? true;
         _notifStreaks = settings['notif_streaks'] ?? true;
@@ -193,15 +247,35 @@ class _NotificationSettingsPageState
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        // Inherits transparent bg + foreground from appBarTheme
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 18),
-          onPressed: () => Navigator.pop(context),
+        toolbarHeight: 72,
+        leadingWidth: 72,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: Center(
+            child: Semantics(
+              button: true,
+              label: 'Back',
+              excludeSemantics: true,
+              child: Material(
+                color: appColors.claySurface,
+                borderRadius: BorderRadius.circular(16),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => Navigator.pop(context),
+                  child: SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Icon(Icons.chevron_left_rounded,
+                        size: 28, color: cs.onSurface),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
         title: const Text(
           'Notifications',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
         ),
         actions: [
           if (_isSaving)
@@ -225,135 +299,78 @@ class _NotificationSettingsPageState
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // Hero banner
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      // reversed: this banner ramps dark -> light
-                      colors: appColors.actionGradient.reversed.toList(),
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Row(children: [
-                    Icon(Icons.notifications_active,
-                        color: Colors.white, size: 28),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Stay in the Loop',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800)),
-                          Text('Choose what notifications you receive',
-                              style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12)),
-                        ],
-                      ),
-                    ),
-                  ]),
-                ),
-
-                const SizedBox(height: 14),
                 _buildOsPermissionBanner(appColors, cs),
-                const SizedBox(height: 6),
-
-                _buildSectionHeader('📬  Notification Categories',
-                    appColors, cs),
-                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+                  child: Text('WHAT TO SEND',
+                      style: TextStyle(
+                          color: appColors.subtleText,
+                          fontSize: 13,
+                          letterSpacing: 0.8,
+                          fontWeight: FontWeight.w700)),
+                ),
                 _buildCard([
                   _buildToggleTile(
-                    icon: '👥',
-                    title: 'Social',
+                    icon: Icons.people_outline,
+                    title: 'Buddy activity',
                     subtitle: 'Friend requests & acceptances',
-                    value: _notifSocial,
-                    onChanged: _osPermissionGranted
-                        ? (v) => setState(() => _notifSocial = v)
-                        : null,
-                    appColors: appColors,
-                    cs: cs,
+                    saved: _notifSocial,
+                    onSaved: (v) => setState(() => _notifSocial = v),
+                    index: 0,
                   ),
                   _buildDivider(appColors),
                   _buildToggleTile(
-                    icon: '🏋️',
+                    icon: Icons.fitness_center,
                     title: 'Workouts',
                     subtitle: 'Invites, reminders & updates',
-                    value: _notifWorkouts,
-                    onChanged: _osPermissionGranted
-                        ? (v) => setState(() => _notifWorkouts = v)
-                        : null,
-                    appColors: appColors,
-                    cs: cs,
+                    saved: _notifWorkouts,
+                    onSaved: (v) => setState(() => _notifWorkouts = v),
+                    index: 1,
                   ),
                   _buildDivider(appColors),
                   _buildToggleTile(
-                    icon: '🔥',
+                    icon: Icons.local_fire_department_outlined,
                     title: 'Streaks',
                     subtitle: 'Check-ins, milestones & warnings',
-                    value: _notifStreaks,
-                    onChanged: _osPermissionGranted
-                        ? (v) => setState(() => _notifStreaks = v)
-                        : null,
-                    appColors: appColors,
-                    cs: cs,
+                    saved: _notifStreaks,
+                    onSaved: (v) => setState(() => _notifStreaks = v),
+                    index: 2,
                   ),
                   _buildDivider(appColors),
                   _buildToggleTile(
-                    icon: '🤖',
+                    icon: Icons.smart_toy_outlined,
                     title: 'Coach Max',
                     subtitle: 'Motivational messages & check-ins',
-                    value: _notifCoachMax,
-                    onChanged: _osPermissionGranted
-                        ? (v) => setState(() => _notifCoachMax = v)
-                        : null,
-                    appColors: appColors,
-                    cs: cs,
+                    saved: _notifCoachMax,
+                    onSaved: (v) => setState(() => _notifCoachMax = v),
+                    index: 3,
                   ),
-                ], appColors),
-
-                const SizedBox(height: 22),
-                _buildSectionHeader('📱  In-App', appColors, cs),
-                const SizedBox(height: 8),
-                _buildCard([
+                  _buildDivider(appColors),
                   _buildToggleTile(
-                    icon: '🔥',
+                    icon: Icons.bolt_outlined,
                     title: 'Live check-in banner',
-                    subtitle:
-                        'Show a banner when your buddy checks in while '
+                    subtitle: 'Show a banner when your buddy checks in while '
                         'you\'re on the dashboard',
-                    value: _liveCheckinBanner,
-                    onChanged: (v) => setState(() => _liveCheckinBanner = v),
-                    appColors: appColors,
-                    cs: cs,
+                    saved: _liveCheckinBanner,
+                    onSaved: (v) => setState(() => _liveCheckinBanner = v),
+                    osGated: false,
                   ),
                 ], appColors),
 
-                const SizedBox(height: 22),
-                _buildSectionHeader('🌙  Quiet Hours', appColors, cs),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 _buildCard([
                   _buildToggleTile(
-                    icon: '🔕',
-                    title: 'Enable Quiet Hours',
+                    icon: Icons.bedtime_outlined,
+                    title: 'Quiet hours',
                     subtitle: 'Pause notifications during set hours',
-                    value: _quietHoursEnabled,
-                    onChanged: _osPermissionGranted
-                        ? (v) =>
-                            setState(() => _quietHoursEnabled = v)
-                        : null,
-                    appColors: appColors,
-                    cs: cs,
+                    saved: _quietHoursEnabled,
+                    onSaved: (v) => setState(() => _quietHoursEnabled = v),
+                    index: 4,
                   ),
                   if (_quietHoursEnabled) ...[
                     _buildDivider(appColors),
                     _buildTimeTile(
-                      icon: '🌆',
+                      icon: Icons.nights_stay_outlined,
                       title: 'Start Time',
                       subtitle: 'Notifications pause at',
                       time: _formatHour(_quietHoursStart),
@@ -363,7 +380,7 @@ class _NotificationSettingsPageState
                     ),
                     _buildDivider(appColors),
                     _buildTimeTile(
-                      icon: '🌅',
+                      icon: Icons.wb_sunny_outlined,
                       title: 'End Time',
                       subtitle: 'Notifications resume at',
                       time: _formatHour(_quietHoursEnd),
@@ -436,128 +453,163 @@ class _NotificationSettingsPageState
   }
 
   Widget _buildOsPermissionBanner(AppColors appColors, ColorScheme cs) {
-    if (_osPermissionGranted) return const SizedBox.shrink();
-    final palette = context.watch<AccentThemeProvider>().palette;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: appColors.tint(palette.statusDanger),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-            color: palette.statusDanger.withValues(alpha: 0.25), width: 0.5),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.notifications_off,
-              color: palette.statusDanger, size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Notifications Blocked',
-                    style: TextStyle(
-                        color: cs.onSurface,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13)),
-                const SizedBox(height: 4),
-                Text(
-                  'You\'ve blocked notifications at the system level. These settings won\'t take effect until you allow them.',
-                  style: TextStyle(
-                      color: appColors.subtleText, fontSize: 12),
+    return AnimatedBuilder(
+      animation: _banner,
+      builder: (context, _) {
+        if (_banner.value == 0) return const SizedBox.shrink();
+        return SizeTransition(
+          sizeFactor: _banner,
+          alignment: Alignment.topCenter,
+          child: FadeTransition(
+            opacity: _banner,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: appColors.claySurface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: appColors.streakOrange, width: 1.5),
                 ),
-                const SizedBox(height: 8),
-                GestureDetector(
-                  onTap: () => AppSettings.openAppSettings(
-                      type: AppSettingsType.notification),
-                  child: Text('Open Phone Settings →',
-                      style: TextStyle(
-                          color: palette.statusDanger,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                          decoration: TextDecoration.underline)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ExcludeSemantics(
+                          child: Icon(Icons.notifications_off_outlined,
+                              size: 28, color: appColors.streakOrange),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Notifications are off',
+                                  style: TextStyle(
+                                      color: cs.onSurface,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 17)),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Turn them on to get streak alerts and buddy check-ins.',
+                                style: TextStyle(
+                                    color: appColors.subtleText, fontSize: 14),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _enableNotifications,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: appColors.streakOrange,
+                          foregroundColor:
+                              appColors.readableForeground(appColors.streakOrange),
+                          elevation: 0,
+                          minimumSize: const Size.fromHeight(52),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                        ),
+                        child: const Text('Turn on notifications',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
-  }
-
-  Widget _buildSectionHeader(
-      String title, AppColors appColors, ColorScheme cs) {
-    return Text(title,
-        style: TextStyle(
-            color: cs.onSurface,
-            fontSize: 14,
-            fontWeight: FontWeight.w700));
   }
 
   Widget _buildCard(List<Widget> children, AppColors appColors) {
     return Container(
       decoration: BoxDecoration(
-        color: appColors.cardBackground,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: appColors.cardBorder, width: 0.5),
+        color: appColors.claySurface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+              color: appColors.clayShadowDark,
+              blurRadius: 12,
+              offset: const Offset(0, 4)),
+        ],
       ),
       child: Column(children: children),
     );
   }
 
+  /// A switch row. Saved values are never touched by the OS state: while the
+  /// permission is off the switch is only drawn off, and a tap asks for it.
   Widget _buildToggleTile({
-    required String icon,
+    required IconData icon,
     required String title,
     required String subtitle,
-    required bool value,
-    required ValueChanged<bool>? onChanged,
-    required AppColors appColors,
-    required ColorScheme cs,
+    required bool saved,
+    required ValueChanged<bool> onSaved,
+    bool osGated = true,
+    int index = 0,
   }) {
-    final disabled = onChanged == null;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(children: [
-        Text(icon,
-            style: TextStyle(
-                fontSize: 22,
-                color: disabled
-                    ? appColors.subtleText.withValues(alpha: 0.4)
-                    : null)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title,
-                  style: TextStyle(
-                      color: disabled
-                          ? appColors.subtleText
-                          : cs.onSurface,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600)),
-              Text(subtitle,
-                  style: TextStyle(
-                      color: disabled
-                          ? appColors.subtleText.withValues(alpha: 0.5)
-                          : appColors.subtleText,
-                      fontSize: 12)),
-            ],
+    final appColors = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final on = saved && (!osGated || _osPermissionGranted);
+    void tap() => osGated && !_osPermissionGranted
+        ? _enableNotifications()
+        : onSaved(!saved);
+    return Semantics(
+      container: true,
+      label: title,
+      hint: subtitle,
+      toggled: on,
+      onTap: tap,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: tap,
+        borderRadius: BorderRadius.circular(20),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 64),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(children: [
+              Icon(icon, size: 24, color: on ? cs.primary : appColors.subtleText),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: TextStyle(
+                            color: cs.onSurface,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600)),
+                    Text(subtitle,
+                        style: TextStyle(
+                            color: appColors.subtleText, fontSize: 13)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              _EmeraldSwitch(
+                on: on,
+                delay: Duration(milliseconds: 90 * index),
+              ),
+            ]),
           ),
         ),
-        CupertinoSwitch(
-          value: value,
-          onChanged: onChanged,
-          activeTrackColor: AppColors.of(context).streakOrange,
-        ),
-      ]),
+      ),
     );
   }
 
   Widget _buildTimeTile({
-    required String icon,
+    required IconData icon,
     required String title,
     required String subtitle,
     required String time,
@@ -567,46 +619,49 @@ class _NotificationSettingsPageState
   }) {
     return InkWell(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(children: [
-          Text(icon, style: const TextStyle(fontSize: 22)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: TextStyle(
-                        color: cs.onSurface,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600)),
-                Text(subtitle,
-                    style: TextStyle(
-                        color: appColors.subtleText, fontSize: 12)),
-              ],
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 64),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(children: [
+            Icon(icon, size: 24, color: appColors.subtleText),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          color: cs.onSurface,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                  Text(subtitle,
+                      style: TextStyle(
+                          color: appColors.subtleText, fontSize: 13)),
+                ],
+              ),
             ),
-          ),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: appColors.tint(appColors.streakOrange),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                  color: appColors.streakOrange.withValues(alpha: 0.25),
-                  width: 0.5),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: appColors.tint(appColors.streakOrange),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: appColors.streakOrange.withValues(alpha: 0.25),
+                    width: 0.5),
+              ),
+              child: Text(time,
+                  style: TextStyle(
+                      color: appColors.streakOrange,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700)),
             ),
-            child: Text(time,
-                style: TextStyle(
-                    color: appColors.streakOrange,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700)),
-          ),
-          const SizedBox(width: 6),
-          Icon(Icons.chevron_right,
-              color: appColors.subtleText, size: 18),
-        ]),
+            const SizedBox(width: 6),
+            Icon(Icons.chevron_right,
+                color: appColors.subtleText, size: 18),
+          ]),
+        ),
       ),
     );
   }
@@ -614,5 +669,99 @@ class _NotificationSettingsPageState
   Widget _buildDivider(AppColors appColors) {
     return Divider(
         height: 1, color: appColors.divider, indent: 16, endIndent: 16);
+  }
+}
+
+/// 52x32 track. ON: accent fill, dark knob. OFF: 2px outline, subtle knob.
+/// A switch that turns on after a delay (the staggered flip on grant) is just
+/// this widget receiving `on: true` with a later start; the state, not the
+/// caller, owns the timer. Colour and transform only.
+class _EmeraldSwitch extends StatefulWidget {
+  final bool on;
+  final Duration delay;
+  const _EmeraldSwitch({required this.on, required this.delay});
+
+  @override
+  State<_EmeraldSwitch> createState() => _EmeraldSwitchState();
+}
+
+class _EmeraldSwitchState extends State<_EmeraldSwitch>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+      value: widget.on ? 1 : 0);
+  Timer? _timer;
+
+  @override
+  void didUpdateWidget(_EmeraldSwitch old) {
+    super.didUpdateWidget(old);
+    if (old.on == widget.on) return;
+    _timer?.cancel();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _c.value = widget.on ? 1 : 0;
+    } else if (widget.on) {
+      _timer = Timer(widget.delay, () {
+        if (mounted) _c.forward();
+      });
+    } else {
+      _c.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final c = AppColors.of(context);
+    // No dedicated outline token yet; statusInfo (info) is the closest hue.
+    final outline = c.info;
+    final knobOff = c.subtleText;
+    final knobOn = Theme.of(context).scaffoldBackgroundColor;
+    return ExcludeSemantics(
+      child: SizedBox(
+        width: 52,
+        height: 48,
+        child: Center(
+          child: AnimatedBuilder(
+            animation: _c,
+            builder: (context, _) {
+              final t = Curves.easeOut.transform(_c.value);
+              final slide = Curves.easeOutBack.transform(_c.value);
+              return Container(
+                width: 52,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: Color.lerp(Colors.transparent, cs.primary, t),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color: Color.lerp(outline, cs.primary, t)!, width: 2),
+                ),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Transform.translate(
+                    offset: Offset(2 + 20 * slide, 0),
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: Color.lerp(knobOff, knobOn, t),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
   }
 }
