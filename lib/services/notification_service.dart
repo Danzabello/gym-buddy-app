@@ -315,53 +315,68 @@ class NotificationService {
     try {
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-      final settings = await _fcm?.requestPermission(
+      final settings = await _fcm?.getNotificationSettings();
+      if (kDebugMode) {
+        debugLog('🔔 Notification permission: ${settings?.authorizationStatus}');
+      }
+      if (!_isGranted(settings?.authorizationStatus)) {
+        debugLog('⏭️ Notifications not granted; nothing to set up yet');
+        return;
+      }
+
+      await _setUpAfterGrant();
+      debugLog('✅ NotificationService initialized!');
+    } catch (e) {
+      debugLog('❌ NotificationService error: $e');
+    }
+  }
+
+  static bool _isGranted(AuthorizationStatus? s) =>
+      s == AuthorizationStatus.authorized || s == AuthorizationStatus.provisional;
+
+  /// The only place that shows the OS permission dialog. Called from the
+  /// rationale screen and the Settings page, never at launch or login. On a
+  /// grant, listeners and the token are set up in this same session.
+  Future<AuthorizationStatus?> requestPermissionFromUser() async {
+    if (!Platform.isAndroid && !Platform.isIOS) return null;
+    _fcm ??= FirebaseMessaging.instance;
+    try {
+      final settings = await _fcm!.requestPermission(
         alert: true,
         badge: true,
         sound: true,
         provisional: false,
       );
+      if (_isGranted(settings.authorizationStatus)) await _setUpAfterGrant();
+      return settings.authorizationStatus;
+    } catch (e) {
+      debugLog('❌ requestPermissionFromUser error: $e');
+      return null;
+    }
+  }
 
-      if (kDebugMode) {
-        debugLog('🔔 Notification permission: ${settings?.authorizationStatus}');
-      }
+  Future<void> _setUpAfterGrant() async {
+    await _setupLocalNotifications();
+    await _saveTokenToSupabase();
 
-      if (settings?.authorizationStatus == AuthorizationStatus.denied) {
-        debugLog('❌ Notifications denied by user');
-        // Still try to save existing token even if denied
-        await _saveTokenToSupabase();
-        return;
-      }
+    if (!_listening) {
+      _listening = true; // may run again (initialize, then a later grant); listen once
+      _fcm?.onTokenRefresh.listen((_) => _saveTokenToSupabase());
+      FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+    }
 
-      await _setupLocalNotifications();
-      await _saveTokenToSupabase();
-
-      _fcm?.onTokenRefresh.listen((newToken) {
-        _saveTokenToSupabase();
-      });
-
-      if (!_listening) {
-        _listening = true; // initialize() can run again; listen once
-        FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-        FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
-      }
-
-      // Cold start from a tap: a system-drawn push, or one this app drew.
-      if (!_launchRouted) {
-        final initial = await _fcm?.getInitialMessage();
-        if (initial != null) routeLaunch(initial.data);
-        final launch = await _localNotifications.getNotificationAppLaunchDetails();
-        if (launch?.didNotificationLaunchApp == true) {
-          final payload = launch!.notificationResponse?.payload;
-          if (payload != null && payload.isNotEmpty) {
-            routeLaunch(jsonDecode(payload) as Map<String, dynamic>);
-          }
+    // Cold start from a tap: a system-drawn push, or one this app drew.
+    if (!_launchRouted) {
+      final initial = await _fcm?.getInitialMessage();
+      if (initial != null) routeLaunch(initial.data);
+      final launch = await _localNotifications.getNotificationAppLaunchDetails();
+      if (launch?.didNotificationLaunchApp == true) {
+        final payload = launch!.notificationResponse?.payload;
+        if (payload != null && payload.isNotEmpty) {
+          routeLaunch(jsonDecode(payload) as Map<String, dynamic>);
         }
       }
-
-      debugLog('✅ NotificationService initialized!');
-    } catch (e) {
-      debugLog('❌ NotificationService error: $e');
     }
   }
 

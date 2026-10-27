@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/app_theme.dart';
+
 const kObBlue = Color(0xFF3B82F6);
 const kObPurple = Color(0xFF8B5CF6);
 const kGradientColors = [kObBlue, kObPurple];
@@ -406,4 +408,61 @@ class FadeSlideRoute<T> extends PageRouteBuilder<T> {
             );
           },
         );
+}
+
+// ── Emerald Ink primary CTA ────────────────────────────────────────────────
+/// Darker shade of the CTA fill for the bottom shadow; derived from the token.
+Color obCtaShadow(Color cta) {
+  final hsl = HSLColor.fromColor(cta);
+  return hsl.withLightness((hsl.lightness - 0.18).clamp(0.0, 1.0)).toColor();
+}
+
+class ObPrimaryButton extends StatelessWidget {
+  final String label;
+  final VoidCallback? onTap;
+  final bool isLoading;
+
+  const ObPrimaryButton(
+      {super.key, required this.label, this.onTap, this.isLoading = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final fg = c.readableForeground(c.streakOrange);
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: onTap == null
+            ? null
+            : [
+                BoxShadow(
+                    color: obCtaShadow(c.streakOrange),
+                    offset: const Offset(0, 4)),
+              ],
+      ),
+      child: ElevatedButton(
+        onPressed: isLoading ? null : onTap,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: c.streakOrange,
+          foregroundColor: fg,
+          disabledBackgroundColor: c.streakOrange.withValues(alpha: 0.5),
+          elevation: 0,
+          minimumSize: const Size.fromHeight(56),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18)),
+        ),
+        child: isLoading
+            ? SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(color: fg, strokeWidth: 2.5))
+            : Text(label,
+                textAlign: TextAlign.center,
+                style:
+                    const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+      ),
+    );
+  }
 }

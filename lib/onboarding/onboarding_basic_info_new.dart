@@ -13,6 +13,7 @@ import '../utils/timezone_sync.dart';
 import 'package:flutter/foundation.dart';
 import '../services/invite_service.dart';
 import '../services/notification_service.dart';
+import 'onboarding_notifications.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 /// Profile columns other users may read (LIVE-10 allowlist), as far as the
@@ -1304,7 +1305,15 @@ class _OnboardingConfirmationState
     super.dispose();
   }
 
-  void _goHome() {
+  Future<void> _goHome() async {
+    final seen = await notificationRationaleSeen();
+    if (!mounted) return;
+    if (seen) return _toHome();
+    Navigator.of(context).push(FadeSlideRoute(
+        page: OnboardingNotifications(onContinue: _toHome)));
+  }
+
+  void _toHome() {
     final user = Supabase.instance.client.auth.currentUser;
     final msg = user != null
         ? _coachMaxService.getMotivationalMessage(
