@@ -717,13 +717,6 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
               label: 'Checked in today',
               color: appColors.successGreen,
             )),
-            const SizedBox(width: 6),
-            Expanded(
-                child: _summaryTile(
-              value: '🔥 ${_bestStreak()}',
-              label: 'Best streak',
-              color: appColors.streakOrange,
-            )),
           ]),
         ),
 
@@ -980,11 +973,6 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     final fallback = AppColors.of(context).subtleText.withValues(alpha: 0.4);
     if (borderKey == null) return fallback;
     return _borderColors[borderKey] ?? fallback;
-  }
-
-  int _bestStreak() {
-    // Placeholder until getFriends() returns streak data
-    return 0;
   }
 
   // ── Subtle invite link at list end ─────────────────────────

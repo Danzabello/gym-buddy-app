@@ -324,10 +324,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  const _Divider(),
-                  const SizedBox(height: 16),
-                  const _GoogleButton(),
                 ],
               ),
             ),
@@ -336,82 +332,4 @@ class _SignUpScreenState extends State<SignUpScreen> {
       ),
     );
   }
-}
-
-class _Divider extends StatelessWidget {
-  const _Divider();
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Expanded(child: Divider()),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text('or',
-              style: TextStyle(fontSize: 13, color: Colors.grey[400])),
-        ),
-        const Expanded(child: Divider()),
-      ],
-    );
-  }
-}
-
-class _GoogleButton extends StatelessWidget {
-  const _GoogleButton();
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: 0.5,
-      child: SizedBox(
-        width: double.infinity,
-        child: OutlinedButton.icon(
-          onPressed: null,
-          icon: const _GoogleLogo(),
-          label: const Text('Continue with Google',
-              style: TextStyle(fontSize: 15, color: Color(0xFF374151))),
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14)),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GoogleLogo extends StatelessWidget {
-  const _GoogleLogo();
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-        size: const Size(20, 20), painter: _GooglePainter());
-  }
-}
-
-class _GooglePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()..style = PaintingStyle.fill;
-    final c = Offset(size.width / 2, size.height / 2);
-    final r = size.width / 2;
-    p.color = const Color(0xFFEA4335);
-    canvas.drawArc(
-        Rect.fromCircle(center: c, radius: r), -1.57, 3.14, true, p);
-    p.color = const Color(0xFF34A853);
-    canvas.drawArc(
-        Rect.fromCircle(center: c, radius: r), 1.57, 3.14, true, p);
-    p.color = const Color(0xFFFBBC05);
-    canvas.drawArc(
-        Rect.fromCircle(center: c, radius: r), 2.36, 1.57, true, p);
-    p.color = const Color(0xFF4285F4);
-    canvas.drawArc(
-        Rect.fromCircle(center: c, radius: r), -1.57, -1.57, true, p);
-    p.color = Colors.white;
-    canvas.drawCircle(c, r * 0.6, p);
-  }
-
-  @override
-  bool shouldRepaint(_) => false;
 }

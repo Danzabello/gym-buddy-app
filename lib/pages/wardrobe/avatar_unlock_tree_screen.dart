@@ -24,6 +24,9 @@ Widget _maybeGreyscale(bool locked, Widget child) =>
 const _canvasWidth = 400.0;
 const _canvasHeight = 260.0;
 const _hubRadius = 32.0;
+
+/// Social path and Seasonal Creature have no content yet; flip to bring them back.
+const kShowPlaceholderUnlockNodes = false;
 const _nodeRadius = 28.0;
 
 class _HubSpec {
@@ -191,17 +194,19 @@ class _AvatarUnlockTreeState extends State<AvatarUnlockTree> {
       }
 
       // Social path is a client-only placeholder — no backing data exists yet.
-      nodes.addAll(const [
-        _TreeNode(pathKey: 'social', tier: 1, name: 'Coming soon', emoji: '❔', isSocialPlaceholder: true),
-        _TreeNode(pathKey: 'social', tier: 2, name: 'Coming soon', emoji: '❔', isSocialPlaceholder: true),
-      ]);
+      if (kShowPlaceholderUnlockNodes) {
+        nodes.addAll(const [
+          _TreeNode(pathKey: 'social', tier: 1, name: 'Coming soon', emoji: '❔', isSocialPlaceholder: true),
+          _TreeNode(pathKey: 'social', tier: 2, name: 'Coming soon', emoji: '❔', isSocialPlaceholder: true),
+        ]);
+      }
 
       // shop_items RLS ("Users see all shop items") only exposes rows where
       // is_available = true. Seasonal Creature is intentionally false (its
       // unlock isn't built yet, and purchase_shop_item gates on that same
       // flag) so it never comes back from the query above — hardcode its
       // display here rather than loosening the RLS/purchase gate for it.
-      if (!nodes.any((n) => n.pathKey == 'special' && n.tier == 2)) {
+      if (kShowPlaceholderUnlockNodes && !nodes.any((n) => n.pathKey == 'special' && n.tier == 2)) {
         nodes.add(const _TreeNode(
           pathKey: 'special',
           tier: 2,
@@ -538,12 +543,14 @@ class _ConnectorPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     for (final path in paths) {
+      if (!kShowPlaceholderUnlockNodes && path.key == 'social') continue;
       final paint = Paint()
         ..color = path.color(appColors).withValues(alpha: 0.5)
         ..strokeWidth = 2
         ..strokeCap = StrokeCap.round;
 
       _drawDashed(canvas, _trim(path.hub, path.tier1, _hubRadius, _nodeRadius), paint);
+      if (!kShowPlaceholderUnlockNodes && path.key == 'special') continue;
       _drawDashed(canvas, _trim(path.tier1, path.tier2, _nodeRadius, _nodeRadius), paint);
     }
   }
