@@ -11,6 +11,7 @@ import 'dart:io';
 import 'onboarding/splash_screen.dart';
 import 'services/achievement_service.dart';
 import 'dart:async';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:app_links/app_links.dart';
 import 'services/invite_service.dart';
 import 'package:provider/provider.dart';
@@ -25,12 +26,33 @@ void main() async {
   await dotenv.load(fileName: '.env');
   if (Platform.isAndroid || Platform.isIOS) {
     await Firebase.initializeApp();
+    await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(!kDebugMode);
+    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
   }
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
   runApp(const GymBuddyApp());
+}
+
+/// A startup read must not hold the splash forever. On timeout this reports a
+/// non-fatal (the name only, no user data) and returns null, which every
+/// caller already treats as "read failed".
+Future<T?> _startupRead<T>(String name, Future<T> read, int seconds) async {
+  try {
+    return await read.timeout(Duration(seconds: seconds));
+  } on TimeoutException catch (e, st) {
+    if (Platform.isAndroid || Platform.isIOS) {
+      unawaited(FirebaseCrashlytics.instance
+          .recordError(e, st, reason: 'startup read timed out: $name'));
+    }
+    return null;
+  }
 }
 
 class GymBuddyApp extends StatelessWidget {
@@ -132,13 +154,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Future<void> _initializeApp() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
-      await NotificationService().initialize();
-      final onboardingStatus = await _authService.checkOnboardingStatus(user.id);
+      await _startupRead('notification init', NotificationService().initialize(), 10);
+      final onboardingStatus = await _startupRead(
+          'onboarding status', _authService.checkOnboardingStatus(user.id), 15);
       if (onboardingStatus == true) {
         // Refresh the stored device timezone every launch (people travel /
         // swap devices) — feeds per-user "today" resolution server-side.
         unawaited(syncDeviceTimezone());
-        await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
+        await _startupRead('coach max schedule',
+            _coachMaxService.scheduleCoachMaxCheckIn(user.id), 15);
         unawaited(AchievementService().checkLoyaltyAchievements());
       } else if (onboardingStatus == false) {
         // Confirmed via a successful read (not just assumed from a failed
