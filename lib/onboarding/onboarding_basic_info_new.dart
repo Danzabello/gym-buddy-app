@@ -104,33 +104,34 @@ class _OnboardingBasicInfoNewState
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.white,
       body: Column(
         children: [
-          ObHeader(step: 1, totalSteps: 5, label: 'About you'),
+          ObStepHeader(
+            step: 1,
+            onBack: Navigator.of(context).canPop()
+                ? () => Navigator.of(context).pop()
+                : null,
+          ),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("Let's get to know you",
-                      style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1E293B))),
-                  const SizedBox(height: 6),
-                  Text('This helps us personalise your experience',
-                      style: TextStyle(
-                          fontSize: 14, color: Colors.grey[500])),
+                  const ObHeading(
+                    title: 'About you',
+                    body: 'So your buddy knows who they are training with.',
+                  ),
                   const SizedBox(height: 28),
                   ObTextField(
                     label: 'Display name',
                     hint: 'What should we call you?',
                     icon: Icons.person_outline,
                     controller: _nameCtrl,
-                    inputFormatters: InputFormatters.displayName,  // 🔒 max 40, no control chars
+                    inputFormatters: InputFormatters.displayName,
                     errorText: _nameError,
                     onChanged: (_) => setState(() => _nameError = null),
                   ),
@@ -141,64 +142,34 @@ class _OnboardingBasicInfoNewState
                     icon: Icons.cake_outlined,
                     controller: _ageCtrl,
                     keyboardType: TextInputType.number,
-                    inputFormatters: InputFormatters.age,          // 🔒 digits only, max "120"
+                    inputFormatters: InputFormatters.age,
                     errorText: _ageError,
                     onChanged: (_) => setState(() => _ageError = null),
                   ),
                   const SizedBox(height: 20),
-                  const Text('Gender',
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF374151))),
-                  const SizedBox(height: 4),
-                  Text('(optional)',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey[400])),
+                  const ObFieldLabel('Gender', optional: true),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     initialValue: _gender,
-                    decoration: InputDecoration(
-                      hintText: 'Select gender',
-                      hintStyle:
-                          TextStyle(color: Colors.grey[400]),
-                      prefixIcon: const Icon(
-                          Icons.accessibility_outlined,
-                          color: Color(0xFF6B7280),
-                          size: 20),
-                      filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
-                      border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                              color: Color(0xFFE2E8F0))),
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                              color: Color(0xFFE2E8F0))),
-                      focusedBorder: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                              color: kObBlue, width: 2)),
-                      contentPadding:
-                          const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 14),
+                    dropdownColor: c.cardBackground,
+                    style: TextStyle(fontSize: 16, color: cs.onSurface),
+                    iconEnabledColor: c.subtleText,
+                    decoration: obInputDecoration(
+                      context,
+                      hint: 'Select gender',
+                      prefixIcon: Icon(Icons.accessibility_outlined,
+                          color: c.subtleText, size: 20),
                     ),
                     items: _genders
-                        .map((g) => DropdownMenuItem(
-                            value: g, child: Text(g)))
+                        .map((g) => DropdownMenuItem(value: g, child: Text(g)))
                         .toList(),
-                    onChanged: (v) =>
-                        setState(() => _gender = v),
+                    onChanged: (v) => setState(() => _gender = v),
                   ),
                 ],
               ),
             ),
           ),
-          ObBottomNav(onNext: _next),
+          ObStepFooter(onNext: _next),
         ],
       ),
     );
@@ -309,171 +280,107 @@ class _OnboardingUsernameState
   }
 
   Widget _suffix() {
+    final c = AppColors.of(context);
     if (_isChecking) {
-      return const Padding(
-        padding: EdgeInsets.all(12),
+      return Padding(
+        padding: const EdgeInsets.all(14),
         child: SizedBox(
-            width: 18,
-            height: 18,
+            width: 20,
+            height: 20,
             child: CircularProgressIndicator(
-                strokeWidth: 2, color: kObBlue)),
+                strokeWidth: 2, color: Theme.of(context).colorScheme.primary)),
       );
     }
     if (_isAvailable) {
-      return const Icon(Icons.check_circle,
-          color: Color(0xFF10B981), size: 20);
+      return Padding(
+        padding: const EdgeInsets.only(right: 12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle, color: c.success, size: 20),
+            const SizedBox(width: 4),
+            Text('Available',
+                style: TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w600, color: c.success)),
+          ],
+        ),
+      );
     }
     if (_error != null) {
-      return const Icon(Icons.error_outline,
-          color: Colors.red, size: 20);
+      return Icon(Icons.error_outline, color: c.danger, size: 20);
     }
     return const SizedBox.shrink();
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.white,
       body: Column(
         children: [
-          ObHeader(
-              step: 2, totalSteps: 5, label: 'Your identity'),
+          ObStepHeader(step: 2, onBack: () => Navigator.of(context).pop()),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Choose a username',
-                      style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1E293B))),
-                  const SizedBox(height: 6),
-                  Text(
-                      'This is how your buddies will find you',
-                      style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[500])),
+                  const ObHeading(
+                    title: 'Your identity',
+                    body: 'Pick a username. Buddies find you with it.',
+                  ),
                   const SizedBox(height: 28),
-                  // Username field with @ prefix
-                  Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      const Text('Username',
-                          style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF374151))),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: _ctrl,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                              RegExp(r'[a-zA-Z0-9_]')),
-                          LengthLimitingTextInputFormatter(
-                              20),
-                        ],
-                        decoration: InputDecoration(
-                          hintText: 'e.g. workout_warrior',
-                          hintStyle: TextStyle(
-                              color: Colors.grey[400]),
-                          prefixIcon: Padding(
-                            padding: const EdgeInsets.only(
-                                left: 14, right: 6,
-                                top: 14, bottom: 14),
-                            child: Text('@',
-                                style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight:
-                                        FontWeight.w600,
-                                    color: _isAvailable
-                                        ? kObBlue
-                                        : Colors.grey)),
-                          ),
-                          prefixIconConstraints:
-                              const BoxConstraints(
-                                  minWidth: 0,
-                                  minHeight: 0),
-                          suffixIcon: _suffix(),
-                          errorText: _error,
-                          helperText: _isAvailable
-                              ? 'Username available'
-                              : null,
-                          helperStyle: const TextStyle(
-                              color: Color(0xFF10B981),
-                              fontWeight: FontWeight.w500),
-                          filled: true,
-                          fillColor:
-                              const Color(0xFFF8FAFC),
-                          border: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(
-                                      12),
-                              borderSide: const BorderSide(
-                                  color:
-                                      Color(0xFFE2E8F0))),
-                          enabledBorder: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(
-                                      12),
-                              borderSide: const BorderSide(
-                                  color:
-                                      Color(0xFFE2E8F0))),
-                          focusedBorder: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(
-                                      12),
-                              borderSide:
-                                  const BorderSide(
-                                      color: kObBlue,
-                                      width: 2)),
-                          errorBorder: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(
-                                      12),
-                              borderSide: const BorderSide(
-                                  color: Colors.red)),
-                          contentPadding:
-                              const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 14),
-                        ),
-                        onChanged: (v) {
-                          if (_isAvailable || _error != null) {
-                            setState(() {
-                              _isAvailable = false;
-                              _error = null;
-                            });
-                          }
-                          Future.delayed(
-                              const Duration(
-                                  milliseconds: 600), () {
-                            if (_ctrl.text == v &&
-                                v.isNotEmpty &&
-                                mounted) {
-                              _check(v);
-                            }
-                          });
-                        },
-                      ),
+                  const ObFieldLabel('Username'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _ctrl,
+                    cursorColor: cs.primary,
+                    style: TextStyle(fontSize: 16, color: cs.onSurface),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9_]')),
+                      LengthLimitingTextInputFormatter(20),
                     ],
+                    decoration: obInputDecoration(
+                      context,
+                      hint: 'e.g. workout_warrior',
+                      prefixIcon: Padding(
+                        padding: const EdgeInsets.only(left: 16, right: 6),
+                        child: Text('@',
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: cs.primary)),
+                      ),
+                      prefixIconConstraints:
+                          const BoxConstraints(minWidth: 0, minHeight: 0),
+                      suffixIcon: _suffix(),
+                      errorText: _error,
+                    ),
+                    onChanged: (v) {
+                      if (_isAvailable || _error != null) {
+                        setState(() {
+                          _isAvailable = false;
+                          _error = null;
+                        });
+                      }
+                      Future.delayed(const Duration(milliseconds: 600), () {
+                        if (_ctrl.text == v && v.isNotEmpty && mounted) {
+                          _check(v);
+                        }
+                      });
+                    },
                   ),
                   const SizedBox(height: 8),
                   Text(
-                      '3–20 characters · letters, numbers, underscores',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[400])),
+                      '3 to 20 characters. Letters, numbers and underscores. '
+                      'No underscore at the start or end.',
+                      style: TextStyle(fontSize: 13, color: c.subtleText)),
                 ],
               ),
             ),
           ),
-          ObBottomNav(
-            onBack: () => Navigator.of(context).pop(),
-            onNext: _next,
-          ),
+          ObStepFooter(onNext: _next),
         ],
       ),
     );
@@ -495,13 +402,9 @@ class _OnboardingAvatarPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
       body: Column(
         children: [
-          ObHeader(
-              step: 3,
-              totalSteps: 5,
-              label: 'Your profile icon'),
+          ObStepHeader(step: 3, onBack: () => Navigator.of(context).pop()),
           Expanded(
             child: AvatarPickerScreen(
               showHeader: false,
@@ -593,28 +496,28 @@ class _OnboardingGoalsState extends State<_OnboardingGoals> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.white,
       body: Column(
         children: [
-          ObHeader(
-              step: 4, totalSteps: 5, label: 'Your goals'),
+          ObStepHeader(step: 4, onBack: () => Navigator.of(context).pop()),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('What are you training for?',
+                  Text('What are you training for?',
                       style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1E293B))),
+                          color: cs.onSurface)),
                   const SizedBox(height: 6),
                   Text('Select all that apply',
                       style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey[500])),
+                          color: c.subtleText)),
                   const SizedBox(height: 20),
                   GridView.builder(
                     shrinkWrap: true,
@@ -639,14 +542,14 @@ class _OnboardingGoalsState extends State<_OnboardingGoals> {
                               const Duration(milliseconds: 180),
                           decoration: BoxDecoration(
                             color: sel
-                                ? const Color(0xFFEFF6FF)
-                                : const Color(0xFFF8FAFC),
+                                ? c.claySurface
+                                : c.inputFill,
                             borderRadius:
                                 BorderRadius.circular(12),
                             border: Border.all(
                               color: sel
-                                  ? kObBlue
-                                  : const Color(0xFFE2E8F0),
+                                  ? cs.primary
+                                  : c.info,
                               width: sel ? 2 : 1,
                             ),
                           ),
@@ -665,10 +568,8 @@ class _OnboardingGoalsState extends State<_OnboardingGoals> {
                                           ? FontWeight.w700
                                           : FontWeight.w500,
                                       color: sel
-                                          ? const Color(
-                                              0xFF1D4ED8)
-                                          : const Color(
-                                              0xFF374151))),
+                                          ? cs.primary
+                                          : cs.onSurface)),
                             ],
                           ),
                         ),
@@ -678,15 +579,15 @@ class _OnboardingGoalsState extends State<_OnboardingGoals> {
                   if (_goalsError != null) ...[
                     const SizedBox(height: 8),
                     Text(_goalsError!,
-                        style: const TextStyle(
-                            color: Colors.red, fontSize: 13)),
+                        style: TextStyle(
+                            color: c.danger, fontSize: 13)),
                   ],
                   const SizedBox(height: 28),
-                  const Text('Fitness level',
+                  Text('Fitness level',
                       style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF374151))),
+                          color: cs.onSurface)),
                   const SizedBox(height: 12),
                   ..._levels.map((l) {
                     final sel = _level == l['value'];
@@ -702,14 +603,14 @@ class _OnboardingGoalsState extends State<_OnboardingGoals> {
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
                             color: sel
-                                ? const Color(0xFFEFF6FF)
-                                : const Color(0xFFF8FAFC),
+                                ? c.claySurface
+                                : c.inputFill,
                             borderRadius:
                                 BorderRadius.circular(12),
                             border: Border.all(
                               color: sel
-                                  ? kObBlue
-                                  : const Color(0xFFE2E8F0),
+                                  ? cs.primary
+                                  : c.info,
                               width: sel ? 2 : 1,
                             ),
                           ),
@@ -721,20 +622,19 @@ class _OnboardingGoalsState extends State<_OnboardingGoals> {
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: sel
-                                      ? kObBlue
+                                      ? cs.primary
                                       : Colors.transparent,
                                   border: Border.all(
                                     color: sel
-                                        ? kObBlue
-                                        : const Color(
-                                            0xFFD1D5DB),
+                                        ? cs.primary
+                                        : c.info,
                                     width: 2,
                                   ),
                                 ),
                                 child: sel
-                                    ? const Icon(Icons.check,
+                                    ? Icon(Icons.check,
                                         size: 12,
-                                        color: Colors.white)
+                                        color: Theme.of(context).scaffoldBackgroundColor)
                                     : null,
                               ),
                               const SizedBox(width: 12),
@@ -752,10 +652,8 @@ class _OnboardingGoalsState extends State<_OnboardingGoals> {
                                                 : FontWeight
                                                     .w500,
                                             color: sel
-                                                ? const Color(
-                                                    0xFF1D4ED8)
-                                                : const Color(
-                                                    0xFF374151))),
+                                                ? cs.primary
+                                                : cs.onSurface)),
                                     Text(l['desc']!,
                                         style: TextStyle(
                                             fontSize: 12,
@@ -774,10 +672,7 @@ class _OnboardingGoalsState extends State<_OnboardingGoals> {
               ),
             ),
           ),
-          ObBottomNav(
-            onBack: () => Navigator.of(context).pop(),
-            onNext: _next,
-          ),
+          ObStepFooter(onNext: _next),
         ],
       ),
     );
@@ -960,7 +855,7 @@ Future<void> _finish() async {
               ? '$sent buddy request${sent == 1 ? '' : 's'} sent'
               : "$sent sent, $failed couldn't be sent"),
           backgroundColor:
-              failed == 0 ? successColor : const Color(0xFFF97316),
+              failed == 0 ? successColor : AppColors.of(context).warn,
           behavior: SnackBarBehavior.floating,
         ));
       }
@@ -978,7 +873,7 @@ Future<void> _finish() async {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text('Could not save profile. Please try again.'),
-            backgroundColor: Colors.red),
+            backgroundColor: AppColors.of(context).danger),
       );
     }
   } finally {
@@ -1004,45 +899,45 @@ Future<void> _createBuddyTeam(String newUserId, String inviterId) async {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.white,
       body: Column(
         children: [
-          ObHeader(
-              step: 5, totalSteps: 5, label: 'Final step'),
+          ObStepHeader(step: 5, onBack: () => Navigator.of(context).pop()),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Find your gym buddy',
+                  Text('Find your gym buddy',
                       style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF1E293B))),
+                          color: cs.onSurface)),
                   const SizedBox(height: 6),
                   Text('Tell us about your workout preferences',
                       style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey[500])),
+                          color: c.subtleText)),
                   const SizedBox(height: 24),
 
                   // Looking for buddy toggle
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
+                      color: c.inputFill,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                          color: const Color(0xFFE2E8F0)),
+                          color: c.info),
                     ),
                     child: Row(
                       children: [
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEFF6FF),
+                            color: c.claySurface,
                             borderRadius:
                                 BorderRadius.circular(10),
                           ),
@@ -1051,7 +946,7 @@ Future<void> _createBuddyTeam(String newUserId, String inviterId) async {
                                   TextStyle(fontSize: 22)),
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment:
                                 CrossAxisAlignment.start,
@@ -1062,15 +957,13 @@ Future<void> _createBuddyTeam(String newUserId, String inviterId) async {
                                       fontSize: 15,
                                       fontWeight:
                                           FontWeight.w600,
-                                      color: Color(
-                                          0xFF1E293B))),
+                                      color: cs.onSurface)),
                               SizedBox(height: 2),
                               Text(
                                   "We'll help you find workout partners",
                                   style: TextStyle(
                                       fontSize: 12,
-                                      color: Color(
-                                          0xFF6B7280))),
+                                      color: c.subtleText)),
                             ],
                           ),
                         ),
@@ -1078,7 +971,7 @@ Future<void> _createBuddyTeam(String newUserId, String inviterId) async {
                           value: _lookingForBuddy,
                           onChanged: (v) => setState(
                               () => _lookingForBuddy = v),
-                          activeThumbColor: kObBlue,
+                          activeThumbColor: cs.primary,
                         ),
                       ],
                     ),
@@ -1097,12 +990,12 @@ Future<void> _createBuddyTeam(String newUserId, String inviterId) async {
                         crossAxisAlignment:
                             CrossAxisAlignment.start,
                         children: [
-                          const Text('Preferred workout style',
+                          Text('Preferred workout style',
                               style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   color:
-                                      Color(0xFF374151))),
+                                      cs.onSurface)),
                           const SizedBox(height: 12),
                           Row(
                             children: _styles.map((s) {
@@ -1129,18 +1022,15 @@ Future<void> _createBuddyTeam(String newUserId, String inviterId) async {
                                       decoration:
                                           BoxDecoration(
                                         color: sel
-                                            ? const Color(
-                                                0xFFEFF6FF)
-                                            : const Color(
-                                                0xFFF8FAFC),
+                                            ? c.claySurface
+                                            : c.inputFill,
                                         borderRadius:
                                             BorderRadius
                                                 .circular(12),
                                         border: Border.all(
                                           color: sel
-                                              ? kObBlue
-                                              : const Color(
-                                                  0xFFE2E8F0),
+                                              ? cs.primary
+                                              : c.info,
                                           width:
                                               sel ? 2 : 1,
                                         ),
@@ -1164,10 +1054,8 @@ Future<void> _createBuddyTeam(String newUserId, String inviterId) async {
                                                       : FontWeight
                                                           .w500,
                                                   color: sel
-                                                      ? const Color(
-                                                          0xFF1D4ED8)
-                                                      : const Color(
-                                                          0xFF374151))),
+                                                      ? cs.primary
+                                                      : cs.onSurface)),
                                         ],
                                       ),
                                     ),
@@ -1187,17 +1075,10 @@ Future<void> _createBuddyTeam(String newUserId, String inviterId) async {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [
-                          Color(0xFFEFF6FF),
-                          Color(0xFFF5F3FF)
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                      color: c.claySurface,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                          color: const Color(0xFFBFDBFE)),
+                          color: c.info),
                     ),
                     child: Row(
                       children: [
@@ -1213,7 +1094,7 @@ Future<void> _createBuddyTeam(String newUserId, String inviterId) async {
                                   TextStyle(fontSize: 24)),
                         ),
                         const SizedBox(width: 16),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment:
                                 CrossAxisAlignment.start,
@@ -1223,15 +1104,13 @@ Future<void> _createBuddyTeam(String newUserId, String inviterId) async {
                                       fontSize: 16,
                                       fontWeight:
                                           FontWeight.bold,
-                                      color: Color(
-                                          0xFF1E293B))),
+                                      color: cs.onSurface)),
                               SizedBox(height: 4),
                               Text(
                                   'Coach Max is ready to train with you from day one.',
                                   style: TextStyle(
                                       fontSize: 13,
-                                      color: Color(
-                                          0xFF6B7280))),
+                                      color: c.subtleText)),
                             ],
                           ),
                         ),
@@ -1242,24 +1121,8 @@ Future<void> _createBuddyTeam(String newUserId, String inviterId) async {
               ),
             ),
           ),
-          ObBottomNav(
-            onBack: () => Navigator.of(context).pop(),
-            onNext: _finish,
-            isLoading: _isLoading,
-            nextChild: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Finish setup',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600)),
-                SizedBox(width: 8),
-                Icon(Icons.check_circle_outline,
-                    color: Colors.white, size: 18),
-              ],
-            ),
-          ),
+          ObStepFooter(
+              onNext: _finish, label: 'Finish setup', isLoading: _isLoading),
         ],
       ),
     );

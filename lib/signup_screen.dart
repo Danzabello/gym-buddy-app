@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'onboarding/onboarding_theme.dart';
 import 'onboarding/onboarding_basic_info_new.dart';
 import 'onboarding/splash_screen.dart';
+import 'theme/app_theme.dart';
 import 'utils/input_validators.dart';
 
 // Hosted on GitHub Pages from docs/ -- same origin as invite.html.
@@ -126,198 +127,115 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Column(
-        children: [
-          // ── Gradient header ──────────────────────────────────────────
-          Container(
-            width: double.infinity,
-            decoration: const BoxDecoration(
-              gradient: kGradientDiag,
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(24),
-                bottomRight: Radius.circular(24),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: ObBackButton(
+                  onTap: () => Navigator.of(context).pushReplacement(
+                    FadeSlideRoute(page: const SplashScreen()),
+                  ),
+                ),
               ),
-            ),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                  20, MediaQuery.of(context).padding.top + 12, 20, 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).pushReplacement(
-                        FadeSlideRoute(page: const SplashScreen()),
-                      );
-                    },
-                    child: Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.arrow_back,
-                          color: Colors.white, size: 17),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Create your account',
-                      style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white)),
-                  const SizedBox(height: 6),
-                  Text('Join the Gym Buddy community',
-                      style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withValues(alpha: 0.8))),
-                ],
+              const SizedBox(height: 24),
+              const ObHeading(
+                eyebrow: true,
+                title: 'Create your account',
+                body: 'Takes a minute. Your buddy is next.',
               ),
-            ),
-          ),
-
-          // ── Form ────────────────────────────────────────────────────
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(height: 28),
+              ObTextField(
+                label: 'Email',
+                hint: 'Enter your email',
+                icon: Icons.email_outlined,
+                controller: _emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                inputFormatters: InputFormatters.email,
+                errorText: _emailError,
+                onChanged: (_) => setState(() => _emailError = null),
+              ),
+              const SizedBox(height: 16),
+              ObTextField(
+                label: 'Password',
+                hint: 'At least 8 characters',
+                icon: Icons.lock_outline,
+                controller: _passwordCtrl,
+                obscureText: !_showPassword,
+                inputFormatters: InputFormatters.password,
+                errorText: _passwordError,
+                onChanged: (_) => setState(() => _passwordError = null),
+                suffixIcon: ObVisibilityButton(
+                  shown: _showPassword,
+                  showLabel: 'Show password',
+                  hideLabel: 'Hide password',
+                  onPressed: () => setState(() => _showPassword = !_showPassword),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ObTextField(
+                label: 'Confirm password',
+                hint: 'Re-enter your password',
+                icon: Icons.lock_outline,
+                controller: _confirmCtrl,
+                obscureText: !_showConfirm,
+                inputFormatters: InputFormatters.password,
+                errorText: _confirmError,
+                onChanged: (_) => setState(() => _confirmError = null),
+                suffixIcon: ObVisibilityButton(
+                  shown: _showConfirm,
+                  showLabel: 'Show confirmation password',
+                  hideLabel: 'Hide confirmation password',
+                  onPressed: () => setState(() => _showConfirm = !_showConfirm),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
                 children: [
-                  ObTextField(
-                    label: 'Email',
-                    hint: 'Enter your email',
-                    icon: Icons.email_outlined,
-                    controller: _emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    inputFormatters: InputFormatters.email,    // 🔒 add this
-                    errorText: _emailError,
-                    onChanged: (_) => setState(() => _emailError = null),
-                  ),
-                  const SizedBox(height: 16),
-                  ObTextField(
-                    label: 'Password',
-                    hint: 'At least 8 characters',            // 🔒 updated from 6
-                    icon: Icons.lock_outline,
-                    controller: _passwordCtrl,
-                    obscureText: !_showPassword,
-                    inputFormatters: InputFormatters.password, // 🔒 add this
-                    errorText: _passwordError,
-                    onChanged: (_) => setState(() => _passwordError = null),
-                    suffixIcon: IconButton(
-                      icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility, size: 20),
-                      onPressed: () => setState(() => _showPassword = !_showPassword),
+                  SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Checkbox(
+                      value: _acceptTerms,
+                      activeColor: cs.primary,
+                      checkColor: Theme.of(context).scaffoldBackgroundColor,
+                      side: BorderSide(color: c.info, width: 2),
+                      onChanged: (v) => setState(() {
+                        _acceptTerms = v ?? false;
+                        _generalError = null;
+                      }),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  ObTextField(
-                    label: 'Confirm password',
-                    hint: 'Re-enter your password',
-                    icon: Icons.lock_outline,
-                    controller: _confirmCtrl,
-                    obscureText: !_showConfirm,
-                    inputFormatters: InputFormatters.password, // 🔒 add this
-                    errorText: _confirmError,
-                    onChanged: (_) => setState(() => _confirmError = null),
-                    suffixIcon: IconButton(
-                      icon: Icon(_showConfirm ? Icons.visibility_off : Icons.visibility, size: 20),
-                      onPressed: () => setState(() => _showConfirm = !_showConfirm),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: _acceptTerms,
-                        activeColor: kObBlue,
-                        onChanged: (v) => setState(() {
-                          _acceptTerms = v ?? false;
-                          _generalError = null;
-                        }),
-                      ),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () =>
-                              setState(() => _acceptTerms = !_acceptTerms),
-                          child: RichText(
-                            text: TextSpan(
-                              style: const TextStyle(
-                                  fontSize: 13, color: Color(0xFF374151)),
-                              children: [
-                                const TextSpan(text: 'I accept the '),
-                                TextSpan(
-                                  text: 'Terms of Service',
-                                  style: const TextStyle(
-                                      color: kObBlue,
-                                      fontWeight: FontWeight.w600),
-                                  recognizer: _termsTap,
-                                ),
-                                const TextSpan(text: ' and '),
-                                TextSpan(
-                                  text: 'Privacy Policy',
-                                  style: const TextStyle(
-                                      color: kObBlue,
-                                      fontWeight: FontWeight.w600),
-                                  recognizer: _privacyTap,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_generalError != null) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red[50],
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.red[200]!),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.error_outline,
-                              color: Colors.red[700], size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(_generalError!,
-                                style: TextStyle(
-                                    fontSize: 13, color: Colors.red[700])),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  ObGradientButton(
-                    label: 'Sign up',
-                    onTap: _next,
-                  ),
-                  const SizedBox(height: 14),
-                  Center(
+                  Expanded(
                     child: GestureDetector(
-                      onTap: () {
-                        Navigator.of(context).pushAndRemoveUntil(
-                          FadeSlideRoute(page: LoginScreen()),
-                          (r) => false,
-                        );
-                      },
-                      child: RichText(
-                        text: TextSpan(
-                          style: TextStyle(
-                              fontSize: 14, color: Colors.grey[600]),
-                          children: const [
-                            TextSpan(text: 'Already have an account? '),
+                      onTap: () => setState(() => _acceptTerms = !_acceptTerms),
+                      child: Text.rich(
+                        TextSpan(
+                          style: TextStyle(fontSize: 14, color: cs.onSurface),
+                          children: [
+                            const TextSpan(text: 'I accept the '),
                             TextSpan(
-                              text: 'Sign in',
+                              text: 'Terms of Service',
                               style: TextStyle(
-                                  color: kObBlue,
-                                  fontWeight: FontWeight.w600),
+                                  color: cs.primary,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline),
+                              recognizer: _termsTap,
+                            ),
+                            const TextSpan(text: ' and '),
+                            TextSpan(
+                              text: 'Privacy Policy',
+                              style: TextStyle(
+                                  color: cs.primary,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline),
+                              recognizer: _privacyTap,
                             ),
                           ],
                         ),
@@ -326,9 +244,24 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                 ],
               ),
-            ),
+              if (_generalError != null) ...[
+                const SizedBox(height: 12),
+                ObErrorBanner(_generalError!),
+              ],
+              const SizedBox(height: 24),
+              ObPrimaryButton(label: 'Sign up', onTap: _next),
+              const SizedBox(height: 8),
+              ObLinkButton(
+                lead: 'Already have an account? ',
+                action: 'Sign in',
+                onTap: () => Navigator.of(context).pushAndRemoveUntil(
+                  FadeSlideRoute(page: LoginScreen()),
+                  (r) => false,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
