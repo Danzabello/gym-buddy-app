@@ -2,7 +2,7 @@
 
 Pixel `34061JEHN24896`, `com.gymbuddy.app` 1.0.0 (plain release build, installed 2026-10-28 21:08), main at `e07c860`. Text only: `uiautomator dump` to a file and parsed, `dumpsys`, `logcat`. No screenshots, no install, no uninstall, no push, no code change.
 
-## Result: 9 PASS, 1 FAIL
+## Result: 9 PASS, 1 FAIL (check 8 now PASS after commit e5466d0, see the re-run at the end)
 
 | # | Check | Result | Evidence |
 |---|---|---|---|
@@ -65,3 +65,36 @@ All `@example.com`, password `Onboard12345` except where noted, all have complet
 - All set: halo pulse, rise-in stagger, Max happy for 2.2 s.
 - Step 6 at text scale 1.3: the "Streak at risk" and "Workout reminders" rows end up behind the pinned buttons until you scroll. Not clipped, but check it reads acceptably.
 - Reduced motion: that it is a clean cross-fade rather than a hard cut.
+
+## Re-run after e5466d0 (sign-in resume fix)
+
+Build with `e5466d0` installed 2026-10-28 21:44. Text only, no code change. `supabase login` was not run (interactive; the CLI was already authenticated). `mijotest` not touched.
+
+| # | Check | Result | Evidence |
+|---|---|---|---|
+| 8a | Sign up through step 1, force-stop, relaunch, Get started | PASS | New `onboardcheck6@example.com` (`30d543f1-bb06-41c4-8522-396ed948ba35`) reached `Step 2 of 6`, 0 profile rows. After `am force-stop` and relaunch: Splash, Get started, `Step 2 of 6` "Pick your buddy". |
+| 8b | Same orphan, force-stop, relaunch, Sign in with the same credentials | PASS | Splash, "Already have an account? Sign in", email and password typed, Sign in: landed on `Step 2 of 6` "Pick your buddy", no "Could not verify your account". The `auth.users` row was still there (0 profile rows). After another force-stop and relaunch, Get started went to `Step 2 of 6` again, so the session survived. |
+| 8c | Same-email re-sign-up | PASS | To sign out an orphan (the avatar step has no log-out) I used `pm clear` and re-granted `POST_NOTIFICATIONS`. Step 1 with the same email and password: continued to `Step 2 of 6`. After another `pm clear`, step 1 with the same email and a different password (`Different12345`): stayed on `Step 1 of 6` with exactly "We could not complete your signup. Please check your details and try again, or sign in if you already have an account." After a force-stop and relaunch, Get started went to the value-props slide ("Find your buddy"), not the avatar step, so it was signed out. |
+| 8d | Finish onboarding for that account | PASS | Re-signed-up with the same credentials, then avatar (Bear), identity ("Resume Six", 36, `onboard_check6`, "Available"), buddy (Coach Max), streak, notifications ("Not now"), All set, Home. Read-only SQL: exactly 1 `user_profiles` row for `30d543f1-...`, `onboarding_completed = true`, `display_name 'Resume Six'`, `age 36`, `avatar_id 'bear'`, `avatar_border 'simple'`. |
+| 8e | Regression: finished account | PASS | Log Out, then sign in as `onboardcheck5@example.com`: straight to Home (dashboard), no onboarding step, no error. Whole run (about 11,700 log lines, 21:45 to 21:54): 0 `FATAL EXCEPTION`, 0 unhandled Flutter exceptions, 0 RenderFlex lines; the only `E` lines naming the package are Android `WindowOrganizerController` messages from force-stop and relaunch. A separate cold start showed `Initializing Firebase Crashlytics 19.4.4`. |
+
+### State left behind
+
+- The phone is signed in as `onboardcheck5` at Home, and signed out of `onboardcheck6` (which now has a completed profile).
+- `POST_NOTIFICATIONS` is `granted=true` (re-granted after each `pm clear`), font scale 1.0, animation scales 1.
+- Test accounts for LAUNCH-CLEAN (all `@example.com`, password `Onboard12345`, all with completed profiles):
+
+| Email | User id |
+|---|---|
+| onboardcheck1 | `81f83cdb-e09b-4f1f-8045-afa0d3d2181e` |
+| onboardcheck2 | `bc85514c-02f2-4340-90f2-d95e3f62af26` |
+| onboardcheck3 | `f0f43430-80aa-4c38-8f87-c11226bef86f` |
+| onboardcheck4 | `ae240bb6-e629-401e-9fb6-feb1ed21cee9` |
+| onboardcheck5 | `19c3b618-ae18-4b2e-be52-cbe1de8cacbe` |
+| onboardcheck6 | `30d543f1-bb06-41c4-8522-396ed948ba35` |
+
+### Odd
+
+- There is no way to sign out from the resume flow (avatar step has no log-out and Back is hidden), so a user who wants a different account has to clear app data or finish. Not new; the old build had no equivalent state.
+- One `E FirebaseCrashlytics: Settings request failed.` appeared once, on a cold start right after a force-stop of the previous process. It did not appear in any other capture; cause not investigated.
+- The long log of this run did not contain the Crashlytics init line (the buffer starts at system boot lines and process starts were not all kept), so I confirmed it with a fresh capture.
