@@ -101,7 +101,7 @@ class _IdentityStepState extends State<IdentityStep> {
       }
     });
     if (nameErr != null || ageErr != null || !_isAvailable) return;
-    host.go(4);
+    host.next();
   }
 
   Widget _suffix() {

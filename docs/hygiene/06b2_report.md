@@ -11,6 +11,23 @@ fa6fb58 onboarding: sign up, avatar, border, identity and buddy steps
 
 (Commit 4 also carries this report, so its hash is not listed; `git log -4` is authoritative.)
 
+## Follow-up (2026-10-28): step 3 removed, step 6 fixed
+
+Everything below this section describes the first build, with seven steps. It is superseded where it conflicts with this section.
+
+- **Step 6 (streak):** green half is the user's, on the LEFT, filling from the top counter-clockwise; orange half is Max's, on the RIGHT, filling from the top clockwise. The two chips are centred on the ring line at its left and right middle. Max drops into the right chip.
+- **Border step removed from the flow.** No free ring exists in the live data. `onboarding_step_border.dart` is kept, unreferenced by the host (it still compiles and keeps `MaxSpot.border`). The flow is now six numbered steps, then All set: sign up (Max left), avatar (right), identity (left), buddy (right), streak (left in a slot, then he jumps into the right chip), notifications (right), All set (centre). Bar: 6 segments, "Step N of 6".
+- **What depended on the old numbering, and what happened to it:**
+  - Hard-coded `host.go(n)` calls in every step: replaced by `host.next()`, so a future renumbering cannot break them.
+  - `kNumberedSteps` 7 to 6, `kAllSetIndex` 7 to 6, `ObSegmentBar` default total (follows `kNumberedSteps`), the host page switch.
+  - Back availability was an index range (steps 3 to 5); now it is "on identity and buddy" by spot, i.e. steps 3 and 4. Still hidden on avatar (account just created) and on every page after the profile write (streak, notifications, All set).
+  - The Max side/size table and its test; the bar test (6 segments, "Step 3 of 6").
+  - Splash resume still lands on avatar (page index 1, step 2).
+  - Bubble line 3 ("Choose a ring...") is gone with the step. The step-2 hint "Unlock more as you level up" is unchanged.
+  - `draft.ringColor` / `ringName` stay in the draft; with no ring step they are always null / "Classic", so the identity preview card uses the default ring colour.
+  - Unchanged: `avatar_border` is still written as `'simple'`; the profile write is still at the buddy step's button (now step 4).
+- This report's "step N" references and the "Details" bullets below use the old numbers.
+
 ## Read this first: three things that differ from the brief
 
 **1. The account is created at step 1, the profile at step 5.** Before this change nothing touched Supabase Auth until "Finish setup". The username availability check ran *before* any account existed, as `anon`. Live `anon` has no SELECT on `user_profiles` (probed read-only: `42501 permission denied`), so on the live database the old username step could only ever show "Error checking username" and block Next. A client-only fix is to create the auth user at step 1 so the check runs signed in (probed as `authenticated`: works). That is what the flow does now. Consequences:

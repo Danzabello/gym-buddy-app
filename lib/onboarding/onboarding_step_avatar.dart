@@ -28,7 +28,7 @@ class _AvatarStepState extends State<AvatarStep> {
     final chosen = avatarCatalogById(draft.avatarId);
     return OnbStepFrame(
       footer: ObPrimaryButton(
-          label: 'Choose ${chosen.name}', onTap: () => host.go(2)),
+          label: 'Choose ${chosen.name}', onTap: () => host.next()),
       child: Column(
         children: [
           MaxStrip(

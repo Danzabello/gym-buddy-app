@@ -65,7 +65,7 @@ class _NotifyStepState extends State<NotifyStep>
     setState(() => _busy = true);
     if (ask) await NotificationService().requestPermissionFromUser();
     await markNotificationRationaleSeen();
-    if (mounted) host.go(7);
+    if (mounted) host.next();
   }
 
   static const _items = [

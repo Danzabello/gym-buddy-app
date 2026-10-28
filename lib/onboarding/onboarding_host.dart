@@ -8,7 +8,6 @@ import 'onboarding_max.dart';
 import 'onboarding_max_layer.dart';
 import 'onboarding_step_allset.dart';
 import 'onboarding_step_avatar.dart';
-import 'onboarding_step_border.dart';
 import 'onboarding_step_buddy.dart';
 import 'onboarding_step_identity.dart';
 import 'onboarding_step_notify.dart';
@@ -17,7 +16,7 @@ import 'onboarding_step_streak.dart';
 import 'onboarding_theme.dart';
 import 'splash_screen.dart';
 
-/// The seven-step onboarding flow: one host owns the step index and a single
+/// The six-step onboarding flow: one host owns the step index and a single
 /// Coach Max layer above every step. Steps are plain widgets inside it.
 class OnboardingHost extends StatefulWidget {
   final List<Map<String, dynamic>> pendingInvites;
@@ -129,9 +128,14 @@ class OnboardingHostState extends State<OnboardingHost>
     );
   }
 
-  /// Back is offered on steps 3 to 5 only: step 2 follows the sign-up that
-  /// created the account, and steps 6 and up follow the profile write.
-  bool get canGoBack => index >= 2 && index <= 4;
+  /// Slides to the next page.
+  void next() => go(index + 1);
+
+  /// Back is offered on identity and buddy only: avatar follows the sign-up
+  /// that created the account, and the pages after buddy follow the profile
+  /// write.
+  bool get canGoBack =>
+      kStepSpots[index] == MaxSpot.identity || kStepSpots[index] == MaxSpot.buddy;
 
   void back() {
     if (_t.isAnimating) return;
@@ -235,11 +239,10 @@ class OnboardingHostState extends State<OnboardingHost>
   Widget _buildStep(int i) => switch (i) {
         0 => const SignUpStep(),
         1 => const AvatarStep(),
-        2 => const BorderStep(),
-        3 => const IdentityStep(),
-        4 => const BuddyStep(),
-        5 => const StreakStep(),
-        6 => const NotifyStep(),
+        2 => const IdentityStep(),
+        3 => const BuddyStep(),
+        4 => const StreakStep(),
+        5 => const NotifyStep(),
         _ => const AllSetStep(),
       };
 }

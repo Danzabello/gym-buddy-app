@@ -31,20 +31,20 @@ class MaxStop {
 const Map<MaxSpot, MaxStop> kMaxStops = {
   MaxSpot.signUp: MaxStop(MaxSide.left, 92),
   MaxSpot.avatar: MaxStop(MaxSide.right, 64),
+  // Only the parked border step uses this; it is not in [kStepSpots].
   MaxSpot.border: MaxStop(MaxSide.left, 64),
-  MaxSpot.identity: MaxStop(MaxSide.right, 64),
-  MaxSpot.buddy: MaxStop(MaxSide.left, 64),
-  MaxSpot.streakSlot: MaxStop(MaxSide.right, 64),
+  MaxSpot.identity: MaxStop(MaxSide.left, 64),
+  MaxSpot.buddy: MaxStop(MaxSide.right, 64),
+  MaxSpot.streakSlot: MaxStop(MaxSide.left, 64),
   MaxSpot.streakChip: MaxStop(MaxSide.right, 44),
-  MaxSpot.notify: MaxStop(MaxSide.left, 64),
+  MaxSpot.notify: MaxStop(MaxSide.right, 64),
   MaxSpot.allSet: MaxStop(MaxSide.centre, 156),
 };
 
-/// Where Max first rests on each page: seven numbered steps, then All set.
+/// Where Max first rests on each page: six numbered steps, then All set.
 const List<MaxSpot> kStepSpots = [
   MaxSpot.signUp,
   MaxSpot.avatar,
-  MaxSpot.border,
   MaxSpot.identity,
   MaxSpot.buddy,
   MaxSpot.streakSlot,
@@ -52,8 +52,8 @@ const List<MaxSpot> kStepSpots = [
   MaxSpot.allSet,
 ];
 
-const int kNumberedSteps = 7;
-const int kAllSetIndex = 7;
+const int kNumberedSteps = 6;
+const int kAllSetIndex = 6;
 
 int _sideOrder(MaxSide s) => switch (s) {
       MaxSide.left => -1,

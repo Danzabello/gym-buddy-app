@@ -114,7 +114,7 @@ class _StreakStepState extends State<StreakStep> with TickerProviderStateMixin {
     final fade = reduce ? Duration.zero : const Duration(milliseconds: 400);
 
     return OnbStepFrame(
-      footer: ObPrimaryButton(label: 'Got it', onTap: () => host.go(6)),
+      footer: ObPrimaryButton(label: 'Got it', onTap: () => host.next()),
       child: Column(
         children: [
           MaxStrip(

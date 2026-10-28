@@ -74,7 +74,7 @@ class _BuddyStepState extends State<BuddyStep> {
     if (host.draft.buddy == BuddyChoice.invite) await _share();
     if (!mounted) return;
     setState(() => _busy = false);
-    host.go(5);
+    host.next();
   }
 
   @override

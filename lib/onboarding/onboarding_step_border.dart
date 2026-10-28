@@ -17,7 +17,7 @@ class _Ring {
   const _Ring(this.name, this.color, [this.unlock]);
 }
 
-/// Step 3: pick a ring colour from the shop's ring colours. Only rings that
+/// Parked: not in the flow, because no ring colour is free yet. Pick a ring colour from the shop's ring colours. Only rings that
 /// cost nothing and need no achievement are pickable; the next two are shown
 /// locked with their real unlock text.
 class BorderStep extends StatefulWidget {
@@ -108,7 +108,7 @@ class _BorderStepState extends State<BorderStep>
 
     return OnbStepFrame(
       footer: ObPrimaryButton(
-          label: 'Choose ${chosen.name}', onTap: () => host.go(3)),
+          label: 'Choose ${chosen.name}', onTap: () => host.next()),
       child: Column(
         children: [
           MaxStrip(

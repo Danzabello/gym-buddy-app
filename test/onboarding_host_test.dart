@@ -10,41 +10,44 @@ Widget _app(Widget child) => MaterialApp(
     );
 
 void main() {
-  testWidgets('step bar: 7 segments, filled up to the step, labelled',
+  testWidgets('step bar: 6 segments, filled up to the step, labelled',
       (tester) async {
     final handle = tester.ensureSemantics();
     await tester.pumpWidget(_app(const ObSegmentBar(step: 3)));
     await tester.pumpAndSettle();
 
     final fills = [
-      for (var i = 1; i <= 7; i++)
+      for (var i = 1; i <= 6; i++)
         ((tester.widget<AnimatedContainer>(find.byKey(ValueKey('segment$i')))
                     .decoration as BoxDecoration)
                 .color)
     ];
-    expect(fills.length, 7);
+    expect(fills.length, 6);
     expect(fills.take(3).toSet().length, 1);
     expect(fills.skip(3).toSet().length, 1);
     expect(fills.first, isNot(fills.last));
-    expect(find.bySemanticsLabel('Step 3 of 7'), findsOneWidget);
+    expect(find.bySemanticsLabel('Step 3 of 6'), findsOneWidget);
     handle.dispose();
   });
 
   test('Max anchor table: side and size per page', () {
     const sides = [
       MaxSide.left, MaxSide.right, MaxSide.left, MaxSide.right,
-      MaxSide.left, MaxSide.right, MaxSide.left, MaxSide.centre,
+      MaxSide.left, MaxSide.right, MaxSide.centre,
     ];
-    const sizes = [92.0, 64, 64, 64, 64, 64, 64, 156];
+    const sizes = [92.0, 64, 64, 64, 64, 64, 156];
     for (var i = 0; i < kStepSpots.length; i++) {
       final stop = kMaxStops[kStepSpots[i]]!;
       expect(stop.side, sides[i], reason: 'page ${i + 1} side');
       expect(stop.size, sizes[i], reason: 'page ${i + 1} size');
     }
     expect(kMaxStops[MaxSpot.streakChip]!.size, 44);
+    expect(kMaxStops[MaxSpot.streakChip]!.side, MaxSide.right);
+    expect(kStepSpots.length, kNumberedSteps + 1);
     expect(maxTravel(0, 1), 1);
     expect(maxTravel(1, 0), -1);
-    expect(maxTravel(6, 7), 1);
+    expect(maxTravel(5, 6), -1);
+    expect(maxTravel(3, 4), -1);
   });
 
   testWidgets('AI chip shows from 52dp up', (tester) async {

@@ -101,7 +101,7 @@ class _SignUpStepState extends State<SignUpStep> {
       _busy = false;
       _generalError = error;
     });
-    if (error == null) host.go(1);
+    if (error == null) host.next();
   }
 
   @override
