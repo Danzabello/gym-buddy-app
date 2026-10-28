@@ -3,8 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'onboarding_draft.dart';
 import 'onboarding_max.dart';
 import 'onboarding_max_layer.dart';
+import 'onboarding_step_avatar.dart';
+import 'onboarding_step_border.dart';
+import 'onboarding_step_buddy.dart';
+import 'onboarding_step_identity.dart';
+import 'onboarding_step_signup.dart';
 import 'onboarding_theme.dart';
 import 'splash_screen.dart';
 
@@ -34,6 +40,10 @@ class OnbScope extends InheritedWidget {
   static OnboardingHostState of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<OnbScope>()!.host;
 
+  /// For initState, where a dependency cannot be registered.
+  static OnboardingHostState read(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<OnbScope>()!.host;
+
   @override
   bool updateShouldNotify(OnbScope old) => false;
 }
@@ -45,6 +55,7 @@ class OnboardingHostState extends State<OnboardingHost>
   final anchors = {for (final s in MaxSpot.values) s: MaxAnchor()};
   final layerKey = GlobalKey<CoachMaxLayerState>();
   final bubbleVisible = ValueNotifier<bool>(false);
+  final draft = OnboardingDraft();
 
   late final AnimationController _t;
   late int index = widget.resume ? 1 : 0;
@@ -75,6 +86,7 @@ class OnboardingHostState extends State<OnboardingHost>
     _bubbleTimer?.cancel();
     _t.dispose();
     bubbleVisible.dispose();
+    draft.dispose();
     super.dispose();
   }
 
@@ -217,7 +229,14 @@ class OnboardingHostState extends State<OnboardingHost>
     );
   }
 
-  Widget _buildStep(int i) => _StubStep(i);
+  Widget _buildStep(int i) => switch (i) {
+        0 => const SignUpStep(),
+        1 => const AvatarStep(),
+        2 => const BorderStep(),
+        3 => const IdentityStep(),
+        4 => const BuddyStep(),
+        _ => _StubStep(i),
+      };
 }
 
 // ── Chrome ──────────────────────────────────────────────────────────────────

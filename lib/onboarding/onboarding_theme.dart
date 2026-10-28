@@ -265,7 +265,7 @@ class ObFieldLabel extends StatelessWidget {
       children: [
         Text(label,
             style: TextStyle(
-                fontSize: 14, fontWeight: FontWeight.w600, color: onSurface)),
+                fontSize: 13, fontWeight: FontWeight.w600, color: onSurface)),
         if (optional) ...[
           const SizedBox(width: 6),
           Text('(optional)',

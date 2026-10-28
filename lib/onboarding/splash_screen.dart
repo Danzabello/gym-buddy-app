@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 import 'widgets/onboarding_splash_background.dart';
+import 'onboarding_host.dart';
 import 'onboarding_value_props.dart';
 import '../login_screen.dart';
 
@@ -65,9 +67,14 @@ class _SplashScreenState extends State<SplashScreen>
 
   void _getStarted() {
     HapticFeedback.mediumImpact();
+    // Signed in but never finished: sign-up already happened, so pick the
+    // flow up at step 2.
+    final resume = Supabase.instance.client.auth.currentUser != null;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const OnboardingValueProps(),
+        pageBuilder: (_, __, ___) => resume
+            ? const OnboardingHost(resume: true)
+            : const OnboardingValueProps(),
         transitionDuration: const Duration(milliseconds: 500),
         transitionsBuilder: (_, animation, __, child) {
           return FadeTransition(
