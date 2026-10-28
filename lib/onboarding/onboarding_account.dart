@@ -35,8 +35,10 @@ Future<String?> createOnboardingAuthUser({
     return client.auth.currentUser == null ? kSignupFailedMessage : null;
   }
 
+  // Wrong password for an existing email, or no connection: AuthService
+  // swallows the cause, so both get the sign-in hint.
   if (await auth.signIn(email: email, password: password) != null) {
-    return kSignupErrorMessage;
+    return kSignupFailedMessage;
   }
   try {
     final row = await client
