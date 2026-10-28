@@ -29,6 +29,8 @@ class AppColors extends ThemeExtension<AppColors> {
   final Color warn;
   final Color danger;
   final Color secondaryAccent; // identity lavender
+  /// Coach Max's ring and AI chip in the onboarding flow.
+  final Color aqua;
 
   const AppColors({
     required this.cardBackground,
@@ -53,6 +55,7 @@ class AppColors extends ThemeExtension<AppColors> {
     this.warn             = const Color(0xFFFBBF24),
     this.danger           = const Color(0xFFEF4444),
     this.secondaryAccent  = const Color(0xFFA78BFA),
+    this.aqua             = const Color(0xFF67E8F9),
   });
 
   /// Lightness offsets (HSL points /100) that define the clay stack. Measured
@@ -142,6 +145,7 @@ class AppColors extends ThemeExtension<AppColors> {
     Color? warn,
     Color? danger,
     Color? secondaryAccent,
+    Color? aqua,
   }) {
     return AppColors(
       cardBackground: cardBackground ?? this.cardBackground,
@@ -164,6 +168,7 @@ class AppColors extends ThemeExtension<AppColors> {
       warn: warn ?? this.warn,
       danger: danger ?? this.danger,
       secondaryAccent: secondaryAccent ?? this.secondaryAccent,
+      aqua: aqua ?? this.aqua,
     );
   }
 
@@ -191,6 +196,7 @@ class AppColors extends ThemeExtension<AppColors> {
       warn: Color.lerp(warn, other.warn, t)!,
       danger: Color.lerp(danger, other.danger, t)!,
       secondaryAccent: Color.lerp(secondaryAccent, other.secondaryAccent, t)!,
+      aqua: Color.lerp(aqua, other.aqua, t)!,
     );
   }
 
