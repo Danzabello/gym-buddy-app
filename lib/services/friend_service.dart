@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'package:gym_buddy_app/services/team_sync_service.dart';
 
 class FriendService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -134,18 +135,10 @@ class FriendService {
       // 🔥 Create a team and get the team ID back
       final teamData = await _createTeamStreakAndGetIds(currentUserId, friendUserId);
       
-      // 🔥 BACKFILL: If users have already checked in today, apply it to new team
-      if (teamData != null && teamData['teamId'] != null && teamData['streakId'] != null) {
-        // Add a small delay to ensure database consistency
-        if (kDebugMode) debugLog('⏳ Waiting for database consistency...');
-        await Future.delayed(const Duration(milliseconds: 100));
-        
-        await _backfillTodaysCheckIns(
-          teamData['teamId']!, 
-          teamData['streakId']!, 
-          currentUserId, 
-          friendUserId
-        );
+      // Today's check-ins (both of you, each in your own local day) are
+      // copied onto the new team server-side.
+      if (teamData != null) {
+        await TeamSyncService().syncAllTeamsCheckIns();
       }
 
       return true;
@@ -176,126 +169,6 @@ class FriendService {
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error creating team streak: $e');
       return null;
-    }
-  }
-
-  // 🔥 NEW: Backfill today's check-ins for newly created team
-  Future<void> _backfillTodaysCheckIns(
-    String teamId, 
-    String streakId, 
-    String userId1, 
-    String userId2
-  ) async {
-    try {
-      // Use consistent UTC date for today
-      final now = DateTime.now().toUtc();
-      final todayUtc = DateTime.utc(now.year, now.month, now.day);
-      final today = todayUtc.toIso8601String().split('T')[0];
-      
-      if (kDebugMode) {
-        debugLog('🔄 Checking for today\'s check-ins to backfill (date: $today)...');
-      }
-
-      // ADD THIS DEBUG BLOCK HERE - BEFORE USER1 QUERY
-      if (kDebugMode) {
-        debugLog('   🔍 Querying for user1 check-in:');
-        debugLog('      - check_in_date: $today');
-      }
-
-      // Check if user1 has checked in today (in ANY team)
-      final user1CheckIn = await _supabase
-          .from('daily_team_checkins')
-          .select('check_in_time')
-          .eq('user_id', userId1)
-          .eq('check_in_date', today)
-          .limit(1)
-          .maybeSingle();
-
-      // ADD THIS DEBUG BLOCK HERE - BEFORE USER2 QUERY
-      if (kDebugMode) {
-        debugLog('   🔍 Querying for user2 check-in:');
-        debugLog('      - check_in_date: $today');
-      }
-
-      // Check if user2 has checked in today (in ANY team)  
-      final user2CheckIn = await _supabase
-          .from('daily_team_checkins')
-          .select('check_in_time')
-          .eq('user_id', userId2)
-          .eq('check_in_date', today)
-          .limit(1)
-          .maybeSingle();
-
-      // ADD THIS DEBUG BLOCK HERE - AFTER BOTH QUERIES
-      if (kDebugMode) {
-        debugLog('   📊 User1 query result: $user1CheckIn');
-        debugLog('   📊 User2 query result: $user2CheckIn');
-      }
-
-      debugLog('🔍 User1 check-in found: ${user1CheckIn != null ? "YES" : "NO"}');
-      debugLog('🔍 User2 check-in found: ${user2CheckIn != null ? "YES" : "NO"}');
-
-      if (user1CheckIn != null) {
-        debugLog('   User1 check-in time: ${user1CheckIn['check_in_time']}');
-      }
-      if (user2CheckIn != null) {
-        debugLog('   User2 check-in time: ${user2CheckIn['check_in_time']}');
-      }
-
-
-      int backfilledCount = 0;
-
-      // Backfill user1's check-in if they checked in today
-      if (user1CheckIn != null) {
-        await _supabase.from('daily_team_checkins').insert({
-          'team_streak_id': streakId,
-          'user_id': userId1,
-          'check_in_date': today,
-          'check_in_time': user1CheckIn['check_in_time'],
-        });
-        backfilledCount++;
-      }
-
-      // Backfill user2's check-in if they checked in today
-      if (user2CheckIn != null) {
-        await _supabase.from('daily_team_checkins').insert({
-          'team_streak_id': streakId,
-          'user_id': userId2,
-          'check_in_date': today,
-          'check_in_time': user2CheckIn['check_in_time'],
-        });
-        backfilledCount++;
-      }
-
-      // If both users had checked in today, update the streak immediately
-      if (backfilledCount == 2) {
-        if (kDebugMode) debugLog('🔥 Both users had checked in - updating streak!');
-
-        // LIVE-15 fix: streak math now lives server-side (recompute_team_streak
-        // RPC) — single source of truth shared with TeamStreakService, the
-        // Coach Max cron, TeamSyncService, and CoachMaxService. Replaces the
-        // direct current_streak/longest_streak/last_workout_date write that
-        // made team_streaks client-writable in the first place; also fixes a
-        // pre-existing bug where the direct write never incremented
-        // total_workouts. Safe now that the daily_team_checkins inserts above
-        // are the only writer of those rows for this team on this date — the
-        // duplicate, racing backfill_team_checkins_on_creation trigger that
-        // used to also touch last_workout_date here has been dropped.
-        final result = await _supabase.rpc('recompute_team_streak', params: {
-          'p_streak_id': streakId,
-          'p_check_in_date': today,
-        });
-
-        if (kDebugMode) debugLog('✅ Streak updated via recompute_team_streak → $result');
-      } else if (backfilledCount == 1) {
-        if (kDebugMode) debugLog('⏳ Only one user had checked in - waiting for the other');
-        // Don't update the streak, but the check-in is recorded
-      } else {
-        if (kDebugMode) debugLog('🆕 Neither user had checked in yet today');
-      }
-
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error backfilling check-ins: $e');
     }
   }
 
