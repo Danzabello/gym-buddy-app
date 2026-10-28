@@ -1,0 +1,5 @@
+PROBE_RESULTS
+PASS B1 authenticated direct INSERT into daily_team_checkins -> 42501 permission denied for table daily_team_checkins
+PASS B2 authenticated submit_checkin still answers -> ok not_checked_in_today
+PASS B3 table ACL -> {postgres=arwdDxtm/postgres,anon=r/postgres,authenticated=r/postgres,service_role=arwdDxtm/postgres}
+PASS B4 no table or column INSERT for authenticated
