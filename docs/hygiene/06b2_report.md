@@ -26,6 +26,10 @@ Everything below this section describes the first build, with seven steps. It is
   - Bubble line 3 ("Choose a ring...") is gone with the step. The step-2 hint "Unlock more as you level up" is unchanged.
   - `draft.ringColor` / `ringName` stay in the draft; with no ring step they are always null / "Classic", so the identity preview card uses the default ring colour.
   - Unchanged: `avatar_border` is still written as `'simple'`; the profile write is still at the buddy step's button (now step 4).
+- **Resume from login (follow-up 2).** `AuthService.onboardingState()` returns `complete`, `incomplete`, `noProfile` (read succeeded, zero rows) or `unknown` (read failed). `checkOnboardingStatus()` is now a wrapper that maps `noProfile` and `unknown` to null, so `main.dart` is untouched and behaves exactly as before. `login_screen.dart` sends `noProfile` to `OnboardingHost(resume: true)` (avatar step), the same place Splash "Get started" goes; every other null or error case still shows "Could not verify your account. Please try again."
+- **Duplicate email (follow-up 2).** When sign-up fails and the sign-in fallback also fails (wrong password for an existing email, or offline), step 1 shows "We could not complete your signup. Please check your details and try again, or sign in if you already have an account." The offline case is not separated: `AuthService.signIn` swallows the cause, so telling them apart would mean changing it. A failure after a successful sign-in (profile read, delete-account retry) still shows "Something went wrong creating your account. Please try again."
+- **Back stays hidden** on the streak and notification pages (they follow the profile write).
+
 - This report's "step N" references and the "Details" bullets below use the old numbers.
 
 ## Read this first: three things that differ from the brief
