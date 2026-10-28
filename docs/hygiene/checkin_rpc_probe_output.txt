@@ -1,0 +1,61 @@
+PROBE_RESULTS
+PASS C1 anon cannot execute submit_checkin -> ERR:permission denied for function submit_checkin
+PASS C2 authenticated cannot execute _credit_checkin -> ERR:permission denied for function _credit_checkin
+PASS C3 authenticated cannot execute _credit_day -> ERR:permission denied for function _credit_day
+PASS C4 submit_checkin: EXECUTE authenticated only (not PUBLIC/anon), SECURITY DEFINER, search_path=public -> {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
+PASS C5 ACLs and search_path of every new/replaced function -> _apply_checkin_rewards(uuid,uuid,date) {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; _auto_credit(uuid,timestamp with time zone,integer,text,text) {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=false; _credit_checkin(uuid,timestamp with time zone,boolean,timestamp with time zone,uuid) {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=false; _credit_day(uuid,timestamp with time zone) {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=false; _fulfil_invite_reward() {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; create_invite_team(uuid,uuid) {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; finish_checkin_session(uuid) {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; notify_buddy_checkin() {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; submit_checkin() {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres} {search_path=public} secdef=true
+PASS C6 _server_checkin dropped
+PASS C7 process_stale_sessions body unchanged, COMMENT points at _credit_day
+PASS E.eq1 new = old: return, check-in rows, streaks, xp/coin rows, profiles, logs, pushes -> md5 old 238d3b43b466e84107873e5bab435d2e new 238d3b43b466e84107873e5bab435d2e
+     eq1 new: {"ret": {"new_level": 1, "checked_in": 1, "credit_date": "2026-10-28", "did_level_up": false, "break_cancelled": false, "partner_checked_in": 0}, "snap": {"xp": [["rokitest1", 10, "xp_award", "daily_checkin", "CM[rokitest1]:2026-10-28"]], "logs": [], "push": [["00000000", "CM[rokitest1]", "rokitest1"]], "rows": [["CM[rokitest1]", "rokitest1", "2026-10-28", "2026-10-28T22:55:16.9217+00:00"]], "coins": [["rokitest1", 10, "daily_checkin", "Daily check-in rewards", "CM[rokitest1]:2026-10-28"]], "streaks": [["CM[rokitest1]", 1, 1, 1, 1, "2026-10-28"]], "profiles": [["rokitest1", 10, 10, 1]], "sessions": 0, "breaks_cancelled": 0}, "teams": [["CM[rokitest1]", {"updated": true, "new_streak": 1, "new_best_streak": 1, "old_best_streak": 0, "is_coach_max_team": true}]]}
+PASS E.eq2 new = old: return, check-in rows, streaks, xp/coin rows, profiles, logs, pushes -> md5 old 87729982e01f121dcdd52302d4ff32f9 new 87729982e01f121dcdd52302d4ff32f9
+     eq2 new: {"ret": {"new_level": 1, "checked_in": 2, "credit_date": "2026-10-28", "did_level_up": false, "break_cancelled": false, "partner_checked_in": 2}, "snap": {"xp": [["onboard_check1", 10, "xp_award", "daily_checkin", "CM[onboard_check1]:2026-10-28"], ["onboard_check1", 10, "xp_award", "daily_checkin", "T[onboard_check1+rokitest1]:2026-10-28"], ["onboard_check1", 5, "xp_award", "partner_bonus", "T[onboard_check1+rokitest1]:2026-10-28"], ["rokitest1", 10, "xp_award", "daily_checkin", "CM[rokitest1]:2026-10-28"], ["rokitest1", 15, "xp_award", "daily_checkin", "T[onboard_check1+rokitest1]:2026-10-28"]], "logs": [], "push": [["00000000", "CM[onboard_check1]", "onboard_check1"], ["rokitest1", "T[onboard_check1+rokitest1]", "onboard_check1"], ["00000000", "CM[rokitest1]", "rokitest1"], ["onboard_check1", "T[onboard_check1+rokitest1]", "rokitest1"]], "rows": [["CM[onboard_check1]", "onboard_check1", "2026-10-28", "2026-10-28T22:55:16.9217+00:00"], ["CM[rokitest1]", "rokitest1", "2026-10-28", "2026-10-28T22:55:16.9217+00:00"], ["T[onboard_check1+rokitest1]", "onboard_check1", "2026-10-28", "2026-10-28T22:55:16.9217+00:00"], ["T[onboard_check1+rokitest1]", "rokitest1", "2026-10-28", "2026-10-28T22:55:16.9217+00:00"]], "coins": [["onboard_check1", 10, "daily_checkin", "Daily check-in rewards", "CM[onboard_check1]:2026-10-28"], ["onboard_check1", 10, "daily_checkin", "Daily check-in rewards", "T[onboard_check1+rokitest1]:2026-10-28"], ["onboard_check1", 5, "partner_bonus", "Partner checked in too!", "T[onboard_check1+rokitest1]:2026-10-28"], ["rokitest1", 10, "daily_checkin", "Daily check-in rewards", "CM[rokitest1]:2026-10-28"], ["rokitest1", 15, "daily_checkin", "Daily check-in rewards", "T[onboard_check1+rokitest1]:2026-10-28"]], "streaks": [["CM[onboard_check1]", 1, 1, 1, 1, "2026-10-28"], ["CM[rokitest1]", 1, 1, 1, 1, "2026-10-28"], ["T[onboard_check1+rokitest1]", 1, 1, 1, 1, "2026-10-28"]], "profiles": [["onboard_check1", 25, 25, 1], ["rokitest1", 25, 25, 1]], "sessions": 0, "breaks_cancelled": 0}, "teams": [["CM[onboard_check1]", {"updated": true, "new_streak": 1, "new_best_streak": 1, "old_best_streak": 0, "is_coach_max_team": true}], ["T[onboard_check1+rokitest1]", {"updated": true, "new_streak": 1, "new_best_streak": 1, "old_best_streak": 0, "is_coach_max_team": false}]]}
+PASS E.eq3 new = old: return, check-in rows, streaks, xp/coin rows, profiles, logs, pushes -> md5 old 421cd9dd7d15d5e429611dda58ed4fdb new 421cd9dd7d15d5e429611dda58ed4fdb
+     eq3 new: {"ret": [true, false], "snap": {"xp": [["testtest1", 10, "xp_award", "daily_checkin", "CM[testtest1]:2026-10-28"]], "logs": [["testtest1", "2026-10-28", "2026-10-28T23:25:16.9217+00:00", "Strength", "other", "💪", 30, 30, true]], "push": [["00000000", "CM[testtest1]", "testtest1"]], "rows": [["CM[testtest1]", "testtest1", "2026-10-28", "2026-10-28T22:55:16.9217+00:00"]], "coins": [["testtest1", 10, "daily_checkin", "Daily check-in rewards", "CM[testtest1]:2026-10-28"]], "streaks": [["CM[testtest1]", 1, 1, 1, 1, "2026-10-28"]], "profiles": [["testtest1", 10, 10, 1]], "sessions": 0, "breaks_cancelled": 0}}
+PASS E.eq4 CAP-2 intended difference, today's cap (old counts the created-today yesterday payout) -> got old 5/5 new 10/10
+PASS E.eq4 CAP-2 intended difference, yesterday's cap (new counts it by its yesterday suffix) -> got old 10/10 new 5/5
+PASS E.eq4 nothing else differs (rows, streaks, logs, pushes)
+PASS Q1.1 submit_checkin as rokitest1 (no row today): reason -> got not_checked_in_today
+PASS Q1.2 credited false, xp 0, coins 0 -> {"xp": 0, "coins": 0, "teams": [{"team_id": "b1a3031e-263f-4cc4-8f02-af5ff91398fb", "updated": false, "streak_id": "763e753d-bf8d-483e-91d1-81d7a93673a4", "new_streak": 0}, {"team_id": "9c6f7f61-e2f8-4634-a661-5b05743ef3b0", "updated": false, "streak_id": "fb4f3961-2a5c-45aa-902c-a8860316c8e8", "new_streak": 0}], "reason": "not_checked_in_today", "streak": 0, "credited": false, "credit_date": "2026-10-28"}
+PASS Q1.3 partner row created on the new team with the partner's local date -> got 2026-10-28
+PASS Q1.4 copy check_in_time = source earliest time, not now() (pin trigger did not fire under the definer) -> copy 2026-10-28 19:55:16.9217+00, now 2026-10-28 22:55:16.9217+00
+PASS Q1.5 caller not copied (no real row today)
+PASS Q1.6 the copy sent no push -> got 0
+PASS Q1.7 the copy paid nothing (partner coins/xp delta) -> got 0/0
+PASS Q1.8 flag cleared when submit_checkin returns -> got 
+PASS Q1.9 new team not advanced yet (caller missing): streak/total -> got 0/0
+PASS Q1.10 a real Finish after the copy, same transaction, still pushes rokitest1 -> onboard_check3 on the new team -> 2 buddy_checked_in pushes from this Finish
+PASS Q1.11 Finish completes the new team's day: streak/total -> got 1/1
+PASS Q1.12 Finish pays as before: rokitest1 +25 (Coach Max 10, team 15), onboard_check3 retro share +15 -> got 25/15
+PASS Q1.13 second submit_checkin the same day: reason -> got already_checked_in
+PASS Q1.14 second call: rows, coins, pushes unchanged -> got 0/0/0/0
+PASS Q1.15 second Finish the same day: result, coins delta -> got nothing_to_finish/0
+PASS Q1.16 submit_checkin return shape -> {"xp": 0, "coins": 0, "teams": [{"team_id": "b1a3031e-263f-4cc4-8f02-af5ff91398fb", "updated": false, "streak_id": "763e753d-bf8d-483e-91d1-81d7a93673a4", "new_streak": 1}, {"team_id": "9c6f7f61-e2f8-4634-a661-5b05743ef3b0", "updated": false, "streak_id": "fb4f3961-2a5c-45aa-902c-a8860316c8e8", "new_streak": 1}], "reason": "already_checked_in", "streak": 1, "credited": false, "credit_date": "2026-10-28"}
+PASS Q2.0 fixture: onboard_check6 local date differs from the UTC date -> Pacific/Kiritimati 2026-10-29 vs UTC 2026-10-28
+PASS Q2.1 Finish credit_date = the member's local date -> got 2026-10-29
+PASS Q2.2 submit_checkin as testtest1 (no row today): reason -> got not_checked_in_today
+PASS Q2.3 onboard_check6 copied with its own local date, not the UTC date -> got 2026-10-29
+PASS Q2.4 onboard_check4 (no real row today, only yesterday) not copied anywhere
+PASS Q2.5 testtest1 not copied
+PASS Q3.1 reason credited, credited true, xp 0, coins 0 -> {"xp": 0, "coins": 0, "teams": [{"team_id": "c45ec8a5-d806-4946-96d2-0c662c611918", "updated": true, "streak_id": "4e9676f4-d5b4-4cf7-b8b7-5fdcbe2b822e", "new_streak": 1}, {"team_id": "b1a3031e-263f-4cc4-8f02-af5ff91398fb", "updated": false, "streak_id": "763e753d-bf8d-483e-91d1-81d7a93673a4", "new_streak": 1}], "reason": "credited", "streak": 1, "credited": true, "credit_date": "2026-10-28"}
+PASS Q3.2 both members copied onto the new team -> got 2
+PASS Q3.3 copies complete the day: streak/total, return marks the team updated -> got 1/1/true
+PASS Q3.4 copies paid nothing: coins and xp deltas -> got 0/0/0/0
+PASS Q3.5 copies pushed nothing -> got 0
+PASS Q3.6 each copy keeps its member's earliest real check_in_time
+PASS CAP.1 yesterday's cap counts yesterday-suffixed payouts: coins/xp/capped -> got 5/5/true
+PASS CAP.2 today's cap counts today-suffixed payouts: coins/xp/capped -> got 5/5/true
+PASS CAP.3 legacy reference (no suffix, NULL, or a near-miss suffix) is not counted: coins/xp/capped -> got 10/10/false
+PASS CAP.4 straddling midnight: counts for yesterday (capped), not for today: today/yesterday coins -> got 10/5
+PASS CAP.5 teammate cap by credit day, teammate has 95 coins suffixed today: teammate paid (10 base + 5 co-op, capped) -> got 5
+PASS CAP.5 teammate cap by credit day, teammate has 95 coins suffixed yesterday: teammate paid (10 base + 5 co-op, capped) -> got 15
+PASS F3.1 create_invite_team for a new invitee pays nothing at join -> 0037b8b8-a0e2-479f-b0a6-6cf9d7c8ee04 bonus 0/0
+PASS F3.2 first credited day pays once (Finish wrote 2 rows): count/amount/reference = the invite -> got 1/20/0e37b6a5-e36d-4640-95b6-118e967a575b
+PASS F3.3 a credited row on another day pays nothing more -> got 1/20
+PASS F3.4 second inviter, then a copied row lands: still one bonus (copy reason, bonus) -> got credited 1/20
+PASS F3.5 an existing account (created before the invite) is never paid -> got 0/0
+     inviter rewards (unchanged rule, >= 2 distinct check-in days): testtest1 1, onboard_check2 1
+PASS B.1 before B the installed build's direct insert still works and is pinned (date|time = now()) -> got 2026-10-28|true
+PASS B.2 after REVOKE: no table or column INSERT left for authenticated
+PASS B.3 direct insert denied -> ERR:permission denied for table daily_team_checkins
+PASS B.4 submit_checkin still works after the REVOKE (definer) -> got already_checked_in
