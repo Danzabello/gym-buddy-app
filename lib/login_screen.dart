@@ -12,6 +12,7 @@ import 'services/coach_max_service.dart';
 import 'services/notification_service.dart';
 import 'home_screen.dart';
 import 'signup_screen.dart';
+import 'onboarding/onboarding_host.dart';
 import 'onboarding/onboarding_theme.dart';
 import 'onboarding/splash_screen.dart';
 import 'theme/app_theme.dart';
@@ -147,9 +148,24 @@ class _LoginScreenState extends State<LoginScreen>
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
         await NotificationService().initialize();
-        final onboardingComplete = await _authService.checkOnboardingStatus(user.id);
+        final state = await _authService.onboardingState(user.id);
         if (!mounted) return;
         setState(() => _isLoading = false);
+
+        if (state == OnboardingState.noProfile) {
+          // Signed up but never reached the profile step: pick the flow up at
+          // the avatar step, as Splash does.
+          Navigator.of(context).pushAndRemoveUntil(
+            FadeSlideRoute(page: const OnboardingHost(resume: true)),
+            (r) => false,
+          );
+          return;
+        }
+        final onboardingComplete = switch (state) {
+          OnboardingState.complete => true,
+          OnboardingState.incomplete => false,
+          _ => null,
+        };
 
         if (onboardingComplete == null) {
           // DI-7 audit fix: the read failed (timeout, network error, etc.)

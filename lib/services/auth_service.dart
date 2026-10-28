@@ -97,15 +97,31 @@ class AuthService {
   //   null  -- read failed; status could not be determined -- callers must
   //            NOT treat this as orphaned.
   Future<bool?> checkOnboardingStatus(String userId) async {
+    return switch (await onboardingState(userId)) {
+      OnboardingState.complete => true,
+      OnboardingState.incomplete => false,
+      OnboardingState.noProfile || OnboardingState.unknown => null,
+    };
+  }
+
+  /// Same read as [checkOnboardingStatus], but a successful read that finds no
+  /// profile row is [OnboardingState.noProfile] (signed up, never finished)
+  /// rather than lumped in with failed reads.
+  Future<OnboardingState> onboardingState(String userId) async {
     try {
       final response = await _supabase
           .rpc('get_my_profile')
           .select('onboarding_completed')
-          .single();
-      return response['onboarding_completed'] == true;
+          .maybeSingle();
+      if (response == null) return OnboardingState.noProfile;
+      return response['onboarding_completed'] == true
+          ? OnboardingState.complete
+          : OnboardingState.incomplete;
     } catch (e) {
       debugLog('AuthService.checkOnboardingStatus failed: $e');
-      return null;
+      return OnboardingState.unknown;
     }
   }
 }
+
+enum OnboardingState { complete, incomplete, noProfile, unknown }
