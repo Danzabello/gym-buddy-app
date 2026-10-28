@@ -19,6 +19,11 @@ class StreakStep extends StatefulWidget {
 }
 
 class _StreakStepState extends State<StreakStep> with TickerProviderStateMixin {
+  // Ring is r 84 on a 220 viewbox drawn at 240; chips are centred on that line
+  // at the left and right middle.
+  static const _chipInset = 120 - 84 * 240 / 220 - 22;
+  static const _chipTop = 98.0;
+
   late final AnimationController _green = AnimationController(
       vsync: this, duration: const Duration(seconds: 1));
   late final AnimationController _orange = AnimationController(
@@ -181,8 +186,8 @@ class _StreakStepState extends State<StreakStep> with TickerProviderStateMixin {
                     ),
                   ),
                   Positioned(
-                    left: 0,
-                    bottom: 0,
+                    left: _chipInset,
+                    top: _chipTop,
                     child: Container(
                       width: 44,
                       height: 44,
@@ -200,11 +205,15 @@ class _StreakStepState extends State<StreakStep> with TickerProviderStateMixin {
                     ),
                   ),
                   Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: CustomPaint(
-                      foregroundPainter: _DashedCircle(c.streakOrange, 2),
-                      child: host.anchors[MaxSpot.streakChip]!.box(44),
+                    right: _chipInset,
+                    top: _chipTop,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                          shape: BoxShape.circle, color: c.inputFill),
+                      child: CustomPaint(
+                        foregroundPainter: _DashedCircle(c.streakOrange, 2),
+                        child: host.anchors[MaxSpot.streakChip]!.box(44),
+                      ),
                     ),
                   ),
                 ],
@@ -322,7 +331,8 @@ class _InfoCard extends StatelessWidget {
 }
 
 /// Ring drawn on a 220 viewbox (r 84, stroke 14), scaled to the widget.
-/// Green half fills clockwise from the top, orange counter-clockwise.
+/// The user's green half is the left one, Max's orange half the right one;
+/// both fill from the top.
 class _TwoHalves extends CustomPainter {
   final Color track, green, orange;
   final double greenT, orangeT;
@@ -344,10 +354,10 @@ class _TwoHalves extends CustomPainter {
       ..strokeCap = StrokeCap.round;
     canvas.drawArc(rect, 0, 2 * math.pi, false, paint..color = track);
     if (greenT > 0) {
-      canvas.drawArc(rect, -math.pi / 2, math.pi * greenT, false, paint..color = green);
+      canvas.drawArc(rect, -math.pi / 2, -math.pi * greenT, false, paint..color = green);
     }
     if (orangeT > 0) {
-      canvas.drawArc(rect, -math.pi / 2, -math.pi * orangeT, false, paint..color = orange);
+      canvas.drawArc(rect, -math.pi / 2, math.pi * orangeT, false, paint..color = orange);
     }
   }
 
