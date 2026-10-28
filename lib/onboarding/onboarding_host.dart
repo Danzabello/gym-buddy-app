@@ -6,11 +6,14 @@ import '../theme/app_theme.dart';
 import 'onboarding_draft.dart';
 import 'onboarding_max.dart';
 import 'onboarding_max_layer.dart';
+import 'onboarding_step_allset.dart';
 import 'onboarding_step_avatar.dart';
 import 'onboarding_step_border.dart';
 import 'onboarding_step_buddy.dart';
 import 'onboarding_step_identity.dart';
+import 'onboarding_step_notify.dart';
 import 'onboarding_step_signup.dart';
+import 'onboarding_step_streak.dart';
 import 'onboarding_theme.dart';
 import 'splash_screen.dart';
 
@@ -235,7 +238,9 @@ class OnboardingHostState extends State<OnboardingHost>
         2 => const BorderStep(),
         3 => const IdentityStep(),
         4 => const BuddyStep(),
-        _ => _StubStep(i),
+        5 => const StreakStep(),
+        6 => const NotifyStep(),
+        _ => const AllSetStep(),
       };
 }
 
@@ -352,26 +357,6 @@ class OnbStepFrame extends StatelessWidget {
               child: footer,
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _StubStep extends StatelessWidget {
-  final int i;
-  const _StubStep(this.i);
-
-  @override
-  Widget build(BuildContext context) {
-    final host = OnbScope.of(context);
-    final spot = kStepSpots[i];
-    return OnbStepFrame(
-      footer: ObPrimaryButton(label: 'Next', onTap: () => host.go(i + 1)),
-      child: MaxStrip(
-        anchor: host.anchors[spot]!,
-        spot: spot,
-        text: 'Step ${i + 1}',
-        bubbleVisible: host.bubbleVisible,
       ),
     );
   }

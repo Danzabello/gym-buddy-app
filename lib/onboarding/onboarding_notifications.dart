@@ -17,6 +17,12 @@ Future<bool> notificationRationaleSeen() async {
   }
 }
 
+Future<void> markNotificationRationaleSeen() async {
+  try {
+    await (await SharedPreferences.getInstance()).setBool(_seenKey(), true);
+  } catch (_) {}
+}
+
 /// Last onboarding step. Never reachable from login or app start.
 class OnboardingNotifications extends StatefulWidget {
   final VoidCallback onContinue;
@@ -34,9 +40,7 @@ class _OnboardingNotificationsState extends State<OnboardingNotifications> {
     if (_busy) return;
     setState(() => _busy = true);
     if (ask) await NotificationService().requestPermissionFromUser();
-    try {
-      await (await SharedPreferences.getInstance()).setBool(_seenKey(), true);
-    } catch (_) {}
+    await markNotificationRationaleSeen();
     if (mounted) widget.onContinue();
   }
 

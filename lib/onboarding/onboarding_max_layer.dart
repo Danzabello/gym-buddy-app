@@ -99,6 +99,7 @@ class CoachMaxLayerState extends State<CoachMaxLayer>
       return;
     }
     final token = ++_token;
+    if (to != MaxSpot.streakChip) _orange = false;
     final start = _flying ? _lastRect : (_spot == null ? null : _anchorRect(_spot!));
     _destShift = destShift ?? () => Offset.zero;
 

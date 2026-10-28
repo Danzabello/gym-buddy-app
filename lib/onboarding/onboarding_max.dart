@@ -238,12 +238,16 @@ class MaxStrip extends StatelessWidget {
   final MaxSpot spot;
   final String text;
   final ValueListenable<bool> bubbleVisible;
+
+  /// Wraps the anchor box, e.g. to draw an empty slot around it.
+  final Widget Function(Widget box)? decorateBox;
   const MaxStrip({
     super.key,
     required this.anchor,
     required this.spot,
     required this.text,
     required this.bubbleVisible,
+    this.decorateBox,
   });
 
   @override
@@ -267,7 +271,7 @@ class MaxStrip extends StatelessWidget {
         child: MaxBubble(text: text, side: stop.side),
       ),
     );
-    final box = anchor.box(stop.size);
+    final box = decorateBox?.call(anchor.box(stop.size)) ?? anchor.box(stop.size);
     const gap = SizedBox(width: 14);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
