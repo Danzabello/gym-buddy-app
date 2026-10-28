@@ -18,6 +18,53 @@ const kSignupFailedMessage =
 const kSignupErrorMessage =
     'Something went wrong creating your account. Please try again.';
 
+/// The auth calls step 1 needs, so the decision logic below can be tested
+/// without a Supabase client.
+abstract class OnboardingAuthPort {
+  Future<String?> signUp(String email, String password);
+  Future<String?> signIn(String email, String password);
+  bool get hasSession;
+  Future<OnboardingState> profileState();
+  Future<void> signOut();
+
+  /// Removes the push token, deletes the account and signs out.
+  Future<void> deleteAccount();
+}
+
+class _SupabasePort implements OnboardingAuthPort {
+  final _auth = AuthService();
+  final _client = Supabase.instance.client;
+
+  @override
+  Future<String?> signUp(String email, String password) =>
+      _auth.signUp(email: email, password: password);
+
+  @override
+  Future<String?> signIn(String email, String password) =>
+      _auth.signIn(email: email, password: password);
+
+  @override
+  bool get hasSession => _client.auth.currentUser != null;
+
+  @override
+  Future<OnboardingState> profileState() =>
+      _auth.onboardingState(_client.auth.currentUser!.id);
+
+  @override
+  Future<void> signOut() => _client.auth.signOut();
+
+  @override
+  Future<void> deleteAccount() async {
+    // Token first: the delete-account failure below is swallowed, and in that
+    // path the auth user survives with its token row intact.
+    await NotificationService().removeToken();
+    try {
+      await _client.functions.invoke('delete-account');
+    } catch (_) {}
+    await _client.auth.signOut();
+  }
+}
+
 /// Step 1: creates the auth user. Returns null on success, else the message
 /// to show. A sign-up that fails is retried as a sign-in with the same
 /// credentials, so someone who quit part-way can pick up again; a finished
@@ -26,44 +73,34 @@ const kSignupErrorMessage =
 Future<String?> createOnboardingAuthUser({
   required String email,
   required String password,
+  OnboardingAuthPort? port,
 }) async {
-  final auth = AuthService();
-  final client = Supabase.instance.client;
+  final auth = port ?? _SupabasePort();
 
-  final signUpError = await auth.signUp(email: email, password: password);
+  final signUpError = await auth.signUp(email, password);
   if (signUpError == null) {
-    return client.auth.currentUser == null ? kSignupFailedMessage : null;
+    return auth.hasSession ? null : kSignupFailedMessage;
   }
 
   // Wrong password for an existing email, or no connection: AuthService
   // swallows the cause, so both get the sign-in hint.
-  if (await auth.signIn(email: email, password: password) != null) {
-    return kSignupFailedMessage;
-  }
-  try {
-    final row = await client
-        .rpc('get_my_profile')
-        .select('onboarding_completed')
-        .maybeSingle();
-    if (row == null) return null; // signed up before, never reached step 5
-    if (row['onboarding_completed'] == true) {
-      await client.auth.signOut();
+  if (await auth.signIn(email, password) != null) return kSignupFailedMessage;
+
+  switch (await auth.profileState()) {
+    case OnboardingState.noProfile:
+      return null; // signed up before, never reached the profile step
+    case OnboardingState.complete:
+      await auth.signOut();
       return kSignupFailedMessage;
-    }
-    // Half-made profile from an older build: delete it and start clean.
-    await NotificationService().removeToken();
-    try {
-      await client.functions.invoke('delete-account');
-    } catch (_) {}
-    await client.auth.signOut();
-    final retry = await auth.signUp(email: email, password: password);
-    return retry == null && client.auth.currentUser != null
-        ? null
-        : kSignupErrorMessage;
-  } catch (e) {
-    debugLog('Onboarding sign-up recovery failed: $e');
-    await client.auth.signOut();
-    return kSignupErrorMessage;
+    case OnboardingState.incomplete:
+      // Half-made profile from an older build: delete it and start clean.
+      await auth.deleteAccount();
+      final retry = await auth.signUp(email, password);
+      return retry == null && auth.hasSession ? null : kSignupErrorMessage;
+    case OnboardingState.unknown:
+      // The read failed: nothing is deleted.
+      await auth.signOut();
+      return kSignupErrorMessage;
   }
 }
 

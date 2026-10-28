@@ -107,21 +107,30 @@ class AuthService {
   /// Same read as [checkOnboardingStatus], but a successful read that finds no
   /// profile row is [OnboardingState.noProfile] (signed up, never finished)
   /// rather than lumped in with failed reads.
-  Future<OnboardingState> onboardingState(String userId) async {
-    try {
-      final response = await _supabase
-          .rpc('get_my_profile')
-          .select('onboarding_completed')
-          .maybeSingle();
-      if (response == null) return OnboardingState.noProfile;
-      return response['onboarding_completed'] == true
-          ? OnboardingState.complete
-          : OnboardingState.incomplete;
-    } catch (e) {
-      debugLog('AuthService.checkOnboardingStatus failed: $e');
-      return OnboardingState.unknown;
-    }
-  }
+  Future<OnboardingState> onboardingState(String userId) => readOnboardingState(
+    () => _supabase.rpc('get_my_profile').select('onboarding_completed'),
+  );
 }
 
 enum OnboardingState { complete, incomplete, noProfile, unknown }
+
+/// Classifies one `get_my_profile` read. The read is taken as a list on
+/// purpose: `single()` / `maybeSingle()` make PostgREST answer 406 for zero
+/// rows, and the client only recognises that by its message text, so an
+/// account with no profile looked like a failed read. An empty list is
+/// [OnboardingState.noProfile]; anything thrown is [OnboardingState.unknown]
+/// and must never be treated as "no profile" or "orphaned".
+Future<OnboardingState> readOnboardingState(
+  Future<List<Map<String, dynamic>>> Function() read,
+) async {
+  try {
+    final rows = await read();
+    if (rows.isEmpty) return OnboardingState.noProfile;
+    return rows.first['onboarding_completed'] == true
+        ? OnboardingState.complete
+        : OnboardingState.incomplete;
+  } catch (e) {
+    debugLog('AuthService.onboardingState failed: $e');
+    return OnboardingState.unknown;
+  }
+}
