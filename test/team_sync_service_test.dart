@@ -29,7 +29,21 @@ void main() {
       expect(res['success'], isTrue);
       expect(res['synced'], 1);
       expect(res['reason'], 'credited');
-      expect(res['message'], 'Check-in synced to your teams.');
+      expect(res['message'], 'Check-ins synced');
+    });
+
+    test('a sync onto several teams still shows no count', () async {
+      final res = await run(() async => {
+            'credited': true,
+            'reason': 'credited',
+            'teams': [
+              {'streak_id': 'a', 'updated': true},
+              {'streak_id': 'b', 'updated': false},
+              {'streak_id': 'c', 'updated': true},
+            ],
+          });
+      expect(res['synced'], 1);
+      expect(res['message'], isNot(matches(RegExp(r'\d'))));
     });
 
     test('nothing to copy is a success with nothing synced', () async {

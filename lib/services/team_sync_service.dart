@@ -4,7 +4,7 @@ import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 /// Short text for a submit_checkin reason code.
 String checkinSyncMessage(String? reason) => switch (reason) {
-      'credited' => 'Check-in synced to your teams.',
+      'credited' => 'Check-ins synced',
       'already_checked_in' => 'Already checked in today.',
       'not_checked_in_today' => 'No check-in today yet.',
       'no_teams' => 'No teams yet.',
@@ -33,7 +33,8 @@ class TeamSyncService {
       return {
         'success': true,
         'message': checkinSyncMessage(reason),
-        // The RPC reports whether the caller got new rows, not how many.
+        // The RPC reports whether the caller got new rows, not how many, so
+        // this is 1 or 0 and the message carries no number.
         'synced': res['credited'] == true ? 1 : 0,
         'reason': reason,
       };

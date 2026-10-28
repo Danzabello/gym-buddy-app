@@ -4140,7 +4140,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               children: [
                 const Icon(Icons.sync, color: Colors.white, size: 20),
                 const SizedBox(width: 12),
-                Text('Synced check-ins to ${result['synced']} team${result['synced'] == 1 ? "" : "s"}'),
+                Text(result['message'] as String),
               ],
             ),
             backgroundColor: Colors.blue,
