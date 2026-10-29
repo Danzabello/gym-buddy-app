@@ -1,6 +1,8 @@
+import 'dart:async' show unawaited;
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'economy_sync.dart';
 
 // ══════════════════════════════════════════════════════════════
 // MODELS
@@ -202,6 +204,8 @@ class AchievementService {
       }) as Map<String, dynamic>?;
 
       if (result == null || result['unlocked'] != true) return null;
+      // The payout is committed: show the new coins and xp.
+      unawaited(EconomySync.instance.refresh());
 
       final def = await _supabase
           .from('achievements')

@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'break_day_service.dart';
 import 'workout_history_service.dart';
 import 'level_service.dart';
+import 'economy_sync.dart';
 import 'dart:async' show unawaited;
 import 'achievement_service.dart';
 import 'handshake_service.dart';
@@ -363,6 +364,8 @@ class TeamStreakService {
   Future<Map<String, dynamic>> applyFinishResult(Map<String, dynamic> res) async {
     final noop = finishNoopMessage(res);
     if (noop != null) return {'success': false, 'noop': true, 'message': noop};
+    // The credit is committed: show the new coins and xp now.
+    unawaited(EconomySync.instance.refresh());
     final today = localTodayString();
       final creditDate = res['credit_date'] as String;
       final successCount = res['checked_in'] as int? ?? 0;

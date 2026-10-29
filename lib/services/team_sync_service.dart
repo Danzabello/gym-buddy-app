@@ -1,6 +1,8 @@
+import 'dart:async' show unawaited;
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'economy_sync.dart';
 
 /// Short text for a submit_checkin reason code.
 String checkinSyncMessage(String? reason) => switch (reason) {
@@ -15,10 +17,12 @@ String checkinSyncMessage(String? reason) => switch (reason) {
 /// This ensures that when a user checks in, ALL their teams get the check-in
 /// even if the team was created after the check-in happened
 class TeamSyncService {
-  TeamSyncService({Future<dynamic> Function()? submitCheckin})
-      : _submitCheckin = submitCheckin ?? (() => Supabase.instance.client.rpc('submit_checkin'));
+  TeamSyncService({Future<dynamic> Function()? submitCheckin, void Function()? onCredited})
+      : _submitCheckin = submitCheckin ?? (() => Supabase.instance.client.rpc('submit_checkin')),
+        _onCredited = onCredited ?? (() => unawaited(EconomySync.instance.refresh()));
 
   final Future<dynamic> Function() _submitCheckin;
+  final void Function() _onCredited;
 
   /// Sync today's check-ins across all user's teams, server-side
   /// (submit_checkin): every member's real check-in for their own local
@@ -30,6 +34,8 @@ class TeamSyncService {
       final res = Map<String, dynamic>.from(await _submitCheckin() as Map);
       final reason = res['reason'] as String?;
       if (kDebugMode) debugLog('🔄 SYNC: submit_checkin → $reason');
+      // A copied row can pay the invitee bonus (_fulfil_invite_reward).
+      if (res['credited'] == true) _onCredited();
       return {
         'success': true,
         'message': checkinSyncMessage(reason),

@@ -42,6 +42,7 @@ import 'widgets/menu_card.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/level_service.dart';
+import 'services/economy_sync.dart';
 import 'pages/achievements_page.dart' as achievements_page;
 import 'widgets/achievement_toast.dart';
 import 'services/achievement_service.dart';
@@ -695,6 +696,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     
     _initializeHomePage();
     _loadHeaderData();
+    EconomySync.instance.numbers.addListener(_onEconomyChanged);
     _updateCountdown();
     _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _updateCountdown());
     _confettiController = ConfettiController(duration: const Duration(seconds: 3));
@@ -747,6 +749,18 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
   }
 
+  /// The server's coins, xp and level changed after a credit (EconomySync).
+  /// Plain update. A later animation goes here: the old values are still in
+  /// _levelInfo and _coinBalance until the setState below.
+  void _onEconomyChanged() {
+    final n = EconomySync.instance.numbers.value;
+    if (n == null || !mounted) return;
+    setState(() {
+      _levelInfo = n.level;
+      _coinBalance = n.coins;
+    });
+  }
+
   void _setupAppLifecycleListener() {
     _loadStreakData();
   }
@@ -757,6 +771,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _confettiController.dispose();
     _confettiControllerRight.dispose();
     _carouselEntranceController.dispose();
+    EconomySync.instance.numbers.removeListener(_onEconomyChanged);
     _appLifecycleListener?.dispose();
     _trayController.dispose();
     _countdownTimer?.cancel();

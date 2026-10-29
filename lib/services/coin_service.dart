@@ -1,6 +1,8 @@
+import 'dart:async' show unawaited;
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'economy_sync.dart';
 
 class CoinService {
   static final CoinService _instance = CoinService._internal();
@@ -52,6 +54,7 @@ class CoinService {
       if (kDebugMode) {
         debugLog('✅ Purchased $itemName for $cost coins → Balance: ${result?['new_balance']}');
       }
+      unawaited(EconomySync.instance.refresh());
       return true;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error purchasing item: $e');
