@@ -19,15 +19,12 @@ import 'splash_screen.dart';
 /// The six-step onboarding flow: one host owns the step index and a single
 /// Coach Max layer above every step. Steps are plain widgets inside it.
 class OnboardingHost extends StatefulWidget {
-  final List<Map<String, dynamic>> pendingInvites;
-
   /// True when an auth user already exists but onboarding never finished:
   /// the flow resumes at step 2.
   final bool resume;
 
   const OnboardingHost({
     super.key,
-    this.pendingInvites = const [],
     this.resume = false,
   });
 

@@ -56,13 +56,7 @@ class _BuddyStepState extends State<BuddyStep> {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
     try {
-      await saveOnboardingProfile(
-        host.draft,
-        pendingInvites: host.widget.pendingInvites,
-        messenger: messenger,
-        successColor: c.success,
-        warnColor: c.warn,
-      );
+      await saveOnboardingProfile(host.draft);
     } catch (e) {
       debugLog('Onboarding profile save failed: $e');
       messenger.showSnackBar(SnackBar(

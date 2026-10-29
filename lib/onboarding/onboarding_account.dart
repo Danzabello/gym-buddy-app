@@ -1,10 +1,8 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/auth_service.dart';
 import '../services/coach_max_service.dart';
-import '../services/friend_service.dart';
 import '../services/invite_service.dart';
 import '../services/notification_service.dart';
 import '../utils/debug_logger.dart';
@@ -105,15 +103,9 @@ Future<String?> createOnboardingAuthUser({
 }
 
 /// Step 5: writes the whole profile in one insert, then sets up Coach Max and
-/// any invites carried over from the intro. Throws when the profile write
-/// fails; the caller shows the error and stays on step 5.
-Future<void> saveOnboardingProfile(
-  OnboardingDraft draft, {
-  required List<Map<String, dynamic>> pendingInvites,
-  required ScaffoldMessengerState messenger,
-  required Color successColor,
-  required Color warnColor,
-}) async {
+/// a pending invite link, if any. Throws when the profile write fails; the
+/// caller shows the error and stays on step 5.
+Future<void> saveOnboardingProfile(OnboardingDraft draft) async {
   final client = Supabase.instance.client;
   final user = client.auth.currentUser;
   if (user == null) throw Exception('Authentication failed');
@@ -165,22 +157,5 @@ Future<void> saveOnboardingProfile(
         if (kDebugMode) debugLog('create_invite_team failed: $e');
       }
     }
-  }
-
-  if (pendingInvites.isNotEmpty) {
-    final friendService = FriendService();
-    var sent = 0;
-    var failed = 0;
-    for (final invite in pendingInvites) {
-      final result = await friendService.sendFriendRequest(invite['id']);
-      result == FriendRequestResult.sent ? sent++ : failed++;
-    }
-    messenger.showSnackBar(SnackBar(
-      content: Text(failed == 0
-          ? '$sent buddy request${sent == 1 ? '' : 's'} sent'
-          : "$sent sent, $failed couldn't be sent"),
-      backgroundColor: failed == 0 ? successColor : warnColor,
-      behavior: SnackBarBehavior.floating,
-    ));
   }
 }

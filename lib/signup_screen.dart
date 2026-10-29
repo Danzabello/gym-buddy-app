@@ -4,10 +4,8 @@ import 'onboarding/onboarding_host.dart';
 /// Entry point from the intro and the log-in screen: sign-up is step 1 of the
 /// onboarding host.
 class SignUpScreen extends StatelessWidget {
-  final List<Map<String, dynamic>> pendingInvites;
-  const SignUpScreen({super.key, this.pendingInvites = const []});
+  const SignUpScreen({super.key});
 
   @override
-  Widget build(BuildContext context) =>
-      OnboardingHost(pendingInvites: pendingInvites);
+  Widget build(BuildContext context) => const OnboardingHost();
 }

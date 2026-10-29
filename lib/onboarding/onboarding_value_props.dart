@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 import '../signup_screen.dart';
-import '../widgets/user_avatar.dart';
 
 class OnboardingValueProps extends StatefulWidget {
   const OnboardingValueProps({super.key});
@@ -16,20 +14,8 @@ class OnboardingValueProps extends StatefulWidget {
 class _OnboardingValuePropsState extends State<OnboardingValueProps> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
-  final List<Map<String, dynamic>> _pendingInvites = [];
 
   void _next() {
-    HapticFeedback.selectionClick();
-    if (_currentPage < 2) {
-      _pageController.nextPage(
-          duration: const Duration(milliseconds: 350),
-          curve: Curves.easeInOut);
-    } else {
-      _goToSignUp();
-    }
-  }
-
-  void _skip() {
     HapticFeedback.selectionClick();
     if (_currentPage < 2) {
       _pageController.nextPage(
@@ -49,20 +35,9 @@ class _OnboardingValuePropsState extends State<OnboardingValueProps> {
   void _goToSignUp() {
     Navigator.of(context).pushReplacement(
       FadeSlideRoute(
-        page: SignUpScreen(pendingInvites: List.from(_pendingInvites)),
+        page: const SignUpScreen(),
       ),
     );
-  }
-
-  void _addPendingInvite(Map<String, dynamic> user) {
-    if (_pendingInvites.any((u) => u['id'] == user['id'])) return;
-    setState(() => _pendingInvites.add(user));
-    HapticFeedback.selectionClick();
-  }
-
-  void _removePendingInvite(String userId) {
-    setState(
-        () => _pendingInvites.removeWhere((u) => u['id'] == userId));
   }
 
   @override
@@ -79,14 +54,9 @@ class _OnboardingValuePropsState extends State<OnboardingValueProps> {
         onPageChanged: (i) => setState(() => _currentPage = i),
         children: [
           _Slide1(
-            pendingInvites: _pendingInvites,
-            onInvite: _addPendingInvite,
-            onRemove: _removePendingInvite,
-            onNext: _next,
-            onSkip: _skip,
-            active: _currentPage == 0,
-            onDotTap: _goToPage,
-          ),
+              onNext: _next,
+              active: _currentPage == 0,
+              onDotTap: _goToPage),
           _Slide2(
               onNext: _next,
               active: _currentPage == 1,
@@ -169,9 +139,8 @@ class _Dots extends StatelessWidget {
 /// Full-width orange action button, 52 tall, presses down to 0.97.
 class _ActionButton extends StatefulWidget {
   final String label;
-  final IconData? icon;
   final VoidCallback onTap;
-  const _ActionButton({required this.label, required this.onTap, this.icon});
+  const _ActionButton({required this.label, required this.onTap});
 
   @override
   State<_ActionButton> createState() => _ActionButtonState();
@@ -205,18 +174,9 @@ class _ActionButtonState extends State<_ActionButton> {
                   borderRadius: BorderRadius.circular(16)),
               elevation: 0,
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (widget.icon != null) ...[
-                  Icon(widget.icon, size: 18),
-                  const SizedBox(width: 8),
-                ],
-                Text(widget.label,
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w700)),
-              ],
-            ),
+            child: Text(widget.label,
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w700)),
           ),
         ),
       ),
@@ -318,427 +278,28 @@ class _StaggerInState extends State<_StaggerIn>
 }
 
 // ── Slide 1 — Find your buddy ──────────────────────────────────────────────
-class _Slide1 extends StatefulWidget {
-  final List<Map<String, dynamic>> pendingInvites;
-  final void Function(Map<String, dynamic>) onInvite;
-  final void Function(String) onRemove;
+class _Slide1 extends StatelessWidget {
   final VoidCallback onNext;
-  final VoidCallback onSkip;
   final bool active;
   final ValueChanged<int> onDotTap;
-
-  const _Slide1({
-    required this.pendingInvites,
-    required this.onInvite,
-    required this.onRemove,
-    required this.onNext,
-    required this.onSkip,
-    required this.active,
-    required this.onDotTap,
-  });
-
-  @override
-  State<_Slide1> createState() => _Slide1State();
-}
-
-class _Slide1State extends State<_Slide1> {
-  bool _searching = false;
-  final _searchCtrl = TextEditingController();
-  List<Map<String, dynamic>> _results = [];
-  bool _isSearching = false;
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _search(String query) async {
-    if (query.isEmpty) {
-      setState(() => _results = []);
-      return;
-    }
-    setState(() => _isSearching = true);
-    try {
-      final clean =
-          query.startsWith('@') ? query.substring(1) : query;
-      // search_usernames RPC (SECURITY DEFINER, granted to anon) does the
-      // %/_ escaping and the 3-char minimum server-side -- this runs
-      // pre-signup, when the caller has no session and can't read
-      // user_profiles directly.
-      final res = await Supabase.instance.client
-          .rpc('search_usernames', params: {'q': clean});
-      if (mounted) {
-        setState(() {
-          _results = List<Map<String, dynamic>>.from(res);
-          _isSearching = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _isSearching = false);
-    }
-  }
+  const _Slide1(
+      {required this.onNext, required this.active, required this.onDotTap});
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    return SafeArea(
-      child: Column(
-        children: [
-          // Back button, shown only while searching
-          if (_searching)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: GestureDetector(
-                onTap: () => setState(() {
-                  _searching = false;
-                  _results = [];
-                  _searchCtrl.clear();
-                }),
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: colors.clayBg,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(Icons.arrow_back,
-                      color: scheme.onSurface, size: 16),
-                ),
-              ),
-            ),
-          // Search field or illustration
-          _searching
-              ? Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                  child: Container(
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: colors.clayBg,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: colors.divider),
-                    ),
-                    child: TextField(
-                      controller: _searchCtrl,
-                      autofocus: true,
-                      cursorColor: scheme.primary,
-                      style: TextStyle(fontSize: 14, color: scheme.onSurface),
-                      decoration: InputDecoration(
-                        hintText: 'Search by username...',
-                        hintStyle:
-                            TextStyle(color: colors.inkMuted, fontSize: 14),
-                        prefixIcon: Icon(Icons.search,
-                            color: colors.inkMuted, size: 18),
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        filled: false,
-                        contentPadding:
-                            const EdgeInsets.symmetric(vertical: 10),
-                        suffixIcon: _isSearching
-                            ? Padding(
-                                padding: const EdgeInsets.all(10),
-                                child: SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: scheme.primary)))
-                            : null,
-                      ),
-                      onChanged: (v) {
-                        Future.delayed(const Duration(milliseconds: 400), () {
-                          if (_searchCtrl.text == v && mounted) {
-                            _search(v);
-                          }
-                        });
-                      },
-                    ),
-                  ),
-                )
-              : const Padding(
-                  padding: EdgeInsets.only(top: 24, bottom: 8),
-                  child: _IconCard(Icons.local_fire_department),
-                ),
-
-          // Body
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _StaggerIn(
-                    active: widget.active,
-                    delayMs: 0,
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: Text('Find your buddy',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w700,
-                              color: scheme.onSurface)),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  _StaggerIn(
-                    active: widget.active,
-                    delayMs: 60,
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 300),
-                        child: Text(
-                          'Connect with friends already on Gym Buddy and start building streaks from day one.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontSize: 15,
-                              color: colors.inkMuted,
-                              height: 1.5),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  if (!_searching) ...[
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: OutlinedButton(
-                        onPressed: widget.onSkip,
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: colors.divider, width: 1.5),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16)),
-                        ),
-                        child: Text('Skip for now',
-                            style: TextStyle(
-                                color: scheme.onSurface,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500)),
-                      ),
-                    ),
-                  ] else ...[
-                    if (_results.isNotEmpty) ...[
-                      Text('Results',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: colors.inkMuted)),
-                      const SizedBox(height: 8),
-                      ..._results
-                          .map((u) => _UserResultTile(
-                                user: u,
-                                isInvited: widget.pendingInvites
-                                    .any((p) => p['id'] == u['id']),
-                                onInvite: () => widget.onInvite(u),
-                                onRemove: () => widget.onRemove(u['id']),
-                              ))
-                          ,
-                    ] else if (_searchCtrl.text.isNotEmpty && !_isSearching)
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          child: Text('No users found',
-                              style: TextStyle(
-                                  color: colors.inkMuted, fontSize: 14)),
-                        ),
-                      ),
-
-                    if (widget.pendingInvites.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Text('Invited (${widget.pendingInvites.length})',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: colors.inkMuted)),
-                      const SizedBox(height: 8),
-                      ...widget.pendingInvites
-                          .map((u) => _InvitedTile(
-                                user: u,
-                                onRemove: () => widget.onRemove(u['id']),
-                              ))
-                          ,
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: colors.tint(colors.info, surface: colors.clayBg),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: colors.info),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.info_outline,
-                                color: colors.info, size: 16),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Invites send automatically once you finish setup.',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: scheme.onSurface,
-                                    height: 1.4),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ],
-              ),
-            ),
-          ),
-          _Footer(
-            dot: 0,
-            active: widget.active,
-            onDotTap: widget.onDotTap,
-            cta: _searching
-                ? _ActionButton(
-                    label: widget.pendingInvites.isEmpty
-                        ? 'Next'
-                        : 'Next — continue setup',
-                    onTap: widget.onNext,
-                  )
-                : _ActionButton(
-                    label: 'Find my friends',
-                    icon: Icons.search,
-                    onTap: () => setState(() => _searching = true),
-                  ),
-          ),
-        ],
-      ),
+    return _ValuePropLayout(
+      dot: 0,
+      active: active,
+      onDotTap: onDotTap,
+      icon: Icons.local_fire_department,
+      title: 'Find your buddy',
+      body:
+          'Pair up with a friend and build a streak together, one workout at a time.',
+      onNext: onNext,
     );
   }
 }
 
-class _UserResultTile extends StatelessWidget {
-  final Map<String, dynamic> user;
-  final bool isInvited;
-  final VoidCallback onInvite;
-  final VoidCallback onRemove;
-
-  const _UserResultTile({
-    required this.user,
-    required this.isInvited,
-    required this.onInvite,
-    required this.onRemove,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: colors.clayBg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.divider),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-                color: colors.tint(scheme.primary, surface: colors.clayBg),
-                shape: BoxShape.circle),
-            child: UserAvatar(
-                avatarId: user['avatar_id'] as String?, size: 38, bare: true),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(user['display_name'] ?? '',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: scheme.onSurface)),
-                Text('@${user['username'] ?? ''}',
-                    style: TextStyle(fontSize: 12, color: colors.inkMuted)),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: isInvited ? onRemove : onInvite,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: isInvited
-                    ? colors.tint(colors.success, surface: colors.clayBg)
-                    : colors.streakOrange,
-                borderRadius: BorderRadius.circular(8),
-                border: isInvited ? Border.all(color: colors.success) : null,
-              ),
-              child: Text(
-                isInvited ? 'Invited' : 'Invite',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isInvited
-                      ? colors.success
-                      : colors.readableForeground(colors.streakOrange),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InvitedTile extends StatelessWidget {
-  final Map<String, dynamic> user;
-  final VoidCallback onRemove;
-
-  const _InvitedTile({required this.user, required this.onRemove});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: colors.tint(colors.success, surface: colors.clayBg),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: colors.success),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.check_circle, color: colors.success, size: 16),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '${user['display_name']} · @${user['username']}',
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSurface),
-            ),
-          ),
-          GestureDetector(
-            onTap: onRemove,
-            child: Icon(Icons.close, size: 16, color: colors.inkMuted),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Slide 2 — Build your streak ────────────────────────────────────────────
 // ── Floating animation wrapper ─────────────────────────────────────────────
 class _FloatingWidget extends StatefulWidget {
   final Widget child;
