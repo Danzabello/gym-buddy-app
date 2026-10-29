@@ -93,7 +93,7 @@ class WorkoutScheduleCard extends StatefulWidget {
   final bool showHeader; // the workout page has its own header
   final void Function(CardAction) onAction;
 
-  /// Runs Leave, Abandon, Cancel or Can't make it from the slide sheet; throws
+  /// Runs Leave, Cancel (solo), Cancel or Can't make it from the slide sheet; throws
   /// if the server refuses. Without it the sheet hands the action to [onAction].
   final Future<void> Function(CardAction)? runEnd;
 

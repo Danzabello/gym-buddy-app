@@ -228,7 +228,7 @@ void main() {
     await t.pump(const Duration(milliseconds: 400));
     await pump(t, card('solo', w: workout('solo', other: false, startedAgo: '5')));
     await openMenu(t);
-    expect(find.text('Abandon workout'), findsOneWidget);
+    expect(find.text('Cancel workout'), findsOneWidget);
   });
 
   group('invites list', () {

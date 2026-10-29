@@ -18,7 +18,7 @@ ConfirmCopy confirmCopyFor(CardAction a, {required String workout, String? other
       return (label: 'Leave workout', title: 'Leave $workout?', slide: 'Slide to leave',
           line: 'Your timer stops and this workout does not count for you. $n keeps going.');
     case CardAction.abandon:
-      return (label: 'Abandon workout', title: 'Abandon this workout?', slide: 'Slide to leave',
+      return (label: 'Cancel workout', title: 'Cancel this workout?', slide: 'Slide to leave',
           line: 'Your timer stops and this workout does not count.');
     case CardAction.cancel:
       return (label: 'Cancel workout', title: 'Cancel $workout?', slide: 'Slide to cancel',

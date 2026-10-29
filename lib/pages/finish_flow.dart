@@ -64,7 +64,8 @@ Future<FinishResult> finishWorkout(
     toast('Workout saved, but your streak credit did not go through.');
     return FinishResult.creditPending;
   } catch (e) {
-    toast(HandshakeError.from(e).message(name: name));
+    final err = HandshakeError.from(e);
+    toast(err.code == 'too_early' ? kTooEarlyToFinishMessage : err.message(name: name));
     return FinishResult.failed;
   }
 }

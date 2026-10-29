@@ -12,6 +12,7 @@ import 'package:gym_buddy_app/theme/app_theme.dart';
 import 'package:gym_buddy_app/widgets/schedule_rows.dart';
 import 'package:gym_buddy_app/widgets/workout_schedule_card.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 final _now = DateTime.now().toUtc();
 String _iso(DateTime t) => t.toIso8601String();
@@ -322,7 +323,7 @@ void main() {
       await check(wk('w', 'time_to_start', startsIn: Duration.zero), ['Change time', 'Cancel workout'], ['Leave workout']);
       await check(wk('w', 'time_to_start', creator: false, startsIn: Duration.zero), ["Can't make it"], ['Change time']);
       await check(wk('w', 'running', startedAgoMin: 4), ['Leave workout'], ['Cancel workout']);
-      await check(wk('w', 'solo', other: null, startedAgoMin: 4), ['Abandon workout'], ['Leave workout']);
+      await check(wk('w', 'solo', other: null, startedAgoMin: 4), ['Cancel workout'], ['Leave workout']);
     });
 
     testWidgets('back works and nothing re-pushes the page', (t) async {
@@ -395,7 +396,7 @@ void main() {
 
     for (final (result, sentence) in [
       ('nothing_to_finish', 'Nothing new to check in.'),
-      ('too_early', 'It is too early for that.'),
+      ('too_early', 'Workouts count from 15 minutes.'),
     ]) {
       testWidgets('Finish credited nothing ($result): plain sentence, no celebration, page closes', (t) async {
         final w = wk('w', 'goal_reached', startedAgoMin: 50, startsIn: const Duration(minutes: -50));
@@ -429,6 +430,20 @@ void main() {
         expect(find.text('home'), findsOneWidget);
       });
     }
+
+    testWidgets('complete_workout too_early (under 15 min) shows the 15 minute sentence', (t) async {
+      final svc = HandshakeService(rpc: (fn, _) async => throw const PostgrestException(message: 'too_early'));
+      late FinishResult r;
+      await t.pumpWidget(MaterialApp(
+        home: Scaffold(body: Builder(builder: (c) => TextButton(
+          onPressed: () async => r = await finishWorkout(c, svc, id: 'w', minutes: 5),
+          child: const Text('go')))),
+      ));
+      await t.tap(find.text('go'));
+      await t.pump();
+      expect(r, FinishResult.failed);
+      expect(find.text('Workouts count from 15 minutes.'), findsOneWidget);
+    });
 
     testWidgets('a closed workout shows a plain message, still leaveable', (t) async {
       await open(t, wk('w', 'closed'));

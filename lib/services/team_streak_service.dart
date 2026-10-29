@@ -6,7 +6,6 @@ import 'level_service.dart';
 import 'economy_sync.dart';
 import 'dart:async' show unawaited;
 import 'achievement_service.dart';
-import 'handshake_service.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
 
@@ -109,11 +108,14 @@ class TeamStreak {
 /// Shown when finish_checkin_session had nothing to credit (FIN-1).
 const kNothingToFinishMessage = 'Nothing new to check in.';
 
+/// Shown when a Finish is under 15 minutes (FIN-1 / complete_workout too_early).
+const kTooEarlyToFinishMessage = 'Workouts count from 15 minutes.';
+
 /// A plain sentence for a finish_checkin_session result that credited
 /// nothing (FIN-1), else null.
 String? finishNoopMessage(Map<String, dynamic> res) => switch (res['result']) {
       'nothing_to_finish' => kNothingToFinishMessage,
-      'too_early' => const HandshakeError('too_early').message(),
+      'too_early' => kTooEarlyToFinishMessage,
       _ => null,
     };
 

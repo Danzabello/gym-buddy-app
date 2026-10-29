@@ -37,7 +37,7 @@ List<MenuOption> menuOptionsFor({
   }
   if (!hasBuddy) {
     return [
-      (action: CardAction.abandon, title: 'Abandon workout',
+      (action: CardAction.abandon, title: 'Cancel workout',
        line: "Your timer stops and this workout doesn't count."),
     ];
   }
