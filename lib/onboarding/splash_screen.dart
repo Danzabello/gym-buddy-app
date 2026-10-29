@@ -6,6 +6,7 @@ import 'widgets/onboarding_splash_background.dart';
 import 'onboarding_host.dart';
 import 'onboarding_value_props.dart';
 import '../login_screen.dart';
+import '../utils/run_once.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -16,6 +17,7 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
+  final _once = RunOnce();
   // Entrance timeline: tile scales in over 0–450ms, then wordmark, tagline,
   // CTA and sign-in link fade+slide up, 60ms apart from 380ms, 400ms each.
   static const _totalMs = 960.0;
@@ -61,16 +63,17 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
+    _once.dispose();
     _ctrl.dispose();
     super.dispose();
   }
 
-  void _getStarted() {
+  Future<void> _getStarted() {
     HapticFeedback.mediumImpact();
     // Signed in but never finished: sign-up already happened, so pick the
     // flow up at step 2.
     final resume = Supabase.instance.client.auth.currentUser != null;
-    Navigator.of(context).pushReplacement(
+    return Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => resume
             ? const OnboardingHost(resume: true)
@@ -86,8 +89,8 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 
-  void _signIn() {
-    Navigator.of(context).push(
+  Future<void> _signIn() {
+    return Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => LoginScreen()),
     );
   }
@@ -163,7 +166,7 @@ class _SplashScreenState extends State<SplashScreen>
                           width: double.infinity,
                           height: 52,
                           child: ElevatedButton(
-                            onPressed: _getStarted,
+                            onPressed: () => _once.run(_getStarted),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: colors.streakOrange,
                               foregroundColor:
@@ -189,7 +192,7 @@ class _SplashScreenState extends State<SplashScreen>
                 _stagger(
                   560,
                   GestureDetector(
-                    onTap: _signIn,
+                    onTap: () => _once.run(_signIn),
                     child: RichText(
                       text: TextSpan(
                         style: TextStyle(fontSize: 14, color: colors.inkMuted),

@@ -1,6 +1,9 @@
 // lib/widgets/friends_page_modern.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../utils/run_once.dart';
 import '../services/friend_service.dart';
 import '../services/nudge_service.dart';
 import '../services/achievement_service.dart';
@@ -29,6 +32,15 @@ class FriendsPageModern extends StatefulWidget {
 class _FriendsPageModernState extends State<FriendsPageModern> {
   final FriendService _friendService = FriendService();
   final NudgeService _nudgeService = NudgeService();
+  final _once = RunOnce();
+  final _sheetOnce = RunOnce();
+
+  @override
+  void dispose() {
+    _once.dispose();
+    _sheetOnce.dispose();
+    super.dispose();
+  }
 
   List<Map<String, dynamic>> _friends = [];
   List<Map<String, dynamic>> _pendingRequests = []; // count only → + badge
@@ -394,7 +406,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   // ══════════════════════════════════════════════════════════
   // BUDDY OPTIONS SHEET (long-press)
   // ══════════════════════════════════════════════════════════
-  void _showBuddySheet(Map<String, dynamic> friend) {
+  Future<void> _showBuddySheet(Map<String, dynamic> friend) {
     final appColors = AppColors.of(context);
     final palette = context.read<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
@@ -406,7 +418,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     final chipFill = appColors.tint(chipRole);
     final borderColor = _borderColor(friend['avatar_border'] as String?);
 
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
@@ -497,7 +509,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
               subtitle: 'Schedule a session together',
               onTap: () {
                 Navigator.pop(context);
-                ScheduleWorkoutSheet.show(
+                return ScheduleWorkoutSheet.show(
                   context,
                   buddyId: friend['id'] as String?,
                   buddyName: friend['display_name'] as String?,
@@ -516,7 +528,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
               subtitle: 'Stats, achievements & history',
               onTap: () {
                 Navigator.pop(context);
-                showDialog(
+                return showDialog(
                   context: context,
                   builder: (_) =>
                       ProfileViewDialog(friendProfile: friend),
@@ -535,7 +547,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
               labelColor: palette.statusDanger,
               onTap: () {
                 Navigator.pop(context);
-                _removeFriend(id, name);
+                return _removeFriend(id, name);
               },
               appColors: appColors,
               cs: cs,
@@ -552,14 +564,14 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     required Color iconColor,
     required String label,
     required String subtitle,
-    required VoidCallback? onTap,
+    required FutureOr<void> Function()? onTap,
     required AppColors appColors,
     required ColorScheme cs,
     Color? labelColor,
     bool disabled = false,
   }) {
     return GestureDetector(
-      onTap: disabled ? null : onTap,
+      onTap: disabled || onTap == null ? null : () => _sheetOnce.run(onTap),
       child: Opacity(
         opacity: disabled ? 0.45 : 1.0,
         child: Padding(
@@ -622,15 +634,13 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
             : IconButton(
           icon: const Icon(Icons.search),
           tooltip: 'Search buddies',
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (_) => _SearchBuddiesPage(
-                      friends: _friends,
-                      streaks: _buddyStreaks)),
-            );
-          },
+          onPressed: () => _once.run(() => Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => _SearchBuddiesPage(
+                    friends: _friends,
+                    streaks: _buddyStreaks)),
+          )),
         ),
         // ── Center: title ──
         title: const Text('Gym Buddies',
@@ -648,14 +658,14 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
                       IconButton(
                         icon: const Icon(Icons.person_add_outlined, size: 22),
                         tooltip: 'Add buddies & requests',
-                        onPressed: () async {
+                        onPressed: () => _once.run(() async {
                           await Navigator.push(
                             context,
                             MaterialPageRoute(
                                 builder: (_) => const _AddBuddiesPage()),
                           );
                           _load(); // refresh badge + any new buddies
-                        },
+                        }),
                       ),
                       if (_pendingRequests.isNotEmpty)
                         Positioned(
@@ -836,7 +846,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
         onTap: kShowChatEntryPoints ? () => _openChat(friend) : null,
         onLongPress: () {
           HapticFeedback.mediumImpact();
-          _showBuddySheet(friend);
+          _once.run(() => _showBuddySheet(friend));
         },
         child: Container(
           margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
@@ -986,7 +996,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   Widget _inviteGhost() {
     final appColors = AppColors.of(context);
     return GestureDetector(
-      onTap: _shareInviteLink,
+      onTap: () => _once.run(_shareInviteLink),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 13),
         decoration: BoxDecoration(
@@ -1064,7 +1074,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
 
   Widget _inviteButton() {
     return GestureDetector(
-      onTap: _shareInviteLink,
+      onTap: () => _once.run(_shareInviteLink),
       child: Container(
         decoration: BoxDecoration(
           gradient: const LinearGradient(
@@ -1434,6 +1444,7 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
   bool _isSearching = false;
   String? _sendingRequestTo;
   String? _processingRequestId;
+  final _once = RunOnce();
 
   @override
   void initState() {
@@ -1443,6 +1454,7 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
 
   @override
   void dispose() {
+    _once.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -1753,8 +1765,8 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
                 child: CircularProgressIndicator(
                     strokeWidth: 2, color: cs.primary))
             : GestureDetector(
-                onTap: () => _sendFriendRequest(
-                    user['id'], user['display_name'] ?? 'them'),
+                onTap: () => _once.run(() => _sendFriendRequest(
+                    user['id'], user['display_name'] ?? 'them')),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 12, vertical: 7),
@@ -1825,7 +1837,7 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
             Row(children: [
               Expanded(
                 child: GestureDetector(
-                  onTap: () => _acceptRequest(request['id']),
+                  onTap: () => _once.run(() => _acceptRequest(request['id'])),
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
@@ -1850,7 +1862,7 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
               const SizedBox(width: 10),
               Expanded(
                 child: GestureDetector(
-                  onTap: () => _declineRequest(request['id']),
+                  onTap: () => _once.run(() => _declineRequest(request['id'])),
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(

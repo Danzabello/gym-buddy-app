@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import '../services/coin_service.dart';
 import '../services/level_service.dart';
+import '../utils/run_once.dart';
 
 Color _hexToColor(String hex) =>
     Color(int.parse('FF${hex.replaceFirst('#', '')}', radix: 16));
@@ -22,6 +23,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
   int _coinBalance = 0;
   List<ShopItem> _allItems = [];
   bool _isLoading = true;
+  final _once = RunOnce();
 
   final List<Map<String, dynamic>> _categories = [
     {'key': 'all', 'label': 'All', 'emoji': '🛍️'},
@@ -43,6 +45,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
 
   @override
   void dispose() {
+    _once.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -116,8 +119,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
     }
 
     if (_coinBalance < item.cost) {
-      _showInsufficientCoins(item);
-      return;
+      return _showInsufficientCoins(item);
     }
 
     final confirmed = await _showPurchaseDialog(item);
@@ -260,9 +262,9 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
     );
   }
 
-  void _showInsufficientCoins(ShopItem item) {
+  Future<void> _showInsufficientCoins(ShopItem item) {
     final needed = item.cost - _coinBalance;
-    showDialog(
+    return showDialog(
       context: context,
       builder: (context) {
         final colors = AppColors.of(context);
@@ -431,7 +433,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
     final isLocked = !item.isOwned && (isAchievementGated || isLevelLocked);
     final isTappable = item.isOwned || !isLocked;
     return GestureDetector(
-      onTap: isTappable ? () => _purchaseItem(item) : null,
+      onTap: isTappable ? () => _once.run(() => _purchaseItem(item)) : null,
       child: Container(
         decoration: BoxDecoration(
           color: colors.cardBackground,

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../utils/run_once.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
@@ -32,7 +35,7 @@ class BuddyProfileSheet extends StatefulWidget {
     this.onNicknameChanged,
   });
 
-  static void show(
+  static Future<void> show(
     BuildContext context, {
     required String buddyDisplayName,
     required String buddyUsername,
@@ -46,7 +49,7 @@ class BuddyProfileSheet extends StatefulWidget {
     VoidCallback? onNicknameChanged,
   }) {
     HapticFeedback.mediumImpact();
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -76,6 +79,14 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
   void initState() {
     super.initState();
     _currentNickname = widget.nickname;
+  }
+
+  final _once = RunOnce();
+
+  @override
+  void dispose() {
+    _once.dispose();
+    super.dispose();
   }
 
   Future<void> _showSetNicknameDialog() async {
@@ -325,7 +336,7 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
             subtitle: 'See workouts you\'ve done together',
             onTap: () {
               Navigator.pop(context);
-              WorkoutHistorySheet.show(
+              return WorkoutHistorySheet.show(
                 context,
                 buddyUserId: widget.buddyUserId,
                 buddyDisplayName: widget.buddyDisplayName,
@@ -342,7 +353,7 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
             subtitle: 'Plan your next session together',
             onTap: () {
               Navigator.pop(context);
-              QuickScheduleSheet.show(
+              return QuickScheduleSheet.show(
                 context,
                 buddyUserId: widget.buddyUserId,
                 buddyDisplayName: widget.buddyDisplayName,
@@ -360,16 +371,16 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
     required Color iconColor,
     required String title,
     required String subtitle,
-    required VoidCallback onTap,
+    required FutureOr<void> Function() onTap,
     required AppColors appColors,
   }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {
+        onTap: () => _once.run(() {
           HapticFeedback.selectionClick();
-          onTap();
-        },
+          return onTap();
+        }),
         borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.all(16),

@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../theme/app_theme.dart';
 import '../../widgets/avatars/avatar_art.dart';
+import '../../utils/run_once.dart';
 import 'wardrobe_selection_state.dart';
 
 /// Standard luminance-weighted greyscale matrix, applied to locked nodes.
@@ -107,9 +108,16 @@ class AvatarUnlockTree extends StatefulWidget {
 }
 
 class _AvatarUnlockTreeState extends State<AvatarUnlockTree> {
+  final _once = RunOnce();
   bool _loading = true;
   String? _error;
   List<_TreeNode> _nodes = [];
+
+  @override
+  void dispose() {
+    _once.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -268,7 +276,7 @@ class _AvatarUnlockTreeState extends State<AvatarUnlockTree> {
       left: hub.pos.dx - _hubRadius,
       top: hub.pos.dy - _hubRadius,
       child: GestureDetector(
-        onTap: () => _showHubSheet(hub, equipped, appColors),
+        onTap: () => _once.run(() => _showHubSheet(hub, equipped, appColors)),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
@@ -318,7 +326,7 @@ class _AvatarUnlockTreeState extends State<AvatarUnlockTree> {
       left: point.dx - _nodeRadius,
       top: point.dy - _nodeRadius,
       child: GestureDetector(
-        onTap: () => _showNodeSheet(node, path, appColors),
+        onTap: () => _once.run(() => _showNodeSheet(node, path, appColors)),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
@@ -390,7 +398,7 @@ class _AvatarUnlockTreeState extends State<AvatarUnlockTree> {
   /// Hubs are just always-unlocked, progress-less species nodes — represent
   /// one as a [_TreeNode] and reuse [_showNodeSheet] verbatim instead of a
   /// second sheet builder.
-  void _showHubSheet(_HubSpec hub, bool equipped, AppColors appColors) {
+  Future<void> _showHubSheet(_HubSpec hub, bool equipped, AppColors appColors) {
     final hubNode = _TreeNode(
       pathKey: 'hub',
       tier: 0,
@@ -401,7 +409,7 @@ class _AvatarUnlockTreeState extends State<AvatarUnlockTree> {
     );
     final hubPath = _PathLayout('hub', 'Starter', (c) => c.avatarRing,
         hub.pos, hub.pos, hub.pos);
-    _showNodeSheet(hubNode, hubPath, appColors);
+    return _showNodeSheet(hubNode, hubPath, appColors);
   }
 
   /// The sheet's title text already names the species, so hide the art's label.
@@ -410,13 +418,13 @@ class _AvatarUnlockTreeState extends State<AvatarUnlockTree> {
     return art == null ? null : ExcludeSemantics(child: art);
   }
 
-  void _showNodeSheet(_TreeNode node, _PathLayout path, AppColors appColors) {
+  Future<void> _showNodeSheet(_TreeNode node, _PathLayout path, AppColors appColors) {
     HapticFeedback.selectionClick();
     // Read outside the sheet builder — showModalBottomSheet's builder context
     // sits under a different route, context.read still resolves the ancestor
     // provider fine here, but capturing it up front keeps intent explicit.
     final selection = context.read<WardrobeSelectionState>();
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       backgroundColor: appColors.cardBackground,
       shape: const RoundedRectangleBorder(

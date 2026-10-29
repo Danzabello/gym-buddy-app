@@ -58,6 +58,7 @@ import 'services/notification_service.dart';
 import 'widgets/live_event_toast.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
+import 'package:gym_buddy_app/utils/run_once.dart';
 
 Color _hexToColor(String hex) =>
     Color(int.parse('FF${hex.replaceFirst('#', '')}', radix: 16));
@@ -587,6 +588,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   final TeamSyncService _teamSyncService = TeamSyncService();
   final BreakDayService _breakDayService = BreakDayService();
   final NudgeService _nudgeService = NudgeService();
+  final _once = RunOnce();
+  final _trayOnce = RunOnce();
   Map<String, String> _nicknames = {};
 
   /// Buddy id -> IANA zone (user_profiles.timezone), for the danger
@@ -841,6 +844,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   @override
   void dispose() {
+    _once.dispose();
+    _trayOnce.dispose();
     _carouselController.dispose();
     _confettiController.dispose();
     _confettiControllerRight.dispose();
@@ -1128,13 +1133,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               _clayCircleButton(
                 size: 38,
                 tooltip: 'Wardrobe',
-                onTap: () async {
+                onTap: () => _once.run(() async {
                   final saved = await Navigator.push<bool>(
                     context,
                     MaterialPageRoute(builder: (_) => const WardrobePage()),
                   );
                   if (saved == true) _loadHeaderData();
-                },
+                }),
                 child: ClipOval(
                   child: UserAvatar(avatarId: _myAvatarId ?? 'lion', size: 32),
                 ),
@@ -1207,7 +1212,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               _clayCircleButton(
                 size: 44,
                 tooltip: 'Sort streaks',
-                onTap: _showSortBottomSheet,
+                onTap: () => _once.run(_showSortBottomSheet),
                 child: Icon(Icons.tune_rounded, color: c.inkMuted, size: 20),
               ),
               const SizedBox(width: 10),
@@ -1267,7 +1272,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   Widget _buildStreakListEntry() {
     final c = AppColors.of(context);
     return GestureDetector(
-      onTap: _showAllStreaks,
+      onTap: () => _once.run(_showAllStreaks),
       behavior: HitTestBehavior.opaque,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 2),
@@ -1608,10 +1613,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   /// A small raised clay action pill.
-  Widget _trayAction(String text, Color role, VoidCallback onTap) {
+  Widget _trayAction(String text, Color role, FutureOr<void> Function() onTap) {
     final c = AppColors.of(context);
     return GestureDetector(
-      onTap: onTap,
+      onTap: () => _trayOnce.run(onTap),
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
@@ -1636,10 +1641,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
-  Widget _trayIconAction(IconData icon, Color role, VoidCallback onTap) {
+  Widget _trayIconAction(IconData icon, Color role, FutureOr<void> Function() onTap) {
     final c = AppColors.of(context);
     return GestureDetector(
-      onTap: onTap,
+      onTap: () => _trayOnce.run(onTap),
       child: Container(
         padding: const EdgeInsets.all(9),
         decoration: BoxDecoration(
@@ -2064,7 +2069,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       opacity: 1.0 - 0.4 * d,            // 1.0 focused → 0.6 peeked
       child: GestureDetector(
         onTap: focused && !streak.isCoachMaxTeam && friendMember != null
-            ? () => _showBuddyProfile(streak, friendMember)
+            ? () => _once.run(() => _showBuddyProfile(streak, friendMember))
             : null,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2178,7 +2183,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final c = AppColors.of(context);
     final on = streak.isFavorite;
     return GestureDetector(
-      onTap: () => _toggleFavorite(streak),
+      onTap: () => _once.run(() => _toggleFavorite(streak)),
       child: Container(
         width: 32,
         height: 32,
@@ -2648,10 +2653,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   /// Full-width counterpart to [_trayAction], for a card whose button gets
   /// its own row instead of sitting beside the title.
-  Widget _fullWidthTrayButton(String text, Color role, VoidCallback onTap) {
+  Widget _fullWidthTrayButton(String text, Color role, FutureOr<void> Function() onTap) {
     final c = AppColors.of(context);
     return GestureDetector(
-      onTap: onTap,
+      onTap: () => _trayOnce.run(onTap),
       behavior: HitTestBehavior.opaque,
       child: Container(
         width: double.infinity,
@@ -3942,8 +3947,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
   }
 
-  void _showQuickCreateWorkoutDialog() {
-    ScheduleWorkoutSheet.show(
+  Future<void> _showQuickCreateWorkoutDialog() {
+    return ScheduleWorkoutSheet.show(
       context,
       onWorkoutScheduled: _loadStreakData,
     );
@@ -3971,8 +3976,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _loadStreakData();
   }
 
-  void _showAllStreaks() {
-    showDialog(
+  Future<void> _showAllStreaks() {
+    return showDialog(
       context: context,
       builder: (context) => _AllStreaksDialog(streaks: _listStreaks),
     );
@@ -4257,14 +4262,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
   }
 
-  void _showSortBottomSheet() {
+  Future<void> _showSortBottomSheet() {
     assert(
       _sortModeDisplayOrder.length == StreakSortMode.values.length,
       'Every StreakSortMode must be listed in _sortModeDisplayOrder',
     );
     final appColors = AppColors.of(context);
     HapticFeedback.mediumImpact();
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -4604,10 +4609,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     }
   }
 
-  void _showBuddyProfile(TeamStreak streak, TeamMember buddy) {
+  Future<void> _showBuddyProfile(TeamStreak streak, TeamMember buddy) {
     final nickname = _nicknames[buddy.userId];
     
-    BuddyProfileSheet.show(
+    return BuddyProfileSheet.show(
       context,
       buddyDisplayName: buddy.displayName,
       buddyUsername: buddy.username ?? buddy.displayName.toLowerCase().replaceAll(' ', ''),
@@ -4719,11 +4724,18 @@ class _AllStreaksDialog extends StatefulWidget {
 
 class _AllStreaksDialogState extends State<_AllStreaksDialog> {
   late List<TeamStreak> _streaks;
+  final _once = RunOnce();
 
   @override
   void initState() {
     super.initState();
     _streaks = List.from(widget.streaks);
+  }
+
+  @override
+  void dispose() {
+    _once.dispose();
+    super.dispose();
   }
 
   // ── Rename ──────────────────────────────────────────────
@@ -5143,7 +5155,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
           // Status + edit
           if (!isCoach)
             GestureDetector(
-              onTap: () => _showRenameDialog(streak),
+              onTap: () => _once.run(() => _showRenameDialog(streak)),
               child: Container(
                 width: 28,
                 height: 28,
@@ -5209,6 +5221,7 @@ class _ProfilePageState extends State<ProfilePage>
   /// is hidden rather than showing a zero.
   List<Map<String, dynamic>> _favouriteCategories = [];
   bool _isLoading = true;
+  final _once = RunOnce();
 
   late AnimationController _fadeController;
   late Animation<double> _xpAnimation;
@@ -5236,6 +5249,7 @@ class _ProfilePageState extends State<ProfilePage>
 
   @override
   void dispose() {
+    _once.dispose();
     _fadeController.dispose();
     super.dispose();
   }
@@ -5465,9 +5479,9 @@ class _ProfilePageState extends State<ProfilePage>
     return AccentPalette.forTheme(theme).name;
   }
 
-  void _showAccentThemePicker(BuildContext context) {
+  Future<void> _showAccentThemePicker(BuildContext context) {
     final provider = context.read<AccentThemeProvider>();
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
@@ -5632,10 +5646,10 @@ class _ProfilePageState extends State<ProfilePage>
                         style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
                       ),
                       GestureDetector(
-                        onTap: () => Navigator.push(
+                        onTap: () => _once.run(() => Navigator.push(
                           context,
                           MaterialPageRoute(builder: (_) => const NotificationSettingsPage()),
-                        ),
+                        )),
                         child: Container(
                           width: 36, height: 36,
                           decoration: BoxDecoration(
@@ -5652,7 +5666,7 @@ class _ProfilePageState extends State<ProfilePage>
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       GestureDetector(
-                        onTap: () async {
+                        onTap: () => _once.run(() async {
                           final saved = await Navigator.push<bool>(
                             context,
                             MaterialPageRoute(builder: (_) => const WardrobePage()),
@@ -5661,7 +5675,7 @@ class _ProfilePageState extends State<ProfilePage>
                             _fadeController.reset();
                             _loadAll();
                           }
-                        },
+                        }),
                         child: Stack(
                           clipBehavior: Clip.none,
                           alignment: Alignment.center,
@@ -6131,40 +6145,19 @@ class _ProfilePageState extends State<ProfilePage>
   // ══════════════════════════════════════════════════════════════
   // LOG OUT
   // ══════════════════════════════════════════════════════════════
-  Widget _buildLogoutButton() {
-    return GestureDetector(
-      onTap: () async {
-        HapticFeedback.mediumImpact();
-        // Release this handset's FCM token before the session goes away —
-        // removeToken() scopes its delete to auth.uid(), so it has to run
-        // while the user is still signed in.
-        await NotificationService().removeToken();
-        await Supabase.instance.client.auth.signOut();
-        if (!mounted) return;
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => LoginScreen()),
-          (route) => false,
-        );
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: const Color(0xFFE53935).withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE53935).withValues(alpha: 0.3), width: 1.5),
-        ),
-        child: const Center(
-          child: Text(
-            'Log Out',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFFE53935),
-            ),
-          ),
-        ),
-      ),
+  Widget _buildLogoutButton() => LogoutButton(onLogout: _logOut);
+
+  Future<void> _logOut() async {
+    HapticFeedback.mediumImpact();
+    // Release this handset's FCM token before the session goes away —
+    // removeToken() scopes its delete to auth.uid(), so it has to run
+    // while the user is still signed in.
+    await NotificationService().removeToken();
+    await Supabase.instance.client.auth.signOut();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => LoginScreen()),
+      (route) => false,
     );
   }
  
@@ -7101,3 +7094,48 @@ class _FireNavButton extends StatelessWidget {
       );
     }
   }
+
+/// The Log Out control. A repeat tap while a log out is running is ignored.
+class LogoutButton extends StatefulWidget {
+  final Future<void> Function() onLogout;
+  const LogoutButton({super.key, required this.onLogout});
+
+  @override
+  State<LogoutButton> createState() => _LogoutButtonState();
+}
+
+class _LogoutButtonState extends State<LogoutButton> {
+  final _once = RunOnce();
+
+  @override
+  void dispose() {
+    _once.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _once.run(widget.onLogout),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE53935).withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE53935).withValues(alpha: 0.3), width: 1.5),
+        ),
+        child: const Center(
+          child: Text(
+            'Log Out',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFFE53935),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

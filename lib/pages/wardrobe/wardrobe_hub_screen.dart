@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../data/avatar_catalog.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/run_once.dart';
 import 'wardrobe_avatar_render.dart';
 import 'wardrobe_avatar_screen.dart';
 import 'wardrobe_border_screen.dart';
@@ -19,6 +22,13 @@ class WardrobeHubScreen extends StatefulWidget {
 
 class _WardrobeHubScreenState extends State<WardrobeHubScreen> {
   bool _saving = false;
+  final _once = RunOnce();
+
+  @override
+  void dispose() {
+    _once.dispose();
+    super.dispose();
+  }
 
   Future<void> _save() async {
     final state = context.read<WardrobeSelectionState>();
@@ -85,7 +95,7 @@ class _WardrobeHubScreenState extends State<WardrobeHubScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: (!state.isDirty || _saving) ? null : _save,
+              onPressed: (!state.isDirty || _saving) ? null : () => _once.run(_save),
               style: ElevatedButton.styleFrom(
                 backgroundColor: appColors.streakOrange,
                 foregroundColor: appColors.readableForeground(appColors.streakOrange),
@@ -115,14 +125,14 @@ class _WardrobeHubScreenState extends State<WardrobeHubScreen> {
     BuildContext context, {
     required String label,
     required String value,
-    required VoidCallback onTap,
+    required FutureOr<void> Function() onTap,
   }) {
     final appColors = AppColors.of(context);
     return GestureDetector(
-      onTap: () {
+      onTap: () => _once.run(() {
         HapticFeedback.selectionClick();
-        onTap();
-      },
+        return onTap();
+      }),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(

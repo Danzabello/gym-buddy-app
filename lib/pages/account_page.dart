@@ -8,6 +8,7 @@ import '../theme/accent_theme_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/debug_logger.dart';
 import '../utils/input_validators.dart';
+import '../utils/run_once.dart';
 import '../widgets/menu_card.dart';
 
 class AccountPage extends StatefulWidget {
@@ -127,8 +128,8 @@ class _AccountPageState extends State<AccountPage> {
     }
   }
 
-  void _showDeleteAccountSheet() {
-    showModalBottomSheet(
+  Future<void> _showDeleteAccountSheet() {
+    return showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
@@ -233,9 +234,11 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
   bool _matches = false;
   bool _isDeleting = false;
   String? _error;
+  final _once = RunOnce();
 
   @override
   void dispose() {
+    _once.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -359,7 +362,7 @@ class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
             ],
             const SizedBox(height: 16),
             GestureDetector(
-              onTap: (_matches && !_isDeleting) ? _handleConfirm : null,
+              onTap: (_matches && !_isDeleting) ? () => _once.run(_handleConfirm) : null,
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 decoration: BoxDecoration(

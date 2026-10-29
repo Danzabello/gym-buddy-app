@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import '../services/workout_service.dart';
 import '../data/coach_comments.dart';
+import '../utils/run_once.dart';
 import 'user_avatar.dart';
 
 class CompletedWorkoutsSection extends StatefulWidget {
@@ -19,6 +20,7 @@ class CompletedWorkoutsSection extends StatefulWidget {
 
 class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
   final WorkoutService _workoutService = WorkoutService();
+  final _once = RunOnce();
   List<Map<String, dynamic>> _completedWorkouts = [];
   bool _isExpanded = false;
   bool _isLoading = true;
@@ -344,7 +346,7 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
-        _showDetail(workout);
+        _once.run(() => _showDetail(workout));
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 7),
@@ -480,9 +482,9 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
       );
 
   // ── Detail bottom sheet ───────────────────────────────────────
-  void _showDetail(Map<String, dynamic> workout) {
+  Future<void> _showDetail(Map<String, dynamic> workout) {
     final vs = _vsPlanned(workout);
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

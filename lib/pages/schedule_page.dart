@@ -13,6 +13,7 @@ import 'finish_flow.dart';
 import 'schedule_deps.dart';
 import 'workout_actions.dart';
 import 'workout_page.dart';
+import '../utils/run_once.dart';
 
 /// Workout Schedule: the list. A Now row, Upcoming rows, Invitations, recent
 /// completed. Each workout opens on its own page.
@@ -33,6 +34,8 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
   bool _loaded = false;
   bool _fetching = false, _again = false;
   bool _finishing = false;
+  final _once = RunOnce();
+  final _answerOnce = RunOnce();
   PendingFinish? _pending;
   int _completedTrigger = 0;
   final Map<String, Map<String, dynamic>> _overlaps = {};
@@ -61,6 +64,8 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
     _poll?.cancel();
     _tick?.cancel();
     _unlisten();
+    _once.dispose();
+    _answerOnce.dispose();
     super.dispose();
   }
 
@@ -209,7 +214,7 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
                 if (nowRow != null) ...[
                   NowRow(
                     workout: nowRow, me: _me, now: now,
-                    onTap: () => _open(nowRow['workout_id'] as String)),
+                    onTap: () => _once.run(() => _open(nowRow['workout_id'] as String))),
                   const SizedBox(height: 16),
                 ],
                 if (upcoming.isNotEmpty) ...[
@@ -220,16 +225,16 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
                   for (final w in upcoming)
                     UpcomingRow(
                       workout: w, me: _me, now: now,
-                      onTap: () => _open(w['workout_id'] as String),
-                      onMenu: () => _rowMenu(w)),
+                      onTap: () => _once.run(() => _open(w['workout_id'] as String)),
+                      onMenu: () => _once.run(() => _rowMenu(w))),
                   const SizedBox(height: 8),
                 ],
                 if (outCount >= 3) _quiet('You have $outCount of 5 invites out'),
                 WorkoutInvitesList(
                   invites: received,
                   overlaps: _overlaps,
-                  onAccept: (id, {force = false}) => _answer(id, accept: true, force: force),
-                  onDecline: (id) => _answer(id, accept: false),
+                  onAccept: (id, {force = false}) => _answerOnce.run(() => _answer(id, accept: true, force: force)),
+                  onDecline: (id) => _answerOnce.run(() => _answer(id, accept: false)),
                 ),
                 if (received.isNotEmpty) const SizedBox(height: 16),
                 if (isEmpty) _empty(),
@@ -243,7 +248,7 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
   Widget _newWorkoutButton() => FilledButton(
         style: FilledButton.styleFrom(
             minimumSize: const Size.fromHeight(48), backgroundColor: AppColors.of(context).streakOrange),
-        onPressed: () => ScheduleWorkoutSheet.show(context, onWorkoutScheduled: _refresh),
+        onPressed: () => _once.run(() => ScheduleWorkoutSheet.show(context, onWorkoutScheduled: _refresh)),
         child: const Text('New workout'),
       );
 

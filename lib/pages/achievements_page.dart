@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import '../widgets/skeleton_box.dart';
 import 'package:provider/provider.dart';
+import '../utils/run_once.dart';
 
 class AchievementsPage extends StatefulWidget {
   const AchievementsPage({super.key});
@@ -22,6 +23,7 @@ class _AchievementsPageState extends State<AchievementsPage>
   List<Achievement> _all = [];
   LevelInfo? _levelInfo;
   bool _isLoading = true;
+  final _once = RunOnce();
 
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
@@ -53,6 +55,7 @@ class _AchievementsPageState extends State<AchievementsPage>
 
   @override
   void dispose() {
+    _once.dispose();
     _fadeController.dispose();
     super.dispose();
   }
@@ -155,7 +158,7 @@ class _AchievementsPageState extends State<AchievementsPage>
   // TAP SHEETS
   // ══════════════════════════════════════════════════════════════
 
-  void _showOverallSheet(BuildContext context) {
+  Future<void> _showOverallSheet(BuildContext context) {
     final appColors = AppColors.of(context);
     final accentPalette = context.read<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
@@ -164,7 +167,7 @@ class _AchievementsPageState extends State<AchievementsPage>
     final inProgressCount = _inProgress.length;
     final lockedCount = _locked.length;
 
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => _Sheet(
@@ -224,7 +227,7 @@ class _AchievementsPageState extends State<AchievementsPage>
     );
   }
 
-  void _showStreakSheet(BuildContext context) {
+  Future<void> _showStreakSheet(BuildContext context) {
     final appColors = AppColors.of(context);
     final accentPalette = context.read<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
@@ -239,7 +242,7 @@ class _AchievementsPageState extends State<AchievementsPage>
     final bestDays =
         bestCompleted.isNotEmpty ? bestCompleted.first.targetValue : 0;
 
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
@@ -336,13 +339,13 @@ class _AchievementsPageState extends State<AchievementsPage>
     );
   }
 
-  void _showXpSheet(BuildContext context) {
+  Future<void> _showXpSheet(BuildContext context) {
     final appColors = AppColors.of(context);
     final accentPalette = context.read<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
     final li = _levelInfo;
 
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => _Sheet(
@@ -471,14 +474,14 @@ class _AchievementsPageState extends State<AchievementsPage>
     );
   }
 
-  void _showCoinsSheet(BuildContext context) {
+  Future<void> _showCoinsSheet(BuildContext context) {
     final appColors = AppColors.of(context);
     final cs = Theme.of(context).colorScheme;
     final topEarners = [..._completed]
       ..sort((a, b) => b.coinReward.compareTo(a.coinReward));
     final top5 = topEarners.take(5).toList();
 
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => _Sheet(
@@ -680,7 +683,7 @@ class _AchievementsPageState extends State<AchievementsPage>
               children: [
                 // Level badge — tappable, opens XP sheet
                 GestureDetector(
-                  onTap: () => _showXpSheet(context),
+                  onTap: () => _once.run(() => _showXpSheet(context)),
                   child: _heroBadge('Lv $level',
                       bg: accentPalette.statusInfo, fg: Colors.white),
                 ),
@@ -748,7 +751,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                         value: _totalXpEarned.toString(),
                         label: 'XP Earned',
                         color: accentPalette.statusSuccess,
-                        onTap: () => _showXpSheet(context))),
+                        onTap: () => _once.run(() => _showXpSheet(context)))),
                 const SizedBox(width: 6),
                 Expanded(
                     child: _bentoStat(context,
@@ -756,7 +759,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                         value: _totalCoinsEarned.toString(),
                         label: 'Coins',
                         color: AppColors.of(context).warn,
-                        onTap: () => _showCoinsSheet(context))),
+                        onTap: () => _once.run(() => _showCoinsSheet(context)))),
               ],
             ),
             const SizedBox(height: 6),
@@ -791,7 +794,7 @@ class _AchievementsPageState extends State<AchievementsPage>
     final pct = _overallPct;
     return _bentoTile(
       context,
-      onTap: () => _showOverallSheet(context),
+      onTap: () => _once.run(() => _showOverallSheet(context)),
       Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -868,7 +871,7 @@ class _AchievementsPageState extends State<AchievementsPage>
 
     return _bentoTile(
       context,
-      onTap: () => _showStreakSheet(context),
+      onTap: () => _once.run(() => _showStreakSheet(context)),
       Stack(
         children: [
           Positioned(

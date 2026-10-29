@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
 import '../services/achievement_service.dart';
+import '../utils/run_once.dart';
 
 class WorkoutSelectionModal extends StatefulWidget {
   final Function(WorkoutTemplate, int, String?, List<AchievementUnlockResult>) onWorkoutSelected;
@@ -46,6 +47,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
 
   // ── Randomiser state ──────────────────────────────────────────
   bool _showRandomResult = false;
+  final _once = RunOnce();
   WorkoutTemplate? _randomTemplate;
   int _randomDuration = 30;
 
@@ -77,6 +79,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
 
   @override
   void dispose() {
+    _once.dispose();
     _shakeController.dispose();
     super.dispose();
   }
@@ -133,7 +136,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
     });
   }
 
-  void _acceptRandom() async {
+  Future<void> _acceptRandom() async {
     if (_randomTemplate == null) return;
     HapticFeedback.heavyImpact();
 
@@ -148,12 +151,12 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
   // Categorized workouts enforce a 20-minute minimum.
   static const int _minCategoryDuration = 20;
 
-  void _showCustomDurationDialog(WorkoutTemplate template) {
+  Future<void> _showCustomDurationDialog(WorkoutTemplate template) {
     HapticFeedback.lightImpact();
     final colors = AppColors.of(context);
     int customDuration = max(_minCategoryDuration, template.defaultDurationMinutes);
 
-    showDialog(
+    return showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
@@ -700,7 +703,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                 Expanded(
                   flex: 2,
                   child: GestureDetector(
-                    onTap: _acceptRandom,
+                    onTap: () => _once.run(_acceptRandom),
                     child: Container(
                       padding:
                           const EdgeInsets.symmetric(vertical: 12),
@@ -835,7 +838,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => _showCustomDurationDialog(template),
+          onTap: () => _once.run(() => _showCustomDurationDialog(template)),
           borderRadius: BorderRadius.circular(14),
           child: Padding(
             padding: const EdgeInsets.all(14),

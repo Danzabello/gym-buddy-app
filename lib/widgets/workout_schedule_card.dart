@@ -10,6 +10,7 @@ import 'confirm_slide_sheet.dart';
 import 'schedule_rows.dart' show otherPerson;
 import 'user_avatar.dart';
 import 'workout_menu.dart';
+import '../utils/run_once.dart';
 
 export 'workout_menu.dart' show CardAction;
 
@@ -128,6 +129,7 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
   late final AnimationController _pulse;
   int _lastSecond = -1;
   String? _dueKey;
+  final _once = RunOnce();
 
   Map<String, dynamic> get _w => widget.data.workout ?? const {};
   String get _state => widget.data.state;
@@ -166,6 +168,7 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
 
   @override
   void dispose() {
+    _once.dispose();
     _ticker.dispose();
     _pulse.dispose();
     super.dispose();
@@ -299,7 +302,7 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
               tooltip: 'Workout options',
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               icon: const Icon(Icons.more_vert),
-              onPressed: widget.busy ? null : _openMenu,
+              onPressed: widget.busy ? null : () => _once.run(_openMenu),
             ),
           ]),
           const SizedBox(height: 12),
@@ -378,7 +381,7 @@ class _WorkoutScheduleCardState extends State<WorkoutScheduleCard>
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           onPressed: a == null || off
               ? null
-              : () => a == CardAction.cantMakeIt || a == CardAction.cancel ? _confirmEnd(a) : widget.onAction(a),
+              : () => a == CardAction.cantMakeIt || a == CardAction.cancel ? _once.run(() => _confirmEnd(a)) : widget.onAction(a),
           child: Text(label),
         );
     const gap = SizedBox(height: 8);

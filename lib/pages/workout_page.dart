@@ -8,6 +8,7 @@ import '../utils/workout_time.dart';
 import '../widgets/schedule_rows.dart';
 import '../widgets/workout_menu.dart';
 import '../widgets/workout_schedule_card.dart';
+import '../utils/run_once.dart';
 import 'finish_flow.dart';
 import 'schedule_deps.dart';
 import 'workout_actions.dart';
@@ -31,6 +32,8 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
   Person _me = const Person();
   int _streak = 0;
   bool _busy = false;
+  final _menuOnce = RunOnce();
+  final _actOnce = RunOnce();
   bool _fetching = false, _again = false;
   late final Unsubscribe _unlisten;
   Timer? _poll;
@@ -57,6 +60,8 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _poll?.cancel();
     _unlisten();
+    _menuOnce.dispose();
+    _actOnce.dispose();
     super.dispose();
   }
 
@@ -142,7 +147,7 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
             IconButton(
               tooltip: 'Workout options',
               icon: const Icon(Icons.more_vert),
-              onPressed: _busy ? null : _openMenu,
+              onPressed: _busy ? null : () => _menuOnce.run(_openMenu),
             ),
         ],
       ),
@@ -163,7 +168,7 @@ class _WorkoutPageState extends State<WorkoutPage> with WidgetsBindingObserver {
                     streakDays: _streak,
                     busy: _busy,
                     showHeader: false,
-                    onAction: _onAction,
+                    onAction: (a) => _actOnce.run(() => _onAction(a)),
                     runEnd: (a) => sendEndAction(_deps.svc, a, widget.workoutId),
                     onEnded: (_) => Navigator.of(context).maybePop(),
                     onDue: _refresh,

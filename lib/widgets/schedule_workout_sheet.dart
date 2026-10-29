@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/run_once.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
@@ -19,14 +20,14 @@ class ScheduleWorkoutSheet extends StatefulWidget {
     this.onWorkoutScheduled,
   });
 
-  static void show(
+  static Future<void> show(
     BuildContext context, {
     String? buddyId,
     String? buddyName,
     VoidCallback? onWorkoutScheduled,
   }) {
     HapticFeedback.mediumImpact();
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -57,6 +58,13 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
   List<Map<String, dynamic>> _friends = [];
   bool _isCreating = false;
   bool _isLoadingFriends = true;
+  final _once = RunOnce();
+
+  @override
+  void dispose() {
+    _once.dispose();
+    super.dispose();
+  }
 
   /// Workout-type identity hues. Deliberately NOT themed: these encode which
   /// kind of session it is, the same way achievements' _categoryAccent encodes
@@ -141,12 +149,12 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
   }
 
   // ✅ NEW — Custom duration picker (matches QuickScheduleSheet)
-  void _showCustomDurationDialog() {
+  Future<void> _showCustomDurationDialog() {
     // Same 15-min floor as the slider and the server, so thumb, label and
     // the saved planned duration always agree.
     int tempDuration = (_isCustomDuration ? _duration : 60).clamp(15, 180);
 
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -388,7 +396,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _isCreating ? null : _scheduleWorkout,
+                      onPressed: _isCreating ? null : () => _once.run(_scheduleWorkout),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: appColors.successGreen,
                         foregroundColor: Colors.white,
@@ -500,7 +508,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
     }
 
     return GestureDetector(
-      onTap: _friends.isEmpty ? null : _showBuddyPicker,
+      onTap: _friends.isEmpty ? null : () => _once.run(_showBuddyPicker),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -576,8 +584,8 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
     );
   }
 
-  void _showBuddyPicker() {
-    showModalBottomSheet(
+  Future<void> _showBuddyPicker() {
+    return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -598,7 +606,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
 
   Widget _buildDatePicker(AppColors appColors) {
     return GestureDetector(
-      onTap: () async {
+      onTap: () => _once.run(() async {
         final date = await showDatePicker(
           context: context,
           initialDate: _selectedDate,
@@ -606,7 +614,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
           lastDate: DateTime.now().add(const Duration(days: 365)),
         );
         if (date != null) setState(() => _selectedDate = date);
-      },
+      }),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -638,11 +646,11 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
 
   Widget _buildTimePicker(AppColors appColors) {
     return GestureDetector(
-      onTap: () async {
+      onTap: () => _once.run(() async {
         final time = await showTimePicker(
             context: context, initialTime: _selectedTime);
         if (time != null) setState(() => _selectedTime = time);
-      },
+      }),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -738,7 +746,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
               child: GestureDetector(
                 onTap: () {
                   HapticFeedback.selectionClick();
-                  _showCustomDurationDialog();
+                  _once.run(_showCustomDurationDialog);
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),

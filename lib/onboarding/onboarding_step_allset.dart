@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import 'onboarding_host.dart';
 import 'onboarding_max.dart';
 import 'onboarding_theme.dart';
+import '../utils/run_once.dart';
 
 /// Last page: Max lands in the centre, a halo rings out once, the headline,
 /// body and button rise in. No bar and no back.
@@ -18,6 +19,7 @@ class AllSetStep extends StatefulWidget {
 }
 
 class _AllSetStepState extends State<AllSetStep> with TickerProviderStateMixin {
+  final _once = RunOnce();
   late final AnimationController _halo = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1200));
   late final AnimationController _rise = AnimationController(
@@ -49,12 +51,13 @@ class _AllSetStepState extends State<AllSetStep> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _once.dispose();
     _halo.dispose();
     _rise.dispose();
     super.dispose();
   }
 
-  void _toHome() {
+  Future<void> _toHome() {
     final user = Supabase.instance.client.auth.currentUser;
     final msg = user != null
         ? CoachMaxService()
@@ -66,7 +69,7 @@ class _AllSetStepState extends State<AllSetStep> with TickerProviderStateMixin {
     final messenger = ScaffoldMessenger.of(context);
     final successColor = AppColors.of(context).success;
 
-    Navigator.of(context).pushAndRemoveUntil(
+    final pushed = Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const HomeScreen()),
       (r) => false,
     );
@@ -83,6 +86,7 @@ class _AllSetStepState extends State<AllSetStep> with TickerProviderStateMixin {
         ),
       );
     });
+    return pushed;
   }
 
   Widget _rising(double start, Widget child) {
@@ -110,7 +114,7 @@ class _AllSetStepState extends State<AllSetStep> with TickerProviderStateMixin {
       centered: true,
       footer: _rising(
         300 / 1100,
-        ObPrimaryButton(label: "Let's train", onTap: _toHome),
+        ObPrimaryButton(label: "Let's train", onTap: () => _once.run(_toHome)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

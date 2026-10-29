@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
+import '../utils/run_once.dart';
 
 class MenuItem {
   final String? emoji;
@@ -11,7 +14,8 @@ class MenuItem {
   final Color? labelColor;
   final String? sub;
   final bool showChevron;
-  final VoidCallback? onTap;
+  /// Return the push/show future so a repeat tap is ignored until it is dismissed.
+  final FutureOr<void> Function()? onTap;
 
   const MenuItem({
     this.emoji,
@@ -46,13 +50,8 @@ Widget buildMenuCard(BuildContext context, List<MenuItem> items) {
         final item = entry.value;
         return Column(
           children: [
-            InkWell(
-              onTap: item.onTap == null
-                  ? null
-                  : () {
-                      HapticFeedback.selectionClick();
-                      item.onTap!();
-                    },
+            _GuardedInkWell(
+              onTap: item.onTap,
               borderRadius: BorderRadius.vertical(
                 top: i == 0 ? const Radius.circular(18) : Radius.zero,
                 bottom: i == items.length - 1 ? const Radius.circular(18) : Radius.zero,
@@ -109,4 +108,41 @@ Widget buildMenuCard(BuildContext context, List<MenuItem> items) {
       }).toList(),
     ),
   );
+}
+
+/// InkWell whose tap is ignored while the previous tap's action is running.
+class _GuardedInkWell extends StatefulWidget {
+  final FutureOr<void> Function()? onTap;
+  final BorderRadius borderRadius;
+  final Widget child;
+
+  const _GuardedInkWell({required this.onTap, required this.borderRadius, required this.child});
+
+  @override
+  State<_GuardedInkWell> createState() => _GuardedInkWellState();
+}
+
+class _GuardedInkWellState extends State<_GuardedInkWell> {
+  final _once = RunOnce();
+
+  @override
+  void dispose() {
+    _once.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final onTap = widget.onTap;
+    return InkWell(
+      onTap: onTap == null
+          ? null
+          : () => _once.run(() {
+                HapticFeedback.selectionClick();
+                return onTap();
+              }),
+      borderRadius: widget.borderRadius,
+      child: widget.child,
+    );
+  }
 }

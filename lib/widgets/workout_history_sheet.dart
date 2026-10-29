@@ -18,14 +18,14 @@ class WorkoutHistorySheet extends StatefulWidget {
     required this.buddyAvatarId,
   });
 
-  static void show(
+  static Future<void> show(
     BuildContext context, {
     required String buddyUserId,
     required String buddyDisplayName,
     required String buddyAvatarId,
   }) {
     HapticFeedback.mediumImpact();
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

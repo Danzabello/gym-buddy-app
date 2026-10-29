@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/level_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/run_once.dart';
 import 'avatars/avatar_art.dart';
 
 
@@ -78,6 +79,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
   int _selectedAvatarIndex = 0;
   AvatarBorderStyle _selectedBorder = AvatarBorderStyle.simple;
   bool _isSaving = false;
+  final _once = RunOnce();
 
   // Unlock data
   Set<String> _unlockedAvatarIds = {};
@@ -133,6 +135,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
 
   @override
   void dispose() {
+    _once.dispose();
     _bounceController.dispose();
     super.dispose();
   }
@@ -472,7 +475,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _isSaving ? null : _confirm,
+              onPressed: _isSaving ? null : () => _once.run(_confirm),
               style: ElevatedButton.styleFrom(
                 backgroundColor: appColors.streakOrange,
                 foregroundColor:
@@ -608,7 +611,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
         HapticFeedback.selectionClick();
         // Save directly since earnable avatars don't go through the starter flow
         if (widget.onCompleteWithData == null) {
-          _saveEarnableAvatar(e.id);
+          _once.run(() => _saveEarnableAvatar(e.id));
         } else {
           widget.onCompleteWithData!(e.id, _selectedBorder.name);
         }

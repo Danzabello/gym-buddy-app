@@ -17,6 +17,7 @@ import 'onboarding/onboarding_theme.dart';
 import 'onboarding/splash_screen.dart';
 import 'theme/app_theme.dart';
 import 'utils/input_validators.dart';
+import 'utils/run_once.dart';
 import 'utils/timezone_sync.dart';
 import 'package:flutter/foundation.dart';
 
@@ -34,6 +35,7 @@ class _LoginScreenState extends State<LoginScreen>
   final _passwordCtrl = TextEditingController();
   final _authService = AuthService();
   final _coachMaxService = CoachMaxService();
+  final _once = RunOnce();
 
   late final AnimationController _animCtrl;
   late final Animation<double> _fade;
@@ -92,6 +94,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   void dispose() {
+    _once.dispose();
     _animCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
@@ -328,7 +331,7 @@ class _LoginScreenState extends State<LoginScreen>
             Align(
               alignment: Alignment.centerRight,
               child: TextButton(
-                onPressed: _forgotPassword,
+                onPressed: () => _once.run(_forgotPassword),
                 style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                 child: Text('Forgot password?',
                     style: TextStyle(
@@ -345,7 +348,7 @@ class _LoginScreenState extends State<LoginScreen>
             ObPrimaryButton(
               label: 'Sign in',
               isLoading: _isLoading,
-              onTap: _isLockedOut ? null : _login,
+              onTap: _isLockedOut ? null : () => _once.run(_login),
             ),
             const SizedBox(height: 8),
             ObLinkButton(

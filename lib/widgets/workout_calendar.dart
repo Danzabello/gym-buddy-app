@@ -4,6 +4,7 @@ import '../services/workout_history_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
+import '../utils/run_once.dart';
 
 class WorkoutCalendarWidget extends StatefulWidget {
   const WorkoutCalendarWidget({super.key});
@@ -14,7 +15,14 @@ class WorkoutCalendarWidget extends StatefulWidget {
 
 class _WorkoutCalendarWidgetState extends State<WorkoutCalendarWidget> {
   final WorkoutHistoryService _historyService = WorkoutHistoryService();
-  
+  final _once = RunOnce();
+
+  @override
+  void dispose() {
+    _once.dispose();
+    super.dispose();
+  }
+
   DateTime _currentMonth = DateTime.now();
   List<CalendarDay>? _calendarDays;
   bool _isLoading = true;
@@ -50,10 +58,10 @@ class _WorkoutCalendarWidgetState extends State<WorkoutCalendarWidget> {
     });
   }
 
-  void _showWorkoutDetails(CalendarDay day) {
-    if (day.workouts.isEmpty) return;
+  Future<void>? _showWorkoutDetails(CalendarDay day) {
+    if (day.workouts.isEmpty) return null;
 
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -208,7 +216,7 @@ class _WorkoutCalendarWidgetState extends State<WorkoutCalendarWidget> {
     final appColors = AppColors.of(context);
     final accentPalette = context.watch<AccentThemeProvider>().palette;
     return GestureDetector(
-      onTap: () => _showWorkoutDetails(day),
+      onTap: () => _once.run(() => _showWorkoutDetails(day)),
       child: Container(
         decoration: BoxDecoration(
           color: day.isToday 

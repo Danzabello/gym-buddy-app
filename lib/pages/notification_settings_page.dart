@@ -9,6 +9,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
+import '../utils/run_once.dart';
 
 class NotificationSettingsPage extends StatefulWidget {
   const NotificationSettingsPage({super.key});
@@ -24,6 +25,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
 
   bool _isLoading = true;
   bool _isSaving = false;
+  final _once = RunOnce();
+  final _saveOnce = RunOnce();
   bool _osPermissionGranted = true;
 
   bool _notifSocial = true;
@@ -52,6 +55,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _once.dispose();
+    _saveOnce.dispose();
     _bannerTimer?.cancel();
     _banner.dispose();
     super.dispose();
@@ -151,12 +156,12 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
     return '${hour - 12}:00 PM';
   }
 
-  void _showHourPicker(bool isStart) {
+  Future<void> _showHourPicker(bool isStart) {
     int tempHour = isStart ? _quietHoursStart : _quietHoursEnd;
     final appColors = AppColors.of(context);
     final cs = Theme.of(context).colorScheme;
 
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
@@ -288,7 +293,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
             )
           else
             TextButton(
-              onPressed: _saveSettings,
+              onPressed: () => _saveOnce.run(_saveSettings),
               child: const Text('Save',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
             ),
@@ -374,7 +379,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
                       title: 'Start Time',
                       subtitle: 'Notifications pause at',
                       time: _formatHour(_quietHoursStart),
-                      onTap: () => _showHourPicker(true),
+                      onTap: () => _once.run(() => _showHourPicker(true)),
                       appColors: appColors,
                       cs: cs,
                     ),
@@ -384,7 +389,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
                       title: 'End Time',
                       subtitle: 'Notifications resume at',
                       time: _formatHour(_quietHoursEnd),
-                      onTap: () => _showHourPicker(false),
+                      onTap: () => _once.run(() => _showHourPicker(false)),
                       appColors: appColors,
                       cs: cs,
                     ),
@@ -421,7 +426,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
 
                 // Save button
                 GestureDetector(
-                  onTap: _isSaving ? null : _saveSettings,
+                  onTap: _isSaving ? null : () => _saveOnce.run(_saveSettings),
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -506,7 +511,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: _enableNotifications,
+                        onPressed: () => _once.run(_enableNotifications),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: appColors.streakOrange,
                           foregroundColor:
@@ -562,7 +567,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
     final cs = Theme.of(context).colorScheme;
     final on = saved && (!osGated || _osPermissionGranted);
     void tap() => osGated && !_osPermissionGranted
-        ? _enableNotifications()
+        ? _once.run(_enableNotifications)
         : onSaved(!saved);
     return Semantics(
       container: true,

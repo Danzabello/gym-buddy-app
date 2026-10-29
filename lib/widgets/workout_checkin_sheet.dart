@@ -10,6 +10,7 @@ import 'schedule_rows.dart' show otherPerson;
 import 'streak_complete_sheet.dart';
 import 'workout_schedule_card.dart' show CardAction, Person;
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'package:gym_buddy_app/utils/run_once.dart';
 
 
 /// Workout timer sheet for check-ins
@@ -81,6 +82,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
   Timer? _timer;
   Duration _elapsed = Duration.zero;
   bool _isCompleting = false;
+  final _once = RunOnce();
 
   // For background tracking
 
@@ -124,6 +126,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
 
   @override
   void dispose() {
+    _once.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     super.dispose();
@@ -612,7 +615,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
 
               // Cancel button - tighter spacing
               TextButton(
-                onPressed: _cancelWorkout,
+                onPressed: () => _once.run(_cancelWorkout),
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                 ),

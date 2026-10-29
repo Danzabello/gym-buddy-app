@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/run_once.dart';
 import 'package:flutter/services.dart';
 import '../services/workout_service.dart';
 import '../theme/app_theme.dart';
@@ -19,14 +20,14 @@ class QuickScheduleSheet extends StatefulWidget {
     this.onWorkoutScheduled,
   });
 
-  static void show(
+  static Future<void> show(
     BuildContext context, {
     required String buddyUserId,
     required String buddyDisplayName,
     VoidCallback? onWorkoutScheduled,
   }) {
     HapticFeedback.mediumImpact();
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -51,6 +52,13 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
   int _duration = 60;
   bool _isCustomDuration = false;
   bool _isCreating = false;
+  final _once = RunOnce();
+
+  @override
+  void dispose() {
+    _once.dispose();
+    super.dispose();
+  }
 
   /// Workout-type identity hues. Deliberately NOT themed: these encode which
   /// kind of session it is, the same way achievements' _categoryAccent encodes
@@ -117,12 +125,12 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
     }
   }
 
-  void _showCustomDurationDialog() {
+  Future<void> _showCustomDurationDialog() {
     // Same 15-min floor as the slider and the server, so thumb, label and
     // the saved planned duration always agree.
     int tempDuration = (_isCustomDuration ? _duration : 60).clamp(15, 180);
 
-    showModalBottomSheet(
+    return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -353,7 +361,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _isCreating ? null : _scheduleWorkout,
+                      onPressed: _isCreating ? null : () => _once.run(_scheduleWorkout),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: appColors.successGreen,
                         foregroundColor: Colors.white,
@@ -437,7 +445,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
 
   Widget _buildDatePicker(AppColors appColors) {
     return GestureDetector(
-      onTap: () async {
+      onTap: () => _once.run(() async {
         final date = await showDatePicker(
           context: context,
           initialDate: _selectedDate,
@@ -445,7 +453,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
           lastDate: DateTime.now().add(const Duration(days: 365)),
         );
         if (date != null) setState(() => _selectedDate = date);
-      },
+      }),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -476,10 +484,10 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
 
   Widget _buildTimePicker(AppColors appColors) {
     return GestureDetector(
-      onTap: () async {
+      onTap: () => _once.run(() async {
         final time = await showTimePicker(context: context, initialTime: _selectedTime);
         if (time != null) setState(() => _selectedTime = time);
-      },
+      }),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -587,7 +595,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
     return GestureDetector(
       onTap: () {
         HapticFeedback.selectionClick();
-        _showCustomDurationDialog();
+        _once.run(_showCustomDurationDialog);
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
