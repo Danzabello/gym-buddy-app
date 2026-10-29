@@ -43,6 +43,8 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/level_service.dart';
 import 'services/economy_sync.dart';
+import 'widgets/header_motion.dart';
+import 'package:flutter/semantics.dart';
 import 'pages/achievements_page.dart' as achievements_page;
 import 'widgets/achievement_toast.dart';
 import 'services/achievement_service.dart';
@@ -123,6 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
     NotificationService.tabRequest.removeListener(_openRequestedTab);
     _tabPageController.dispose();
     LiveEventToast.dashboardTabActive = false;
+    _DashboardPageState._headerSweepPlayed = false; // next sign-in sweeps again
     super.dispose();
   }
 
@@ -626,6 +629,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   int _coinBalance = 0;
   String? _myAvatarId;
 
+  // Count-up motion for the header numbers. The sweep plays once per signed-in
+  // session: the tab PageView disposes this state when another tab is open, so
+  // a per-state flag would replay it on every return.
+  late final HeaderMotion _motion;
+  static bool _headerSweepPlayed = false;
+  bool _reduceMotion = false;
+  ModalRoute<dynamic>? _route;
+
   late ConfettiController _confettiController;
   late ConfettiController _confettiControllerRight;
   int _lastCelebratedStreak = 0;
@@ -696,6 +707,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     
     _initializeHomePage();
     _loadHeaderData();
+    _motion = HeaderMotion(this, onSettled: _announceHeader);
     EconomySync.instance.numbers.addListener(_onEconomyChanged);
     _updateCountdown();
     _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _updateCountdown());
@@ -759,6 +771,41 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _levelInfo = n.level;
       _coinBalance = n.coins;
     });
+    final level = n.level;
+    if (level == null || !_motion.ready) return; // first value: build inits it
+    if (_canAnimateHeader) {
+      _motion.credit(level, n.coins);
+    } else {
+      _motion.snap(level, n.coins);
+    }
+  }
+
+  /// Animate only while the app is in the foreground, this is the visible tab,
+  /// no full-screen page covers it (dialogs and sheets don't count), and
+  /// reduced motion is off. Anything else snaps.
+  bool get _canAnimateHeader {
+    final life = WidgetsBinding.instance.lifecycleState;
+    return !_reduceMotion &&
+        (life == null || life == AppLifecycleState.resumed) &&
+        (_route?.secondaryAnimation?.isDismissed ?? true) &&
+        LiveEventToast.dashboardTabActive;
+  }
+
+  void _announceHeader() {
+    final level = _levelInfo;
+    if (!mounted || level == null) return;
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      headerSemanticLabel(_coinBalance, level),
+      Directionality.of(context),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.disableAnimationsOf(context);
+    _route = ModalRoute.of(context);
   }
 
   void _setupAppLifecycleListener() {
@@ -772,6 +819,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _confettiControllerRight.dispose();
     _carouselEntranceController.dispose();
     EconomySync.instance.numbers.removeListener(_onEconomyChanged);
+    _motion.dispose();
     _appLifecycleListener?.dispose();
     _trayController.dispose();
     _countdownTimer?.cancel();
@@ -1029,7 +1077,29 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final ink = c.readableForeground(accentPalette.background);
     final levelInfo = _levelInfo;
 
-    return Padding(
+    // First real value: show the bar empty and sweep it in once per session.
+    // Anything the hook did not deliver (e.g. a reload after the wardrobe)
+    // snaps, so the numbers on screen never drift from _levelInfo.
+    if (levelInfo != null) {
+      if (!_motion.ready) {
+        _motion.init(levelInfo, _coinBalance,
+            sweep: !_headerSweepPlayed && !_reduceMotion);
+        _headerSweepPlayed = true;
+      } else if (!_motion.matches(levelInfo, _coinBalance)) {
+        final coins = _coinBalance;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _motion.snap(levelInfo, coins);
+        });
+      }
+    }
+
+    void openShop() {
+      final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+      homeState?.setState(() => homeState._selectedIndex = 3);
+    }
+
+    return RepaintBoundary(
+      child: Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1051,41 +1121,61 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 ),
               ),
               const SizedBox(width: 10),
-              GestureDetector(
-                onTap: () {
-                  final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-                  homeState?.setState(() => homeState._selectedIndex = 3);
-                },
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [c.claySurfaceLight, c.claySurface],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(999),
-                    boxShadow: c.clayShadow(),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+              Semantics(
+                button: true,
+                label: 'Coins $_coinBalance',
+                excludeSemantics: true,
+                onTap: openShop,
+                child: GestureDetector(
+                  onTap: openShop,
+                  behavior: HitTestBehavior.opaque,
+                  child: Stack(
+                    clipBehavior: Clip.none,
                     children: [
                       Container(
-                        width: 8,
-                        height: 8,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: c.warn, // gold
+                          gradient: LinearGradient(
+                            colors: [c.claySurfaceLight, c.claySurface],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(999),
+                          boxShadow: c.clayShadow(),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: c.warn, // gold
+                              ),
+                            ),
+                            const SizedBox(width: 7),
+                            HeaderCoinCount(
+                              motion: _motion,
+                              fallback: _coinBalance,
+                              style: TextStyle(
+                                color: ink,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 7),
-                      Text(
-                        '$_coinBalance',
-                        style: TextStyle(
-                          color: ink,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
+                      // Credit pulse: a 2 px outline just outside the pill.
+                      Positioned(
+                        left: -2,
+                        top: -2,
+                        right: -2,
+                        bottom: -2,
+                        child: HeaderCoinRing(
+                          motion: _motion,
+                          color: accentPalette.swatch,
                         ),
                       ),
                     ],
@@ -1119,40 +1209,17 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           ),
           if (levelInfo != null) ...[
             const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(100),
-              child: LinearProgressIndicator(
-                value: levelInfo.progressPercent,
-                minHeight: 6,
-                backgroundColor: c.claySurface,
-                valueColor: AlwaysStoppedAnimation<Color>(c.streakOrange),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'LV ${levelInfo.level} · ${levelInfo.xpIntoCurrentLevel}/'
-                  '${levelInfo.xpForNextLevel - levelInfo.xpForThisLevel} XP',
-                  style: TextStyle(
-                    color: c.inkMuted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  'LV ${levelInfo.level + 1}',
-                  style: TextStyle(
-                    color: c.inkMuted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            HeaderXpRow(
+              motion: _motion,
+              semanticLabel: headerSemanticLabel(_coinBalance, levelInfo),
+              track: c.claySurface,
+              fill: c.streakOrange,
+              textColor: c.inkMuted,
+              popColor: c.warn, // gold stand-in
             ),
           ],
         ],
+      ),
       ),
     );
   }
