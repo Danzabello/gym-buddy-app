@@ -61,6 +61,27 @@
       font-family: monospace;
       margin-bottom: 24px;
     }
+    .code-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .code-row .code-pill { margin-bottom: 0; }
+    .copy-btn {
+      min-height: 44px;
+      background: transparent;
+      border: 1px solid rgba(0,255,136,0.4);
+      color: #00ff88;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 0 14px;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+    .note { font-size: 13px; margin-bottom: 24px; }
     .error { color: #ff6b35; font-size: 15px; }
     #loading { color: #6b6b85; font-size: 15px; }
   </style>
@@ -75,32 +96,22 @@
   </div>
 
   <script>
-    // Both values below come from the query string, so they are attacker
-    // controlled and must be escaped before they reach innerHTML.
-    // Same implementation as escapeHtml() in the invite-redirect Edge Fn.
-    function escapeHtml(str) {
-      return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    }
+    const APP_ID = 'com.gymbuddy.app';
+    const INVITE_LINK = 'jwpbunulswiihkzpjopy.supabase.co/functions/v1/invite-redirect';
 
     const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
+    // The query string is attacker controlled. A code that is not exactly 8
+    // letters and digits gets the Not Found card, so nothing else ever
+    // reaches the intent URL below.
+    const code = (params.get('code') || '').toUpperCase();
+    const validCode = /^[A-Z0-9]{8}$/.test(code);
     const inviter = params.get('inviter');
     const error = params.get('error');
-
-    // Store code for deferred deep link
-    if (code) {
-      try { localStorage.setItem('gym_buddy_invite_code', code); } catch(e) {}
-    }
 
     const content = document.getElementById('content');
     const loading = document.getElementById('loading');
 
-    if (error || !code) {
+    if (error || !validCode) {
       content.innerHTML = `
         <span class="emoji">&#x1F62C;</span>
         <h1>Invite <span>Not Found</span></h1>
@@ -108,17 +119,69 @@
         <p>Ask your buddy to send you a fresh invite link.</p>
       `;
     } else {
-      const name = inviter || 'Someone';
+      // Static markup only. The name and code go in with textContent below.
       content.innerHTML = `
         <span class="emoji">&#x1F4AA;</span>
-        <h1><span>${escapeHtml(name)}</span> wants to be your Gym Buddy!</h1>
+        <h1><span id="inviter"></span> wants to be your Gym Buddy!</h1>
         <p>Stay accountable together. You both check in daily &mdash; miss a day and the streak dies. No solo streaks. That's the point.</p>
-        <div class="code-pill">INVITE: ${escapeHtml(code)}</div>
-        <a class="btn" href="https://play.google.com/store/apps/details?id=com.gymbuddy.app">
-          Download Gym Buddy &#x1F3CB;&#xFE0F;
-        </a>
-        <p style="font-size:13px; margin-bottom:0;">Already have the app? Open it and your invite will be waiting.</p>
+        <div class="code-row">
+          <div class="code-pill">INVITE: <span id="code"></span></div>
+          <button type="button" class="copy-btn" id="copy">Copy code</button>
+        </div>
+        <div id="android">
+          <a class="btn" id="open">Open Gym Buddy</a>
+          <p class="note">Don't have it yet? This takes you to the Play Store, and your invite comes with you.</p>
+        </div>
+        <p class="note" id="desktop" style="display:none">Gym Buddy is an Android app. Open this link on your phone.</p>
+        <p style="font-size:13px; margin-bottom:0;">If your invite doesn't show up in the app, choose "Have an invite code?" on the buddy step and type the code above.</p>
       `;
+
+      // Cut by code points, so an emoji is never split in half.
+      document.getElementById('inviter').textContent =
+        Array.from(inviter || 'Someone').slice(0, 30).join('');
+      const codeEl = document.getElementById('code');
+      codeEl.textContent = code;
+
+      // Installed: Chrome hands the invite link to the app, whose intent
+      // filter matches it. Not installed: Chrome opens the fallback, the Play
+      // Store, with the code as the install referrer the app reads on first
+      // launch. The fallback is a URL inside a URL, so it is encoded again.
+      const playUrl = 'https://play.google.com/store/apps/details?id=' + APP_ID +
+        '&referrer=' + encodeURIComponent('invite_code=' + code);
+      document.getElementById('open').href =
+        'intent://' + INVITE_LINK + '?code=' + code +
+        '#Intent;scheme=https;package=' + APP_ID +
+        ';S.browser_fallback_url=' + encodeURIComponent(playUrl) + ';end';
+
+      if (!/Android/i.test(navigator.userAgent)) {
+        document.getElementById('android').style.display = 'none';
+        document.getElementById('desktop').style.display = 'block';
+      }
+
+      const copyBtn = document.getElementById('copy');
+      let resetTimer;
+      function copied() {
+        copyBtn.textContent = 'Copied';
+        clearTimeout(resetTimer);
+        resetTimer = setTimeout(() => { copyBtn.textContent = 'Copy code'; }, 2000);
+      }
+      // Without the clipboard API (old browser, or a page that is not a
+      // secure context) the code is selected, so a long-press copies it.
+      function selectCode() {
+        const range = document.createRange();
+        range.selectNodeContents(codeEl);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        try { if (document.execCommand('copy')) copied(); } catch (e) {}
+      }
+      copyBtn.addEventListener('click', () => {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(code).then(copied, selectCode);
+        } else {
+          selectCode();
+        }
+      });
     }
 
     loading.style.display = 'none';
