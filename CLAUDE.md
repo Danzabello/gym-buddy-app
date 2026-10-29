@@ -41,6 +41,19 @@ GRANT  EXECUTE ON FUNCTION public.<fn>(<args>) TO authenticated;  -- anon only i
 
 **Migrations:** `supabase/migrations/` and live history are reconciled (local files and remote versions match one-to-one, and `supabase db push --dry-run` should say "up to date"), but a from-scratch replay / `db reset` fails. The base tables (`team_members`, `user_profiles`, `friendships`, …) predate version control. Their DDL is in `docs/pre_vc_schema_baseline_20260720.sql`, which is REFERENCE ONLY and never applied. Don't retime the baseline migration `20260628000000` to fix ordering; it only moves the failure. Apply migrations with the CLI (`supabase db query --linked -f <file>`, then `migration repair --status applied <version>`), never the MCP `apply_migration` tool: it stamps its own version, which causes drift. Never run `migration repair --status reverted` on existing versions: it deletes history and `db push` would re-run the local files. `migration repair` is metadata-only (never runs SQL). Files in supabase/migrations/ that match an already-applied remote version are history records, not to be edited or re-run.
 
+**Lock order for credit paths** (prompt 07, `docs/hygiene/07_design.md` §3). Take locks in this order, ascending key order within a level. Every added lock carries a `-- L<n>` comment, and `docs/hygiene/suite/run.sh` (G0) fails if a body reorders them.
+
+| Level | Lock | Key order |
+|---|---|---|
+| L0 | `workouts` row (`finish_checkin_session` with a workout id; handshake RPCs via `_hs_lock`) | one row |
+| L1 | `active_checkin_sessions` row(s) | own row; cron: `SKIP LOCKED`, then `ORDER BY id` |
+| L2 | `team_streaks` rows `FOR NO KEY UPDATE` (`_lock_credit`, `_recompute_team_streak`, `check_in_coach_max`, `reconcile_stale_streaks`) | streak id |
+| L3 | `pg_advisory_xact_lock(hashtext('checkin_cap'), hashtext(user_id::text))`, paying credits only (`_lock_credit`) | lock key |
+| L4 | `checkin_rewards:<streak>:<day>` advisory (`_apply_checkin_rewards`, CAP-1) | per streak |
+| L5 | row writes: check-in unique key, `user_profiles`, transactions, `invites FOR UPDATE`, schedule, logs | n/a |
+
+Known residual: `process_stale_sessions` takes L1 before L0 (CRON-ORDER, pre-existing; a cycle aborts one side with 40P01).
+
 **Known gap:** leaked-password protection is off (needs Pro plan). Enable it before public launch.
 
 ## Rules
