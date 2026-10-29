@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reward and streak suite, one command. Everything runs on live inside transactions that abort, so nothing persists.
+# Reward, streak and rate-limit suite, one command. Everything runs on live inside transactions that abort, so nothing persists.
 #   docs/hygiene/suite/run.sh                      # test what is live
 #   docs/hygiene/suite/run.sh --with <migration>   # test a migration before it is pushed (inlined, rolled back)
 # Needs `supabase login` and a linked project. Exit 0 only when every line is PASS.
@@ -11,7 +11,7 @@ mig=/dev/null
 if [[ "${1:-}" == --with ]]; then mig=$2; fi
 
 fails=0
-for f in grants_fresh economy_suite; do
+for f in grants_fresh economy_suite rate_suite; do
   python3 -c '
 import sys
 s, m = open(sys.argv[1]).read(), open(sys.argv[2]).read()

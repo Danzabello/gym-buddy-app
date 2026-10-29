@@ -104,7 +104,7 @@ class FriendService {
       // between search and tap, RLS rejections and plain network failure.
       // Deliberately not split further: every one of them means "try again".
       if (kDebugMode) debugLog('❌ Error sending friend request: $e');
-      return FriendRequestResult.error;
+      return friendRequestErrorResult(e);
     }
   }
 
@@ -335,5 +335,13 @@ enum FriendRequestResult {
   requestPending,
   theyRequestedYou,
   notSignedIn,
+  tooManyRequests,
   error,
 }
+
+/// The friendships insert trigger raises `too_many_requests` (20 an hour, 2 a
+/// day to one person); every other failure means "try again".
+FriendRequestResult friendRequestErrorResult(Object e) =>
+    e is PostgrestException && e.message == 'too_many_requests'
+        ? FriendRequestResult.tooManyRequests
+        : FriendRequestResult.error;

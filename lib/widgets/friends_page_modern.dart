@@ -1545,6 +1545,13 @@ class _AddBuddiesPageState extends State<_AddBuddiesPage> {
           behavior: SnackBarBehavior.floating,
         ));
         break;
+      case FriendRequestResult.tooManyRequests:
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Too many requests. Try again later.'),
+          backgroundColor: neutral,
+          behavior: SnackBarBehavior.floating,
+        ));
+        break;
       case FriendRequestResult.error:
         // Distinct from the informational cases above: this one means the
         // request did not land and retrying is worthwhile.

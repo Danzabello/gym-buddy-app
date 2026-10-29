@@ -1,0 +1,149 @@
+== grants_fresh
+PASS G9.1 authenticated direct INSERT daily_team_checkins -> 42501 permission denied for table daily_team_checkins
+PASS G9.2 authenticated UPDATE coin_balance -> 42501 permission denied for table user_profiles
+PASS G9.3 authenticated UPDATE xp -> 42501 permission denied for table user_profiles
+PASS G9.4 authenticated UPDATE rest_tokens_available -> 42501 permission denied for table user_profiles
+PASS G9.5 authenticated INSERT coin_transactions -> 42501 permission denied for table coin_transactions
+PASS G9.6 authenticated INSERT xp_transactions -> 42501 permission denied for table xp_transactions
+PASS G9.7 authenticated UPDATE team_streaks -> 42501 permission denied for table team_streaks
+PASS G9.8 authenticated INSERT user_inventory -> 42501 permission denied for table user_inventory
+PASS G9.9 authenticated cannot execute public._lock_credit -> 42501 permission denied for function _lock_credit
+PASS G9.9 authenticated cannot execute public._credit_checkin -> 42501 permission denied for function _credit_checkin
+PASS G9.9 authenticated cannot execute public._credit_day -> 42501 permission denied for function _credit_day
+PASS G9.9 authenticated cannot execute public.award_coins -> 42501 permission denied for function award_coins
+PASS G9.9 authenticated cannot execute public.award_xp -> 42501 permission denied for function award_xp
+PASS G9.9 authenticated cannot execute public.award_checkin_rewards -> 42501 permission denied for function award_checkin_rewards
+PASS G9.9 authenticated cannot execute public.check_in_coach_max_with_buddy -> 42501 permission denied for function check_in_coach_max_with_buddy
+PASS G9.9 authenticated cannot execute public.reconcile_stale_streaks -> 42501 permission denied for function reconcile_stale_streaks
+PASS G9.9 authenticated cannot execute public.process_stale_sessions -> 42501 permission denied for function process_stale_sessions
+PASS G9.9 authenticated cannot execute public._recompute_team_streak -> 42501 permission denied for function _recompute_team_streak
+PASS G9.10 authenticated submit_checkin answers -> not_checked_in_today
+PASS G9.15 authenticated denied: SELECT count(*) FROM public.username_search_attempts
+PASS G9.15 authenticated denied: INSERT INTO public.username_search_attempts
+PASS G9.15 authenticated denied: SELECT count(*) FROM public.friend_request_attempts
+PASS G9.15 authenticated denied: INSERT INTO public.friend_request_attempts
+PASS G9.15 anon denied: SELECT count(*) FROM public.username_search_attempts
+PASS G9.15 anon denied: INSERT INTO public.username_search_attempts
+PASS G9.15 anon denied: SELECT count(*) FROM public.friend_request_attempts
+PASS G9.15 anon denied: INSERT INTO public.friend_request_attempts
+PASS G9.11 anon cannot execute submit_checkin -> 42501 permission denied for function submit_checkin
+PASS G9.12 anon can execute no economy function -> none
+PASS G9.16 search_usernames authenticated-only; _meter_friend_request executable by neither -> ok
+PASS G9.13 authenticated table privileges on economy tables (no INSERT anywhere) -> coin_transactions SELECT; daily_team_checkins SELECT; team_streaks DELETESELECT; user_achievements SELECT; user_inventory SELECT; user_unlocked_cosmetics DELETESELECTUPDATE; xp_transactions SELECT
+PASS G9.14 no column-level INSERT on daily_team_checkins for authenticated
+-- grants_fresh: 32 PASS, 0 FAIL
+== economy_suite
+PASS G0.1 ACL, SECURITY DEFINER and search_path of every credit-path function -> _apply_checkin_rewards(uuid,uuid,date) {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; _auto_credit(uuid,timestamp with time zone,integer,text,text) {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=false; _credit_checkin(uuid,timestamp with time zone,boolean,timestamp with time zone,uuid) {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=false; _credit_day(uuid,timestamp with time zone) {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=false; _fulfil_invite_reward() {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; _lock_credit(uuid[],boolean,uuid) {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=false; _recompute_team_streak(uuid,date) {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; check_in_coach_max(uuid) {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; create_invite_team(uuid,uuid) {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; finish_checkin_session(uuid) {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; process_stale_sessions(timestamp with time zone) {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; purchase_shop_item(uuid) {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; recompute_team_streak(uuid,date) {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; reconcile_stale_streaks() {postgres=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; submit_checkin() {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres} {search_path=public} secdef=true; verify_achievement_progress(text) {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres} {search_path=public} secdef=true
+PASS G0.2 unchanged bodies pinned: _apply_checkin_rewards, process_stale_sessions, submit_checkin, purchase_shop_item -> got 47185fcbc9c873ef46ebdce0bdde70f6 929c250cf1b7e98ad9c9d593d786ba32 acc63cafafd56afa8a0ebd7503510739 0f67d03bef591fd4c107bb2bb8d05ef2
+PASS G0.3 process_stale_sessions COMMENT points at _credit_day
+PASS G0.4 lock order _lock_credit: L2 streak rows (ORDER BY ts.id FOR NO KEY UPDATE) before L3 cap locks
+PASS G0.5 lock order _credit_checkin: _lock_credit before any write
+PASS G0.6 lock order finish_checkin_session: L0 workout, then L1 session, then L2+L3 for caller and partner, then credits
+PASS G0.7 lock order _recompute_team_streak: first read of the streak row is FOR NO KEY UPDATE
+PASS G0.8 lock order check_in_coach_max: L2 before the bot row check and _finish_coach_max_checkin
+PASS G0.9 lock order reconcile_stale_streaks: loop ORDER BY id FOR NO KEY UPDATE
+PASS G1.1 p_pay=false takes no L3 cap lock -> got 0
+PASS G1.2 a paying credit holds L3 for every non-bot member of the locked streak (both, held to commit) -> got 2
+PASS G1.3 no L3 for the Coach Max bot -> got 0
+PASS G1.4 p_streak_id limits the credit to that team (no row on the Coach Max team) -> {"xp": 0, "coins": 0, "teams": [{"team_id": "6b474386-8619-4598-ae7d-f4c698c092f7", "updated": false, "streak_id": "bea73925-e3d6-42f3-9d31-c695b92a41c6", "new_streak": 0}], "credit_date": "2026-10-29"}
+PASS G1.5 return shape credit_date/teams/xp/coins, day incomplete (partner missing), paid 0 -> {"xp": 0, "coins": 0, "teams": [{"team_id": "6b474386-8619-4598-ae7d-f4c698c092f7", "updated": false, "streak_id": "bea73925-e3d6-42f3-9d31-c695b92a41c6", "new_streak": 0}], "credit_date": "2026-10-29"}
+PASS G1.6 teammate completes the day: updated/new_streak/xp/coins -> got true/1/15/15
+PASS G1.7 second call: no new row, teams [] , paid 0 -> got 0/[]/0
+PASS G1.8 stored check_in_time = p_time -> got true
+PASS G10.eq1 new = old -> md5 old 42ed9165cab30d2f57392915c38ce091 new 42ed9165cab30d2f57392915c38ce091
+     eq1: {"ret": {"new_level": 1, "checked_in": 1, "credit_date": "2026-10-29", "did_level_up": false, "break_cancelled": false, "partner_checked_in": 0}, "snap": {"xp": [["rokitest1", 10, "xp_award", "daily_checkin", "CM[rokitest1]:2026-10-29"]], "logs": [], "push": [], "rows": [["CM[rokitest1]", "rokitest1", "2026-10-29", "2026-10-29T22:43:18.532692+00:00"]], "coins": [["rokitest1", 10, "daily_checkin", "Daily check-in rewards", "CM[rokitest1]:2026-10-29"]], "streaks": [["CM[rokitest1]", 1, 1, 1, 1, "2026-10-29"]], "profiles": [["rokitest1", 10, 10, 1]], "schedule": [["rokitest1", "2026-10-28", true, false], ["rokitest1", "2026-10-29", true, false]], "sessions": 0, "breaks_cancelled": 0}, "teams": [["CM[rokitest1]", {"updated": true, "new_streak": 1, "new_best_streak": 1, "old_best_streak": 0, "is_coach_max_team": true}]]}
+PASS G10.eq2 new = old -> md5 old 7072c3eee981262a012078db4d12a931 new 7072c3eee981262a012078db4d12a931
+     eq2: {"ret": {"new_level": 1, "checked_in": 2, "credit_date": "2026-10-29", "did_level_up": false, "break_cancelled": false, "partner_checked_in": 2}, "snap": {"xp": [["onboard_check1", 10, "xp_award", "daily_checkin", "CM[onboard_check1]:2026-10-29"], ["onboard_check1", 10, "xp_award", "daily_checkin", "T[onboard_check1+rokitest1]:2026-10-29"], ["onboard_check1", 5, "xp_award", "partner_bonus", "T[onboard_check1+rokitest1]:2026-10-29"], ["rokitest1", 10, "xp_award", "daily_checkin", "CM[rokitest1]:2026-10-29"], ["rokitest1", 15, "xp_award", "daily_checkin", "T[onboard_check1+rokitest1]:2026-10-29"]], "logs": [], "push": [["onboard_check1", "invite_received", null, "rokitest1"], ["rokitest1", "buddy_checked_in", "T[onboard_check1+rokitest1]", "onboard_check1"], ["onboard_check1", "buddy_checked_in", "T[onboard_check1+rokitest1]", "rokitest1"]], "rows": [["CM[onboard_check1]", "onboard_check1", "2026-10-29", "2026-10-29T22:43:18.532692+00:00"], ["CM[rokitest1]", "rokitest1", "2026-10-29", "2026-10-29T22:43:18.532692+00:00"], ["T[onboard_check1+rokitest1]", "onboard_check1", "2026-10-29", "2026-10-29T22:43:18.532692+00:00"], ["T[onboard_check1+rokitest1]", "rokitest1", "2026-10-29", "2026-10-29T22:43:18.532692+00:00"]], "coins": [["onboard_check1", 10, "daily_checkin", "Daily check-in rewards", "CM[onboard_check1]:2026-10-29"], ["onboard_check1", 10, "daily_checkin", "Daily check-in rewards", "T[onboard_check1+rokitest1]:2026-10-29"], ["onboard_check1", 5, "partner_bonus", "Partner checked in too!", "T[onboard_check1+rokitest1]:2026-10-29"], ["rokitest1", 10, "daily_checkin", "Daily check-in rewards", "CM[rokitest1]:2026-10-29"], ["rokitest1", 15, "daily_checkin", "Daily check-in rewards", "T[onboard_check1+rokitest1]:2026-10-29"]], "streaks": [["CM[onboard_check1]", 1, 1, 1, 1, "2026-10-29"], ["CM[rokitest1]", 1, 1, 1, 1, "2026-10-29"], ["T[onboard_check1+rokitest1]", 1, 1, 1, 1, "2026-10-29"]], "profiles": [["onboard_check1", 25, 25, 1], ["rokitest1", 25, 25, 1]], "schedule": [["rokitest1", "2026-10-28", true, false], ["rokitest1", "2026-10-29", true, false], ["onboard_check1", "2026-10-28", true, false], ["onboard_check1", "2026-10-29", true, false]], "sessions": 0, "breaks_cancelled": 0}, "teams": [["CM[onboard_check1]", {"updated": true, "new_streak": 1, "new_best_streak": 1, "old_best_streak": 0, "is_coach_max_team": true}], ["T[onboard_check1+rokitest1]", {"updated": true, "new_streak": 1, "new_best_streak": 1, "old_best_streak": 0, "is_coach_max_team": false}]]}
+PASS G10.eq3 new = old -> md5 old 9d0f835ebb661a086b699f7ecd8c3fa4 new 9d0f835ebb661a086b699f7ecd8c3fa4
+     eq3: {"ret": [true, false], "snap": {"xp": [["testtest1", 10, "xp_award", "daily_checkin", "CM[testtest1]:2026-10-29"]], "logs": [["testtest1", "2026-10-29", "2026-10-29T23:13:18.532692+00:00", "Strength", "other", "💪", 30, 30, true]], "push": [], "rows": [["CM[testtest1]", "testtest1", "2026-10-29", "2026-10-29T22:43:18.532692+00:00"]], "coins": [["testtest1", 10, "daily_checkin", "Daily check-in rewards", "CM[testtest1]:2026-10-29"]], "streaks": [["CM[testtest1]", 1, 1, 1, 1, "2026-10-29"]], "profiles": [["testtest1", 10, 10, 1]], "schedule": [["testtest1", "2026-10-28", true, false], ["testtest1", "2026-10-29", true, false]], "sessions": 0, "breaks_cancelled": 0}}
+PASS G10.eq4 new = old -> md5 old 2580ea48a1d04245ea4c9208f545796e new 2580ea48a1d04245ea4c9208f545796e
+     eq4: {"snap": {"xp": [["onboard_check2", 10, "xp_award", "daily_checkin", "CM[onboard_check2]:2026-10-29"], ["onboard_check2", 5, "xp_award", "daily_checkin", "CM[onboard_check2]:2026-10-28"], ["onboard_check2", 995, "xp_award", "daily_checkin", "fx:2026-10-28"]], "logs": [], "push": [], "rows": [], "coins": [["onboard_check2", 10, "daily_checkin", "Daily check-in rewards", "CM[onboard_check2]:2026-10-29"], ["onboard_check2", 5, "daily_checkin", "Daily check-in rewards", "CM[onboard_check2]:2026-10-28"], ["onboard_check2", 95, "daily_checkin", "probe fixture", "fx:2026-10-28"]], "streaks": [["CM[onboard_check2]", 0, 0, 0, 0, null]], "profiles": [["onboard_check2", 15, 15, 1]], "schedule": [["onboard_check2", "2026-10-28", true, false], ["onboard_check2", "2026-10-29", true, false]], "sessions": 0, "breaks_cancelled": 0}, "today": {"reasons": [], "new_level": 1, "old_level": 1, "xp_awarded": 10, "did_level_up": false, "coins_awarded": 10, "current_streak": 0, "daily_cap_reached": false}, "yesterday": {"reasons": [], "new_level": 1, "old_level": 1, "xp_awarded": 5, "did_level_up": false, "coins_awarded": 5, "current_streak": 0, "daily_cap_reached": true}}
+PASS G10.eq5 new = old -> md5 old f098173e14a0b9df0a3e916792f7ca80 new f098173e14a0b9df0a3e916792f7ca80
+     eq5: {"ret": {"xp": 0, "coins": 0, "reason": "not_checked_in_today", "streak": 0, "credited": false, "credit_date": "2026-10-29"}, "snap": {"xp": [], "logs": [], "push": [], "rows": [["CM[onboard_check3]", "onboard_check3", "2026-10-29", "2026-10-29T19:43:18+00:00"], ["T[onboard_check3+rokitest1]", "onboard_check3", "2026-10-29", "2026-10-29T19:43:18+00:00"]], "coins": [], "streaks": [["CM[onboard_check3]", 0, 0, 0, 0, null], ["CM[rokitest1]", 0, 0, 0, 0, null], ["T[onboard_check3+rokitest1]", 0, 0, 0, 0, null]], "profiles": [["onboard_check3", 0, 0, 1], ["rokitest1", 0, 0, 1]], "schedule": [["rokitest1", "2026-10-28", true, false], ["rokitest1", "2026-10-29", true, false], ["onboard_check3", "2026-10-28", true, false], ["onboard_check3", "2026-10-29", true, false]], "sessions": 0, "breaks_cancelled": 0}, "teams": [["CM[rokitest1]", {"updated": false, "new_streak": 0}], ["T[onboard_check3+rokitest1]", {"updated": false, "new_streak": 0}]]}
+PASS G10.eq6 new = old -> md5 old 1f6da37ffa84fc307d38ae1d24eb803e new 1f6da37ffa84fc307d38ae1d24eb803e
+     eq6: {"cm1": {"checked_in": true, "already_done": true}, "cm2": {"checked_in": true, "already_done": true}, "fin": {"new_level": 1, "checked_in": 1, "credit_date": "2026-10-29", "did_level_up": false, "break_cancelled": false, "partner_checked_in": 0}, "snap": {"xp": [["onboard_check6", 10, "xp_award", "daily_checkin", "CM[onboard_check6]:2026-10-29"]], "logs": [], "push": [], "rows": [["CM[onboard_check6]", "onboard_check6", "2026-10-29", "2026-10-29T22:43:18.532692+00:00"]], "coins": [["onboard_check6", 10, "daily_checkin", "Daily check-in rewards", "CM[onboard_check6]:2026-10-29"]], "streaks": [["CM[onboard_check6]", 1, 1, 1, 1, "2026-10-29"]], "profiles": [["onboard_check6", 10, 10, 1]], "schedule": [["onboard_check6", "2026-10-28", true, false], ["onboard_check6", "2026-10-29", false, null]], "sessions": 0, "breaks_cancelled": 0}, "teams": [["CM[onboard_check6]", {"updated": true, "new_streak": 1, "new_best_streak": 1, "old_best_streak": 0, "is_coach_max_team": true}]]}
+PASS G10.eq7 new = old -> md5 old db5f8f35f267fbe31f5fd87632ba1a65 new db5f8f35f267fbe31f5fd87632ba1a65
+     eq7: {"push": [["onboard_check1", "streak_broken"], ["onboard_check2", "streak_broken"]], "losses": 2, "streaks": [["T[onboard_check1+onboard_check2]", 0, 3, -3], ["T[onboard_check3+onboard_check4]", 2, 2, -1]]}
+PASS G2.1 submit_checkin as rokitest1 (no row today): reason -> got not_checked_in_today
+PASS G2.2 credited false, xp 0, coins 0 -> {"xp": 0, "coins": 0, "teams": [{"team_id": "b1a3031e-263f-4cc4-8f02-af5ff91398fb", "updated": false, "streak_id": "763e753d-bf8d-483e-91d1-81d7a93673a4", "new_streak": 0}, {"team_id": "fca504bb-3c2b-4b46-8205-efa2caadf544", "updated": false, "streak_id": "d06c3d24-7de4-4f87-b183-83d460792208", "new_streak": 0}], "reason": "not_checked_in_today", "streak": 0, "credited": false, "credit_date": "2026-10-29"}
+PASS G2.3 partner row created on the new team with the partner's local date -> got 2026-10-29
+PASS G2.4 copy check_in_time = source earliest time, not now() -> copy 2026-10-29 19:43:18.532692+00, now 2026-10-29 22:43:18.532692+00
+PASS G2.5 caller not copied (no real row today)
+PASS G2.6 the copy sent no push -> got 0
+PASS G2.7 the copy paid nothing (partner coins/xp delta) -> got 0/0
+PASS G2.8 copy flag cleared when submit_checkin returns -> got 
+PASS G2.9 new team not advanced yet (caller missing): streak/total -> got 0/0
+PASS G3.1 a real Finish after the copy still pushes rokitest1 -> onboard_check3 on the new team
+PASS G3.2 Finish completes the new team's day: streak/total -> got 1/1
+PASS G3.3 Finish pays: rokitest1 +25 (Coach Max 10, team 15), onboard_check3 retro share +15 -> got 25/15
+PASS G2.10 second submit_checkin the same day: reason -> got already_checked_in
+PASS G2.11 second call: rows, coins, pushes unchanged -> got 0/0/0/0
+PASS G3.4 second Finish the same day: result, coins delta -> got nothing_to_finish/0
+PASS G2.12 submit_checkin return shape -> {"xp": 0, "coins": 0, "teams": [{"team_id": "b1a3031e-263f-4cc4-8f02-af5ff91398fb", "updated": false, "streak_id": "763e753d-bf8d-483e-91d1-81d7a93673a4", "new_streak": 1}, {"team_id": "fca504bb-3c2b-4b46-8205-efa2caadf544", "updated": false, "streak_id": "d06c3d24-7de4-4f87-b183-83d460792208", "new_streak": 1}], "reason": "already_checked_in", "streak": 1, "credited": false, "credit_date": "2026-10-29"}
+PASS G2.13 fixture: onboard_check6 local date differs from the UTC date -> Pacific/Kiritimati 2026-10-30 vs UTC 2026-10-29
+PASS G3.5 Finish credit_date = the member's local date -> got 2026-10-30
+PASS G2.14 submit_checkin as testtest1 (no row today): reason -> got not_checked_in_today
+PASS G2.15 onboard_check6 copied with its own local date, not the UTC date -> got 2026-10-30
+PASS G2.16 onboard_check4 (only yesterday) not copied anywhere
+PASS G2.17 testtest1 not copied
+PASS G2.18 reason credited, credited true, xp 0, coins 0 -> {"xp": 0, "coins": 0, "teams": [{"team_id": "b1a3031e-263f-4cc4-8f02-af5ff91398fb", "updated": false, "streak_id": "763e753d-bf8d-483e-91d1-81d7a93673a4", "new_streak": 1}, {"team_id": "30885222-1889-443f-96fd-8cb1762357b4", "updated": true, "streak_id": "a88ca5c8-4237-4326-b76c-bd841bf0d0ab", "new_streak": 1}], "reason": "credited", "streak": 1, "credited": true, "credit_date": "2026-10-29"}
+PASS G2.19 both members copied onto the new team -> got 2
+PASS G2.20 copies complete the day: streak/total, return marks the team updated -> got 1/1/true
+PASS G2.21 copies paid nothing: coins and xp deltas -> got 0/0/0/0
+PASS G2.22 copies pushed nothing -> got 0
+PASS G2.23 each copy keeps its member's earliest real check_in_time
+PASS G3.6 no session, no workout: nothing_to_finish, credits nothing -> got nothing_to_finish/0
+PASS G3.7 session under 15 minutes: too_early, session kept -> got too_early/1
+PASS G3.8 someone else's workout id: no error, nothing_to_finish (L0 only locks a participant's workout) -> got nothing_to_finish
+PASS G3.9 return shape (installed build parses it) -> {"teams": [], "result": "nothing_to_finish", "new_level": 1, "checked_in": 0, "credit_date": "2026-10-29", "did_level_up": false, "break_cancelled": false, "partner_checked_in": 0}
+PASS G5.1 base payout 10/10, then CAP-1 dedup on the same streak:day -> got 10/10/true
+PASS G5.2 yesterday's cap counts yesterday-suffixed payouts: coins/xp/capped -> got 5/5/true
+PASS G5.3 today's cap counts today-suffixed payouts: coins/xp/capped -> got 5/5/true
+PASS G5.4 legacy reference (no suffix, NULL, near-miss suffix) is not counted: coins/xp/capped -> got 10/10/false
+PASS G5.5 straddling midnight: counts for yesterday (capped), not for today: today/yesterday coins -> got 10/5
+PASS G5.6 teammate cap by credit day, teammate has 95 coins suffixed today: teammate paid (10 base + 5 co-op, capped) -> got 5
+PASS G5.6 teammate cap by credit day, teammate has 95 coins suffixed yesterday: teammate paid (10 base + 5 co-op, capped) -> got 15
+PASS G4.1 _auto_credit credits once, then dedups (workout_logs.auto_completed) -> got true/false/1
+PASS G6.1 create_invite_team for a new invitee pays nothing at join -> 75ed45ce-3f35-4a29-a31e-b95852119013 bonus 0/0
+PASS G6.2 first credited day pays once (Finish wrote 2 rows): count/amount/reference = the invite -> got 1/20/69cc914f-d4b3-41c5-81cf-1ec03202ff30
+PASS G6.3 a credited row on another day pays nothing more -> got 1/20
+PASS G6.4 inviter reward needs >= 2 distinct check-in days (invitee now has 2) -> got 1
+PASS G6.5 second inviter, then a copied row lands: still one bonus (copy reason, bonus) -> got credited 1/20
+PASS G6.6 an existing account (created before the invite) is never paid -> got 0/0
+PASS G7.1 insufficient funds refused, balance unchanged -> got insufficient_funds/100
+PASS G7.2 exact balance buys it: success/new_balance/ledger/inventory -> got true/0/-150/1
+PASS G7.3 second purchase of the same item refused -> {"reason": "already_owned", "success": false}
+PASS G7.4 purchase locks the buyer row (FOR UPDATE in the body)
+PASS G7.5 coin_balance cannot go negative (CHECK) -> 23514 new row for relation "user_profiles" violates check constraint "user_profiles_coin_balance_nonneg"
+PASS G8.1 no streak yet: not unlocked, nothing paid -> {"target": 1, "progress": 0, "unlocked": false}
+PASS G8.2 after a credited day: unlocked once, paid 20 coins / 50 xp -> got 1/20/50
+PASS G8.3 replay: already_unlocked, nothing paid -> got true/0/0
+-- economy_suite: 78 PASS, 0 FAIL
+== rate_suite
+PASS S1 60 calls in the window all return results -> got 60
+PASS S2 the 61st returns empty, not an error -> got 0
+PASS S3 the meter rows are committed (60 kept after the over-cap call, none for it) -> got 60
+PASS S4 another user is unaffected (results, one meter row) -> 10 / 1
+PASS S5 short queries return nothing and are not metered -> got 0/0/0 meter 1
+PASS S6 a write prunes rows older than the window -> got 0
+PASS S7 limiter unavailable (table gone): search fails open -> 10
+PASS R1.1 20 requests to 20 different targets succeed -> got 20
+PASS R1.2 the 21st fails with too_many_requests -> got ERR:P0001 too_many_requests
+PASS R1.3 the 21st left no friendship row, the meter holds 20 -> got 0 / 20
+PASS R1.4 each landed request still pushed once -> got 20
+PASS R1.5 accept_invite at the request cap -> got b73a4aaf-9a9a-4eb7-8376-c248145d53cd
+PASS R1.6 create_invite_team at the request cap: team made, accepted friendship inserted -> 45bf38ba-ab64-48c2-9e33-fd3a62903ccf
+PASS R1.7 pairing is not metered (invitee still 20, inviter 0) -> got 20 / 0
+PASS R2.1 request, delete, request again, delete -> got pending 1 pending 1
+PASS R2.2 the third request to the same target fails with too_many_requests -> got ERR:P0001 too_many_requests
+PASS R2.3 another target is still fine -> got pending
+PASS R2.4 the target can still request the sender -> got pending
+PASS R3.1 20 requests 61 minutes ago do not block a new one -> got pending
+PASS R3.2 two requests to a target 23 hours ago still block it -> got ERR:P0001 too_many_requests
+PASS R3.3 after 24 hours the target is open again and the old rows are pruned -> got pending 0
+PASS R4.1 service_role insert lands and is not metered -> got pending 0
+PASS R4.2 postgres insert is not metered -> got 0
+PASS R4.3 limiter unavailable (table gone): the request fails open -> got pending
+PASS R4.4 trigger is BEFORE INSERT, gated on current_user = authenticated
+-- rate_suite: 25 PASS, 0 FAIL
+== total FAIL: 0

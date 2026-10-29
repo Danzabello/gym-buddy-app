@@ -51,6 +51,21 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
   r := r || (CASE WHEN n IN ('not_checked_in_today', 'already_checked_in', 'no_teams') THEN 'PASS ' ELSE 'FAIL ' END || 'G9.10 authenticated submit_checkin answers -> ' || n);
   RESET ROLE;
+  -- Rate-limit meters (prompt 13): neither role can read or write them.
+  FOREACH fn IN ARRAY ARRAY['authenticated', 'anon'] LOOP
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', u, 'role', fn)::text, true);
+    EXECUTE format('SET LOCAL ROLE %I', fn);
+    FOREACH n IN ARRAY ARRAY['SELECT count(*) FROM public.username_search_attempts',
+                             'INSERT INTO public.username_search_attempts (user_id) VALUES (''' || u || ''')',
+                             'SELECT count(*) FROM public.friend_request_attempts',
+                             'INSERT INTO public.friend_request_attempts (user_id, target_id) VALUES (''' || u || ''', ''' || u || ''')'] LOOP
+      BEGIN EXECUTE n; ok := false;
+      EXCEPTION WHEN OTHERS THEN ok := SQLSTATE = '42501';
+      END;
+      r := r || (CASE WHEN ok THEN 'PASS ' ELSE 'FAIL ' END || 'G9.15 ' || fn || ' denied: ' || split_part(n, ' (', 1));
+    END LOOP;
+    RESET ROLE;
+  END LOOP;
 
   PERFORM set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true);
   SET LOCAL ROLE anon;
@@ -67,6 +82,12 @@ BEGIN
                       'verify_achievement_progress', 'create_invite_team', 'create_buddy_team', 'accept_invite', 'award_coins', 'award_xp',
                       '_apply_checkin_rewards', '_credit_checkin', '_lock_credit', '_recompute_team_streak', 'award_checkin_rewards');
   r := r || (CASE WHEN n IS NULL THEN 'PASS ' ELSE 'FAIL ' END || 'G9.12 anon can execute no economy function -> ' || coalesce(n, 'none'));
+  SELECT string_agg(x, ', ') INTO n FROM unnest(ARRAY[
+    CASE WHEN has_function_privilege('anon', 'public.search_usernames(text)', 'EXECUTE') THEN 'anon search_usernames' END,
+    CASE WHEN NOT has_function_privilege('authenticated', 'public.search_usernames(text)', 'EXECUTE') THEN 'authenticated lost search_usernames' END,
+    CASE WHEN has_function_privilege('anon', 'public._meter_friend_request()', 'EXECUTE') THEN 'anon _meter_friend_request' END,
+    CASE WHEN has_function_privilege('authenticated', 'public._meter_friend_request()', 'EXECUTE') THEN 'authenticated _meter_friend_request' END]) x;
+  r := r || (CASE WHEN n IS NULL THEN 'PASS ' ELSE 'FAIL ' END || 'G9.16 search_usernames authenticated-only; _meter_friend_request executable by neither -> ' || coalesce(n, 'ok'));
   SELECT string_agg(t || ' ' || coalesce((SELECT string_agg(p, '' ORDER BY p) FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE']) p
                                           WHERE has_table_privilege('authenticated', 'public.' || t, p)), '-'), '; ' ORDER BY t) INTO n
   FROM unnest(ARRAY['coin_transactions', 'daily_team_checkins', 'team_streaks', 'user_achievements', 'user_inventory', 'user_unlocked_cosmetics', 'xp_transactions']) t;
