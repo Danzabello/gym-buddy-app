@@ -33,7 +33,9 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   final FriendService _friendService = FriendService();
   final NudgeService _nudgeService = NudgeService();
   final _once = RunOnce();
-  final _sheetOnce = RunOnce();
+  // A fresh latch per buddy sheet: every option closes the sheet, so one tap
+  // per sheet. The page State is reused, so the latch is replaced on each open.
+  var _sheetOnce = RunOnce();
 
   @override
   void dispose() {
@@ -407,6 +409,8 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   // BUDDY OPTIONS SHEET (long-press)
   // ══════════════════════════════════════════════════════════
   Future<void> _showBuddySheet(Map<String, dynamic> friend) {
+    _sheetOnce.dispose();
+    _sheetOnce = RunOnce();
     final appColors = AppColors.of(context);
     final palette = context.read<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
@@ -571,7 +575,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     bool disabled = false,
   }) {
     return GestureDetector(
-      onTap: disabled || onTap == null ? null : () => _sheetOnce.run(onTap),
+      onTap: disabled || onTap == null ? null : () => _sheetOnce.latch(onTap),
       child: Opacity(
         opacity: disabled ? 0.45 : 1.0,
         child: Padding(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
+import '../utils/run_once.dart';
 import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
 import 'quick_schedule_sheet.dart';
@@ -42,6 +43,8 @@ class WorkoutHistorySheet extends StatefulWidget {
 }
 
 class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
+  // Schedule closes this sheet, so this State dies with it.
+  final _scheduleLatch = RunOnce();
   List<Map<String, dynamic>> _workouts = [];
   bool _isLoading = true;
   int _totalWorkouts = 0;
@@ -258,14 +261,14 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () {
+              onPressed: () => _scheduleLatch.latch(() {
                 Navigator.pop(context);
-                QuickScheduleSheet.show(
+                return QuickScheduleSheet.show(
                   context,
                   buddyUserId: widget.buddyUserId,
                   buddyDisplayName: widget.buddyDisplayName,
                 );
-              },
+              }),
               icon: const Icon(Icons.add),
               label: const Text('Schedule Workout'),
               style: ElevatedButton.styleFrom(

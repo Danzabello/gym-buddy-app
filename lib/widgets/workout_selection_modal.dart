@@ -12,9 +12,13 @@ import '../utils/run_once.dart';
 class WorkoutSelectionModal extends StatefulWidget {
   final Function(WorkoutTemplate, int, String?, List<AchievementUnlockResult>) onWorkoutSelected;
 
+  /// Test seam; the app leaves it null and templates come from the service.
+  final Future<List<WorkoutTemplate>> Function()? loadTemplates;
+
   const WorkoutSelectionModal({
     super.key,
     required this.onWorkoutSelected,
+    this.loadTemplates,
   });
 
   @override
@@ -23,7 +27,7 @@ class WorkoutSelectionModal extends StatefulWidget {
 
 class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
     with SingleTickerProviderStateMixin {
-  final WorkoutHistoryService _historyService = WorkoutHistoryService();
+  late final WorkoutHistoryService _historyService = WorkoutHistoryService();
 
   List<WorkoutTemplate>? _templates;
   bool _isLoading = true;
@@ -48,6 +52,8 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
   // ── Randomiser state ──────────────────────────────────────────
   bool _showRandomResult = false;
   final _once = RunOnce();
+  // Start closes the dialog and this sheet, so this State dies with it.
+  final _startLatch = RunOnce();
   WorkoutTemplate? _randomTemplate;
   int _randomDuration = 30;
 
@@ -80,13 +86,14 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
   @override
   void dispose() {
     _once.dispose();
+    _startLatch.dispose();
     _shakeController.dispose();
     super.dispose();
   }
 
   Future<void> _loadTemplates() async {
     setState(() => _isLoading = true);
-    final templates = await _historyService.getWorkoutTemplates();
+    final templates = await (widget.loadTemplates ?? _historyService.getWorkoutTemplates)();
     setState(() {
       _templates = templates;
       _isLoading = false;
@@ -309,11 +316,11 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                     style: TextStyle(color: colors.subtleText)),
               ),
               ElevatedButton(
-                onPressed: () {
+                onPressed: () => _startLatch.latch(() {
                   Navigator.pop(dialogContext);
                   Navigator.pop(context);
                   widget.onWorkoutSelected(template, customDuration, null, []);
-                },
+                }),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: colors.streakOrange,
                   foregroundColor: Colors.white,

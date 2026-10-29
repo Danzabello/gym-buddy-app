@@ -9,6 +9,7 @@ import 'dart:async';
 /// its dispose(). Errors from [action] propagate unchanged.
 class RunOnce {
   bool _running = false;
+  bool _latched = false;
   bool _disposed = false;
 
   bool get isRunning => _running;
@@ -23,6 +24,16 @@ class RunOnce {
     } finally {
       _running = false;
     }
+  }
+
+  /// Runs [action] the first time only and never releases (not even if it
+  /// throws), for a handler that closes its own sheet or dialog and then acts:
+  /// a second tap during the close animation must not act again. Only use it
+  /// on an instance that dies with the route, or replace the instance per open.
+  Future<T?> latch<T>(FutureOr<T> Function() action) async {
+    if (_latched || _disposed) return null;
+    _latched = true;
+    return await action();
   }
 
   void dispose() => _disposed = true;

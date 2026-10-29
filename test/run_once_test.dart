@@ -55,4 +55,35 @@ void main() {
       expect(pushes, 2);
     });
   });
+
+  group('RunOnce.latch', () {
+    test('the first call runs and later calls are ignored, even after it finished', () async {
+      final once = RunOnce();
+      var runs = 0;
+      expect(await once.latch(() async { runs++; return 'a'; }), 'a');
+      expect(await once.latch(() async { runs++; return 'b'; }), isNull);
+      expect(runs, 1);
+    });
+
+    test('a throwing first action stays latched and the error propagates', () async {
+      final once = RunOnce();
+      var runs = 0;
+      await expectLater(once.latch<void>(() { runs++; throw StateError('boom'); }), throwsStateError);
+      expect(await once.latch(() async { runs++; return 1; }), isNull);
+      expect(runs, 1);
+    });
+
+    test('calls after dispose are ignored', () async {
+      final once = RunOnce()..dispose();
+      var runs = 0;
+      expect(await once.latch(() async => runs++), isNull);
+      expect(runs, 0);
+    });
+
+    test('run is unaffected by the latch and the latch by run', () async {
+      final once = RunOnce();
+      await once.latch(() async {});
+      expect(await once.run(() async => 3), 3);
+    });
+  });
 }
