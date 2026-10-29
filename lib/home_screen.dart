@@ -590,6 +590,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   final NudgeService _nudgeService = NudgeService();
   final _once = RunOnce();
   final _trayOnce = RunOnce();
+  // The custom sort tile closes the sort sheet. This State outlives the sheet,
+  // so a fresh latch is made each time the sheet opens.
+  var _sortCustomLatch = RunOnce();
   Map<String, String> _nicknames = {};
 
   /// Buddy id -> IANA zone (user_profiles.timezone), for the danger
@@ -846,6 +849,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   void dispose() {
     _once.dispose();
     _trayOnce.dispose();
+    _sortCustomLatch.dispose();
     _carouselController.dispose();
     _confettiController.dispose();
     _confettiControllerRight.dispose();
@@ -4269,6 +4273,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
     final appColors = AppColors.of(context);
     HapticFeedback.mediumImpact();
+    _sortCustomLatch.dispose();
+    _sortCustomLatch = RunOnce();
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -4340,9 +4346,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                       HapticFeedback.selectionClick();
                       
                       if (mode == StreakSortMode.custom) {
-                        Navigator.pop(context);
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          _showCustomModeSelector();
+                        _sortCustomLatch.latch(() {
+                          Navigator.pop(context);
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            _showCustomModeSelector();
+                          });
                         });
                         return;
                       }

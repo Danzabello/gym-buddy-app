@@ -15,10 +15,14 @@ class WorkoutSelectionModal extends StatefulWidget {
   /// Test seam; the app leaves it null and templates come from the service.
   final Future<List<WorkoutTemplate>> Function()? loadTemplates;
 
+  /// Test seam; the app leaves it null and the achievement service is used.
+  final Future<List<AchievementUnlockResult>> Function()? checkFeelingLucky;
+
   const WorkoutSelectionModal({
     super.key,
     required this.onWorkoutSelected,
     this.loadTemplates,
+    this.checkFeelingLucky,
   });
 
   @override
@@ -54,6 +58,8 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
   final _once = RunOnce();
   // Start closes the dialog and this sheet, so this State dies with it.
   final _startLatch = RunOnce();
+  // Let's Go pops this sheet, so this State dies with it.
+  final _acceptLatch = RunOnce();
   WorkoutTemplate? _randomTemplate;
   int _randomDuration = 30;
 
@@ -87,6 +93,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
   void dispose() {
     _once.dispose();
     _startLatch.dispose();
+    _acceptLatch.dispose();
     _shakeController.dispose();
     super.dispose();
   }
@@ -147,7 +154,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
     if (_randomTemplate == null) return;
     HapticFeedback.heavyImpact();
 
-    final results = await AchievementService().checkFeelingLucky();
+    final results = await (widget.checkFeelingLucky ?? AchievementService().checkFeelingLucky)();
     if (!mounted) return;
     
     Navigator.pop(context);
@@ -710,7 +717,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                 Expanded(
                   flex: 2,
                   child: GestureDetector(
-                    onTap: () => _once.run(_acceptRandom),
+                    onTap: () => _acceptLatch.latch(_acceptRandom),
                     child: Container(
                       padding:
                           const EdgeInsets.symmetric(vertical: 12),
