@@ -83,6 +83,39 @@ List<HeaderStep> planHeaderSteps(LevelInfo old, LevelInfo next) {
   ];
 }
 
+/// What the header last displayed (or was heading to) this session. Survives
+/// the Dashboard state being disposed and rebuilt by the tab view.
+class HeaderRecord {
+  const HeaderRecord(this.level, this.coins);
+  final LevelInfo level;
+  final int coins;
+}
+
+/// How a new set of numbers reaches the header.
+enum HeaderSyncMode {
+  /// Play the count-up.
+  animate,
+
+  /// Jump to the numbers and update the record, no motion.
+  snap,
+
+  /// Not on an uncovered header yet: show nothing new, try again later.
+  hold,
+}
+
+/// One decision for every write: background and reduced motion snap; a
+/// covered or inactive Dashboard waits; otherwise animate.
+HeaderSyncMode headerSyncMode({
+  required bool foreground,
+  required bool reduceMotion,
+  required bool covered,
+  required bool tabReady,
+}) {
+  if (!foreground || reduceMotion) return HeaderSyncMode.snap;
+  if (covered || !tabReady) return HeaderSyncMode.hold;
+  return HeaderSyncMode.animate;
+}
+
 /// Drives the dashboard header's coin count, XP bar and level-up pop. Owns its
 /// controllers and timers; call [dispose]. Widgets listen to it directly.
 class HeaderMotion extends ChangeNotifier {
@@ -110,7 +143,15 @@ class HeaderMotion extends ChangeNotifier {
     }
     _coin.addStatusListener(_onDone);
     _bar.addStatusListener(_onDone);
+    final rec = session;
+    if (rec != null) init(rec.level, rec.coins, sweep: false);
   }
+
+  /// Session-scoped record of the last numbers shown. Cleared with the
+  /// entry-sweep lifetime (when the signed-in home screen goes away).
+  static HeaderRecord? session;
+
+  void _record() => session = HeaderRecord(target!, coinTarget);
 
   /// Called once after the last step of an animated credit.
   final VoidCallback? onSettled;
@@ -195,6 +236,29 @@ class HeaderMotion extends ChangeNotifier {
       _sweepPending = true;
       _later(600, _startSweep);
     }
+    _record();
+  }
+
+  /// The one path for every write of coins, level and xp. The first value of
+  /// a session sweeps in; a value that differs from the record counts up (or
+  /// down) from it; equal values do nothing.
+  void sync(LevelInfo level, int newCoins, HeaderSyncMode mode) {
+    if (!ready) {
+      if (session == null) {
+        init(level, newCoins, sweep: mode != HeaderSyncMode.snap);
+        return;
+      }
+      init(session!.level, session!.coins, sweep: false);
+    }
+    if (matches(level, newCoins)) return;
+    switch (mode) {
+      case HeaderSyncMode.snap:
+        snap(level, newCoins);
+      case HeaderSyncMode.animate:
+        credit(level, newCoins);
+      case HeaderSyncMode.hold:
+        break;
+    }
   }
 
   void _startSweep() {
@@ -230,6 +294,7 @@ class HeaderMotion extends ChangeNotifier {
     _fromXp = _toXp = info.xpIntoCurrentLevel.toDouble();
     _bar.value = 1;
     _coin.value = 1;
+    _record();
     notifyListeners();
   }
 
@@ -246,6 +311,7 @@ class HeaderMotion extends ChangeNotifier {
     }
     final old = target!;
     target = next;
+    _record();
     if (_sweepPending) return;
     if (_beat) {
       _pending = next;

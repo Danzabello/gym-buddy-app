@@ -125,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
     NotificationService.tabRequest.removeListener(_openRequestedTab);
     _tabPageController.dispose();
     LiveEventToast.dashboardTabActive = false;
-    _DashboardPageState._headerSweepPlayed = false; // next sign-in sweeps again
+    HeaderMotion.session = null; // next sign-in sweeps again
     super.dispose();
   }
 
@@ -629,11 +629,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   int _coinBalance = 0;
   String? _myAvatarId;
 
-  // Count-up motion for the header numbers. The sweep plays once per signed-in
-  // session: the tab PageView disposes this state when another tab is open, so
-  // a per-state flag would replay it on every return.
+  // Count-up motion for the header numbers. What it last showed lives in
+  // HeaderMotion.session, because the tab PageView disposes this state when
+  // another tab is open.
   late final HeaderMotion _motion;
-  static bool _headerSweepPlayed = false;
+  late final AppLifecycleListener _headerLifecycle;
+  final DateTime _builtAt = DateTime.now();
+  Timer? _headerGate;
   bool _reduceMotion = false;
   ModalRoute<dynamic>? _route;
 
@@ -708,6 +710,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _initializeHomePage();
     _loadHeaderData();
     _motion = HeaderMotion(this, onSettled: _announceHeader);
+    // Resuming from the background updates the numbers silently.
+    _headerLifecycle = AppLifecycleListener(onResume: () {
+      final level = _levelInfo;
+      if (mounted && level != null) {
+        _motion.sync(level, _coinBalance, HeaderSyncMode.snap);
+      }
+    });
     EconomySync.instance.numbers.addListener(_onEconomyChanged);
     _updateCountdown();
     _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _updateCountdown());
@@ -756,14 +765,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         _levelInfo = level;
         _coinBalance = coins;
       });
+      _syncHeader();
     } catch (e) {
       if (kDebugMode) debugLog('❌ _loadHeaderData: $e');
     }
   }
 
-  /// The server's coins, xp and level changed after a credit (EconomySync).
-  /// Plain update. A later animation goes here: the old values are still in
-  /// _levelInfo and _coinBalance until the setState below.
+  /// The server's coins, xp and level changed (EconomySync). Same path as
+  /// the header reload: write the numbers, then compare and animate.
   void _onEconomyChanged() {
     final n = EconomySync.instance.numbers.value;
     if (n == null || !mounted) return;
@@ -771,24 +780,37 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _levelInfo = n.level;
       _coinBalance = n.coins;
     });
-    final level = n.level;
-    if (level == null || !_motion.ready) return; // first value: build inits it
-    if (_canAnimateHeader) {
-      _motion.credit(level, n.coins);
-    } else {
-      _motion.snap(level, n.coins);
+    _syncHeader();
+  }
+
+  /// The one compare-and-animate path for the header numbers. Background and
+  /// reduced motion snap; a header covered by a pushed page, or a tab that is
+  /// still sliding in, waits and is retried when it is clear.
+  void _syncHeader() {
+    _headerGate?.cancel();
+    final level = _levelInfo;
+    if (!mounted || level == null) return;
+    final life = WidgetsBinding.instance.lifecycleState;
+    final covered = !(_route?.secondaryAnimation?.isDismissed ?? true);
+    final slidIn = DateTime.now().difference(_builtAt) >= _tabSettle;
+    final mode = headerSyncMode(
+      foreground: life == null || life == AppLifecycleState.resumed,
+      reduceMotion: _reduceMotion,
+      covered: covered,
+      tabReady: LiveEventToast.dashboardTabActive && slidIn,
+    );
+    _motion.sync(level, _coinBalance, mode);
+    if (mode == HeaderSyncMode.hold &&
+        !covered &&
+        !_motion.matches(level, _coinBalance)) {
+      _headerGate = Timer(_tabSettle, _syncHeader); // the route listener covers the rest
     }
   }
 
-  /// Animate only while the app is in the foreground, this is the visible tab,
-  /// no full-screen page covers it (dialogs and sheets don't count), and
-  /// reduced motion is off. Anything else snaps.
-  bool get _canAnimateHeader {
-    final life = WidgetsBinding.instance.lifecycleState;
-    return !_reduceMotion &&
-        (life == null || life == AppLifecycleState.resumed) &&
-        (_route?.secondaryAnimation?.isDismissed ?? true) &&
-        LiveEventToast.dashboardTabActive;
+  static const _tabSettle = Duration(milliseconds: 350);
+
+  void _onRouteCover(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed) _syncHeader();
   }
 
   void _announceHeader() {
@@ -805,7 +827,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   void didChangeDependencies() {
     super.didChangeDependencies();
     _reduceMotion = MediaQuery.disableAnimationsOf(context);
-    _route = ModalRoute.of(context);
+    final route = ModalRoute.of(context);
+    if (route != _route) {
+      _route?.secondaryAnimation?.removeStatusListener(_onRouteCover);
+      _route = route;
+      route?.secondaryAnimation?.addStatusListener(_onRouteCover);
+    }
   }
 
   void _setupAppLifecycleListener() {
@@ -819,6 +846,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _confettiControllerRight.dispose();
     _carouselEntranceController.dispose();
     EconomySync.instance.numbers.removeListener(_onEconomyChanged);
+    _headerGate?.cancel();
+    _route?.secondaryAnimation?.removeStatusListener(_onRouteCover);
+    _headerLifecycle.dispose();
     _motion.dispose();
     _appLifecycleListener?.dispose();
     _trayController.dispose();
@@ -1077,21 +1107,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final ink = c.readableForeground(accentPalette.background);
     final levelInfo = _levelInfo;
 
-    // First real value: show the bar empty and sweep it in once per session.
-    // Anything the hook did not deliver (e.g. a reload after the wardrobe)
-    // snaps, so the numbers on screen never drift from _levelInfo.
-    if (levelInfo != null) {
-      if (!_motion.ready) {
-        _motion.init(levelInfo, _coinBalance,
-            sweep: !_headerSweepPlayed && !_reduceMotion);
-        _headerSweepPlayed = true;
-      } else if (!_motion.matches(levelInfo, _coinBalance)) {
-        final coins = _coinBalance;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _motion.snap(levelInfo, coins);
-        });
-      }
-    }
+    // What the header shows and announces: the newest numbers when loaded,
+    // else what the session record last showed.
+    final shownLevel = levelInfo ?? _motion.target;
+    final shownCoins = levelInfo != null ? _coinBalance : _motion.coinTarget;
 
     void openShop() {
       final homeState = context.findAncestorStateOfType<_HomeScreenState>();
@@ -1123,7 +1142,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               const SizedBox(width: 10),
               Semantics(
                 button: true,
-                label: 'Coins $_coinBalance',
+                label: 'Coins $shownCoins',
                 excludeSemantics: true,
                 onTap: openShop,
                 child: GestureDetector(
@@ -1207,11 +1226,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               ),
             ],
           ),
-          if (levelInfo != null) ...[
+          if (_motion.ready && shownLevel != null) ...[
             const SizedBox(height: 10),
             HeaderXpRow(
               motion: _motion,
-              semanticLabel: headerSemanticLabel(_coinBalance, levelInfo),
+              semanticLabel: headerSemanticLabel(shownCoins, shownLevel),
               track: c.claySurface,
               fill: c.streakOrange,
               textColor: c.inkMuted,
