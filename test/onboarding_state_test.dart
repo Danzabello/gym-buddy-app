@@ -48,12 +48,6 @@ class _Port implements OnboardingAuthPort {
     calls.add('signOut');
     session = false;
   }
-
-  @override
-  Future<void> deleteAccount() async {
-    calls.add('deleteAccount');
-    session = false;
-  }
 }
 
 Future<String?> _run(_Port p) => createOnboardingAuthUser(
@@ -124,30 +118,23 @@ void main() {
         final p = _Port(state: OnboardingState.complete);
         expect(await _run(p), kSignupFailedMessage);
         expect(p.calls, contains('signOut'));
-        expect(p.calls, isNot(contains('deleteAccount')));
       },
     );
 
-    test('a failed profile read deletes nothing and does not resume', () async {
+    test('a failed profile read does not resume', () async {
       final p = _Port(state: OnboardingState.unknown);
       expect(await _run(p), kSignupErrorMessage);
       expect(p.calls, contains('signOut'));
-      expect(p.calls, isNot(contains('deleteAccount')));
     });
 
-    test('a half-made profile is deleted and sign-up retried', () async {
-      final p = _Port(
-        signUps: ['already registered', null],
-        state: OnboardingState.incomplete,
-      );
+    // A Join on step 5 writes the row with onboarding_completed false, so
+    // this is someone who joined (maybe already paired) and quit before the
+    // main button: they keep their account and resume at step 2.
+    test('an unfinished profile row resumes and is kept', () async {
+      final p = _Port(state: OnboardingState.incomplete);
       expect(await _run(p), isNull);
-      expect(p.calls, [
-        'signUp',
-        'signIn',
-        'profileState',
-        'deleteAccount',
-        'signUp',
-      ]);
+      expect(p.calls, ['signUp', 'signIn', 'profileState']);
+      expect(p.hasSession, isTrue);
     });
   });
 

@@ -58,10 +58,13 @@ dependencies:
   url_launcher: ^6.3.2
   video_player: ^2.14.0
   firebase_crashlytics: ^4.3.0
+  play_install_referrer: 0.5.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Already in the lock as a transitive dependency; tests use its MockClient.
+  http: 1.5.0
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/auth_service.dart';
 import 'services/coach_max_service.dart';
+import 'services/invite_service.dart';
 import 'services/notification_service.dart';
 import 'home_screen.dart';
 import 'signup_screen.dart';
@@ -19,7 +20,6 @@ import 'theme/app_theme.dart';
 import 'utils/input_validators.dart';
 import 'utils/run_once.dart';
 import 'utils/timezone_sync.dart';
-import 'package:flutter/foundation.dart';
 
 
 class LoginScreen extends StatefulWidget {
@@ -155,22 +155,20 @@ class _LoginScreenState extends State<LoginScreen>
         if (!mounted) return;
         setState(() => _isLoading = false);
 
-        if (state == OnboardingState.noProfile) {
-          // Signed up but never reached the profile step: pick the flow up at
-          // the avatar step, as Splash does.
+        if (state == OnboardingState.noProfile ||
+            state == OnboardingState.incomplete) {
+          // Signed up but never finished: pick the flow up at the avatar
+          // step, as Splash does. An unfinished row is resumed, never
+          // deleted: a Join on the buddy step writes one early, possibly
+          // already paired.
           Navigator.of(context).pushAndRemoveUntil(
             FadeSlideRoute(page: const OnboardingHost(resume: true)),
             (r) => false,
           );
           return;
         }
-        final onboardingComplete = switch (state) {
-          OnboardingState.complete => true,
-          OnboardingState.incomplete => false,
-          _ => null,
-        };
 
-        if (onboardingComplete == null) {
+        if (state != OnboardingState.complete) {
           // DI-7 audit fix: the read failed (timeout, network error, etc.)
           // — status is unknown, NOT confirmed orphaned. Fail safe: do not
           // delete the account, just let the user retry.
@@ -178,34 +176,7 @@ class _LoginScreenState extends State<LoginScreen>
           return;
         }
 
-        if (!onboardingComplete) {
-          // Confirmed via a successful read (not just assumed from a
-          // failed one) — clean it up and send back to splash.
-          // Token first: the delete-account failure below is swallowed, and in
-          // that path the auth user survives with its token row intact.
-          await NotificationService().removeToken();
-          try {
-            await Supabase.instance.client.functions.invoke('delete-account');
-          } catch (e) {
-            if (kDebugMode) debugPrint('⚠️ cleanup: $e');
-          } finally {
-            await Supabase.instance.client.auth.signOut();
-          }
-          if (!mounted) return;
-          Navigator.of(context).pushAndRemoveUntil(
-            FadeSlideRoute(page: const SplashScreen()),
-            (r) => false,
-          );
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Previous signup was incomplete. Please register again.'),
-              backgroundColor: AppColors.of(context).warn,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          return;
-        }
-
+        unawaited(InviteService().discardPendingIfOnboarded(true));
         unawaited(syncDeviceTimezone());
         await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
         if (!mounted) return;

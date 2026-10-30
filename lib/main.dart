@@ -12,7 +12,6 @@ import 'onboarding/splash_screen.dart';
 import 'services/achievement_service.dart';
 import 'dart:async';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:app_links/app_links.dart';
 import 'services/invite_service.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
@@ -37,6 +36,10 @@ void main() async {
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
+  InviteService.startListening();
+  if (Platform.isAndroid) {
+    unawaited(InviteService().readInstallReferrerOnce(InviteService.playReferrer));
+  }
   runApp(const GymBuddyApp());
 }
 
@@ -89,8 +92,6 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final CoachMaxService _coachMaxService = CoachMaxService();
   final AuthService _authService = AuthService();
-  final _appLinks = AppLinks();
-  StreamSubscription<Uri>? _linkSubscription;
 
   bool _isInitializing = true;
   bool _hasCompletedOnboarding = false;
@@ -99,54 +100,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void initState() {
     super.initState();
     _initializeApp();
-    _initDeepLinks();
-  }
-
-  @override
-  void dispose() {
-    _linkSubscription?.cancel();
-    super.dispose();
-  }
-
-  // ─── Deep link handling ────────────────────────────────────────────────────
-
-  Future<void> _initDeepLinks() async {
-    // Handle link that cold-launched the app (app was fully closed)
-    try {
-      final initialUri = await _appLinks.getInitialLink();
-      if (initialUri != null) {
-        _handleInviteLink(initialUri);
-      }
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Deep link initial: $e');
-    }
-
-    // Handle links while app is already running in background
-    _linkSubscription = _appLinks.uriLinkStream.listen(
-      _handleInviteLink,
-      onError: (e) {
-        if (kDebugMode) debugLog('❌ Deep link stream: $e');
-      },
-    );
-  }
-
-  void _handleInviteLink(Uri uri) {
-    final code = uri.queryParameters['code'];
-    if (code != null && code.isNotEmpty && _isValidInviteCode(code)) {
-      if (kDebugMode) debugLog('🔗 Invite code received via deep link: $code');
-      unawaited(InviteService().storePendingInviteCode(code));
-    } else if (code != null && code.isNotEmpty) {
-      if (kDebugMode) debugLog('⚠️ Rejected malformed invite code from deep link');
-    }
-  }
-
-  // S11 audit fix: basic format validation before persisting an
-  // unauthenticated deep-link value to local storage. Real validation
-  // still happens server-side on lookup -- this just stops obviously
-  // malformed/oversized values from ever being written to disk.
-  bool _isValidInviteCode(String code) {
-    if (code.length > 32) return false;
-    return RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(code);
   }
 
   // ─── App initialisation ────────────────────────────────────────────────────
@@ -154,9 +107,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Future<void> _initializeApp() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
+      unawaited(InviteService().retryPendingTeam(user.id));
       await _startupRead('notification init', NotificationService().initialize(), 10);
       final onboardingStatus = await _startupRead(
           'onboarding status', _authService.checkOnboardingStatus(user.id), 15);
+      unawaited(InviteService().discardPendingIfOnboarded(onboardingStatus));
       if (onboardingStatus == true) {
         // Refresh the stored device timezone every launch (people travel /
         // swap devices) — feeds per-user "today" resolution server-side.
@@ -164,17 +119,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
         await _startupRead('coach max schedule',
             _coachMaxService.scheduleCoachMaxCheckIn(user.id), 15);
         unawaited(AchievementService().checkLoyaltyAchievements());
-      } else if (onboardingStatus == false) {
-        // Confirmed via a successful read (not just assumed from a failed
-        // one) — this auth account really did abandon onboarding.
-        // Clean it up so they can re-register with the same email.
-        await _cleanupOrphanedAccount();
       } else {
-        // DI-7 audit fix: the read itself failed (timeout, network error,
-        // etc.) — status is unknown, NOT confirmed orphaned. Do not
-        // delete; fall through to Splash so the user can retry (signing
-        // in again re-runs this check).
-        if (kDebugMode) {
+        // Not finished (false), or the read failed (null; DI-7: never treat a
+        // failed read as orphaned). Either way Splash shows, and its Get
+        // started resumes the flow at step 2. An unfinished row is never
+        // deleted: a Join on the buddy step writes one early, possibly
+        // already paired.
+        if (kDebugMode && onboardingStatus == null) {
           debugLog('⚠️ Could not verify onboarding status; leaving account untouched');
         }
       }
@@ -184,20 +135,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       });
     } else {
       setState(() => _isInitializing = false);
-    }
-  }
-
-  Future<void> _cleanupOrphanedAccount() async {
-    // Before delete-account, which destroys the auth user. A successful delete
-    // would cascade the token row away anyway, but the failure below is
-    // swallowed — in that path the user survives and the row would linger.
-    await NotificationService().removeToken();
-    try {
-      await Supabase.instance.client.functions.invoke('delete-account');
-    } catch (e) {
-      if (kDebugMode) debugLog('⚠️ Could not delete orphaned account: $e');
-    } finally {
-      await Supabase.instance.client.auth.signOut();
     }
   }
 

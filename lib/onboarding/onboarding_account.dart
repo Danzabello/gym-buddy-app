@@ -1,14 +1,9 @@
-import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/auth_service.dart';
 import '../services/coach_max_service.dart';
-import '../services/invite_service.dart';
 import '../services/notification_service.dart';
-import '../utils/debug_logger.dart';
 import '../utils/timezone_sync.dart';
-import 'onboarding_basic_info_new.dart'
-    show discoveryFieldsOf, isOwnProfileDuplicate;
 import 'onboarding_draft.dart';
 
 const kSignupFailedMessage =
@@ -24,9 +19,6 @@ abstract class OnboardingAuthPort {
   bool get hasSession;
   Future<OnboardingState> profileState();
   Future<void> signOut();
-
-  /// Removes the push token, deletes the account and signs out.
-  Future<void> deleteAccount();
 }
 
 class _SupabasePort implements OnboardingAuthPort {
@@ -50,17 +42,6 @@ class _SupabasePort implements OnboardingAuthPort {
 
   @override
   Future<void> signOut() => _client.auth.signOut();
-
-  @override
-  Future<void> deleteAccount() async {
-    // Token first: the delete-account failure below is swallowed, and in that
-    // path the auth user survives with its token row intact.
-    await NotificationService().removeToken();
-    try {
-      await _client.functions.invoke('delete-account');
-    } catch (_) {}
-    await _client.auth.signOut();
-  }
 }
 
 /// Step 1: creates the auth user. Returns null on success, else the message
@@ -86,15 +67,14 @@ Future<String?> createOnboardingAuthUser({
 
   switch (await auth.profileState()) {
     case OnboardingState.noProfile:
-      return null; // signed up before, never reached the profile step
+    case OnboardingState.incomplete:
+      // Signed up before and never finished. A row with onboarding_completed
+      // false is one a Join on the buddy step wrote, possibly already paired,
+      // so it is resumed, never deleted.
+      return null;
     case OnboardingState.complete:
       await auth.signOut();
       return kSignupFailedMessage;
-    case OnboardingState.incomplete:
-      // Half-made profile from an older build: delete it and start clean.
-      await auth.deleteAccount();
-      final retry = await auth.signUp(email, password);
-      return retry == null && auth.hasSession ? null : kSignupErrorMessage;
     case OnboardingState.unknown:
       // The read failed: nothing is deleted.
       await auth.signOut();
@@ -102,38 +82,54 @@ Future<String?> createOnboardingAuthUser({
   }
 }
 
-/// Step 5: writes the whole profile in one insert, then sets up Coach Max and
-/// a pending invite link, if any. Throws when the profile write fails; the
-/// caller shows the error and stays on step 5.
-Future<void> saveOnboardingProfile(OnboardingDraft draft) async {
+/// The user_profiles row step 5 writes. Goals, gender and buddy preferences
+/// are no longer asked: the columns keep the values the removed steps used to
+/// default to.
+Map<String, dynamic> onboardingProfileRow(
+  OnboardingDraft draft,
+  String userId, {
+  required bool completed,
+}) =>
+    {
+      'id': userId,
+      'display_name': draft.name.text.trim(),
+      'username': draft.username.text.toLowerCase(),
+      'age': int.parse(draft.age.text.trim()),
+      'avatar_id': draft.avatarId,
+      'avatar_border': 'simple',
+      'fitness_level': 'beginner',
+      'looking_for_buddy': true,
+      'preferred_workout_style': 'both',
+      'onboarding_completed': completed,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+
+/// Writes the user's own row: inserted the first time, updated after that (a
+/// Join on step 5 writes it early, then the main button writes it again), so
+/// it never fails on a duplicate key. Throws when the write fails.
+Future<void> writeOnboardingProfileRow(
+  OnboardingDraft draft, {
+  required bool completed,
+}) async {
   final client = Supabase.instance.client;
   final user = client.auth.currentUser;
   if (user == null) throw Exception('Authentication failed');
+  await upsertProfileRow(
+      client, onboardingProfileRow(draft, user.id, completed: completed));
+}
 
-  // Goals, gender and buddy preferences are no longer asked: the columns keep
-  // the values the removed steps used to default to.
-  final profile = {
-    'id': user.id,
-    'display_name': draft.name.text.trim(),
-    'username': draft.username.text.toLowerCase(),
-    'age': int.parse(draft.age.text.trim()),
-    'avatar_id': draft.avatarId,
-    'avatar_border': 'simple',
-    'fitness_level': 'beginner',
-    'looking_for_buddy': true,
-    'preferred_workout_style': 'both',
-    'onboarding_completed': true,
-    'updated_at': DateTime.now().toUtc().toIso8601String(),
-  };
-  try {
-    await client.from('user_profiles').insert(profile);
-  } catch (e) {
-    if (!isOwnProfileDuplicate(e)) rethrow;
-    await client
-        .from('user_profiles')
-        .update(discoveryFieldsOf(profile))
-        .eq('id', user.id);
-  }
+/// One INSERT ... ON CONFLICT (id) DO UPDATE. A username taken by someone
+/// else still fails, on its own unique key.
+Future<void> upsertProfileRow(SupabaseClient client, Map<String, dynamic> row) =>
+    client.from('user_profiles').upsert(row, onConflict: 'id');
+
+/// Step 5's main button: the row with onboarding_completed true, then Coach
+/// Max and the rest of account setup. Throws when the profile write fails;
+/// the caller shows the error and stays on step 5. Invite codes are redeemed
+/// by the buddy step itself, before this runs.
+Future<void> saveOnboardingProfile(OnboardingDraft draft) async {
+  final user = Supabase.instance.client.auth.currentUser;
+  await writeOnboardingProfileRow(draft, completed: true);
 
   await syncDeviceTimezone();
 
@@ -141,21 +137,5 @@ Future<void> saveOnboardingProfile(OnboardingDraft draft) async {
   // without this a new account had no device token until the next cold start.
   await NotificationService().initialize();
 
-  await CoachMaxService().initializeCoachMaxForUser(user.id);
-
-  final inviteService = InviteService();
-  final pendingCode = await inviteService.consumePendingInviteCode();
-  if (pendingCode != null) {
-    final inviterId = await inviteService.acceptInvite(pendingCode);
-    if (inviterId != null) {
-      try {
-        await client.rpc('create_invite_team', params: {
-          'p_inviter_id': inviterId,
-          'p_invitee_id': user.id,
-        });
-      } catch (e) {
-        if (kDebugMode) debugLog('create_invite_team failed: $e');
-      }
-    }
-  }
+  await CoachMaxService().initializeCoachMaxForUser(user!.id);
 }

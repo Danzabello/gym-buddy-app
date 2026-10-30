@@ -20,6 +20,10 @@ class OnboardingDraft {
 
   BuddyChoice buddy = BuddyChoice.coachMax;
 
+  /// The inviter's name once a Join on step 5 paired the user, so Back and
+  /// forward still show the paired card.
+  String? pairedWith;
+
   void dispose() {
     for (final c in [email, password, confirm, name, age, username]) {
       c.dispose();

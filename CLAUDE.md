@@ -35,7 +35,7 @@ GRANT  EXECUTE ON FUNCTION public.<fn>(<args>) TO authenticated;  -- anon only i
 
 **Table grants must be explicit.** New `public` tables get `anon` and `authenticated` grants from default privileges, so every migration that creates a table must enable RLS, `REVOKE ALL … FROM anon`, `REVOKE TRUNCATE … FROM authenticated`, and grant only the privileges the client needs.
 
-**Account deletion** goes through the `delete-account` Edge Function (service_role deletes `user_profiles`, then `auth.admin.deleteUser`). A postgres-owned `SECURITY DEFINER` RPC cannot delete `auth.users` when called as `authenticated`, so the old `delete_own_account` RPC only ever removed the profile. Call sites: `AuthWrapper._cleanupOrphanedAccount`, `login_screen` orphan cleanup, onboarding retry.
+**Account deletion** goes through the `delete-account` Edge Function (service_role deletes `user_profiles`, then `auth.admin.deleteUser`). A postgres-owned `SECURITY DEFINER` RPC cannot delete `auth.users` when called as `authenticated`, so the old `delete_own_account` RPC only ever removed the profile. Call site: `AccountPage` (self-serve delete). Unfinished accounts (no profile row, or `onboarding_completed` false, which a Join on the buddy step writes early) are resumed at step 2, never deleted automatically.
 
 **Testing permissions:** run the trusted call in a clean session. PL/pgSQL caches plans per session, so an earlier more-privileged call can make a later `SET ROLE authenticated` call wrongly succeed. Verify with a fresh authenticated-only call.
 

@@ -68,7 +68,10 @@ class _IdentityStepState extends State<IdentityStep> {
       if (mounted) {
         setState(() {
           _isChecking = false;
-          if (res != null) {
+          // The user's own row (written early by a Join on step 5, then
+          // resumed or reached with Back) does not make the name taken.
+          if (res != null &&
+              res['id'] != Supabase.instance.client.auth.currentUser?.id) {
             _usernameError = 'Username already taken';
             _isAvailable = false;
           } else {

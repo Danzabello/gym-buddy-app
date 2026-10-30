@@ -23,9 +23,13 @@ class OnboardingHost extends StatefulWidget {
   /// the flow resumes at step 2.
   final bool resume;
 
+  /// Fakes for the buddy step in tests; null uses the real services.
+  final BuddyDeps? buddyDeps;
+
   const OnboardingHost({
     super.key,
     this.resume = false,
+    this.buddyDeps,
   });
 
   @override
@@ -237,7 +241,7 @@ class OnboardingHostState extends State<OnboardingHost>
         0 => const SignUpStep(),
         1 => const AvatarStep(),
         2 => const IdentityStep(),
-        3 => const BuddyStep(),
+        3 => BuddyStep(deps: widget.buddyDeps),
         4 => const StreakStep(),
         5 => const NotifyStep(),
         _ => const AllSetStep(),
