@@ -268,6 +268,10 @@ class NotificationService {
   /// A tapped workout push asks HomeScreen for that workout's page.
   static final ValueNotifier<String?> workoutRequest = ValueNotifier<String?>(null);
 
+  /// The OS notification permission as last seen: null until a check or a
+  /// request has finished, never reset to null. The dashboard bell listens.
+  static final ValueNotifier<bool?> osPermission = ValueNotifier<bool?>(null);
+
   /// The tap that launched the app is routed once per process. initialize()
   /// runs again after login or onboarding, and Android keeps reporting the
   /// launching notification for the life of the activity, so without this a
@@ -347,6 +351,7 @@ class NotificationService {
         sound: true,
         provisional: false,
       );
+      osPermission.value = _isGranted(settings.authorizationStatus);
       if (_isGranted(settings.authorizationStatus)) await _setUpAfterGrant();
       return settings.authorizationStatus;
     } catch (e) {
@@ -663,11 +668,10 @@ class NotificationService {
   }
 
   Future<bool> checkOsPermission() async {
-    if (!Platform.isAndroid && !Platform.isIOS) return true;
+    if (!Platform.isAndroid && !Platform.isIOS) return osPermission.value = true;
     final fcm = FirebaseMessaging.instance;
     final settings = await fcm.getNotificationSettings();
-    return settings.authorizationStatus == AuthorizationStatus.authorized ||
-        settings.authorizationStatus == AuthorizationStatus.provisional;
+    return osPermission.value = _isGranted(settings.authorizationStatus);
   }
 
   Map<String, dynamic> _defaultSettings() => {

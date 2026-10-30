@@ -55,6 +55,7 @@ import 'theme/app_theme.dart';
 import 'theme/accent_theme_provider.dart';
 import 'data/coach_tips.dart';
 import 'services/notification_service.dart';
+import 'widgets/notification_prompt_sheet.dart';
 import 'widgets/live_event_toast.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
@@ -717,7 +718,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _loadHeaderData();
     _motion = HeaderMotion(this, onSettled: _announceHeader);
     // Resuming from the background updates the numbers silently.
+    _refreshOsPermission();
     _headerLifecycle = AppLifecycleListener(onResume: () {
+      _refreshOsPermission();
       final level = _levelInfo;
       if (mounted && level != null) {
         _motion.sync(level, _coinBalance, HeaderSyncMode.snap);
@@ -839,6 +842,28 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _route = route;
       route?.secondaryAnimation?.addStatusListener(_onRouteCover);
     }
+  }
+
+  /// Feeds the bell's dot (NotificationService.osPermission). A failed check
+  /// leaves it as it was.
+  Future<void> _refreshOsPermission() async {
+    try {
+      await NotificationService().checkOsPermission();
+    } catch (_) {}
+  }
+
+  /// Granted (or unknown): the plain snackbar. Not granted: the sheet. Held
+  /// by _once until the sheet closes.
+  Future<void> _onBellTap() async {
+    final tap = await routeBellTap(NotificationService().checkOsPermission);
+    if (!mounted) return;
+    if (tap == BellTap.sheet) return showNotificationPromptSheet(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('No new notifications'),
+        duration: Duration(seconds: 1),
+      ),
+    );
   }
 
   void _setupAppLifecycleListener() {
@@ -1220,18 +1245,52 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 child: Icon(Icons.tune_rounded, color: c.inkMuted, size: 20),
               ),
               const SizedBox(width: 10),
-              _clayCircleButton(
-                size: 46,
-                tooltip: 'Notifications',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('No new notifications'),
-                      duration: Duration(seconds: 1),
+              ValueListenableBuilder<bool?>(
+                valueListenable: NotificationService.osPermission,
+                builder: (context, permission, _) {
+                  final off = bellDotVisible(permission);
+                  return _clayCircleButton(
+                    size: 46,
+                    tooltip: off ? 'Notifications, turned off' : 'Notifications',
+                    onTap: () => _once.run(_onBellTap),
+                    child: SizedBox(
+                      width: 46,
+                      height: 46,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Icon(Icons.notifications_none_rounded,
+                              color: ink, size: 22),
+                          if (off)
+                            // 11 px gold dot, 9 px from the top and 10 from
+                            // the right, with a 2 px ring in the button's fill.
+                            Positioned(
+                              top: 7,
+                              right: 8,
+                              child: ExcludeSemantics(
+                                child: Container(
+                                  width: 15,
+                                  height: 15,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Color.lerp(
+                                        c.claySurfaceLight, c.claySurface, 0.5),
+                                  ),
+                                  child: Container(
+                                    width: 11,
+                                    height: 11,
+                                    decoration: BoxDecoration(
+                                        shape: BoxShape.circle, color: c.warn),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   );
                 },
-                child: Icon(Icons.notifications_none_rounded, color: ink, size: 22),
               ),
             ],
           ),
