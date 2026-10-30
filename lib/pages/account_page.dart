@@ -137,9 +137,8 @@ class _AccountPageState extends State<AccountPage> {
     );
   }
 
-  /// Same shape as AuthWrapper._cleanupOrphanedAccount in main.dart, minus
-  /// the retry-signup step -- but signs out only on success, since a failed
-  /// delete must leave the account (and session) intact.
+  /// Signs out only on success: a failed delete must leave the account (and
+  /// session) intact.
   Future<bool> _deleteAccount() async {
     await NotificationService().removeToken();
     try {

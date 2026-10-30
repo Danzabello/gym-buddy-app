@@ -9,7 +9,9 @@ import '../login_screen.dart';
 import '../utils/run_once.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  /// Whether an auth user exists; null reads Supabase. For tests.
+  final bool Function()? signedIn;
+  const SplashScreen({super.key, this.signedIn});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -68,11 +70,14 @@ class _SplashScreenState extends State<SplashScreen>
     super.dispose();
   }
 
+  static bool _supabaseSignedIn() =>
+      Supabase.instance.client.auth.currentUser != null;
+
   Future<void> _getStarted() {
     HapticFeedback.mediumImpact();
     // Signed in but never finished: sign-up already happened, so pick the
     // flow up at step 2.
-    final resume = Supabase.instance.client.auth.currentUser != null;
+    final resume = (widget.signedIn ?? _supabaseSignedIn)();
     return Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => resume

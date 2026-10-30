@@ -12,7 +12,9 @@ const _kStarterIds = ['wolf', 'bear', 'lion'];
 
 /// Step 2: pick the starter avatar. The choice stays in the draft.
 class AvatarStep extends StatefulWidget {
-  const AvatarStep({super.key});
+  /// The first step shown on a resume: welcome-back line and sign-out link.
+  final bool resumeEntry;
+  const AvatarStep({super.key, this.resumeEntry = false});
 
   @override
   State<AvatarStep> createState() => _AvatarStepState();
@@ -27,14 +29,22 @@ class _AvatarStepState extends State<AvatarStep> {
     final cs = Theme.of(context).colorScheme;
     final chosen = avatarCatalogById(draft.avatarId);
     return OnbStepFrame(
-      footer: ObPrimaryButton(
-          label: 'Choose ${chosen.name}', onTap: () => host.next()),
+      footer: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ObPrimaryButton(
+              label: 'Choose ${chosen.name}', onTap: () => host.next()),
+          if (widget.resumeEntry) const ResumeEscapeLink(),
+        ],
+      ),
       child: Column(
         children: [
           MaxStrip(
             anchor: host.anchors[MaxSpot.avatar]!,
             spot: MaxSpot.avatar,
-            text: 'First, pick your avatar. ${chosen.name} is a great start.',
+            text: widget.resumeEntry
+                ? kWelcomeBackLine
+                : 'First, pick your avatar. ${chosen.name} is a great start.',
             bubbleVisible: host.bubbleVisible,
           ),
           const SizedBox(height: 20),

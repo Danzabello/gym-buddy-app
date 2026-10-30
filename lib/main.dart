@@ -8,6 +8,9 @@ import 'services/coach_max_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'services/notification_service.dart';
 import 'dart:io';
+import 'onboarding/onboarding_host.dart';
+import 'onboarding/onboarding_resume.dart';
+import 'onboarding/onboarding_step_buddy.dart' show BuddyDeps;
 import 'onboarding/splash_screen.dart';
 import 'services/achievement_service.dart';
 import 'dart:async';
@@ -82,19 +85,77 @@ class GymBuddyApp extends StatelessWidget {
   }
 }
 
+/// What AuthWrapper needs from the outside world, so tests can hand it fakes.
+class AuthWrapperDeps {
+  final String? Function() userId;
+
+  /// Work every signed-in launch does before the status read.
+  final Future<void> Function(String userId) onSignedIn;
+  final Future<OnboardingState> Function(String userId) onboardingState;
+
+  /// The unfinished account's own row; null when it could not be read.
+  final Future<OnboardingResume?> Function(String userId) loadResume;
+
+  /// Launch work for a finished account.
+  final Future<void> Function(String userId) onCompleted;
+  final WidgetBuilder home;
+
+  /// Passed to the onboarding host: its "Not you?" sign-out and buddy step.
+  final Future<void> Function() signOut;
+  final BuddyDeps? buddyDeps;
+
+  const AuthWrapperDeps({
+    required this.userId,
+    required this.onSignedIn,
+    required this.onboardingState,
+    required this.loadResume,
+    required this.onCompleted,
+    required this.home,
+    required this.signOut,
+    this.buddyDeps,
+  });
+
+  factory AuthWrapperDeps.live() {
+    final auth = AuthService();
+    return AuthWrapperDeps(
+      userId: () => Supabase.instance.client.auth.currentUser?.id,
+      onSignedIn: (id) async {
+        unawaited(InviteService().retryPendingTeam(id));
+        await _startupRead('notification init', NotificationService().initialize(), 10);
+      },
+      onboardingState: auth.onboardingState,
+      loadResume: (id) => loadOnboardingResume(ResumeReads.live(id)),
+      onCompleted: (id) async {
+        // Refresh the stored device timezone every launch (people travel /
+        // swap devices) — feeds per-user "today" resolution server-side.
+        unawaited(syncDeviceTimezone());
+        await _startupRead('coach max schedule',
+            CoachMaxService().scheduleCoachMaxCheckIn(id), 15);
+        unawaited(AchievementService().checkLoyaltyAchievements());
+      },
+      home: (_) => const HomeScreen(),
+      signOut: auth.signOut,
+    );
+  }
+}
+
 class AuthWrapper extends StatefulWidget {
-  const AuthWrapper({super.key});
+  final AuthWrapperDeps? deps;
+  const AuthWrapper({super.key, this.deps});
 
   @override
   State<AuthWrapper> createState() => _AuthWrapperState();
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
-  final CoachMaxService _coachMaxService = CoachMaxService();
-  final AuthService _authService = AuthService();
+  late final AuthWrapperDeps _deps = widget.deps ?? AuthWrapperDeps.live();
 
   bool _isInitializing = true;
-  bool _hasCompletedOnboarding = false;
+
+  /// Signed out, or signed in with the status unknown (read failed or timed
+  /// out): the splash.
+  OnboardingState _state = OnboardingState.unknown;
+  OnboardingResume? _resume;
 
   @override
   void initState() {
@@ -105,37 +166,33 @@ class _AuthWrapperState extends State<AuthWrapper> {
   // ─── App initialisation ────────────────────────────────────────────────────
 
   Future<void> _initializeApp() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user != null) {
-      unawaited(InviteService().retryPendingTeam(user.id));
-      await _startupRead('notification init', NotificationService().initialize(), 10);
-      final onboardingStatus = await _startupRead(
-          'onboarding status', _authService.checkOnboardingStatus(user.id), 15);
-      unawaited(InviteService().discardPendingIfOnboarded(onboardingStatus));
-      if (onboardingStatus == true) {
-        // Refresh the stored device timezone every launch (people travel /
-        // swap devices) — feeds per-user "today" resolution server-side.
-        unawaited(syncDeviceTimezone());
-        await _startupRead('coach max schedule',
-            _coachMaxService.scheduleCoachMaxCheckIn(user.id), 15);
-        unawaited(AchievementService().checkLoyaltyAchievements());
-      } else {
-        // Not finished (false), or the read failed (null; DI-7: never treat a
-        // failed read as orphaned). Either way Splash shows, and its Get
-        // started resumes the flow at step 2. An unfinished row is never
-        // deleted: a Join on the buddy step writes one early, possibly
-        // already paired.
-        if (kDebugMode && onboardingStatus == null) {
-          debugLog('⚠️ Could not verify onboarding status; leaving account untouched');
-        }
-      }
-      setState(() {
-        _hasCompletedOnboarding = onboardingStatus == true;
-        _isInitializing = false;
-      });
-    } else {
+    final userId = _deps.userId();
+    if (userId == null) {
       setState(() => _isInitializing = false);
+      return;
     }
+    await _deps.onSignedIn(userId);
+    final state = await _startupRead(
+            'onboarding status', _deps.onboardingState(userId), 15) ??
+        OnboardingState.unknown;
+    unawaited(InviteService()
+        .discardPendingIfOnboarded(state == OnboardingState.complete ? true : null));
+    OnboardingResume? resume;
+    if (state == OnboardingState.complete) {
+      await _deps.onCompleted(userId);
+    } else if (state == OnboardingState.incomplete) {
+      // A failed read leaves null, which falls back to the splash below.
+      resume = await _startupRead<OnboardingResume?>('onboarding resume', _deps.loadResume(userId), 15);
+    } else if (kDebugMode && state == OnboardingState.unknown) {
+      // DI-7: a failed read is never treated as orphaned or unfinished.
+      debugLog('⚠️ Could not verify onboarding status; leaving account untouched');
+    }
+    if (!mounted) return;
+    setState(() {
+      _state = state;
+      _resume = resume;
+      _isInitializing = false;
+    });
   }
 
   // ─── Build ─────────────────────────────────────────────────────────────────
@@ -148,13 +205,24 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
 
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
-      return const SplashScreen();
-    } else if (!_hasCompletedOnboarding) {
-      return const SplashScreen();
-    } else {
-      return const HomeScreen();
-    }
+    final splash = SplashScreen(signedIn: () => _deps.userId() != null);
+    if (_deps.userId() == null) return splash;
+    return switch (_state) {
+      OnboardingState.complete => _deps.home(context),
+      // Never finished: straight back into the flow. An unfinished row is
+      // never deleted (a Join on the buddy step writes one early, possibly
+      // already paired).
+      OnboardingState.noProfile => OnboardingHost(
+          resume: true, signOut: _deps.signOut, buddyDeps: _deps.buddyDeps),
+      OnboardingState.incomplete when _resume != null => OnboardingHost(
+          resume: true,
+          resumeData: _resume,
+          signOut: _deps.signOut,
+          buddyDeps: _deps.buddyDeps),
+      // Status unknown (or the row could not be read): the splash, whose Get
+      // started resumes the flow. A network blip never pushes anyone into
+      // onboarding.
+      _ => splash,
+    };
   }
 }

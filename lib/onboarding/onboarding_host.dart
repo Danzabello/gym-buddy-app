@@ -2,10 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/debug_logger.dart';
+import '../utils/run_once.dart';
 import 'onboarding_draft.dart';
 import 'onboarding_max.dart';
 import 'onboarding_max_layer.dart';
+import 'onboarding_resume.dart';
 import 'onboarding_step_allset.dart';
 import 'onboarding_step_avatar.dart';
 import 'onboarding_step_buddy.dart';
@@ -20,16 +24,26 @@ import 'splash_screen.dart';
 /// Coach Max layer above every step. Steps are plain widgets inside it.
 class OnboardingHost extends StatefulWidget {
   /// True when an auth user already exists but onboarding never finished:
-  /// the flow resumes at step 2.
+  /// the flow resumes at step 2, or at the buddy step when [resumeData] holds
+  /// a full profile row.
   final bool resume;
+
+  /// The unfinished account's own row, prefilled into the draft. Null when
+  /// there is no row (or it could not be read): the flow starts at step 2.
+  final OnboardingResume? resumeData;
 
   /// Fakes for the buddy step in tests; null uses the real services.
   final BuddyDeps? buddyDeps;
 
+  /// "Not you?" sign-out; null signs out for real. For tests.
+  final Future<void> Function()? signOut;
+
   const OnboardingHost({
     super.key,
     this.resume = false,
+    this.resumeData,
     this.buddyDeps,
+    this.signOut,
   });
 
   @override
@@ -61,7 +75,12 @@ class OnboardingHostState extends State<OnboardingHost>
   final draft = OnboardingDraft();
 
   late final AnimationController _t;
-  late int index = widget.resume ? 1 : 0;
+  late final int entryIndex = !widget.resume
+      ? 0
+      : widget.resumeData?.complete == true
+          ? kStepSpots.indexOf(MaxSpot.buddy)
+          : 1;
+  late int index = entryIndex;
   int? _prev;
   int _dir = 1;
   double _width = 360;
@@ -72,6 +91,7 @@ class OnboardingHostState extends State<OnboardingHost>
   @override
   void initState() {
     super.initState();
+    widget.resumeData?.applyTo(draft);
     _t = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 600), value: 1);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -127,6 +147,21 @@ class OnboardingHostState extends State<OnboardingHost>
           Offset(-_dir * _width * (1 - _slide.transform(_t.value)), 0),
       onLanded: _landed,
     );
+  }
+
+  /// Signs out and starts over at the splash. The account is kept.
+  Future<void> signOutToSplash() async {
+    try {
+      await (widget.signOut ?? AuthService().signOut)();
+    } catch (e) {
+      debugLog('Onboarding sign-out failed: $e');
+      return;
+    }
+    if (!mounted) return;
+    unawaited(Navigator.of(context).pushAndRemoveUntil(
+      FadeSlideRoute(page: const SplashScreen()),
+      (r) => false,
+    ));
   }
 
   /// Slides to the next page.
@@ -237,16 +272,55 @@ class OnboardingHostState extends State<OnboardingHost>
     );
   }
 
+  /// The first step shown on a resume: Max greets the user back and the
+  /// "Not you?" link sits under its button.
+  bool _isEntry(int i) => widget.resume && i == entryIndex;
+
   Widget _buildStep(int i) => switch (i) {
         0 => const SignUpStep(),
-        1 => const AvatarStep(),
+        1 => AvatarStep(resumeEntry: _isEntry(1)),
         2 => const IdentityStep(),
-        3 => BuddyStep(deps: widget.buddyDeps),
+        3 => BuddyStep(deps: widget.buddyDeps, resumeEntry: _isEntry(3)),
         4 => const StreakStep(),
         5 => const NotifyStep(),
         _ => const AllSetStep(),
       };
 }
+
+/// The quiet "Not you?" link under the main controls of the first step shown
+/// on a resume. Signs out; the account is kept.
+class ResumeEscapeLink extends StatefulWidget {
+  const ResumeEscapeLink({super.key});
+
+  @override
+  State<ResumeEscapeLink> createState() => _ResumeEscapeLinkState();
+}
+
+class _ResumeEscapeLinkState extends State<ResumeEscapeLink> {
+  final _once = RunOnce();
+
+  @override
+  void dispose() {
+    _once.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: () => _once.run(OnbScope.of(context).signOutToSplash),
+      style: TextButton.styleFrom(
+        minimumSize: const Size(0, 44),
+        foregroundColor: AppColors.of(context).subtleText,
+      ),
+      child: const Text('Not you? Use a different account.',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+    );
+  }
+}
+
+/// Max's line at the first step shown on a resume.
+const kWelcomeBackLine = "Welcome back. Let's finish setting you up.";
 
 // ── Chrome ──────────────────────────────────────────────────────────────────
 

@@ -87,26 +87,11 @@ class AuthService {
     return userId;
   }
 
-  // DI-7 audit fix: was duplicated verbatim in main.dart and login_screen.dart,
-  // both returning a plain `false` on ANY exception -- a network timeout was
-  // indistinguishable from "this account really never finished onboarding",
-  // and callers treated `false` as "confirmed orphaned, safe to delete".
-  // Tri-state return distinguishes a successful read from a failed one:
-  //   true  -- read succeeded, onboarding_completed is true
-  //   false -- read succeeded, onboarding_completed is confirmed false
-  //   null  -- read failed; status could not be determined -- callers must
-  //            NOT treat this as orphaned.
-  Future<bool?> checkOnboardingStatus(String userId) async {
-    return switch (await onboardingState(userId)) {
-      OnboardingState.complete => true,
-      OnboardingState.incomplete => false,
-      OnboardingState.noProfile || OnboardingState.unknown => null,
-    };
-  }
-
-  /// Same read as [checkOnboardingStatus], but a successful read that finds no
-  /// profile row is [OnboardingState.noProfile] (signed up, never finished)
-  /// rather than lumped in with failed reads.
+  /// DI-7 audit fix: a failed read must be distinguishable from "this account
+  /// really never finished onboarding" (callers once treated `false` as
+  /// orphaned and deleted). A successful read that finds no profile row is
+  /// [OnboardingState.noProfile] (signed up, never finished); a failed read is
+  /// [OnboardingState.unknown] and must never be treated as either.
   Future<OnboardingState> onboardingState(String userId) => readOnboardingState(
     () => _supabase.rpc('get_my_profile').select('onboarding_completed'),
   );

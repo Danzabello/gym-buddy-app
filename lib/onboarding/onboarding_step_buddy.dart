@@ -63,7 +63,10 @@ class BuddyDeps {
 /// onboarding_completed false, and pairs at once.
 class BuddyStep extends StatefulWidget {
   final BuddyDeps? deps;
-  const BuddyStep({super.key, this.deps});
+
+  /// The first step shown on a resume: welcome-back line and sign-out link.
+  final bool resumeEntry;
+  const BuddyStep({super.key, this.deps, this.resumeEntry = false});
 
   @override
   State<BuddyStep> createState() => _BuddyStepState();
@@ -228,7 +231,9 @@ class _BuddyStepState extends State<BuddyStep> {
                 ? 'Got a code from a friend? Type it in.'
                 : waiting && invite
                     ? 'Someone invited you. Tap Join to team up with them.'
-                    : "That's me. I'm an AI, so I never miss a day. Invite a friend any time.";
+                    : widget.resumeEntry
+                        ? kWelcomeBackLine
+                        : "That's me. I'm an AI, so I never miss a day. Invite a friend any time.";
     final label = paired != null
         ? 'Continue'
         : waiting && invite
@@ -237,10 +242,16 @@ class _BuddyStepState extends State<BuddyStep> {
                 ? 'Send invite link'
                 : 'Start with Coach Max';
     return OnbStepFrame(
-      footer: ObPrimaryButton(
-        label: label,
-        isLoading: _busy,
-        onTap: _continue,
+      footer: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ObPrimaryButton(
+            label: label,
+            isLoading: _busy,
+            onTap: _continue,
+          ),
+          if (widget.resumeEntry) const ResumeEscapeLink(),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
