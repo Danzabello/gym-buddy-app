@@ -11,6 +11,24 @@ import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
 import '../utils/run_once.dart';
 
+/// "All notifications" master over the four push kinds. `count` is how many
+/// of them are on. Drawn on only when the OS permission is granted.
+@visibleForTesting
+bool masterSwitchOn({required bool permissionGranted, required int count}) =>
+    permissionGranted && count > 0;
+
+@visibleForTesting
+String masterSubtitle({required bool permissionGranted, required int count}) {
+  if (!permissionGranted) return 'Turn every kind on or off at once';
+  if (count == 4) return 'All 4 kinds on';
+  if (count == 0) return 'All kinds off';
+  return '$count of 4 kinds on';
+}
+
+/// What a master tap sets all four kinds to: on only when none are on.
+@visibleForTesting
+bool nextKindValue(int count) => count == 0;
+
 class NotificationSettingsPage extends StatefulWidget {
   const NotificationSettingsPage({super.key});
 
@@ -305,6 +323,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
               padding: const EdgeInsets.all(16),
               children: [
                 _buildOsPermissionBanner(appColors, cs),
+                _buildMasterTile(appColors, cs),
+                const SizedBox(height: 16),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
                   child: Text('WHAT TO SEND',
@@ -549,6 +569,81 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
         ],
       ),
       child: Column(children: children),
+    );
+  }
+
+  /// The "All notifications" card. Only sets the four push kinds in state; the
+  /// Save buttons persist them. Never touches the in-app banner or quiet hours.
+  Widget _buildMasterTile(AppColors appColors, ColorScheme cs) {
+    final count = [_notifSocial, _notifWorkouts, _notifStreaks, _notifCoachMax]
+        .where((v) => v)
+        .length;
+    final on = masterSwitchOn(permissionGranted: _osPermissionGranted, count: count);
+    final subtitle =
+        masterSubtitle(permissionGranted: _osPermissionGranted, count: count);
+    void tap() {
+      if (!_osPermissionGranted) {
+        _once.run(_enableNotifications);
+        return;
+      }
+      final v = nextKindValue(count);
+      setState(() => _notifSocial =
+          _notifWorkouts = _notifStreaks = _notifCoachMax = v);
+    }
+
+    return Semantics(
+      container: true,
+      label: 'All notifications',
+      hint: subtitle,
+      toggled: on,
+      onTap: tap,
+      excludeSemantics: true,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Color.alphaBlend(
+              cs.primary.withValues(alpha: 0.10), appColors.claySurface),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: cs.primary.withValues(alpha: 0.35), width: 1),
+          boxShadow: [
+            BoxShadow(
+                color: appColors.clayShadowDark,
+                blurRadius: 12,
+                offset: const Offset(0, 4)),
+          ],
+        ),
+        child: InkWell(
+          onTap: tap,
+          borderRadius: BorderRadius.circular(20),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 72),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(children: [
+                Icon(Icons.notifications_rounded,
+                    size: 26, color: on ? cs.primary : appColors.subtleText),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('All notifications',
+                          style: TextStyle(
+                              color: cs.onSurface,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800)),
+                      Text(subtitle,
+                          style: TextStyle(
+                              color: appColors.subtleText, fontSize: 13)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _EmeraldSwitch(on: on, delay: Duration.zero),
+              ]),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
