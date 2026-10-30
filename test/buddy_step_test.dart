@@ -20,6 +20,7 @@ const _maxError =
 class _Fake {
   String? pending;
   Object? saveError;
+  Object? finishError;
   InviteRedeemResult result =
       const InviteRedeemResult(InviteRedeemStatus.paired, 'inviter-1');
   final calls = <String>[];
@@ -34,7 +35,10 @@ class _Fake {
           calls.add('saveRow');
           if (saveError != null) throw saveError!;
         },
-        finish: (_) async => calls.add('finish'),
+        finish: (_) async {
+          calls.add('finish');
+          if (finishError != null) throw finishError!;
+        },
         redeem: (code) async {
           calls.add('redeem $code');
           return result;
@@ -184,6 +188,21 @@ void main() {
       expect(_main('Join your buddy'), findsOneWidget);
     });
 
+    testWidgets(
+        'a username clash on the main button shows the save-failed message and stays',
+        (t) async {
+      final f = _Fake()
+        ..finishError = const PostgrestException(
+            message:
+                'duplicate key value violates unique constraint "user_profiles_username_key"',
+            code: '23505');
+      await _open(t, f);
+      await _tap(t, _main('Start with Coach Max'));
+      expect(f.calls, contains('finish'));
+      expect(find.text(kProfileSaveFailed), findsOneWidget);
+      expect(_main('Start with Coach Max'), findsOneWidget);
+    });
+
     testWidgets('pending code that is invalid moves into the field', (t) async {
       final f = _Fake()
         ..pending = 'AAAA1111'
@@ -267,42 +286,127 @@ void main() {
           isTrue);
     });
 
-    test('Join, quit, resume, main button: no duplicate-key error', () async {
-      // A PostgREST stand-in: a plain insert of an existing id is a 23505 on
-      // the primary key, as on live; a merge upsert updates the row.
-      final rows = <String, Map<String, dynamic>>{};
+    // A PostgREST stand-in that records every request. PATCH with select=id
+    // answers the ids of the matching rows ([existing] says whether the row
+    // is there); a POST answers 201, or [insertError] when set.
+    ({SupabaseClient client, List<http.Request> log, List<int> patchRows}) rig({
+      required List<bool> exists,
+      Map<String, String>? insertError,
+      int status = 409,
+    }) {
+      final log = <http.Request>[];
+      final patchRows = <int>[];
+      var patches = 0;
       final client = SupabaseClient('https://x.supabase.co', 'anon',
           httpClient: MockClient((req) async {
-        final body = jsonDecode(req.body) as Map<String, dynamic>;
-        final merge = req.url.queryParameters['on_conflict'] == 'id' &&
-            (req.headers['Prefer'] ?? '').contains('resolution=merge-duplicates');
-        if (rows.containsKey(body['id']) && !merge) {
-          return http.Response(
-              jsonEncode({
-                'code': '23505',
-                'message':
-                    'duplicate key value violates unique constraint "user_profiles_pkey"',
-              }),
-              409,
-              request: req);
+        log.add(req);
+        if (req.method == 'PATCH') {
+          final hit = exists[patches++ % exists.length];
+          patchRows.add(hit ? 1 : 0);
+          return http.Response(jsonEncode(hit ? [{'id': 'me'}] : []), 200,
+              headers: {'content-type': 'application/json'}, request: req);
         }
-        rows[body['id'] as String] = {...?rows[body['id']], ...body};
+        if (insertError != null) {
+          return http.Response(jsonEncode(insertError), status,
+              headers: {'content-type': 'application/json'}, request: req);
+        }
         return http.Response('', 201, request: req);
       }));
       addTearDown(client.dispose);
+      return (client: client, log: log, patchRows: patchRows);
+    }
 
-      // Join on step 5, then the app is killed.
-      await upsertProfileRow(client, onboardingProfileRow(draft(), 'me', completed: false));
-      expect(rows['me']!['onboarding_completed'], isFalse);
+    List<String> methods(List<http.Request> log) =>
+        [for (final r in log) r.method];
 
-      // The stand-in really rejects a second plain insert.
-      await expectLater(
-          client.from('user_profiles').insert(rows['me']!),
+    void expectNoUpsert(List<http.Request> log) {
+      for (final r in log) {
+        expect(r.url.queryParameters.containsKey('on_conflict'), isFalse);
+        expect(r.headers['Prefer'] ?? '', isNot(contains('resolution=')));
+      }
+    }
+
+    Map<String, dynamic> row(bool completed) =>
+        onboardingProfileRow(draft(), 'me', completed: completed);
+
+    const pkey = {
+      'code': '23505',
+      'message':
+          'duplicate key value violates unique constraint "user_profiles_pkey"',
+    };
+    const usernameKey = {
+      'code': '23505',
+      'message':
+          'duplicate key value violates unique constraint "user_profiles_username_key"',
+    };
+
+    test('first time: update finds no row, then a plain insert', () async {
+      final r = rig(exists: [false]);
+      await writeProfileRow(r.client, 'me', row(false));
+      expect(methods(r.log), ['PATCH', 'POST']);
+      expect(r.log[0].url.queryParameters['select'], 'id');
+      expect(r.log[0].url.queryParameters['id'], 'eq.me');
+      expect(r.log[0].headers['Prefer'], contains('return=representation'));
+      expect(jsonDecode(r.log[0].body), isNot(contains('id')));
+      expect(r.log[1].url.queryParameters.containsKey('select'), isFalse);
+      expect(r.log[1].headers['Prefer'] ?? '', isNot(contains('return=representation')));
+      expect(jsonDecode(r.log[1].body)['id'], 'me');
+      expect(jsonDecode(r.log[1].body)['onboarding_completed'], isFalse);
+      expectNoUpsert(r.log);
+    });
+
+    test('resume: the row exists, update only, no insert', () async {
+      final r = rig(exists: [true]);
+      await writeProfileRow(r.client, 'me', row(true));
+      expect(methods(r.log), ['PATCH']);
+      expect(jsonDecode(r.log[0].body)['onboarding_completed'], isTrue);
+      expectNoUpsert(r.log);
+    });
+
+    test('primary-key race: insert clashes, one more update succeeds', () async {
+      final r = rig(exists: [false, true], insertError: pkey);
+      await writeProfileRow(r.client, 'me', row(true));
+      expect(methods(r.log), ['PATCH', 'POST', 'PATCH']);
+      expectNoUpsert(r.log);
+    });
+
+    test('primary-key race where the retry finds no row still fails', () async {
+      final r = rig(exists: [false, false], insertError: pkey);
+      await expectLater(writeProfileRow(r.client, 'me', row(true)),
           throwsA(isA<PostgrestException>()));
+      expect(methods(r.log), ['PATCH', 'POST', 'PATCH']);
+    });
 
-      // Resumed at step 2 with a new draft, then the main button on step 5.
-      await upsertProfileRow(client, onboardingProfileRow(draft(), 'me', completed: true));
-      expect(rows['me']!['onboarding_completed'], isTrue);
+    test('username taken: rethrown as is, no retry', () async {
+      final r = rig(exists: [false], insertError: usernameKey);
+      await expectLater(
+          writeProfileRow(r.client, 'me', row(true)),
+          throwsA(isA<PostgrestException>()
+              .having((e) => e.code, 'code', '23505')
+              .having((e) => e.message, 'message', contains('user_profiles_username_key'))));
+      expect(methods(r.log), ['PATCH', 'POST']);
+    });
+
+    test('any other failure throws', () async {
+      for (final e in <(int, Map<String, String>)>[
+        (500, {'code': 'XX000', 'message': 'boom'}),
+        (403, {'code': '42501', 'message': 'permission denied for table user_profiles'}),
+      ]) {
+        final r = rig(exists: [false], insertError: e.$2, status: e.$1);
+        await expectLater(writeProfileRow(r.client, 'me', row(true)),
+            throwsA(isA<PostgrestException>()));
+        expect(methods(r.log), ['PATCH', 'POST']);
+      }
+    });
+
+    test('a failed update throws and inserts nothing', () async {
+      final client = SupabaseClient('https://x.supabase.co', 'anon',
+          httpClient: MockClient((req) async => http.Response(
+              jsonEncode({'code': '42501', 'message': 'permission denied'}), 403,
+              headers: {'content-type': 'application/json'}, request: req)));
+      addTearDown(client.dispose);
+      await expectLater(writeProfileRow(client, 'me', row(true)),
+          throwsA(isA<PostgrestException>()));
     });
   });
 }

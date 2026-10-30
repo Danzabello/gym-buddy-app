@@ -114,14 +114,42 @@ Future<void> writeOnboardingProfileRow(
   final client = Supabase.instance.client;
   final user = client.auth.currentUser;
   if (user == null) throw Exception('Authentication failed');
-  await upsertProfileRow(
-      client, onboardingProfileRow(draft, user.id, completed: completed));
+  await writeProfileRow(
+      client, user.id, onboardingProfileRow(draft, user.id, completed: completed));
 }
 
-/// One INSERT ... ON CONFLICT (id) DO UPDATE. A username taken by someone
-/// else still fails, on its own unique key.
-Future<void> upsertProfileRow(SupabaseClient client, Map<String, dynamic> row) =>
-    client.from('user_profiles').upsert(row, onConflict: 'id');
+/// True when an insert hit this user's existing row (primary key), not the
+/// username unique key.
+bool isOwnProfileDuplicate(Object e) =>
+    e is PostgrestException &&
+    e.code == '23505' &&
+    e.message.contains('user_profiles_pkey');
+
+/// UPDATE, then a plain INSERT when no row matched. Never an upsert: ON
+/// CONFLICT DO UPDATE reads every payload column through EXCLUDED, and
+/// authenticated has no SELECT on age, onboarding_completed,
+/// preferred_workout_style or updated_at (LIVE-10), so it answers 42501. The
+/// update asks for 'id' back only, and the insert asks for nothing.
+/// A double tap or a race can insert between the two steps: the primary-key
+/// clash is answered by one more update. A username taken by someone else
+/// (user_profiles_username_key) is rethrown as it is, never retried.
+Future<void> writeProfileRow(
+  SupabaseClient client,
+  String userId,
+  Map<String, dynamic> row,
+) async {
+  final fields = {...row}..remove('id');
+  Future<List<Map<String, dynamic>>> update() =>
+      client.from('user_profiles').update(fields).eq('id', userId).select('id');
+
+  if ((await update()).isNotEmpty) return;
+  try {
+    await client.from('user_profiles').insert(row);
+  } on PostgrestException catch (e) {
+    if (!isOwnProfileDuplicate(e)) rethrow;
+    if ((await update()).isEmpty) rethrow;
+  }
+}
 
 /// Step 5's main button: the row with onboarding_completed true, then Coach
 /// Max and the rest of account setup. Throws when the profile write fails;

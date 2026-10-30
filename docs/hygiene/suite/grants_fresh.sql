@@ -50,6 +50,31 @@ BEGIN
   BEGIN n := public.submit_checkin()->>'reason';
   EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
   r := r || (CASE WHEN n IN ('not_checked_in_today', 'already_checked_in', 'no_teams') THEN 'PASS ' ELSE 'FAIL ' END || 'G9.10 authenticated submit_checkin answers -> ' || n);
+  -- Onboarding profile write (client: writeProfileRow). A fresh id, so no real account is touched (user_profiles.id has no FK to auth.users).
+  -- authenticated has no SELECT on age, onboarding_completed, preferred_workout_style, updated_at (LIVE-10), so an upsert (ON CONFLICT DO UPDATE
+  -- reads EXCLUDED) is 42501, while UPDATE ... RETURNING id and a plain INSERT work.
+  DECLARE
+    v uuid := gen_random_uuid();
+    cols constant text := 'display_name, username, age, avatar_id, avatar_border, fitness_level, looking_for_buddy, preferred_workout_style, onboarding_completed, updated_at';
+    vals text; k int;
+  BEGIN
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v, 'role', 'authenticated')::text, true);
+    vals := format('%L, %L, 30, ''lion'', ''simple'', ''beginner'', true, ''both'', false, now()', 'Suite', 'suite_' || substr(v::text, 1, 8));
+    BEGIN EXECUTE format('UPDATE public.user_profiles SET age = 31, onboarding_completed = true WHERE id = %L RETURNING id', v);
+      GET DIAGNOSTICS k = ROW_COUNT; n := k::text; EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+    r := r || (CASE WHEN n = '0' THEN 'PASS ' ELSE 'FAIL ' END || 'G9.17.1 UPDATE RETURNING id of a missing own row -> ' || n || ' rows');
+    BEGIN EXECUTE format('INSERT INTO public.user_profiles (id, %s) VALUES (%L, %s)', cols, v, vals); n := 'ok';
+    EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+    r := r || (CASE WHEN n = 'ok' THEN 'PASS ' ELSE 'FAIL ' END || 'G9.17.2 plain INSERT of the onboarding row -> ' || n);
+    BEGIN EXECUTE format('UPDATE public.user_profiles SET age = 31, onboarding_completed = true WHERE id = %L RETURNING id', v);
+      GET DIAGNOSTICS k = ROW_COUNT; n := k::text; EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+    r := r || (CASE WHEN n = '1' THEN 'PASS ' ELSE 'FAIL ' END || 'G9.17.3 UPDATE RETURNING id of the existing own row -> ' || n || ' rows');
+    BEGIN EXECUTE format('INSERT INTO public.user_profiles (id, %s) VALUES (%L, %s) ON CONFLICT (id) DO UPDATE SET age = EXCLUDED.age, onboarding_completed = EXCLUDED.onboarding_completed, preferred_workout_style = EXCLUDED.preferred_workout_style, updated_at = EXCLUDED.updated_at',
+                         cols, v, vals); n := 'no error';
+    EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+    r := r || (CASE WHEN n LIKE '42501%' THEN 'PASS ' ELSE 'FAIL ' END || 'G9.17.4 upsert of the onboarding row is denied (the bug this guards) -> ' || n);
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', u, 'role', 'authenticated')::text, true);
+  END;
   RESET ROLE;
   -- Rate-limit meters (prompt 13): neither role can read or write them.
   FOREACH fn IN ARRAY ARRAY['authenticated', 'anon'] LOOP
