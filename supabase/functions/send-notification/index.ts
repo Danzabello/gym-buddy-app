@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { categoryDisabled, isQuietHour, resolveSettings } from './settings.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -25,7 +26,7 @@ const FIREBASE_SERVICE_ACCOUNT = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOU
 // coach-max-cron / workout-overtime-cron.
 const FALLBACK_TZ = 'Europe/Dublin'
 
-// Types a client (non-service) caller may send; keep in sync with categoryMap below.
+// Types a client (non-service) caller may send; keep in sync with categoryMap in settings.ts.
 const CLIENT_TYPES = new Set([
   'friend_request',
   'friend_accepted',
@@ -273,78 +274,37 @@ serve(async (req) => {
     // ============================================
     // QUIET HOURS & CATEGORY CHECK
     // ============================================
-    const { data: settings } = await supabase
+    const { data: settingsRow } = await supabase
       .from('notification_settings')
       .select('*')
       .eq('user_id', user_id)
       .maybeSingle()
 
-    if (settings) {
-      // Time-critical handshake pushes (urgent) ignore quiet hours.
-      if (settings.quiet_hours_enabled && !urgent) {
-        // Recipient's own local hour, not the server's — a UTC hour was
-        // being compared against a quiet-hours window the user configured
-        // in their own local time, which is wrong for anyone far from UTC.
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('timezone')
-          .eq('id', user_id)
-          .maybeSingle()
-        const tz = profile?.timezone || FALLBACK_TZ
-        const hour = Number(localTimeOfDay(new Date(), tz).slice(0, 2))
-        const start = settings.quiet_hours_start
-        const end = settings.quiet_hours_end
-        const inQuietHours = start > end
-          ? (hour >= start || hour < end)
-          : (hour >= start && hour < end)
+    // No row means the defaults (quiet hours 23-7 on), same as the app's Settings page.
+    const settings = resolveSettings(settingsRow)
 
-        if (inQuietHours) {
-          console.log(`🌙 Quiet hours - skipping`)
-          return new Response(JSON.stringify({ skipped: 'quiet_hours' }), { status: 200 })
-        }
-      }
+    // Time-critical handshake pushes (urgent) ignore quiet hours.
+    if (settings.quiet_hours_enabled && !urgent) {
+      // Recipient's own local hour, not the server's — a UTC hour was
+      // being compared against a quiet-hours window the user configured
+      // in their own local time, which is wrong for anyone far from UTC.
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('timezone')
+        .eq('id', user_id)
+        .maybeSingle()
+      const tz = profile?.timezone || FALLBACK_TZ
+      const hour = Number(localTimeOfDay(new Date(), tz).slice(0, 2))
 
-      const categoryMap: Record<string, string> = {
-        'friend_request': 'notif_social',
-        'friend_accepted': 'notif_social',
-        'workout_invite': 'notif_workouts',
-        'workout_accepted': 'notif_workouts',
-        'workout_declined': 'notif_workouts',
-        'workout_starting_soon': 'notif_workouts',
-        'buddy_started_workout': 'notif_workouts',
-        'join_window_expiring': 'notif_workouts',
-        'workout_overtime': 'notif_workouts',
-        'invite_received': 'notif_workouts',
-        'invite_accepted': 'notif_workouts',
-        'invite_declined': 'notif_workouts',
-        'invite_expired': 'notif_workouts',
-        'invite_rescheduled': 'notif_workouts',
-        'workout_cancelled': 'notif_workouts',
-        'time_to_start': 'notif_workouts',
-        'buddy_tapped_first': 'notif_workouts',
-        'started': 'notif_workouts',
-        'nudge': 'notif_workouts',
-        'cant_make_it': 'notif_workouts',
-        'buddy_left': 'notif_workouts',
-        'buddy_finished': 'notif_workouts',
-        'still_going': 'notif_workouts',
-        'before_auto': 'notif_workouts',
-        'buddy_checked_in': 'notif_streaks',
-        'streak_complete': 'notif_streaks',
-        'streak_milestone': 'notif_streaks',
-        'streak_danger': 'notif_streaks',
-        'streak_broken': 'notif_streaks',
-        'break_day_taken': 'notif_streaks',
-        'coach_max_checked_in': 'notif_coach_max',
-        'coach_max_motivational': 'notif_coach_max',
-        'buddy_nudge': 'notif_streaks',
+      if (isQuietHour(hour, settings.quiet_hours_start, settings.quiet_hours_end)) {
+        console.log(`🌙 Quiet hours - skipping`)
+        return new Response(JSON.stringify({ skipped: 'quiet_hours' }), { status: 200 })
       }
+    }
 
-      const categoryField = categoryMap[type]
-      if (categoryField && settings[categoryField] === false) {
-        console.log(`🔕 Category disabled - skipping ${type}`)
-        return new Response(JSON.stringify({ skipped: 'category_disabled' }), { status: 200 })
-      }
+    if (categoryDisabled(type, settings)) {
+      console.log(`🔕 Category disabled - skipping ${type}`)
+      return new Response(JSON.stringify({ skipped: 'category_disabled' }), { status: 200 })
     }
 
     // ============================================
