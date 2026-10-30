@@ -32,6 +32,7 @@ import 'services/workout_history_service.dart';
 import 'widgets/workout_selection_modal.dart';
 import 'pages/notification_settings_page.dart';
 import 'pages/shop_page.dart';
+import 'pages/coin_history_page.dart';
 import 'pages/notice_screens.dart';
 import 'pages/workout_history_page.dart';
 import 'pages/account_page.dart';
@@ -1146,10 +1147,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final shownLevel = levelInfo ?? _motion.target;
     final shownCoins = levelInfo != null ? _coinBalance : _motion.coinTarget;
 
-    void openShop() {
-      final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-      homeState?._onTabChanged(3);
-    }
+    void openCoinHistory() => _once.run(() async {
+          final goShop = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+                builder: (_) => CoinHistoryPage(initialBalance: shownCoins)),
+          );
+          if (goShop != true || !mounted) return;
+          final homeState = context.findAncestorStateOfType<_HomeScreenState>();
+          homeState?._onTabChanged(3);
+        });
 
     return RepaintBoundary(
       child: Padding(
@@ -1176,11 +1183,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
               const SizedBox(width: 10),
               Semantics(
                 button: true,
-                label: 'Coins $shownCoins',
+                label: 'Coins $shownCoins. Opens coin history',
                 excludeSemantics: true,
-                onTap: openShop,
+                onTap: openCoinHistory,
                 child: GestureDetector(
-                  onTap: openShop,
+                  onTap: openCoinHistory,
                   behavior: HitTestBehavior.opaque,
                   child: Stack(
                     clipBehavior: Clip.none,

@@ -152,6 +152,65 @@ class CoinService {
   }
 
   // ============================================================
+  // COIN HISTORY PAGE
+  // Unlike the loaders above, these throw on failure: the page must tell
+  // an error from "no coins yet", and an empty list can't say which.
+  // ============================================================
+
+  /// One page of the signed-in user's rows, newest first. `id` breaks ties
+  /// because the rows of one check-in share a timestamp, and offset paging
+  /// needs a stable order.
+  Future<List<CoinTransaction>> getTransactionPage({
+    required int offset,
+    int limit = kCoinPageSize,
+    CoinFilter filter = CoinFilter.all,
+  }) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw StateError('Not signed in');
+      var query =
+          _supabase.from('coin_transactions').select().eq('user_id', userId);
+      if (filter == CoinFilter.earned) query = query.gt('amount', 0);
+      if (filter == CoinFilter.spent) query = query.lt('amount', 0);
+      final rows = await query
+          .order('created_at', ascending: false)
+          .order('id', ascending: false)
+          .range(offset, offset + limit - 1);
+      return rows.map<CoinTransaction>(CoinTransaction.fromMap).toList();
+    } catch (e) {
+      if (kDebugMode) debugLog('❌ Error getting transaction page: $e');
+      rethrow;
+    }
+  }
+
+  /// Earned and spent (both positive) since the start of the local day six
+  /// days ago, so today plus the six days before it.
+  // ponytail: sums client-side, so it sees at most PostgREST's 1000-row cap;
+  // move to an RPC if a week can ever pass that.
+  Future<CoinWeekTotals> getWeekTotals() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw StateError('Not signed in');
+      final start = coinWeekStart(DateTime.now()); // sent as UTC below
+      final rows = await _supabase
+          .from('coin_transactions')
+          .select('amount')
+          .eq('user_id', userId)
+          .gte('created_at', start.toUtc().toIso8601String());
+      var earned = 0, spent = 0;
+      for (final r in rows) {
+        final a = r['amount'] as int;
+        if (a > 0) earned += a;
+        if (a < 0) spent -= a;
+      }
+      return (earned: earned, spent: spent);
+    } catch (e) {
+      if (kDebugMode) debugLog('❌ Error getting week totals: $e');
+      rethrow;
+    }
+  }
+
+  // ============================================================
   // EQUIP ITEM
   // ============================================================
   Future<bool> equipItem({required String itemId, required String category}) async {
@@ -242,6 +301,18 @@ class ShopItem {
     );
   }
 }
+
+/// Rows per page on the coin history page; a full page means there may be more.
+const kCoinPageSize = 20;
+
+enum CoinFilter { all, earned, spent }
+
+typedef CoinWeekTotals = ({int earned, int spent});
+
+/// Local midnight six days before [now]'s day (DateTime normalises the day).
+@visibleForTesting
+DateTime coinWeekStart(DateTime now) =>
+    DateTime(now.year, now.month, now.day - 6);
 
 class CoinTransaction {
   final String id;
