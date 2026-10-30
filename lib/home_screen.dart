@@ -1148,7 +1148,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
     void openShop() {
       final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-      homeState?.setState(() => homeState._selectedIndex = 3);
+      homeState?._onTabChanged(3);
     }
 
     return RepaintBoundary(
@@ -1786,7 +1786,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         subtitle: scheduled['workout_time'],
         trailing: _trayAction('View', c.info, () {
           final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-          homeState?.setState(() => homeState._selectedIndex = 0);
+          homeState?._onTabChanged(0);
         }),
       );
     }
