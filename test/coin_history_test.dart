@@ -107,6 +107,19 @@ void main() {
     });
   });
 
+  test('coinEmptyMessage: each filter has its own words', () {
+    final all = coinEmptyMessage(CoinFilter.all);
+    final earned = coinEmptyMessage(CoinFilter.earned);
+    final spent = coinEmptyMessage(CoinFilter.spent);
+    expect(all.title, 'No coins yet');
+    expect(earned.title, 'Nothing earned yet');
+    expect(earned.body, 'Check in with your buddy to earn coins.');
+    expect(spent.title, 'Nothing spent yet');
+    expect(spent.body, 'Coins you spend in the Shop show up here.');
+    expect(earned.title, isNot(spent.title));
+    expect(earned.body, isNot(spent.body));
+  });
+
   group('page', () {
     late List<(int, CoinFilter)> calls;
     late bool? popped;
@@ -166,8 +179,14 @@ void main() {
       await open(
         t,
         page: (_, __) async => [
-          tx('daily_checkin', 5, id: '1'),
-          tx('shop_purchase', -5, desc: 'Purchased: Gold Ring', id: '2'),
+          tx('daily_checkin', 5, id: '1', at: DateTime.now()),
+          tx(
+            'shop_purchase',
+            -5,
+            desc: 'Purchased: Gold Ring',
+            id: '2',
+            at: DateTime.now(),
+          ),
         ],
       );
       expect(find.text('Coin history'), findsOneWidget);
@@ -254,6 +273,82 @@ void main() {
       await t.pumpAndSettle();
       expect(find.text('Could not load your coins'), findsNothing);
       expect(find.text('Daily check-in'), findsNWidgets(2));
+    });
+
+    // First page has rows; [filter] then answers with [then].
+    Future<List<CoinTransaction>> Function(int, CoinFilter) onlyAllHasRows(
+      CoinFilter filter,
+      Future<List<CoinTransaction>> Function() then,
+    ) =>
+        (_, f) => f == filter ? then() : Future.value(rows(2));
+
+    const earnedWords = 'Nothing earned yet';
+    const spentWords = 'Nothing spent yet';
+
+    testWidgets('Earned with no rows shows the Earned card', (t) async {
+      await open(t, page: onlyAllHasRows(CoinFilter.earned, () async => []));
+      await t.tap(find.text('Earned'));
+      await t.pumpAndSettle();
+      expect(find.text(earnedWords), findsOneWidget);
+      expect(
+        find.text('Check in with your buddy to earn coins.'),
+        findsOneWidget,
+      );
+      expect(find.text(spentWords), findsNothing);
+      expect(find.text('No coins yet'), findsNothing);
+      expect(find.text('Go to Shop'), findsOneWidget);
+    });
+
+    testWidgets('Spent with no rows shows the Spent card', (t) async {
+      await open(t, page: onlyAllHasRows(CoinFilter.spent, () async => []));
+      await t.tap(find.text('Spent'));
+      await t.pumpAndSettle();
+      expect(find.text(spentWords), findsOneWidget);
+      expect(
+        find.text('Coins you spend in the Shop show up here.'),
+        findsOneWidget,
+      );
+      expect(find.text(earnedWords), findsNothing);
+      expect(find.text('No coins yet'), findsNothing);
+    });
+
+    testWidgets('filter with rows shows no empty card', (t) async {
+      await open(t, page: (_, __) async => rows(2));
+      await t.tap(find.text('Spent'));
+      await t.pumpAndSettle();
+      expect(find.text(spentWords), findsNothing);
+      expect(find.text('Daily check-in'), findsNWidgets(2));
+    });
+
+    testWidgets('empty card is not shown while a filter is loading', (t) async {
+      final gate = Completer<List<CoinTransaction>>();
+      await open(t, page: onlyAllHasRows(CoinFilter.spent, () => gate.future));
+      await t.tap(find.text('Spent'));
+      await t.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text(spentWords), findsNothing);
+      expect(find.text(earnedWords), findsNothing);
+      gate.complete([]);
+      await t.pumpAndSettle();
+      expect(find.text(spentWords), findsOneWidget);
+    });
+
+    testWidgets('empty card is not shown when a filter fails to load', (
+      t,
+    ) async {
+      await open(
+        t,
+        page: onlyAllHasRows(
+          CoinFilter.spent,
+          () async => throw Exception('boom'),
+        ),
+      );
+      await t.tap(find.text('Spent'));
+      await t.pumpAndSettle();
+      expect(find.text('Could not load your coins'), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
+      expect(find.text(spentWords), findsNothing);
+      expect(find.text(earnedWords), findsNothing);
     });
 
     testWidgets('loading shows a spinner', (t) async {

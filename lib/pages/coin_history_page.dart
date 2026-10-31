@@ -64,6 +64,26 @@ IconData _entryIcon(String type) => switch (type) {
   _ => Icons.monetization_on_outlined,
 };
 
+/// The empty card's words for a filter that matched no rows.
+@visibleForTesting
+({String title, String body}) coinEmptyMessage(CoinFilter filter) =>
+    switch (filter) {
+      CoinFilter.all => (
+        title: 'No coins yet',
+        body:
+            'Check in with your buddy to earn your first coins. '
+            'They show up here.',
+      ),
+      CoinFilter.earned => (
+        title: 'Nothing earned yet',
+        body: 'Check in with your buddy to earn coins.',
+      ),
+      CoinFilter.spent => (
+        title: 'Nothing spent yet',
+        body: 'Coins you spend in the Shop show up here.',
+      ),
+    };
+
 /// "+12", "\u221212" (a real minus sign), or "0" with no sign.
 @visibleForTesting
 String coinAmountText(int amount) => amount > 0
@@ -535,7 +555,8 @@ class _CoinHistoryPageState extends State<CoinHistoryPage> {
         ),
       ];
     }
-    if (_rows.isEmpty && _filter == CoinFilter.all) {
+    if (_rows.isEmpty) {
+      final msg = coinEmptyMessage(_filter);
       return [
         Container(
           width: double.infinity,
@@ -545,7 +566,7 @@ class _CoinHistoryPageState extends State<CoinHistoryPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'No coins yet',
+                msg.title,
                 style: TextStyle(
                   color: cs.onSurface,
                   fontSize: 17,
@@ -554,8 +575,7 @@ class _CoinHistoryPageState extends State<CoinHistoryPage> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Check in with your buddy to earn your first coins. '
-                'They show up here.',
+                msg.body,
                 style: TextStyle(color: c.subtleText, fontSize: 14),
               ),
             ],
