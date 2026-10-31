@@ -67,6 +67,13 @@ Color _hexToColor(String hex) =>
 
 
 
+/// Second line of the buddy check-in banner. Only when the viewer is already
+/// in does the buddy's check-in complete the pair; otherwise it is their turn.
+@visibleForTesting
+String checkInBannerSubtitle({required bool viewerCheckedIn}) => viewerCheckedIn
+    ? 'Your streak is safe today'
+    : 'Your turn to check in';
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -678,6 +685,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   // live_checkin_banner setting (cached once on load).
   TeamMember? _bannerBuddy;
   int _bannerRequestId = 0;
+  bool _bannerViewerCheckedIn = false;
   bool _liveCheckinBannerEnabled = true;
 
 
@@ -999,6 +1007,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
 
     if (!mounted) return;
+    final viewerId = _supabase.auth.currentUser?.id;
+    final viewerCheckedIn = updatedCheckIns.any((ci) => ci.userId == viewerId);
     setState(() {
       _allStreaks = [..._allStreaks]..[streakIndex] = updatedStreak;
       _teamFeeds.remove(teamStreakId);  // feed reloads with the new check-in
@@ -1010,6 +1020,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           _liveCheckinBannerEnabled) {
         _bannerBuddy = member;
         _bannerRequestId++;
+        _bannerViewerCheckedIn = viewerCheckedIn;
       }
     });
   }
@@ -3868,7 +3879,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                 ? _nicknames[_bannerBuddy!.userId]!
                 : _bannerBuddy!.displayName,
             title: ' just checked in',
-            subtitle: 'Your streak is safe today',
+            subtitle: checkInBannerSubtitle(
+                viewerCheckedIn: _bannerViewerCheckedIn),
             onDismissed: () {
               if (mounted) setState(() => _bannerBuddy = null);
             },
