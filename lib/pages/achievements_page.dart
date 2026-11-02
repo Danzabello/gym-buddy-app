@@ -4,6 +4,7 @@ import '../services/achievement_service.dart';
 import '../services/level_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
+import '../widgets/coin_glyph.dart';
 import '../widgets/skeleton_box.dart';
 import 'package:provider/provider.dart';
 import '../utils/run_once.dart';
@@ -490,7 +491,7 @@ class _AchievementsPageState extends State<AchievementsPage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _SheetHeader(
-              icon: '🪙',
+              iconWidget: CoinGlyph(size: 26),
               title: 'Coins',
               subtitle: '$_totalCoinsEarned earned from achievements',
               appColors: appColors,
@@ -527,11 +528,21 @@ class _AchievementsPageState extends State<AchievementsPage>
                                   fontWeight: FontWeight.w600,
                                   color: cs.onSurface)),
                         ),
-                        Text('+${a.coinReward} 🪙',
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                color: appColors.warn)),
+                        Text.rich(
+                          TextSpan(
+                            text: '+${a.coinReward} ',
+                            children: [
+                              WidgetSpan(
+                                alignment: PlaceholderAlignment.middle,
+                                child: CoinGlyph(size: 13),
+                              ),
+                            ],
+                          ),
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: appColors.warn),
+                        ),
                       ],
                     ),
                   )),
@@ -755,7 +766,7 @@ class _AchievementsPageState extends State<AchievementsPage>
                 const SizedBox(width: 6),
                 Expanded(
                     child: _bentoStat(context,
-                        icon: '🪙',
+                        iconWidget: CoinGlyph(size: 16),
                         value: _totalCoinsEarned.toString(),
                         label: 'Coins',
                         color: AppColors.of(context).warn,
@@ -937,7 +948,8 @@ class _AchievementsPageState extends State<AchievementsPage>
   }
 
   Widget _bentoStat(BuildContext context,
-      {required String icon,
+      {String icon = '',
+      Widget? iconWidget,
       required String value,
       required String label,
       required Color color,
@@ -953,8 +965,9 @@ class _AchievementsPageState extends State<AchievementsPage>
           children: [
             Row(
               children: [
-                Text(icon,
-                    style: const TextStyle(fontSize: 16, height: 1)),
+                iconWidget ??
+                    Text(icon,
+                        style: const TextStyle(fontSize: 16, height: 1)),
                 const Spacer(),
                 if (onTap != null)
                   Icon(Icons.chevron_right,
@@ -1243,10 +1256,19 @@ class _AchievementsPageState extends State<AchievementsPage>
                                       fontSize: 9,
                                       fontWeight: FontWeight.w800,
                                       color: rColor)),
-                              Text('+${a.coinReward} 🪙',
-                                  style: TextStyle(
-                                      fontSize: 8,
-                                      color: appColors.subtleText)),
+                              Text.rich(
+                                TextSpan(
+                                  text: '+${a.coinReward} ',
+                                  children: [
+                                    WidgetSpan(
+                                      alignment: PlaceholderAlignment.middle,
+                                      child: CoinGlyph(size: 10),
+                                    ),
+                                  ],
+                                ),
+                                style: TextStyle(
+                                    fontSize: 8, color: appColors.subtleText),
+                              ),
                               const SizedBox(height: 4),
                             ] else if (!showProgress && !dimmed) ...[
                               Text('+${a.xpReward} XP',
@@ -1374,13 +1396,15 @@ class _Sheet extends StatelessWidget {
 
 class _SheetHeader extends StatelessWidget {
   final String icon;
+  final Widget? iconWidget;
   final String title;
   final String subtitle;
   final AppColors appColors;
   final ColorScheme cs;
 
   const _SheetHeader({
-    required this.icon,
+    this.icon = '',
+    this.iconWidget,
     required this.title,
     required this.subtitle,
     required this.appColors,
@@ -1391,7 +1415,7 @@ class _SheetHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(icon, style: const TextStyle(fontSize: 26)),
+        iconWidget ?? Text(icon, style: const TextStyle(fontSize: 26)),
         const SizedBox(width: 12),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
+import 'coin_glyph.dart';
 
 class StreakCompleteSheet extends StatefulWidget {
   const StreakCompleteSheet({super.key});
@@ -139,7 +140,7 @@ class _StreakCompleteSheetState extends State<StreakCompleteSheet>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('🪙', style: TextStyle(fontSize: 22)),
+                    CoinGlyph(size: 22),
                     const SizedBox(width: 10),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
