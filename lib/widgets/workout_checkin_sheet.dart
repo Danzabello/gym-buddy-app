@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:math';
 import 'confirm_slide_sheet.dart';
 import 'schedule_rows.dart' show otherPerson;
+import 'header_motion.dart';
 import 'streak_complete_sheet.dart';
 import 'workout_schedule_card.dart' show CardAction, Person;
 import 'package:gym_buddy_app/utils/debug_logger.dart';
@@ -243,6 +244,10 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
       return;
     }
 
+    // The header keeps its old numbers until the last popup after the credit
+    // is gone. Taken before the sheet pops, so the credit cannot beat it.
+    final releaseHold = HeaderHold.instance.begin();
+
     // ✅ Close the sheet IMMEDIATELY — don't wait for check-in to finish
     if (mounted) {
       Navigator.pop(context, true);
@@ -262,6 +267,8 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
       }
     } catch (e) {
       debugLog('❌ Error completing check-in: $e');
+    } finally {
+      releaseHold();
     }
 
     try {

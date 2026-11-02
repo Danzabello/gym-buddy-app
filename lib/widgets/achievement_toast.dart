@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/achievement_service.dart';
+import 'header_motion.dart';
 
 class AchievementToast {
   /// Call this after any checkX method returns results.
@@ -17,11 +18,16 @@ class AchievementToast {
 
     final overlay = Overlay.of(context);
     late OverlayEntry entry;
+    // Held while the toast is up, so the header does not animate behind it.
+    final releaseHold = HeaderHold.instance.begin();
 
     entry = OverlayEntry(
       builder: (_) => _AchievementToastWidget(
         result: result,
-        onDismiss: () => entry.remove(),
+        onDismiss: () {
+          releaseHold();
+          entry.remove();
+        },
       ),
     );
 

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/achievement_service.dart';
 import '../services/handshake_service.dart';
 import '../services/team_streak_service.dart';
+import '../widgets/header_motion.dart';
 import '../widgets/streak_complete_sheet.dart';
 import '../widgets/workout_celebration.dart';
 
@@ -44,6 +45,9 @@ Future<FinishResult> finishWorkout(
 }) async {
   final messenger = ScaffoldMessenger.of(context);
   void toast(String t) => messenger.showSnackBar(SnackBar(content: Text(t)));
+  // The header keeps its old numbers until the celebration and the streak
+  // sheet are gone. Taken before the first await, so the credit cannot beat it.
+  final releaseHold = HeaderHold.instance.begin();
   try {
     final res = await svc.finish(id, minutes, alreadyCompleted: completed);
     // The server had nothing to credit (FIN-1): no celebration, leave as usual.
@@ -67,5 +71,7 @@ Future<FinishResult> finishWorkout(
     final err = HandshakeError.from(e);
     toast(err.code == 'too_early' ? kTooEarlyToFinishMessage : err.message(name: name));
     return FinishResult.failed;
+  } finally {
+    releaseHold();
   }
 }

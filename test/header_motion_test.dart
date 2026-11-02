@@ -113,6 +113,72 @@ void main() {
     });
   });
 
+  group('HeaderHold', () {
+    test('begin holds, the release lets go', () {
+      final h = HeaderHold();
+      var calls = 0;
+      h.addListener(() => calls++);
+      expect(h.active, isFalse);
+      final release = h.begin();
+      expect(h.active, isTrue);
+      release();
+      expect(h.active, isFalse);
+      expect(calls, 2); // one for begin, one for the release
+      h.dispose();
+    });
+
+    test('holds nest: active until every one is released', () {
+      final h = HeaderHold();
+      final a = h.begin();
+      final b = h.begin();
+      a();
+      expect(h.active, isTrue);
+      b();
+      expect(h.active, isFalse);
+      h.dispose();
+    });
+
+    test('releasing twice is safe and does not eat another hold', () {
+      final h = HeaderHold();
+      final a = h.begin();
+      final b = h.begin();
+      a();
+      a();
+      expect(h.active, isTrue, reason: 'b is still held');
+      b();
+      expect(h.active, isFalse);
+      h.dispose();
+    });
+
+    testWidgets('a hold nobody releases expires', (tester) async {
+      final h = HeaderHold(expiry: const Duration(seconds: 20));
+      var calls = 0;
+      h.addListener(() => calls++);
+      final release = h.begin();
+      await tester.pump(const Duration(seconds: 19));
+      expect(h.active, isTrue);
+      await tester.pump(const Duration(seconds: 2));
+      expect(h.active, isFalse);
+      expect(calls, 2);
+      release(); // late release after expiry changes nothing
+      expect(h.active, isFalse);
+      expect(calls, 2);
+      h.dispose();
+    });
+
+    testWidgets('each hold has its own expiry', (tester) async {
+      final h = HeaderHold(expiry: const Duration(seconds: 20));
+      h.begin();
+      await tester.pump(const Duration(seconds: 15));
+      final late = h.begin();
+      await tester.pump(const Duration(seconds: 10)); // first expired
+      expect(h.active, isTrue);
+      late();
+      expect(h.active, isFalse);
+      h.dispose();
+    });
+  });
+
   group('HeaderCoverGate', () {
     final t0 = DateTime(2026, 11, 2, 12);
     DateTime at(int ms) => t0.add(Duration(milliseconds: ms));

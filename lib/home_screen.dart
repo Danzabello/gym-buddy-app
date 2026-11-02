@@ -739,6 +739,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       }
     });
     EconomySync.instance.numbers.addListener(_onEconomyChanged);
+    HeaderHold.instance.addListener(_onHeaderHold);
     _updateCountdown();
     _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _updateCountdown());
     _confettiController = ConfettiController(duration: const Duration(seconds: 3));
@@ -804,6 +805,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _syncHeader();
   }
 
+  /// A flow that pays coins finished with its popups: try the header again.
+  void _onHeaderHold() {
+    if (!HeaderHold.instance.active) _syncHeader();
+  }
+
   /// The one compare-and-animate path for the header numbers. Background and
   /// reduced motion snap; a header covered by a pushed page, a dialog, a sheet
   /// or the workout celebration, or a tab that is still sliding in, waits and
@@ -814,10 +820,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     if (!mounted || level == null) return;
     final life = WidgetsBinding.instance.lifecycleState;
     final pageCovered = !(_route?.secondaryAnimation?.isDismissed ?? true);
-    // Anything above the home route that is not a sliding page: a dialog, a
-    // bottom sheet, the celebration overlay.
+    // Anything above the home route that is not a sliding page (a dialog, a
+    // bottom sheet, the celebration overlay), or a flow that is still paying.
     final overlay =
-        _route?.isCurrent == false || WorkoutCelebration.isShowing;
+        _route?.isCurrent == false ||
+        WorkoutCelebration.isShowing ||
+        HeaderHold.instance.active;
     final covered = _coverGate.covered(
       page: pageCovered,
       overlay: overlay,
@@ -902,6 +910,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _confettiControllerRight.dispose();
     _carouselEntranceController.dispose();
     EconomySync.instance.numbers.removeListener(_onEconomyChanged);
+    HeaderHold.instance.removeListener(_onHeaderHold);
     _headerGate?.cancel();
     _route?.secondaryAnimation?.removeStatusListener(_onRouteCover);
     _headerLifecycle.dispose();

@@ -153,6 +153,39 @@ class HeaderCoverGate {
   }
 }
 
+/// Keeps the header on its old numbers while a flow that pays coins is still
+/// on screen (finish, check-in, the popups after it). [begin] before the
+/// first await of the flow; call the returned closure when the last popup is
+/// gone. The closure is safe to call twice. A hold that is never released
+/// expires after [expiry], so a hang can never freeze the header.
+class HeaderHold extends ChangeNotifier {
+  HeaderHold({this.expiry = const Duration(seconds: 20)});
+
+  static final HeaderHold instance = HeaderHold();
+
+  final Duration expiry;
+  int _count = 0;
+
+  bool get active => _count > 0;
+
+  VoidCallback begin() {
+    var open = true;
+    late final Timer timer;
+    void release() {
+      if (!open) return;
+      open = false;
+      timer.cancel();
+      _count--;
+      notifyListeners();
+    }
+
+    timer = Timer(expiry, release);
+    _count++;
+    notifyListeners();
+    return release;
+  }
+}
+
 /// Drives the dashboard header's coin count, XP bar and level-up pop. Owns its
 /// controllers and timers; call [dispose]. Widgets listen to it directly.
 class HeaderMotion extends ChangeNotifier {
