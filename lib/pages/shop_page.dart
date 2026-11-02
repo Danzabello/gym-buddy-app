@@ -5,6 +5,7 @@ import '../theme/accent_theme_provider.dart';
 import '../services/coin_service.dart';
 import '../services/level_service.dart';
 import '../utils/run_once.dart';
+import '../widgets/coin_glyph.dart';
 
 Color _hexToColor(String hex) =>
     Color(int.parse('FF${hex.replaceFirst('#', '')}', radix: 16));
@@ -204,7 +205,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('🪙', style: TextStyle(fontSize: 20)),
+                      CoinGlyph(size: 20),
                       const SizedBox(width: 8),
                       Text('${item.cost} coins',
                           style: const TextStyle(
@@ -276,7 +277,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('🪙', style: TextStyle(fontSize: 48)),
+                CoinGlyph(size: 48),
                 const SizedBox(height: 16),
                 Text('Not enough coins!',
                     style: TextStyle(
@@ -355,7 +356,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text('🪙', style: TextStyle(fontSize: 20)),
+                              CoinGlyph(size: 20),
                               const SizedBox(width: 8),
                               Text(
                                 '$_coinBalance coins',
@@ -555,7 +556,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
                   else
                     Row(
                       children: [
-                        const Text('🪙', style: TextStyle(fontSize: 13)),
+                        CoinGlyph(size: 13),
                         const SizedBox(width: 4),
                         Text('${item.cost}',
                             style: TextStyle(
