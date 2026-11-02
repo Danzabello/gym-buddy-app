@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/coin_glyph.dart';
 import 'wardrobe_avatar_render.dart';
 import 'wardrobe_preview_header.dart';
 import 'wardrobe_selection_state.dart';
@@ -39,6 +40,7 @@ class WardrobeRingScreen extends StatelessWidget {
                   : appColors.avatarRing;
 
               final String? caption;
+              Widget? captionLeading;
               if (!locked) {
                 caption = null;
               } else if (item.unlockAchievementId != null) {
@@ -46,7 +48,8 @@ class WardrobeRingScreen extends StatelessWidget {
               } else if (state.userLevel < item.unlockLevel) {
                 caption = 'Lvl ${item.unlockLevel}';
               } else {
-                caption = '🪙 ${item.cost} in Shop';
+                caption = '${item.cost} in Shop';
+                captionLeading = CoinGlyph(size: 11);
               }
 
               return WardrobeTile(
@@ -55,6 +58,7 @@ class WardrobeRingScreen extends StatelessWidget {
                 accentColor: color,
                 label: item.name.replaceAll(' Ring', ''),
                 caption: caption,
+                captionLeading: captionLeading,
                 preview: Container(
                   width: 44,
                   height: 44,

@@ -11,6 +11,9 @@ class WardrobeTile extends StatelessWidget {
   final bool selected;
   final bool locked;
   final String? caption;
+
+  /// Shown before [caption] on the same line (e.g. a coin).
+  final Widget? captionLeading;
   final Color accentColor;
   final VoidCallback? onTap;
 
@@ -22,6 +25,7 @@ class WardrobeTile extends StatelessWidget {
     required this.locked,
     required this.accentColor,
     this.caption,
+    this.captionLeading,
     this.onTap,
   });
 
@@ -82,13 +86,32 @@ class WardrobeTile extends StatelessWidget {
             ),
             if (caption != null) ...[
               const SizedBox(height: 2),
-              Text(
-                caption!,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 9, color: appColors.subtleText, height: 1.3),
-              ),
+              if (captionLeading == null)
+                Text(
+                  caption!,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 9, color: appColors.subtleText, height: 1.3),
+                )
+              else
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    captionLeading!,
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        caption!,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 9, color: appColors.subtleText, height: 1.3),
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ],
         ),
