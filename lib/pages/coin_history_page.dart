@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../services/coin_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/run_once.dart';
+import '../widgets/coin_glyph.dart';
 
 // ── Pure helpers ────────────────────────────────────────────────
 
@@ -392,7 +393,7 @@ class _CoinHistoryPageState extends State<CoinHistoryPage> {
       decoration: _slab(c, 20),
       child: Row(
         children: [
-          _CoinDot(c, 20),
+          CoinGlyph(size: 20),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -640,21 +641,6 @@ class _CoinHistoryPageState extends State<CoinHistoryPage> {
   }
 }
 
-/// The header pill's gold dot (AppColors.warn), at a bigger size: the pill
-/// draws it inline, so there is no widget to reuse.
-class _CoinDot extends StatelessWidget {
-  final AppColors c;
-  final double size;
-  const _CoinDot(this.c, this.size);
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(shape: BoxShape.circle, color: c.warn),
-  );
-}
-
 class _CoinRow extends StatelessWidget {
   final CoinTransaction t;
   const _CoinRow(this.t);
@@ -723,7 +709,7 @@ class _CoinRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  _CoinDot(c, 8),
+                  CoinGlyph(size: 12),
                 ],
               ),
               Text(time, style: TextStyle(color: c.subtleText, fontSize: 12)),

@@ -58,6 +58,7 @@ import 'data/coach_tips.dart';
 import 'services/notification_service.dart';
 import 'widgets/notification_prompt_sheet.dart';
 import 'widgets/live_event_toast.dart';
+import 'widgets/coin_glyph.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
 import 'package:gym_buddy_app/utils/run_once.dart';
@@ -1217,14 +1218,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: c.warn, // gold
-                              ),
-                            ),
+                            CoinGlyph(size: 16),
                             const SizedBox(width: 7),
                             HeaderCoinCount(
                               motion: _motion,
