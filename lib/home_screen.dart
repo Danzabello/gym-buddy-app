@@ -1261,7 +1261,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                         bottom: -2,
                         child: HeaderCoinRing(
                           motion: _motion,
-                          color: accentPalette.swatch,
+                          color: accentPalette.accentIcon,
                         ),
                       ),
                     ],
