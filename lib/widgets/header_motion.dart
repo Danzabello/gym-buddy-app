@@ -116,6 +116,43 @@ HeaderSyncMode headerSyncMode({
   return HeaderSyncMode.animate;
 }
 
+/// Holds the header while an overlay (dialog, sheet, celebration) is up, and
+/// for one more [confirm] after it is gone, so the gap between one overlay
+/// closing and the next opening (celebration, then streak sheet) does not
+/// start the motion behind the next one. A credit with no overlay seen is not
+/// delayed. A pushed page ([page]) holds without arming the delay.
+class HeaderCoverGate {
+  HeaderCoverGate({this.confirm = const Duration(milliseconds: 300)});
+
+  final Duration confirm;
+  bool _seen = false;
+  DateTime? _clearAt;
+
+  /// True while the header should hold.
+  bool covered({
+    required bool page,
+    required bool overlay,
+    required DateTime now,
+  }) {
+    if (page) return true;
+    if (overlay) {
+      _seen = true;
+      _clearAt = null;
+      return true;
+    }
+    if (!_seen) return false;
+    final first = _clearAt;
+    if (first == null) {
+      _clearAt = now;
+      return true;
+    }
+    if (now.difference(first) < confirm) return true;
+    _seen = false;
+    _clearAt = null;
+    return false;
+  }
+}
+
 /// Drives the dashboard header's coin count, XP bar and level-up pop. Owns its
 /// controllers and timers; call [dispose]. Widgets listen to it directly.
 class HeaderMotion extends ChangeNotifier {

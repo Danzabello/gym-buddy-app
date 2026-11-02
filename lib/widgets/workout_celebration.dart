@@ -10,6 +10,8 @@ class WorkoutCelebration {
   static bool _isShowing = false;
   static Completer<void>? _done;
 
+  static bool get isShowing => _isShowing;
+
   /// Show the celebration overlay. The future completes when it is dismissed
   /// (tap or the 4 s auto-dismiss).
   static Future<void> show(

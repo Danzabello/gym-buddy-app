@@ -59,6 +59,7 @@ import 'services/notification_service.dart';
 import 'widgets/notification_prompt_sheet.dart';
 import 'widgets/live_event_toast.dart';
 import 'widgets/coin_glyph.dart';
+import 'widgets/workout_celebration.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
 import 'package:gym_buddy_app/utils/run_once.dart';
@@ -649,6 +650,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   // HeaderMotion.session, because the tab PageView disposes this state when
   // another tab is open.
   late final HeaderMotion _motion;
+  final _coverGate = HeaderCoverGate();
   late final AppLifecycleListener _headerLifecycle;
   final DateTime _builtAt = DateTime.now();
   Timer? _headerGate;
@@ -803,14 +805,24 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   }
 
   /// The one compare-and-animate path for the header numbers. Background and
-  /// reduced motion snap; a header covered by a pushed page, or a tab that is
-  /// still sliding in, waits and is retried when it is clear.
+  /// reduced motion snap; a header covered by a pushed page, a dialog, a sheet
+  /// or the workout celebration, or a tab that is still sliding in, waits and
+  /// is retried when it is clear.
   void _syncHeader() {
     _headerGate?.cancel();
     final level = _levelInfo;
     if (!mounted || level == null) return;
     final life = WidgetsBinding.instance.lifecycleState;
-    final covered = !(_route?.secondaryAnimation?.isDismissed ?? true);
+    final pageCovered = !(_route?.secondaryAnimation?.isDismissed ?? true);
+    // Anything above the home route that is not a sliding page: a dialog, a
+    // bottom sheet, the celebration overlay.
+    final overlay =
+        _route?.isCurrent == false || WorkoutCelebration.isShowing;
+    final covered = _coverGate.covered(
+      page: pageCovered,
+      overlay: overlay,
+      now: DateTime.now(),
+    );
     final slidIn = DateTime.now().difference(_builtAt) >= _tabSettle;
     final mode = headerSyncMode(
       foreground: life == null || life == AppLifecycleState.resumed,
@@ -820,7 +832,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     );
     _motion.sync(level, _coinBalance, mode);
     if (mode == HeaderSyncMode.hold &&
-        !covered &&
+        !pageCovered &&
         !_motion.matches(level, _coinBalance)) {
       _headerGate = Timer(_tabSettle, _syncHeader); // the route listener covers the rest
     }

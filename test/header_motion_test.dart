@@ -113,6 +113,58 @@ void main() {
     });
   });
 
+  group('HeaderCoverGate', () {
+    final t0 = DateTime(2026, 11, 2, 12);
+    DateTime at(int ms) => t0.add(Duration(milliseconds: ms));
+
+    test('with no overlay seen it never holds', () {
+      final g = HeaderCoverGate();
+      expect(g.covered(page: false, overlay: false, now: at(0)), isFalse);
+      expect(g.covered(page: false, overlay: false, now: at(10)), isFalse);
+    });
+
+    test('an overlay holds, then one more confirm after it is gone', () {
+      final g = HeaderCoverGate();
+      expect(g.covered(page: false, overlay: true, now: at(0)), isTrue);
+      expect(g.covered(page: false, overlay: true, now: at(350)), isTrue);
+      // First clear check: still held. Second, 350 ms later: free.
+      expect(g.covered(page: false, overlay: false, now: at(700)), isTrue);
+      expect(g.covered(page: false, overlay: false, now: at(1050)), isFalse);
+      // And back to immediate.
+      expect(g.covered(page: false, overlay: false, now: at(1060)), isFalse);
+    });
+
+    test('two quick checks do not count as two clear checks', () {
+      final g = HeaderCoverGate();
+      g.covered(page: false, overlay: true, now: at(0));
+      expect(g.covered(page: false, overlay: false, now: at(100)), isTrue);
+      expect(g.covered(page: false, overlay: false, now: at(150)), isTrue);
+      expect(g.covered(page: false, overlay: false, now: at(420)), isFalse);
+    });
+
+    test('the next overlay in the gap restarts the wait', () {
+      final g = HeaderCoverGate();
+      g.covered(page: false, overlay: true, now: at(0)); // celebration
+      expect(g.covered(page: false, overlay: false, now: at(100)), isTrue);
+      expect(g.covered(page: false, overlay: true, now: at(200)), isTrue); // sheet
+      expect(g.covered(page: false, overlay: false, now: at(900)), isTrue);
+      expect(g.covered(page: false, overlay: false, now: at(1250)), isFalse);
+    });
+
+    test('a pushed page holds without arming the delay', () {
+      final g = HeaderCoverGate();
+      expect(g.covered(page: true, overlay: true, now: at(0)), isTrue);
+      expect(g.covered(page: false, overlay: false, now: at(10)), isFalse);
+    });
+
+    test('a long-open sheet just keeps holding', () {
+      final g = HeaderCoverGate();
+      for (var i = 0; i < 100; i++) {
+        expect(g.covered(page: false, overlay: true, now: at(i * 350)), isTrue);
+      }
+    });
+  });
+
   group('header widgets', () {
     late HeaderMotion motion;
 
