@@ -909,7 +909,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   /// practice (verified — every write path in this codebase is `.insert`),
   /// so INSERT is the only event this subscribes to.
   void _subscribeToCheckIns() {
-    _checkinChannel = _supabase
+    final channel = _supabase
         .channel('dashboard_checkins',
             opts: const RealtimeChannelConfig(private: true))
         .onPostgresChanges(
@@ -922,8 +922,26 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             }
             _handleRealtimeCheckIn(payload.newRecord);
           },
-        )
-        .subscribe();
+        );
+    // Coins credited by someone else's action or by the database must reach
+    // the open dashboard, so a new coin row re-reads the header numbers.
+    final uid = _supabase.auth.currentUser?.id;
+    if (uid != null) {
+      channel.onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'coin_transactions',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'user_id',
+          value: uid,
+        ),
+        callback: (_) {
+          if (mounted) unawaited(EconomySync.instance.refresh());
+        },
+      );
+    }
+    _checkinChannel = channel.subscribe();
   }
 
   /// Cached once on load per the settings toggle (notification_settings_page
