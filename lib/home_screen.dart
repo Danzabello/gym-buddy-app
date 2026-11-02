@@ -1218,7 +1218,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            CoinGlyph(size: 16),
+                            HeaderCoinFlip(
+                              motion: _motion,
+                              child: CoinGlyph(size: 16),
+                            ),
                             const SizedBox(width: 7),
                             HeaderCoinCount(
                               motion: _motion,

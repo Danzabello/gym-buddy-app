@@ -137,8 +137,12 @@ class HeaderMotion extends ChangeNotifier {
       _pop = AnimationController(
         vsync: vsync,
         duration: const Duration(milliseconds: 600),
+      ),
+      _flip = AnimationController(
+        vsync: vsync,
+        duration: const Duration(milliseconds: 800),
       ) {
-    for (final c in [_coin, _bar, _ring, _pop]) {
+    for (final c in [_coin, _bar, _ring, _pop, _flip]) {
       c.addListener(notifyListeners);
     }
     _coin.addStatusListener(_onDone);
@@ -162,6 +166,7 @@ class HeaderMotion extends ChangeNotifier {
   final AnimationController _bar;
   final AnimationController _ring;
   final AnimationController _pop;
+  final AnimationController _flip;
 
   bool ready = false;
   LevelInfo? target;
@@ -211,6 +216,15 @@ class HeaderMotion extends ChangeNotifier {
         ? _ease.transform(t / 0.24)
         : 1 - _ease.transform((t - 0.24) / 0.76);
   }
+
+  /// Turns of the header coin's flip, 0 to 1 over 800 ms (eased). 0 at rest.
+  double get flipTurns =>
+      _flip.isAnimating ? Curves.easeInOutCubic.transform(_flip.value) : 0;
+
+  /// The coin swells to 1.18 at mid-flip and settles back. 1 at rest.
+  double get flipScale => _flip.isAnimating
+      ? 1 + 0.18 * math.sin(math.pi * flipTurns)
+      : 1;
 
   /// True when [i] and [coins] are what this motion is already showing or
   /// heading to.
@@ -284,6 +298,7 @@ class HeaderMotion extends ChangeNotifier {
     _announce = false;
     _ring.stop();
     _pop.stop();
+    _flip.stop();
     _coin.stop();
     _bar.stop();
     ready = true;
@@ -307,7 +322,10 @@ class HeaderMotion extends ChangeNotifier {
       _coinTo = coinTarget = newCoins;
       _announce = true;
       _coin.forward(from: 0);
-      if (up) _ring.forward(from: 0);
+      if (up) {
+        _ring.forward(from: 0);
+        _flip.forward(from: 0);
+      }
     }
     final old = target!;
     target = next;
@@ -423,6 +441,7 @@ class HeaderMotion extends ChangeNotifier {
     _bar.dispose();
     _ring.dispose();
     _pop.dispose();
+    _flip.dispose();
     super.dispose();
   }
 }
@@ -485,6 +504,34 @@ class HeaderCoinRing extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Flips [child] once around its vertical axis while [motion] plays a credit.
+/// Paint-only, so the layout never moves. Flat (no perspective): the back half
+/// shows the child mirrored.
+class HeaderCoinFlip extends StatelessWidget {
+  const HeaderCoinFlip({super.key, required this.motion, required this.child});
+
+  final HeaderMotion motion;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: motion,
+      builder: (_, __) {
+        final turns = motion.flipTurns;
+        if (turns == 0) return child;
+        return Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.identity()
+            ..rotateY(2 * math.pi * turns)
+            ..scaleByDouble(motion.flipScale, motion.flipScale, 1, 1),
+          child: child,
+        );
+      },
     );
   }
 }

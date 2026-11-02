@@ -362,6 +362,109 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
+    group('coin flip', () {
+      Finder flipTransform() => find.ancestor(
+        of: find.byKey(const Key('flipChild')),
+        matching: find.byType(Transform),
+      );
+
+      testWidgets('a credit flips once and comes back to rest', (tester) async {
+        await pumpHeader(tester, sweep: false);
+        expect(motion.flipTurns, 0);
+        expect(motion.flipScale, 1);
+        expect(flipTransform(), findsNothing);
+        motion.credit(info(2, 70, 250), 150);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(motion.flipTurns, closeTo(0.5, 0.05));
+        expect(motion.flipScale, closeTo(1.18, 0.001));
+        expect(flipTransform(), findsOneWidget);
+        await run(tester, 500);
+        expect(motion.flipTurns, 0);
+        expect(motion.flipScale, 1);
+        expect(flipTransform(), findsNothing);
+        await tester.pumpWidget(const SizedBox());
+      });
+
+      testWidgets('a spend never flips', (tester) async {
+        await pumpHeader(tester, sweep: false);
+        motion.credit(info(2, 70, 250), 100);
+        for (var i = 0; i < 70; i++) {
+          await tester.pump(const Duration(milliseconds: 16));
+          expect(motion.flipTurns, 0);
+          expect(flipTransform(), findsNothing);
+        }
+        await tester.pumpWidget(const SizedBox());
+      });
+
+      testWidgets('a second credit mid-flip restarts it from 0', (tester) async {
+        await pumpHeader(tester, sweep: false);
+        motion.credit(info(2, 70, 250), 150);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(motion.flipTurns, greaterThan(0.5));
+        motion.credit(info(2, 70, 250), 160);
+        await tester.pump();
+        expect(motion.flipTurns, 0);
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(motion.flipTurns, closeTo(0.5, 0.05));
+        await run(tester, 500);
+        expect(motion.flipTurns, 0);
+        await tester.pumpWidget(const SizedBox());
+      });
+
+      testWidgets('snap stops it', (tester) async {
+        await pumpHeader(tester, sweep: false);
+        motion.credit(info(2, 70, 250), 150);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(motion.flipTurns, greaterThan(0));
+        motion.snap(info(2, 70, 250), 150);
+        await tester.pump();
+        expect(motion.flipTurns, 0);
+        expect(motion.flipScale, 1);
+        expect(flipTransform(), findsNothing);
+        expect(tester.hasRunningAnimations, isFalse);
+        await tester.pumpWidget(const SizedBox());
+      });
+
+      testWidgets('with reduced motion a credit never flips', (tester) async {
+        tester.platformDispatcher.accessibilityFeaturesTestValue =
+            const FakeAccessibilityFeatures(disableAnimations: true);
+        addTearDown(
+          tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+        );
+        HeaderMotion.session = HeaderRecord(info(2, 70, 250), 140);
+        late BuildContext ctx;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (c) {
+                ctx = c;
+                return _Host(onMotion: (m) => motion = m);
+              },
+            ),
+          ),
+        );
+        motion.sync(
+          info(2, 70, 250),
+          200,
+          headerSyncMode(
+            foreground: true,
+            reduceMotion: MediaQuery.disableAnimationsOf(ctx),
+            covered: false,
+            tabReady: true,
+          ),
+        );
+        for (var i = 0; i < 60; i++) {
+          await tester.pump(const Duration(milliseconds: 16));
+          expect(motion.flipTurns, 0);
+        }
+        expect(coinText(tester), '200');
+        await tester.pumpWidget(const SizedBox());
+      });
+    });
+
     testWidgets('a credit makes the ring pulse', (tester) async {
       await pumpHeader(tester, sweep: false);
       motion.credit(info(2, 70, 250), 150);
@@ -421,6 +524,10 @@ class _HostState extends State<_Host> with TickerProviderStateMixin {
             motion: motion,
             fallback: 0,
             style: const TextStyle(),
+          ),
+          HeaderCoinFlip(
+            motion: motion,
+            child: const SizedBox(key: Key('flipChild'), width: 16, height: 16),
           ),
           HeaderXpRow(
             motion: motion,
