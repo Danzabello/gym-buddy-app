@@ -12,8 +12,8 @@ DECLARE
   n text; ok boolean; fn text;
 BEGIN
   -- G12.9 fixture (prompt 27): one inbox row for this user and one for another test account (rokitest1). A plain INSERT, no function called.
-  INSERT INTO public.notification_inbox (user_id, notification_type, title, body) VALUES
-    (u, 'nudge', 'g12.9 mine', 'b'), ('5e67f64d-16e3-4b09-9b00-ddc49df8c3f6', 'nudge', 'g12.9 theirs', 'b');
+  INSERT INTO public.notification_inbox (user_id, notification_type, title, body, sender_id) VALUES
+    (u, 'nudge', 'g12.9 mine', 'b', '5e67f64d-16e3-4b09-9b00-ddc49df8c3f6'), ('5e67f64d-16e3-4b09-9b00-ddc49df8c3f6', 'nudge', 'g12.9 theirs', 'b', NULL);
   PERFORM set_config('request.jwt.claims', json_build_object('sub', u, 'role', 'authenticated')::text, true);
   SET LOCAL ROLE authenticated;
 
@@ -99,6 +99,9 @@ BEGIN
   BEGIN EXECUTE 'SELECT string_agg(title, '','') FROM public.notification_inbox WHERE title LIKE ''g12.9%''' INTO n;
   EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
   r := r || (CASE WHEN n = 'g12.9 mine' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 authenticated SELECT sees its own row and not another user''s -> ' || coalesce(n, 'no rows'));
+  BEGIN EXECUTE 'SELECT sender_id::text FROM public.notification_inbox WHERE title = ''g12.9 mine''' INTO n;
+  EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+  r := r || (CASE WHEN n = '5e67f64d-16e3-4b09-9b00-ddc49df8c3f6' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 authenticated can read sender_id on its own row -> ' || coalesce(n, 'null'));
   RESET ROLE;
   -- Rate-limit meters (prompt 13): neither role can read or write them.
   FOREACH fn IN ARRAY ARRAY['authenticated', 'anon'] LOOP
@@ -166,6 +169,10 @@ BEGIN
   r := r || (CASE WHEN (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.notification_inbox'::regclass)
                        AND n = 'Users read own inbox SELECT {authenticated} (user_id = ( SELECT auth.uid() AS uid))'
                   THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 notification_inbox: RLS on, one SELECT policy, own rows -> ' || coalesce(n, 'none'));
+  SELECT string_agg(a.attname || ' ' || c.confdeltype::text, ', ' ORDER BY a.attname) INTO n
+  FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+  WHERE c.conrelid = 'public.notification_inbox'::regclass AND c.contype = 'f' AND c.confrelid = 'public.user_profiles'::regclass;
+  r := r || (CASE WHEN n = 'sender_id n, user_id c' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 foreign keys to user_profiles: sender_id SET NULL (n), user_id CASCADE (c) -> ' || coalesce(n, 'none'));
   r := r || (CASE WHEN NOT EXISTS (SELECT 1 FROM pg_depend d JOIN pg_class c ON c.oid = d.objid
                                    WHERE c.relkind = 'S' AND d.refobjid = 'public.notification_inbox'::regclass)
                   THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 notification_inbox owns no sequence, so there is nothing to grant a client');

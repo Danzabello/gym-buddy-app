@@ -1,7 +1,7 @@
 -- ROLLBACK for supabase/migrations/20261105230000_notification_inbox.sql
 -- NOT a migration: lives in docs/ so `supabase db push` never runs it.
 -- Restores _send_push (md5 of pg_get_functiondef 494338d98a90bdfb3a0374aadfb0d7dd, as of 20261008200000), unschedules
--- purge-notification-inbox and drops notification_inbox (its rows are lost). send-notification fails open, so it is
+-- purge-notification-inbox and drops notification_inbox with its sender_id column (its rows are lost). send-notification fails open, so it is
 -- safe to run before or after redeploying the function. Run as postgres.
 BEGIN;
 CREATE OR REPLACE FUNCTION public._send_push(p_user uuid, p_key text, p_vars jsonb, p_kind text, p_channel text, p_type text, p_ref text, p_tag text, p_urgent boolean DEFAULT false, p_sender uuid DEFAULT NULL::uuid)

@@ -235,6 +235,10 @@ serve(async (req) => {
     const bearer = authHeader.replace(/^Bearer\s+/i, '').trim()
 
     const isService = await isServiceKey(bearer)
+    // Whose avatar the inbox row shows. A service caller's value is passed through after a UUID
+    // check (a bad one is dropped, the push still goes); a client's is ignored, see below.
+    let senderId: string | null =
+      isService && typeof payload.sender_id === 'string' && UUID_RE.test(payload.sender_id) ? payload.sender_id : null
     if (!isService) {
       const { data: userData, error: authErr } = await supabase.auth.getUser(bearer)
       const callerId = userData?.user?.id
@@ -242,6 +246,8 @@ serve(async (req) => {
         console.log('⛔ send-notification: invalid caller JWT')
         return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
       }
+      // Always the verified caller, or a client could put anyone's avatar on a row.
+      senderId = callerId
 
       // S-15: client callers may only send known notification types, and at most
       // CLIENT_HOURLY_CAP per hour per target. ponytail: notification_log has no sender
@@ -334,7 +340,7 @@ serve(async (req) => {
     // token stops so a held or undeliverable push is listed. Never throws.
     // ============================================
     await recordInbox(supabase, {
-      user_id, type, title: cleanTitle, body: cleanBody, quiet, reference_id, batch_key,
+      user_id, type, title: cleanTitle, body: cleanBody, quiet, reference_id, sender_id: senderId, batch_key,
       dedupeMinutes, hourlyCap: isService ? undefined : CLIENT_HOURLY_CAP,
     })
 

@@ -5,6 +5,10 @@
 -- hours or a missing token. The write fails open: a push is delivered or held exactly as before.
 -- _send_push: a user with no device token now gets the HTTP request, so that row can be written, and the function
 -- still returns false for them (process_stale_sessions' pushed count does not change). Coach Max is skipped.
+-- sender_id: whose avatar the row shows, looked up from the public user_profiles columns, no avatar data stored. It is
+-- p_sender as _send_push already has it (the person who caused the push, the workout partner for time_to_start,
+-- still_going and before_auto, the buddy for invite_expired, Coach Max for his pushes), now also in the request body.
+-- NULL for a push with no person behind it (streak_danger, streak_broken, streak_milestone, checkin_ready, solo overtime).
 -- Rollback: docs/rollback_20261105230000.sql.
 
 CREATE TABLE public.notification_inbox (
@@ -15,6 +19,7 @@ CREATE TABLE public.notification_inbox (
   body              text        NOT NULL,
   quiet             boolean     NOT NULL DEFAULT false,
   reference_id      text,
+  sender_id         uuid        REFERENCES public.user_profiles(id) ON DELETE SET NULL,
   batch_key         text,
   created_at        timestamptz NOT NULL DEFAULT now()
 );
@@ -109,6 +114,7 @@ BEGIN
                  WHEN 'red' THEN '#F87171' ELSE '#B9CFC3' END,
       'channel', 'gym_buddy_' || p_channel,
       'tag', p_tag,
+      'sender_id', p_sender,
       'urgent', p_urgent,
       'batch_key', p_key || '_' || COALESCE(p_ref, ''),
       'dedupe_minutes', CASE p_key WHEN 'nudge' THEN 10 WHEN 'time_to_start' THEN 120

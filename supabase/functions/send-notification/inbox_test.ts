@@ -10,12 +10,12 @@ const ago = (min: number) => new Date(NOW - min * 60 * 1000).toISOString()
 
 const PUSH = {
   user_id: 'u1', type: 'buddy_nudge', title: 'Ana', body: 'is waiting on your check-in.',
-  quiet: false, reference_id: 'r1', batch_key: 'k1', dedupeMinutes: 60,
+  quiet: false, reference_id: 'r1', sender_id: 's1', batch_key: 'k1', dedupeMinutes: 60,
 }
 
 // A stand-in for the service-role client: records each lookup and insert. `count` answers a
 // lookup; `selectError` / `insertError` come back as PostgREST errors; `throws` throws on from().
-function fake(o: { count?: (f: Record<string, unknown>) => number, selectError?: object, insertError?: object, throws?: boolean } = {}) {
+function fake(o: { count?: (f: Record<string, unknown>) => number, selectError?: object, insertError?: object | ((row: Record<string, unknown>) => object | null), throws?: boolean } = {}) {
   const lookups: Record<string, unknown>[] = []
   const inserts: Record<string, unknown>[] = []
   return {
@@ -39,7 +39,8 @@ function fake(o: { count?: (f: Record<string, unknown>) => number, selectError?:
         },
         insert(row: Record<string, unknown>) {
           inserts.push(row)
-          return Promise.resolve({ error: o.insertError ?? null })
+          const e = typeof o.insertError === 'function' ? o.insertError(row) : o.insertError
+          return Promise.resolve({ error: e ?? null })
         },
       }
     },
@@ -73,15 +74,16 @@ test('a row carries the stored text, the flag and the routing fields', async () 
   assert.equal(await recordInbox(c, { ...PUSH, title: 'Ana 💪', quiet: true }, NOW), true)
   assert.deepEqual(c.inserts, [{
     user_id: 'u1', notification_type: 'buddy_nudge', title: 'Ana', body: 'is waiting on your check-in.',
-    quiet: true, reference_id: 'r1', batch_key: 'k1',
+    quiet: true, reference_id: 'r1', sender_id: 's1', batch_key: 'k1',
   }])
 })
 
-test('missing reference_id and batch_key are stored as null, and no batch_key means no dedupe lookup', async () => {
+test('missing reference_id, sender_id and batch_key are stored as null, and no batch_key means no dedupe lookup', async () => {
   const c = fake({ count: () => 5 })
-  assert.equal(await recordInbox(c, { ...PUSH, reference_id: undefined, batch_key: undefined }, NOW), true)
+  assert.equal(await recordInbox(c, { ...PUSH, reference_id: undefined, sender_id: undefined, batch_key: undefined }, NOW), true)
   assert.equal(c.lookups.length, 0)
   assert.equal(c.inserts[0].reference_id, null)
+  assert.equal(c.inserts[0].sender_id, null)
   assert.equal(c.inserts[0].batch_key, null)
 })
 
@@ -137,6 +139,28 @@ test('a lookup error writes no row (a retry could otherwise duplicate one)', asy
   assert.equal(c.inserts.length, 0)
 })
 
+test('a sender with no profile any more: one retry with a NULL sender keeps the row', async () => {
+  const c = fake({ insertError: (row) => (row.sender_id ? { code: '23503', message: 'sender gone' } : null) })
+  assert.equal(await recordInbox(c, PUSH, NOW), true)
+  assert.deepEqual(c.inserts.map((r) => r.sender_id), ['s1', null])
+  assert.deepEqual({ ...c.inserts[1], sender_id: 's1' }, c.inserts[0])
+})
+
+test('the retry happens once, and fails open if the recipient is the one missing', async () => {
+  const c = fake({ insertError: { code: '23503', message: 'user gone' } })
+  assert.equal(await recordInbox(c, PUSH, NOW), false)
+  assert.equal(c.inserts.length, 2)
+})
+
+test('no retry without a sender, or for any other error', async () => {
+  const none = fake({ insertError: { code: '23503', message: 'user gone' } })
+  assert.equal(await recordInbox(none, { ...PUSH, sender_id: null }, NOW), false)
+  assert.equal(none.inserts.length, 1)
+  const other = fake({ insertError: { code: '23505', message: 'x' } })
+  assert.equal(await recordInbox(other, PUSH, NOW), false)
+  assert.equal(other.inserts.length, 1)
+})
+
 // index.ts cannot be imported (serve() runs on import), so the order is checked on its source.
 test('index.ts order: category, log dedupe, quiet worked out, inbox, quiet return, tokens, FCM, log', () => {
   const src = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
@@ -164,4 +188,14 @@ test('index.ts sends the sanitized text to both the inbox and the phone, and cap
   assert.match(src, /recordInbox\(supabase, \{[^}]*title: cleanTitle, body: cleanBody/)
   assert.match(src, /title: cleanTitle, body: cleanBody, type, reference_id, kind/)
   assert.match(src, /hourlyCap: isService \? undefined : CLIENT_HOURLY_CAP/)
+})
+
+test('index.ts sender: service value only after a UUID check, a client is always the verified caller, and the phone never gets it', () => {
+  const src = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
+  assert.match(src, /let senderId: string \| null =\s+isService && typeof payload\.sender_id === 'string' && UUID_RE\.test\(payload\.sender_id\) \? payload\.sender_id : null/)
+  const auth = src.indexOf("JSON.stringify({ error: 'unauthorized' })")
+  const set = src.indexOf('senderId = callerId')
+  assert.ok(auth > 0 && set > auth && set < src.indexOf('await recordInbox('), 'senderId = callerId comes after the JWT check')
+  assert.match(src, /sender_id: senderId/)
+  assert.equal(src.slice(src.indexOf('function buildMessage')).includes('sender_id'), false)
 })

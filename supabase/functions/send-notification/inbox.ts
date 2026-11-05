@@ -17,11 +17,12 @@ export interface InboxPush {
   body: string
   quiet: boolean
   reference_id?: string | null
+  sender_id?: string | null
   batch_key?: string | null
   dedupeMinutes: number
   // Set for client callers only. notification_log's hourly cap cannot see a quiet or tokenless
   // push (no log row), so without this a friend could write unlimited rows of their own text.
-  // ponytail: per target+type like the log's cap, add a sender column for a true per-caller cap.
+  // ponytail: per target+type like the log's cap, count by sender_id for a true per-caller cap.
   hourlyCap?: number
 }
 
@@ -62,15 +63,22 @@ export async function recordInbox(supabase: any, p: InboxPush, now = Date.now())
       if ((count ?? 0) > 0) return false
     }
 
-    const { error } = await supabase.from('notification_inbox').insert({
+    const row = {
       user_id: p.user_id,
       notification_type: p.type,
       title,
       body,
       quiet: p.quiet,
       reference_id: p.reference_id ?? null,
+      sender_id: p.sender_id ?? null,
       batch_key: p.batch_key ?? null,
-    })
+    }
+    let { error } = await supabase.from('notification_inbox').insert(row)
+    // pg_net is asynchronous, so the sender can delete their account before this request lands.
+    // The row still belongs in the list, without the avatar, as ON DELETE SET NULL would leave it.
+    if (error?.code === '23503' && row.sender_id) {
+      ;({ error } = await supabase.from('notification_inbox').insert({ ...row, sender_id: null }))
+    }
     if (error) throw error
     return true
   } catch (e) {

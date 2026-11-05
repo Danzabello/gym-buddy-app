@@ -1076,7 +1076,7 @@ session_reminder2|1|Final reminder|This is the final reminder. Open the app and 
                          (SELECT string_agg(column_name || ' ' || data_type || ' ' || is_nullable, ', ' ORDER BY ordinal_position)
                           FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'notification_inbox'),
                          'id uuid NO, user_id uuid NO, notification_type text NO, title text NO, body text NO, quiet boolean NO, '
-                         'reference_id text YES, batch_key text YES, created_at timestamp with time zone NO');
+                         'reference_id text YES, sender_id uuid YES, batch_key text YES, created_at timestamp with time zone NO');
     r := r || pg_temp.ok('G12.2 the index reads one user newest first',
                          (SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'notification_inbox_user_created_idx')
                          LIKE '%(user_id, created_at DESC)');
@@ -1105,12 +1105,15 @@ session_reminder2|1|Final reminder|This is the final reminder. Open the app and 
             WHEN OTHERS THEN r := r || ('FAIL G12.5-6 crashed: ' || SQLERRM);
   END;
 
-  -- G12.7-8 account deletion takes the rows with it; a row for nobody is refused (send-notification logs that and carries on)
+  -- G12.7, 8, 10 account deletion takes the user's own rows with it and only blanks the sender on other people's; a row for nobody is refused (send-notification logs that and carries on)
   BEGIN
     f := gen_random_uuid();
     INSERT INTO public.user_profiles (id, display_name, username, age) VALUES (f, 'Suite', 'suite_' || substr(f::text, 1, 8), 30);
     INSERT INTO public.notification_inbox (user_id, notification_type, title, body) VALUES (f, 'nudge', 't', 'b');
+    INSERT INTO public.notification_inbox (user_id, notification_type, title, body, sender_id) VALUES (pg_temp.ua(), 'nudge', 'g12.10', 'b', f);
     DELETE FROM public.user_profiles WHERE id = f;
+    r := r || pg_temp.is('G12.10 deleting the sender keeps the other user''s row, with no sender',
+                         (SELECT count(*) || '/' || count(sender_id) FROM public.notification_inbox WHERE title = 'g12.10'), '1/0');
     r := r || pg_temp.is('G12.7 deleting the profile cascades to its inbox rows',
                          (SELECT count(*)::text FROM public.notification_inbox WHERE user_id = f), '0');
     BEGIN
@@ -1121,7 +1124,7 @@ session_reminder2|1|Final reminder|This is the final reminder. Open the app and 
     r := r || pg_temp.is('G12.8 a user_id with no profile is refused by the foreign key', n, '23503');
     RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
   EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
-            WHEN OTHERS THEN r := r || ('FAIL G12.7-8 crashed: ' || SQLERRM);
+            WHEN OTHERS THEN r := r || ('FAIL G12.7, 8, 10 crashed: ' || SQLERRM);
   END;
 
   RAISE EXCEPTION E'SUITE_RESULTS\n%', array_to_string(r, E'\n');
