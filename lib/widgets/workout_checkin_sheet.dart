@@ -8,7 +8,6 @@ import 'dart:math';
 import 'confirm_slide_sheet.dart';
 import 'schedule_rows.dart' show otherPerson;
 import 'header_motion.dart';
-import 'streak_complete_sheet.dart';
 import 'workout_schedule_card.dart' show CardAction, Person;
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/run_once.dart';
@@ -257,14 +256,7 @@ class _WorkoutCheckInSheetState extends State<WorkoutCheckInSheet>
     // The session is cleared only afterwards: the server check-in reads its
     // start time to credit the day the workout started (and deletes it).
     try {
-      final partnerBonusEarned = await widget.onCheckInComplete();
-
-      if (partnerBonusEarned && mounted) {
-        await Future.delayed(const Duration(milliseconds: 400));
-        if (mounted) {
-          await StreakCompleteSheet.show(context);
-        }
-      }
+      await widget.onCheckInComplete();
     } catch (e) {
       debugLog('❌ Error completing check-in: $e');
     } finally {
