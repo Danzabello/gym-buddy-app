@@ -365,6 +365,15 @@ $p1$;
 -- ═════════ migration under test (run.sh --with), else nothing ═════════
 -- @@MIGRATION@@
 
+-- The stub again, in case the migration just replaced _send_push (20261105230000 did): phase 2 counts pushes in push_log.
+CREATE OR REPLACE FUNCTION public._send_push(p_user uuid, p_key text, p_vars jsonb, p_kind text, p_channel text, p_type text,
+                                             p_ref text, p_tag text, p_urgent boolean DEFAULT false, p_sender uuid DEFAULT NULL::uuid)
+ RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $f$
+BEGIN
+  INSERT INTO pg_temp.push_log (recipient, key, ref, sender) VALUES (p_user, p_key, p_ref, p_sender);
+  RETURN true;
+END $f$;
+
 -- ═════════ phase 2 ═════════
 DO $suite$
 DECLARE
@@ -1059,6 +1068,60 @@ session_reminder2|1|Final reminder|This is the final reminder. Open the app and 
                          AND NOT EXISTS (SELECT 1 FROM unnest(ARRAY['anon', 'authenticated']) ro, unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) pr
                                          WHERE has_table_privilege(ro, 'public.auto_checkin_counts', pr)));
   EXCEPTION WHEN OTHERS THEN r := r || ('FAIL G11.16-19 crashed: ' || SQLERRM);
+  END;
+
+  -- ── G12 notification inbox (prompt 27). Grants and own-row reads are G12.9 in grants_fresh.sql; the real _send_push is probe 27. ──
+  BEGIN
+    r := r || pg_temp.is('G12.1 the columns, types and nullability',
+                         (SELECT string_agg(column_name || ' ' || data_type || ' ' || is_nullable, ', ' ORDER BY ordinal_position)
+                          FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'notification_inbox'),
+                         'id uuid NO, user_id uuid NO, notification_type text NO, title text NO, body text NO, quiet boolean NO, '
+                         'reference_id text YES, batch_key text YES, created_at timestamp with time zone NO');
+    r := r || pg_temp.ok('G12.2 the index reads one user newest first',
+                         (SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'notification_inbox_user_created_idx')
+                         LIKE '%(user_id, created_at DESC)');
+    r := r || pg_temp.is('G12.3 the purge job, exact schedule and command',
+                         (SELECT schedule || ' | ' || command FROM cron.job WHERE jobname = 'purge-notification-inbox'),
+                         $t$23 3 * * * | DELETE FROM public.notification_inbox WHERE created_at < now() - interval '7 days'$t$);
+    r := r || pg_temp.ok('G12.4 the _send_push stub is still in place after the migration (the push counts above rely on it)',
+                         pg_temp.def('public._send_push(uuid,text,jsonb,text,text,text,text,text,boolean,uuid)') LIKE '%pg_temp.push_log%');
+  EXCEPTION WHEN OTHERS THEN r := r || ('FAIL G12.1-4 crashed: ' || SQLERRM);
+  END;
+
+  -- G12.5-6 the job's own command keeps 6 days and removes 8; a row without quiet set is not quiet
+  BEGIN
+    a := pg_temp.ua();
+    DELETE FROM public.notification_inbox WHERE user_id = a;
+    INSERT INTO public.notification_inbox (user_id, notification_type, title, body, created_at) VALUES
+      (a, 'nudge', 'six', 'days', now() - interval '6 days'),
+      (a, 'nudge', 'eight', 'days', now() - interval '8 days');
+    EXECUTE (SELECT command FROM cron.job WHERE jobname = 'purge-notification-inbox');
+    r := r || pg_temp.is('G12.5 the purge command keeps the 6-day row and deletes the 8-day row',
+                         (SELECT string_agg(title, ',') FROM public.notification_inbox WHERE user_id = a), 'six');
+    r := r || pg_temp.is('G12.6 quiet defaults to false',
+                         (SELECT quiet::text FROM public.notification_inbox WHERE user_id = a), 'false');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G12.5-6 crashed: ' || SQLERRM);
+  END;
+
+  -- G12.7-8 account deletion takes the rows with it; a row for nobody is refused (send-notification logs that and carries on)
+  BEGIN
+    f := gen_random_uuid();
+    INSERT INTO public.user_profiles (id, display_name, username, age) VALUES (f, 'Suite', 'suite_' || substr(f::text, 1, 8), 30);
+    INSERT INTO public.notification_inbox (user_id, notification_type, title, body) VALUES (f, 'nudge', 't', 'b');
+    DELETE FROM public.user_profiles WHERE id = f;
+    r := r || pg_temp.is('G12.7 deleting the profile cascades to its inbox rows',
+                         (SELECT count(*)::text FROM public.notification_inbox WHERE user_id = f), '0');
+    BEGIN
+      INSERT INTO public.notification_inbox (user_id, notification_type, title, body) VALUES (gen_random_uuid(), 'nudge', 't', 'b');
+      n := 'no error';
+    EXCEPTION WHEN OTHERS THEN n := SQLSTATE;
+    END;
+    r := r || pg_temp.is('G12.8 a user_id with no profile is refused by the foreign key', n, '23503');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G12.7-8 crashed: ' || SQLERRM);
   END;
 
   RAISE EXCEPTION E'SUITE_RESULTS\n%', array_to_string(r, E'\n');

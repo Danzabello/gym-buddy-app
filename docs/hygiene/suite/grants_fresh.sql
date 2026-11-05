@@ -11,6 +11,9 @@ DECLARE
   u uuid := 'cf4946f5-f921-4e81-bbf4-88d574e8baf5';  -- testtest1
   n text; ok boolean; fn text;
 BEGIN
+  -- G12.9 fixture (prompt 27): one inbox row for this user and one for another test account (rokitest1). A plain INSERT, no function called.
+  INSERT INTO public.notification_inbox (user_id, notification_type, title, body) VALUES
+    (u, 'nudge', 'g12.9 mine', 'b'), ('5e67f64d-16e3-4b09-9b00-ddc49df8c3f6', 'nudge', 'g12.9 theirs', 'b');
   PERFORM set_config('request.jwt.claims', json_build_object('sub', u, 'role', 'authenticated')::text, true);
   SET LOCAL ROLE authenticated;
 
@@ -84,6 +87,18 @@ BEGIN
     EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
     r := r || (CASE WHEN n LIKE '42501%' THEN 'PASS ' ELSE 'FAIL ' END || 'G9.18 authenticated ' || split_part(fn, ' ', 1) || ' auto_checkin_counts -> ' || n);
   END LOOP;
+  -- G12.9 (prompt 27): the inbox is read-only for a client, and only its own rows.
+  FOREACH fn IN ARRAY ARRAY['INSERT INTO public.notification_inbox (user_id, notification_type, title, body) VALUES (''' || u || ''', ''nudge'', ''t'', ''b'')',
+                            'UPDATE public.notification_inbox SET quiet = true WHERE user_id = ''' || u || '''',
+                            'DELETE FROM public.notification_inbox WHERE user_id = ''' || u || '''',
+                            'TRUNCATE public.notification_inbox'] LOOP
+    BEGIN EXECUTE fn; n := 'no error';
+    EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+    r := r || (CASE WHEN n LIKE '42501%' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 authenticated ' || split_part(fn, ' ', 1) || ' notification_inbox -> ' || n);
+  END LOOP;
+  BEGIN EXECUTE 'SELECT string_agg(title, '','') FROM public.notification_inbox WHERE title LIKE ''g12.9%''' INTO n;
+  EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+  r := r || (CASE WHEN n = 'g12.9 mine' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 authenticated SELECT sees its own row and not another user''s -> ' || coalesce(n, 'no rows'));
   RESET ROLE;
   -- Rate-limit meters (prompt 13): neither role can read or write them.
   FOREACH fn IN ARRAY ARRAY['authenticated', 'anon'] LOOP
@@ -106,6 +121,14 @@ BEGIN
   BEGIN n := public.submit_checkin()::text;
   EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
   r := r || (CASE WHEN n LIKE '42501%' THEN 'PASS ' ELSE 'FAIL ' END || 'G9.11 anon cannot execute submit_checkin -> ' || n);
+  BEGIN EXECUTE 'SELECT count(*)::text FROM public.notification_inbox' INTO n;
+  EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+  r := r || (CASE WHEN n LIKE '42501%' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 anon SELECT notification_inbox -> ' || n);
+  RESET ROLE;
+  SET LOCAL ROLE service_role;
+  BEGIN EXECUTE 'INSERT INTO public.notification_inbox (user_id, notification_type, title, body, quiet) VALUES (''' || u || ''', ''nudge'', ''t'', ''b'', true)'; n := 'ok';
+  EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+  r := r || (CASE WHEN n = 'ok' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 service_role can write the row send-notification writes -> ' || n);
   RESET ROLE;
   PERFORM set_config('request.jwt.claims', '', true);
 
@@ -134,6 +157,18 @@ BEGIN
   FROM unnest(ARRAY['anon', 'authenticated']) ro, unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) pr
   WHERE has_table_privilege(ro, 'public.auto_checkin_counts', pr);
   r := r || (CASE WHEN n IS NULL THEN 'PASS ' ELSE 'FAIL ' END || 'G9.18 anon and authenticated hold no privilege on auto_checkin_counts -> ' || coalesce(n, 'none'));
+  SELECT string_agg(ro || ' ' || pr, ', ' ORDER BY ro, pr) INTO n
+  FROM unnest(ARRAY['anon', 'authenticated', 'public', 'service_role']) ro, unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) pr
+  WHERE has_table_privilege(ro, 'public.notification_inbox', pr);
+  r := r || (CASE WHEN n = 'authenticated SELECT, service_role DELETE, service_role INSERT, service_role REFERENCES, service_role SELECT, service_role TRIGGER, service_role TRUNCATE, service_role UPDATE'
+                  THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 notification_inbox privileges: authenticated SELECT only, service_role all, nothing for anon or PUBLIC -> ' || coalesce(n, 'none'));
+  SELECT string_agg(policyname || ' ' || cmd || ' ' || roles::text || ' ' || qual, '; ') INTO n FROM pg_policies WHERE schemaname = 'public' AND tablename = 'notification_inbox';
+  r := r || (CASE WHEN (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.notification_inbox'::regclass)
+                       AND n = 'Users read own inbox SELECT {authenticated} (user_id = ( SELECT auth.uid() AS uid))'
+                  THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 notification_inbox: RLS on, one SELECT policy, own rows -> ' || coalesce(n, 'none'));
+  r := r || (CASE WHEN NOT EXISTS (SELECT 1 FROM pg_depend d JOIN pg_class c ON c.oid = d.objid
+                                   WHERE c.relkind = 'S' AND d.refobjid = 'public.notification_inbox'::regclass)
+                  THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 notification_inbox owns no sequence, so there is nothing to grant a client');
 
   RAISE EXCEPTION E'SUITE_RESULTS\n%', array_to_string(r, E'\n');
 END
