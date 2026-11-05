@@ -75,6 +75,15 @@ BEGIN
     r := r || (CASE WHEN n LIKE '42501%' THEN 'PASS ' ELSE 'FAIL ' END || 'G9.17.4 upsert of the onboarding row is denied (the bug this guards) -> ' || n);
     PERFORM set_config('request.jwt.claims', json_build_object('sub', u, 'role', 'authenticated')::text, true);
   END;
+  -- G9.18 (prompt 35): the auto check-in counter is not readable or writable by a client; only the credit functions touch it.
+  FOREACH fn IN ARRAY ARRAY['SELECT count(*) FROM public.auto_checkin_counts',
+                            'INSERT INTO public.auto_checkin_counts (user_id, consecutive) VALUES (''' || u || ''', 1)',
+                            'UPDATE public.auto_checkin_counts SET consecutive = 1',
+                            'DELETE FROM public.auto_checkin_counts'] LOOP
+    BEGIN EXECUTE fn; n := 'no error';
+    EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+    r := r || (CASE WHEN n LIKE '42501%' THEN 'PASS ' ELSE 'FAIL ' END || 'G9.18 authenticated ' || split_part(fn, ' ', 1) || ' auto_checkin_counts -> ' || n);
+  END LOOP;
   RESET ROLE;
   -- Rate-limit meters (prompt 13): neither role can read or write them.
   FOREACH fn IN ARRAY ARRAY['authenticated', 'anon'] LOOP
@@ -121,6 +130,10 @@ BEGIN
                   THEN 'PASS ' ELSE 'FAIL ' END || 'G9.13 authenticated table privileges on economy tables (no INSERT anywhere) -> ' || n);
   r := r || (CASE WHEN NOT has_any_column_privilege('authenticated', 'public.daily_team_checkins', 'INSERT')
                   THEN 'PASS ' ELSE 'FAIL ' END || 'G9.14 no column-level INSERT on daily_team_checkins for authenticated');
+  SELECT string_agg(ro || ' ' || pr, ', ') INTO n
+  FROM unnest(ARRAY['anon', 'authenticated']) ro, unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) pr
+  WHERE has_table_privilege(ro, 'public.auto_checkin_counts', pr);
+  r := r || (CASE WHEN n IS NULL THEN 'PASS ' ELSE 'FAIL ' END || 'G9.18 anon and authenticated hold no privilege on auto_checkin_counts -> ' || coalesce(n, 'none'));
 
   RAISE EXCEPTION E'SUITE_RESULTS\n%', array_to_string(r, E'\n');
 END

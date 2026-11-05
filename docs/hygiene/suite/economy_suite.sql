@@ -309,6 +309,35 @@ BEGIN
   RETURN w;
 END $f$;
 
+-- G11 helpers (prompt 35). plpgsql, so auto_checkin_counts is only looked up when a G11 case runs (the helpers are created
+-- before the migration under test is inlined).
+-- The user's counter, 0 when there is no row.
+CREATE FUNCTION pg_temp.cnt(p_u uuid) RETURNS text LANGUAGE plpgsql AS $f$
+DECLARE t text;
+BEGIN
+  SELECT coalesce((SELECT consecutive::text FROM auto_checkin_counts WHERE user_id = p_u), '0') INTO t;
+  RETURN t;
+END $f$;
+CREATE FUNCTION pg_temp.setcnt(p_u uuid, p_n integer) RETURNS void LANGUAGE plpgsql AS $f$
+BEGIN
+  INSERT INTO auto_checkin_counts (user_id, consecutive) VALUES (p_u, p_n)
+  ON CONFLICT (user_id) DO UPDATE SET consecutive = p_n;
+END $f$;
+-- Coach Max warnings the user got.
+CREATE FUNCTION pg_temp.mx(p_u uuid) RETURNS integer LANGUAGE sql AS $$
+  SELECT count(*)::int FROM pg_temp.push_log WHERE recipient = p_u AND key = 'coach_max_auto_limit' $$;
+-- Forget the user's credit for today (check-in rows and auto log), so the same fixture user can be credited again.
+CREATE FUNCTION pg_temp.clr(p_u uuid) RETURNS void LANGUAGE sql AS $$
+  DELETE FROM workout_logs WHERE user_id = p_u AND auto_completed;
+  DELETE FROM daily_team_checkins WHERE user_id = p_u AND check_in_date = pg_temp.day(p_u) $$;
+-- One forgotten session: cleared day, a session started now(), the job run 210 minutes later. Returns the job's result.
+CREATE FUNCTION pg_temp.auto1(p_u uuid) RETURNS jsonb LANGUAGE plpgsql AS $f$
+BEGIN
+  PERFORM pg_temp.clr(p_u);
+  PERFORM pg_temp.sess(p_u, interval '0 minutes');
+  RETURN pg_temp.psj(210);
+END $f$;
+
 -- ═════════ phase 1 ═════════
 DO $p1$
 DECLARE fk text; v jsonb; d text;
@@ -387,6 +416,23 @@ BEGIN
   body := pg_temp.def('public.reconcile_stale_streaks()');
   r := r || pg_temp.ok('G0.9 lock order reconcile_stale_streaks: loop ORDER BY id FOR NO KEY UPDATE',
                        pg_temp.before(body, 'ORDER BY id' || chr(10) || '    FOR NO KEY UPDATE', 'LOOP'));
+
+  body := pg_temp.def('public._auto_credit(uuid,timestamptz,integer,text,text)');
+  r := r || pg_temp.ok('G0.10 lock order _auto_credit (20261105220000): lock-free counter read, then _credit_checkin, then the L5 counter write',
+                       pg_temp.before(body, 'SELECT consecutive INTO v_n', 'v_rc := public._credit_checkin(p_user, p_start)')
+                       AND pg_temp.before(body, 'v_rc := public._credit_checkin(p_user, p_start)', 'INSERT INTO auto_checkin_counts'));
+  body := pg_temp.def('public.finish_checkin_session(uuid)');
+  r := r || pg_temp.ok('G0.11 lock order finish_checkin_session: the counter reset is an L5 write after _credit_checkin and past the nothing_to_finish return',
+                       pg_temp.before(body, 'PERFORM public._credit_checkin(v_uid, v_start)', 'DELETE FROM auto_checkin_counts')
+                       AND pg_temp.before(body, '''nothing_to_finish''', 'DELETE FROM auto_checkin_counts')
+                       AND (length(body) - length(replace(body, 'auto_checkin_counts', ''))) / length('auto_checkin_counts') = 1);
+  r := r || pg_temp.ok('G0.12 only finish_checkin_session resets and only _auto_credit counts: no other function mentions auto_checkin_counts',
+                       NOT EXISTS (SELECT 1 FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace
+                                   AND p.proname NOT IN ('_auto_credit', 'finish_checkin_session')
+                                   AND p.prosrc LIKE '%auto_checkin_counts%'));
+  r := r || pg_temp.is('G0.13 bodies pinned (20261105220000): _auto_credit, finish_checkin_session',
+                       md5(pg_temp.def('public._auto_credit(uuid,timestamptz,integer,text,text)')) || ' ' || md5(pg_temp.def('public.finish_checkin_session(uuid)')),
+                       '204300bd6cf943e1c73faf78b33a30a7 3cdf210622abd60288c26d7032eec4c8');
 
   -- ── G1 _credit_checkin (the L3 checks first: no paying credit has run in this phase yet) ──
   BEGIN
@@ -813,12 +859,12 @@ BEGIN
     r := r || pg_temp.is('G9.21 process-stale-sessions runs every minute, same command',
                          (SELECT schedule || ' | ' || command FROM cron.job WHERE jobname = 'process-stale-sessions'),
                          '* * * * * | SELECT public.process_stale_sessions();');
-    r := r || pg_temp.is('G9.22 the three push templates, exact copy',
+    r := r || pg_temp.is('G9.22 the three push templates, exact copy (push 3 re-worded by 20261105220000)',
                          (SELECT string_agg(push_templates.key || '|' || push_templates.variant || '|' || push_templates.title || '|' || push_templates.body, E'\n' ORDER BY push_templates.key)
                           FROM push_templates WHERE push_templates.key LIKE 'session\_%'),
                          $t$session_goal|1|Timer's done|Your check-in is unlocked. Open the app and tap Complete Check-In.
 session_reminder|1|Still waiting on you|Your workout isn't counted until you check in. It takes one tap.
-session_reminder2|1|Last reminder|Tap Complete Check-In now. If you skip it, it's counted automatically 3½ hours after you started.$t$);
+session_reminder2|1|Final reminder|This is the final reminder. Open the app and tap Complete Check-In.$t$);
     r := r || pg_temp.ok('G9.23 templates: within the 100/300 limits, no placeholder left, no emoji, no clock time',
                          (SELECT bool_and(char_length(push_templates.title) BETWEEN 1 AND 100 AND char_length(push_templates.body) BETWEEN 1 AND 300
                                           AND push_templates.title !~ '[{}]' AND push_templates.body !~ '[{}]'
@@ -829,6 +875,190 @@ session_reminder2|1|Last reminder|Tap Complete Check-In now. If you skip it, it'
                          pg_temp.def('public.process_stale_sessions(timestamptz)') LIKE '%''checkin_ready'', s.id::text, ''session_'' || s.id::text, false, NULL)%'
                          AND pg_temp.def('public.process_stale_sessions(timestamptz)') LIKE '%''high_importance''%');
   EXCEPTION WHEN OTHERS THEN r := r || ('FAIL G9.21-24 crashed: ' || SQLERRM);
+  END;
+
+  -- ── G11 auto check-in limit (prompt 35): 3 paid auto check-ins in a row, then none; the user's own Complete Check-In resets ──
+  -- G11.1-4 the run to 3, the Coach Max warning, the 4th forgotten session
+  BEGIN
+    c := pg_temp.uc();
+    j := pg_temp.auto1(c); n := pg_temp.cnt(c) || '/' || pg_temp.mx(c);
+    j := pg_temp.auto1(c); n := n || ' ' || pg_temp.cnt(c) || '/' || pg_temp.mx(c);
+    r := r || pg_temp.is('G11.1 first and second paid auto check-in: count 1 then 2, no Coach Max push', n, '1/0 2/0');
+    j := pg_temp.auto1(c);
+    r := r || pg_temp.is('G11.2 third: count 3 and exactly one push, from Coach Max, ref the user',
+                         pg_temp.cnt(c) || '/' || pg_temp.mx(c) || '/'
+                         || (SELECT count(*) FROM pg_temp.push_log WHERE recipient = c AND key = 'coach_max_auto_limit' AND sender = pg_temp.cmx() AND ref = c::text),
+                         '3/1/1');
+    r := r || pg_temp.is('G11.3 the third auto check-in paid (job result), session closed',
+                         (SELECT count(*) FROM workout_logs WHERE user_id = c AND auto_completed) || ' ' || pg_temp.stamps(c), '1 gone');
+    j := pg_temp.auto1(c);
+    r := r || pg_temp.is('G11.4 fourth forgotten session: nothing paid, session closed, no log row, no check-in row, count stays 3, no second push',
+                         pg_temp.stamps(c) || ' '
+                         || (SELECT count(*) FROM workout_logs WHERE user_id = c AND auto_completed) || ' '
+                         || (SELECT count(*) FROM daily_team_checkins WHERE user_id = c AND check_in_date = pg_temp.day(c)) || ' '
+                         || pg_temp.cnt(c) || ' ' || pg_temp.mx(c),
+                         'gone 0 0 3 1');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G11.1-4 crashed: ' || SQLERRM);
+  END;
+
+  -- G11.5-7 a manual Complete Check-In starts over: 2 autos, a manual one, then 3 more all work
+  BEGIN
+    c := pg_temp.uc();
+    j := pg_temp.auto1(c); j := pg_temp.auto1(c);
+    PERFORM pg_temp.clr(c);
+    PERFORM pg_temp.sess(c);  -- 20 minutes old
+    j2 := pg_temp.fin(c);
+    r := r || pg_temp.is('G11.5 own Complete Check-In credited and cleared the counter', (j2->>'checked_in') || ' ' || pg_temp.cnt(c), '1 0');
+    j := pg_temp.auto1(c); n := pg_temp.cnt(c) || '/' || pg_temp.mx(c);
+    j := pg_temp.auto1(c); n := n || ' ' || pg_temp.cnt(c) || '/' || pg_temp.mx(c);
+    j := pg_temp.auto1(c); n := n || ' ' || pg_temp.cnt(c) || '/' || pg_temp.mx(c);
+    r := r || pg_temp.is('G11.6 after the reset three more auto check-ins all pay, the push comes on the third only', n, '1/0 2/0 3/1');
+    j := pg_temp.auto1(c);
+    r := r || pg_temp.is('G11.7 and the next one is refused again (no log row)', (SELECT count(*) FROM workout_logs WHERE user_id = c AND auto_completed) || ' ' || pg_temp.cnt(c) || ' ' || pg_temp.mx(c), '0 3 1');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G11.5-7 crashed: ' || SQLERRM);
+  END;
+
+  -- G11.8 a Finish that is not eligible resets nothing
+  BEGIN
+    c := pg_temp.uc();
+    PERFORM pg_temp.setcnt(c, 2);
+    j2 := pg_temp.fin(c);
+    n := (j2->>'result') || ' ' || pg_temp.cnt(c);
+    PERFORM pg_temp.sess(c, interval '5 minutes');
+    j2 := pg_temp.fin(c);
+    n := n || ' ' || (j2->>'result') || ' ' || pg_temp.cnt(c);
+    r := r || pg_temp.is('G11.8 nothing_to_finish and too_early leave the counter at 2', n, 'nothing_to_finish 2 too_early 2');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G11.8 crashed: ' || SQLERRM);
+  END;
+
+  -- G11.9 an auto check-in that pays nothing does not count (the day already has the user's own check-in)
+  BEGIN
+    c := pg_temp.uc();
+    PERFORM public._credit_checkin(c, now());
+    PERFORM pg_temp.sess(c, interval '0 minutes');
+    j := pg_temp.psj(210);
+    r := r || pg_temp.is('G11.9 day already credited: the log is written as before, the counter does not move, no push',
+                         (SELECT count(*) FROM workout_logs WHERE user_id = c AND auto_completed) || ' ' || pg_temp.cnt(c) || ' ' || pg_temp.mx(c), '1 0 0');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G11.9 crashed: ' || SQLERRM);
+  END;
+
+  -- G11.10-12 shared workout at 3h30: the M6b partner counts for the partner; a refused participant; everybody refused
+  BEGIN
+    a := pg_temp.ua(); b := pg_temp.o1();
+    w := pg_temp.buddy_run();
+    DELETE FROM active_checkin_sessions WHERE user_id = b;  -- b is ready with no session: credited by M6b
+    j := pg_temp.psj(210);
+    r := r || pg_temp.is('G11.10 session holder and M6b partner each counted for themselves, workout completed',
+                         pg_temp.cnt(a) || '/' || pg_temp.cnt(b) || ' ' || (SELECT status FROM workouts WHERE id = w),
+                         '1/1 completed');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G11.10 crashed: ' || SQLERRM);
+  END;
+
+  BEGIN
+    a := pg_temp.ua(); b := pg_temp.o1();
+    w := pg_temp.buddy_run();
+    PERFORM pg_temp.setcnt(b, 3);
+    j := pg_temp.psj(210);
+    r := r || pg_temp.is('G11.11 one participant at 3 is refused (no log, no check-in row, session closed), the other is paid, workout completed',
+                         pg_temp.cnt(a) || '/' || pg_temp.cnt(b) || ' ' || (SELECT status FROM workouts WHERE id = w) || ' '
+                         || (SELECT count(*) FROM workout_logs WHERE user_id = b AND auto_completed) || ' '
+                         || (SELECT count(*) FROM daily_team_checkins WHERE user_id = b AND check_in_date = pg_temp.day(b) AND team_streak_id <> pg_temp.cms(b)) || ' '
+                         || pg_temp.stamps(b),
+                         '1/3 completed 0 0 gone');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G11.11 crashed: ' || SQLERRM);
+  END;
+
+  BEGIN
+    a := pg_temp.ua(); b := pg_temp.o1();
+    w := pg_temp.buddy_run();
+    PERFORM pg_temp.setcnt(a, 3); PERFORM pg_temp.setcnt(b, 3);
+    j := pg_temp.psj(210);
+    r := r || pg_temp.is('G11.12 every participant refused: workout cancelled (auto_completed), both sessions gone, counters stay 3, no check-in rows',
+                         pg_temp.cnt(a) || '/' || pg_temp.cnt(b) || ' ' || (SELECT status || '/' || coalesce(auto_completed, false) FROM workouts WHERE id = w) || ' '
+                         || pg_temp.stamps(a) || ' ' || pg_temp.stamps(b) || ' '
+                         || (SELECT count(*) FROM daily_team_checkins WHERE user_id IN (a, b) AND check_in_date = pg_temp.day(a)),
+                         '3/3 cancelled/true gone gone 0');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G11.12 crashed: ' || SQLERRM);
+  END;
+
+  -- G11.13-14 only the user's own Finish resets: not the partner's credit (M6a); a Finish on a day the partner already filled still does
+  BEGIN
+    a := pg_temp.ua(); b := pg_temp.o1();
+    PERFORM pg_temp.team(a, b);
+    INSERT INTO workouts (user_id, buddy_id, workout_type, workout_date, workout_time, planned_duration_minutes, status, buddy_status,
+                          workout_started_at, workout_completed_at, actual_duration_minutes, creator_ready, buddy_ready)
+    VALUES (a, b, 'Strength', current_date, '10:00', 30, 'completed', 'accepted', now(), now(), 30, true, true) RETURNING id INTO w;
+    PERFORM pg_temp.setcnt(a, 2); PERFORM pg_temp.setcnt(b, 2);
+    j2 := pg_temp.fin(b, w);
+    r := r || pg_temp.is('G11.13 b finishes the shared workout: b resets, partner a (credited by M6a) keeps 2',
+                         (j2->>'partner_checked_in') || ' ' || pg_temp.cnt(b) || '/' || pg_temp.cnt(a), '2 0/2');
+    j2 := pg_temp.fin(a, w);
+    r := r || pg_temp.is('G11.14 a then finishes too, the day already filled by the partner credit: still resets (decision 2026-11-05)',
+                         (j2->>'checked_in') || ' ' || pg_temp.cnt(a), '0 0');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G11.13-14 crashed: ' || SQLERRM);
+  END;
+
+  -- G11.15 the Coach Max mirror and a submit_checkin copy do not reset
+  BEGIN
+    e := pg_temp.o6(); a := pg_temp.ua(); b := pg_temp.o3();
+    PERFORM pg_temp.setcnt(e, 2); PERFORM pg_temp.setcnt(a, 2); PERFORM pg_temp.setcnt(b, 2);
+    INSERT INTO coach_max_schedule (user_id, scheduled_date, scheduled_time, has_checked_in)
+    VALUES (e, pg_temp.day(e), '00:00', false)
+    ON CONFLICT (user_id, scheduled_date) DO UPDATE SET scheduled_time = '00:00', has_checked_in = false, checked_in_at = NULL;
+    j := pg_temp.js(pg_temp.u(e, format('SELECT public.check_in_coach_max(%L)::text', e)));
+    n := coalesce(j->>'checked_in', j::text) || ' ' || pg_temp.cnt(e);
+    INSERT INTO daily_team_checkins (team_streak_id, user_id, check_in_date, check_in_time)
+    VALUES (pg_temp.cms(b), b, pg_temp.day(b), date_trunc('second', now()) - interval '3 hours');
+    PERFORM pg_temp.bt(a, b);
+    j := pg_temp.sub(a);
+    n := n || ' copy rows '
+         || (SELECT count(*) FROM daily_team_checkins d JOIN team_streaks ts ON ts.id = d.team_streak_id JOIN buddy_teams bt ON bt.id = ts.team_id
+             WHERE d.user_id IN (a, b) AND NOT bt.is_coach_max_team AND d.check_in_date = pg_temp.day(b))
+         || ' ' || pg_temp.cnt(a) || '/' || pg_temp.cnt(b);
+    r := r || pg_temp.is('G11.15 check_in_coach_max (it did check in) and a submit_checkin copy (it did copy a row) leave the counters at 2', n, 'true 2 copy rows 1 2/2');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G11.15 crashed: ' || SQLERRM);
+  END;
+
+  -- G11.16-19 the warning's copy and call, the table's RLS and privileges
+  BEGIN
+    r := r || pg_temp.is('G11.16 the three coach_max_auto_limit templates, exact copy',
+                         (SELECT string_agg(push_templates.variant || '|' || push_templates.title || '|' || push_templates.body, E'\n' ORDER BY push_templates.variant)
+                          FROM push_templates WHERE push_templates.key = 'coach_max_auto_limit'),
+                         $t$1|Coach Max|That's three auto check-ins in a row. I'm done covering for you. Next time, you check in yourself.
+2|Coach Max|Three in a row. I covered for you, now it's your turn. Check in yourself from now on.
+3|Coach Max|I'm not your alarm clock. Three auto check-ins is all you get. Check in yourself next time.$t$);
+    r := r || pg_temp.ok('G11.17 templates: within the 100/300 limits, no placeholder, no emoji',
+                         (SELECT bool_and(char_length(push_templates.title) BETWEEN 1 AND 100 AND char_length(push_templates.body) BETWEEN 1 AND 300
+                                          AND push_templates.title !~ '[{}]' AND push_templates.body !~ '[{}]'
+                                          AND (push_templates.title || push_templates.body) !~ '[\U0001F000-\U0001FAFF☀-➿]')
+                          FROM push_templates WHERE push_templates.key = 'coach_max_auto_limit'));
+    r := r || pg_temp.ok('G11.18 the warning goes out as coach_max_motivational on the Coach Max channel, not urgent, from Coach Max',
+                         pg_temp.def('public._auto_credit(uuid,timestamptz,integer,text,text)')
+                           LIKE '%''coach_max_auto_limit'', ''{}''::jsonb, ''emerald'', ''coach_max'', ''coach_max_motivational'',%p_user::text, ''coach_max_limit_'' || p_user::text, false, ''00000000-0000-0000-0000-000000000001''::uuid%');
+    r := r || pg_temp.ok('G11.19 auto_checkin_counts: RLS on, no policy, no privilege for anon or authenticated',
+                         (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.auto_checkin_counts'::regclass)
+                         AND NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'auto_checkin_counts')
+                         AND NOT EXISTS (SELECT 1 FROM unnest(ARRAY['anon', 'authenticated']) ro, unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) pr
+                                         WHERE has_table_privilege(ro, 'public.auto_checkin_counts', pr)));
+  EXCEPTION WHEN OTHERS THEN r := r || ('FAIL G11.16-19 crashed: ' || SQLERRM);
   END;
 
   RAISE EXCEPTION E'SUITE_RESULTS\n%', array_to_string(r, E'\n');

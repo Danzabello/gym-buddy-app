@@ -4,6 +4,7 @@
 --   Before the migration is applied:  (printf 'BEGIN;\n'; cat supabase/migrations/20261105120000_checkin_ready_pushes.sql; cat docs/hygiene/34_checkin_ready_probe.sql) > /tmp/p.sql
 --                                      supabase db query --linked -f /tmp/p.sql
 --   After it is applied:               supabase db query --linked -f docs/hygiene/34_checkin_ready_probe.sql
+-- NOTE (prompt 35): stage 3 reads "Final reminder" since 20261105220000; against a database without that migration this probe's stage 3 reports MISMATCH.
 -- Test accounts: rokitest1 (A, gets a fake device token here) and testtest1 (C, no token). Never a real phone's account.
 -- The Authorization header is reported as its first 7 characters only.
 DO $probe$
@@ -14,7 +15,7 @@ DECLARE
   want text[][] := ARRAY[
     ['30',  'session_goal',      'emerald', '#50C878', 'Timer''s done',          'Your check-in is unlocked. Open the app and tap Complete Check-In.'],
     ['60',  'session_reminder',  'orange',  '#EA580C', 'Still waiting on you',   'Your workout isn''t counted until you check in. It takes one tap.'],
-    ['120', 'session_reminder2', 'amber',   '#FBBF24', 'Last reminder',          'Tap Complete Check-In now. If you skip it, it''s counted automatically 3½ hours after you started.']];
+    ['120', 'session_reminder2', 'amber',   '#FBBF24', 'Final reminder',         'This is the final reminder. Open the app and tap Complete Check-In.']];
   i int; res text := ''; ok boolean := true; got text; exp text;
 BEGIN
   SELECT coalesce(max(id), 0) INTO m FROM net.http_request_queue;
