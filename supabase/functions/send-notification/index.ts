@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { recordInbox } from './inbox.ts'
 import { categoryDisabled, isQuietHour, resolveSettings } from './settings.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
@@ -233,7 +234,8 @@ serve(async (req) => {
     const authHeader = req.headers.get('Authorization') ?? ''
     const bearer = authHeader.replace(/^Bearer\s+/i, '').trim()
 
-    if (!(await isServiceKey(bearer))) {
+    const isService = await isServiceKey(bearer)
+    if (!isService) {
       const { data: userData, error: authErr } = await supabase.auth.getUser(bearer)
       const callerId = userData?.user?.id
       if (authErr || !callerId) {
@@ -272,7 +274,7 @@ serve(async (req) => {
     console.log(`🔔 send-notification called for user ${user_id}, type: ${type}`)
 
     // ============================================
-    // QUIET HOURS & CATEGORY CHECK
+    // CATEGORY CHECK
     // ============================================
     const { data: settingsRow } = await supabase
       .from('notification_settings')
@@ -282,25 +284,6 @@ serve(async (req) => {
 
     // No row means the defaults (quiet hours 23-7 on), same as the app's Settings page.
     const settings = resolveSettings(settingsRow)
-
-    // Time-critical handshake pushes (urgent) ignore quiet hours.
-    if (settings.quiet_hours_enabled && !urgent) {
-      // Recipient's own local hour, not the server's — a UTC hour was
-      // being compared against a quiet-hours window the user configured
-      // in their own local time, which is wrong for anyone far from UTC.
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('timezone')
-        .eq('id', user_id)
-        .maybeSingle()
-      const tz = profile?.timezone || FALLBACK_TZ
-      const hour = Number(localTimeOfDay(new Date(), tz).slice(0, 2))
-
-      if (isQuietHour(hour, settings.quiet_hours_start, settings.quiet_hours_end)) {
-        console.log(`🌙 Quiet hours - skipping`)
-        return new Response(JSON.stringify({ skipped: 'quiet_hours' }), { status: 200 })
-      }
-    }
 
     if (categoryDisabled(type, settings)) {
       console.log(`🔕 Category disabled - skipping ${type}`)
@@ -325,6 +308,39 @@ serve(async (req) => {
         console.log(`📦 Already sent ${batch_key} within ${dedupeMinutes} min - batching`)
         return new Response(JSON.stringify({ skipped: 'batched' }), { status: 200 })
       }
+    }
+
+    // ============================================
+    // QUIET HOURS: worked out here, acted on after the inbox row
+    // ============================================
+    // Time-critical handshake pushes (urgent) ignore quiet hours.
+    let quiet = false
+    if (settings.quiet_hours_enabled && !urgent) {
+      // Recipient's own local hour, not the server's — a UTC hour was
+      // being compared against a quiet-hours window the user configured
+      // in their own local time, which is wrong for anyone far from UTC.
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('timezone')
+        .eq('id', user_id)
+        .maybeSingle()
+      const tz = profile?.timezone || FALLBACK_TZ
+      const hour = Number(localTimeOfDay(new Date(), tz).slice(0, 2))
+      quiet = isQuietHour(hour, settings.quiet_hours_start, settings.quiet_hours_end)
+    }
+
+    // ============================================
+    // INBOX: one row per push for the Notifications page, before the quiet and
+    // token stops so a held or undeliverable push is listed. Never throws.
+    // ============================================
+    await recordInbox(supabase, {
+      user_id, type, title: cleanTitle, body: cleanBody, quiet, reference_id, batch_key,
+      dedupeMinutes, hourlyCap: isService ? undefined : CLIENT_HOURLY_CAP,
+    })
+
+    if (quiet) {
+      console.log(`🌙 Quiet hours - skipping`)
+      return new Response(JSON.stringify({ skipped: 'quiet_hours' }), { status: 200 })
     }
 
     // ============================================
