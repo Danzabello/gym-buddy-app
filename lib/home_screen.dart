@@ -56,7 +56,7 @@ import 'theme/app_theme.dart';
 import 'theme/accent_theme_provider.dart';
 import 'data/coach_tips.dart';
 import 'services/notification_service.dart';
-import 'widgets/notification_prompt_sheet.dart';
+import 'pages/notifications_page.dart';
 import 'widgets/live_event_toast.dart';
 import 'widgets/coin_glyph.dart';
 import 'widgets/workout_celebration.dart';
@@ -882,19 +882,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     } catch (_) {}
   }
 
-  /// Granted (or unknown): the plain snackbar. Not granted: the sheet. Held
-  /// by _once until the sheet closes.
-  Future<void> _onBellTap() async {
-    final tap = await routeBellTap(NotificationService().checkOsPermission);
-    if (!mounted) return;
-    if (tap == BellTap.sheet) return showNotificationPromptSheet(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('No new notifications'),
-        duration: Duration(seconds: 1),
-      ),
-    );
-  }
+  /// Always the Notifications page. Held by _once until it closes.
+  Future<void> _onBellTap() => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const NotificationsPage()),
+      );
 
   void _setupAppLifecycleListener() {
     _loadStreakData();
