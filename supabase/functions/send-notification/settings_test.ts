@@ -56,6 +56,12 @@ test('categoryDisabled: streaks-off row disables buddy_checked_in', () => {
   assert.equal(categoryDisabled('nudge', s), false)
 })
 
+test('categoryDisabled: checkin_ready follows the workouts toggle', () => {
+  assert.equal(categoryDisabled('checkin_ready', resolveSettings({ notif_workouts: false })), true)
+  assert.equal(categoryDisabled('checkin_ready', resolveSettings({ notif_streaks: false })), false)
+  assert.equal(categoryDisabled('checkin_ready', resolveSettings(null)), false)
+})
+
 test('categoryDisabled: defaults disable nothing', () => {
   assert.equal(categoryDisabled('buddy_checked_in', resolveSettings(null)), false)
   assert.equal(categoryDisabled('friend_request', resolveSettings(null)), false)

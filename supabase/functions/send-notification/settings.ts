@@ -69,6 +69,7 @@ export const categoryMap: Record<string, string> = {
   'buddy_finished': 'notif_workouts',
   'still_going': 'notif_workouts',
   'before_auto': 'notif_workouts',
+  'checkin_ready': 'notif_workouts',
   'buddy_checked_in': 'notif_streaks',
   'streak_complete': 'notif_streaks',
   'streak_milestone': 'notif_streaks',
