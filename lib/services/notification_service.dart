@@ -175,6 +175,7 @@ int? tabForType(String? type) {
     case 'streak_broken':
     case 'streak_danger':
     case 'coach_max_motivational':
+    case 'checkin_ready': // the dashboard, where Complete Check-In waits; its reference is a session, not a workout
       return 2;
   }
   return null;

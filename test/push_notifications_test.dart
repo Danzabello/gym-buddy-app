@@ -119,6 +119,10 @@ void main() {
         expect(tabForType(t), 2, reason: t);
       }
     });
+    test('checkin_ready opens the Dashboard, never a workout page (its reference is a session id)', () {
+      expect(tabForType('checkin_ready'), 2);
+      expect(workoutIdForPush('checkin_ready', 'a-session-id'), isNull);
+    });
     test('unknown type does nothing', () {
       expect(tabForType('something_else'), isNull);
       expect(tabForType(null), isNull);
