@@ -263,6 +263,52 @@ BEGIN
              FROM pg_temp.push_log WHERE ref IN (s1::text, s2::text)));
 END $f$;
 
+-- EQ8 3h30 auto check-in (prompt 34): a solo session started now(), the job run 210 minutes later. The session is
+-- credited and closed exactly as before the check-in-ready pushes, and nobody is pushed.
+CREATE FUNCTION pg_temp.fx_eq8() RETURNS jsonb LANGUAGE plpgsql AS $f$
+DECLARE u uuid := pg_temp.uc();
+BEGIN
+  PERFORM pg_temp.sess(u, interval '0 minutes');
+  PERFORM public.process_stale_sessions(now() + interval '210 minutes');
+  RETURN jsonb_build_object(
+    'left', (SELECT count(*) FROM active_checkin_sessions WHERE user_id = u),
+    'logs', (SELECT count(*) FROM workout_logs WHERE user_id = u AND auto_completed AND created_at = now()),
+    'push', (SELECT count(*) FROM pg_temp.push_log WHERE recipient = u),
+    'snap', pg_temp.snap(ARRAY[u]));
+END $f$;
+
+-- G9 helpers (prompt 34). Sessions start at now(); psj(m) runs the job as if m minutes had passed.
+-- Keys of the session_* pushes a user got, in send order ('-' for none).
+CREATE FUNCTION pg_temp.pk(p_u uuid) RETURNS text LANGUAGE sql AS $$
+  SELECT coalesce(string_agg(key, ',' ORDER BY ts, key), '-') FROM pg_temp.push_log WHERE recipient = p_u AND key LIKE 'session\_%' $$;
+CREATE FUNCTION pg_temp.psj(p_min integer) RETURNS jsonb LANGUAGE sql AS $$
+  SELECT public.process_stale_sessions(now() + p_min * interval '1 minute') $$;
+-- The stamps as minutes after now(), '30/60' = stages 1 and 2 stamped; 'none' = no stamp; 'gone' = no session row.
+-- plpgsql, so the reminder2_notified_at column is only looked up when a G9 case runs.
+CREATE FUNCTION pg_temp.stamps(p_u uuid) RETURNS text LANGUAGE plpgsql AS $f$
+DECLARE t text;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM active_checkin_sessions WHERE user_id = p_u) THEN RETURN 'gone'; END IF;
+  SELECT nullif(concat_ws('/', round(extract(epoch FROM goal_notified_at - now()) / 60),
+                               round(extract(epoch FROM reminder_notified_at - now()) / 60),
+                               round(extract(epoch FROM reminder2_notified_at - now()) / 60)), '')
+  INTO t FROM active_checkin_sessions WHERE user_id = p_u;
+  RETURN coalesce(t, 'none');
+END $f$;
+-- In-progress buddy workout (ua + o1, both in, started now(), 30 min) with a session each.
+CREATE FUNCTION pg_temp.buddy_run() RETURNS uuid LANGUAGE plpgsql AS $f$
+DECLARE w uuid;
+BEGIN
+  PERFORM pg_temp.team(pg_temp.ua(), pg_temp.o1());
+  INSERT INTO workouts (user_id, buddy_id, workout_type, workout_date, workout_time, planned_duration_minutes, status, buddy_status,
+                        workout_started_at, creator_ready, buddy_ready)
+  VALUES (pg_temp.ua(), pg_temp.o1(), 'Strength', current_date, '10:00', 30, 'in_progress', 'accepted', now(), true, true)
+  RETURNING id INTO w;
+  INSERT INTO active_checkin_sessions (user_id, started_at, workout_type, planned_duration, workout_id)
+  VALUES (pg_temp.ua(), now(), 'Strength', 30, w), (pg_temp.o1(), now(), 'Strength', 30, w);
+  RETURN w;
+END $f$;
+
 -- ═════════ phase 1 ═════════
 DO $p1$
 DECLARE fk text; v jsonb; d text;
@@ -275,7 +321,7 @@ BEGIN
      OR EXISTS (SELECT 1 FROM pg_temp.acct WHERE id IN ('19c3b618-ae18-4b2e-be52-cbe1de8cacbe', '6dfac56a-74a1-4a60-b7fa-e200338350f3')) THEN
     RAISE EXCEPTION 'fixture precondition failed';
   END IF;
-  FOREACH fk IN ARRAY ARRAY['eq1', 'eq2', 'eq3', 'eq4', 'eq5', 'eq6', 'eq7'] LOOP
+  FOREACH fk IN ARRAY ARRAY['eq1', 'eq2', 'eq3', 'eq4', 'eq5', 'eq6', 'eq7', 'eq8'] LOOP
     BEGIN
       EXECUTE format('SELECT pg_temp.fx_%s()', fk) INTO v;
       RAISE EXCEPTION 'capture' USING ERRCODE = 'P0099', DETAIL = v::text;
@@ -312,10 +358,10 @@ BEGIN
     '_auto_credit', 'process_stale_sessions', 'check_in_coach_max', 'reconcile_stale_streaks', '_apply_checkin_rewards',
     'submit_checkin', 'create_invite_team', '_fulfil_invite_reward', 'purchase_shop_item', 'verify_achievement_progress');
   r := r || pg_temp.ok('G0.1 ACL, SECURITY DEFINER and search_path of every credit-path function', ok AND n LIKE '%_lock_credit%', n);
-  r := r || pg_temp.is('G0.2 unchanged bodies pinned: _apply_checkin_rewards, process_stale_sessions, submit_checkin, purchase_shop_item',
+  r := r || pg_temp.is('G0.2 bodies pinned: _apply_checkin_rewards, process_stale_sessions (re-pinned by 20261105120000), submit_checkin, purchase_shop_item',
                        md5(pg_temp.def('public._apply_checkin_rewards(uuid,uuid,date)')) || ' ' || md5(pg_temp.def('public.process_stale_sessions(timestamptz)'))
                        || ' ' || md5(pg_temp.def('public.submit_checkin()')) || ' ' || md5(pg_temp.def('public.purchase_shop_item(uuid)')),
-                       '47185fcbc9c873ef46ebdce0bdde70f6 929c250cf1b7e98ad9c9d593d786ba32 acc63cafafd56afa8a0ebd7503510739 0f67d03bef591fd4c107bb2bb8d05ef2');
+                       '47185fcbc9c873ef46ebdce0bdde70f6 8471f6ae8be34f5232c9f64eb7ef9f7f acc63cafafd56afa8a0ebd7503510739 0f67d03bef591fd4c107bb2bb8d05ef2');
   r := r || pg_temp.ok('G0.3 process_stale_sessions COMMENT points at _credit_day',
                        obj_description('public.process_stale_sessions(timestamptz)'::regprocedure, 'pg_proc') LIKE '%_credit_day%');
   body := pg_temp.def('public._lock_credit(uuid[],boolean,uuid)');
@@ -369,7 +415,7 @@ BEGIN
   END;
 
   -- ── G10 equivalence: the phase-2 bodies on the phase-1 fixtures ──
-  FOREACH fk IN ARRAY ARRAY['eq1', 'eq2', 'eq3', 'eq4', 'eq5', 'eq6', 'eq7'] LOOP
+  FOREACH fk IN ARRAY ARRAY['eq1', 'eq2', 'eq3', 'eq4', 'eq5', 'eq6', 'eq7', 'eq8'] LOOP
     BEGIN
       EXECUTE format('SELECT pg_temp.fx_%s()', fk) INTO v;
       RAISE EXCEPTION 'capture' USING ERRCODE = 'P0099', DETAIL = v::text;
@@ -644,6 +690,145 @@ BEGIN
     RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
   EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
             WHEN OTHERS THEN r := r || ('FAIL G8 crashed: ' || SQLERRM);
+  END;
+
+  -- ── G9 check-in ready pushes (prompt 34): process_stale_sessions at p_now, _send_push stubbed into push_log ──
+  -- Stage 1 at the goal, stage 2 +30 min, stage 3 +60 min after that, once each, nothing from 3h30 on.
+  BEGIN
+    a := pg_temp.ua();
+    PERFORM pg_temp.sess(a, interval '0 minutes');  -- planned 30: goal at minute 30
+    s := (SELECT id FROM active_checkin_sessions WHERE user_id = a);
+    j := pg_temp.psj(29);
+    r := r || pg_temp.is('G9.1 a minute before the goal: no push, no stamp', pg_temp.pk(a) || ' ' || pg_temp.stamps(a), '- none');
+    j := pg_temp.psj(30);
+    r := r || pg_temp.is('G9.2 at the goal: stage 1 once, stamped', pg_temp.pk(a) || ' ' || pg_temp.stamps(a), 'session_goal 30');
+    j := pg_temp.psj(30); j := pg_temp.psj(31); j := pg_temp.psj(59);
+    r := r || pg_temp.is('G9.3 re-runs and the 29 minutes after stage 1 send nothing', pg_temp.pk(a) || ' ' || pg_temp.stamps(a), 'session_goal 30');
+    j := pg_temp.psj(60);
+    r := r || pg_temp.is('G9.4 stage 2 thirty minutes after stage 1, once', pg_temp.pk(a) || ' ' || pg_temp.stamps(a), 'session_goal,session_reminder 30/60');
+    j := pg_temp.psj(60); j := pg_temp.psj(61); j := pg_temp.psj(119);
+    r := r || pg_temp.is('G9.5 nothing in the 59 minutes after stage 2', pg_temp.pk(a) || ' ' || pg_temp.stamps(a), 'session_goal,session_reminder 30/60');
+    j := pg_temp.psj(120);
+    r := r || pg_temp.is('G9.6 stage 3 an hour after stage 2, once', pg_temp.pk(a) || ' ' || pg_temp.stamps(a),
+                         'session_goal,session_reminder,session_reminder2 30/60/120');
+    j := pg_temp.psj(120); j := pg_temp.psj(121); j := pg_temp.psj(150); j := pg_temp.psj(209);
+    r := r || pg_temp.is('G9.7 never a fourth push before 3h30', pg_temp.pk(a), 'session_goal,session_reminder,session_reminder2');
+    r := r || pg_temp.is('G9.8 every push carries the session id as its reference',
+                         (SELECT count(*) FROM pg_temp.push_log WHERE recipient = a AND ref = s::text AND sender IS NULL)::text, '3');
+    j := pg_temp.psj(210);
+    r := r || pg_temp.is('G9.9 3h30: auto-completed (session gone), no further push', pg_temp.stamps(a) || ' ' || pg_temp.pk(a), 'gone session_goal,session_reminder,session_reminder2');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G9.1-9 crashed: ' || SQLERRM);
+  END;
+
+  -- G9 a job that ran late sends one stage per run; the goal clamps to 15..210 minutes, null planned = 30
+  BEGIN
+    a := pg_temp.ua();
+    PERFORM pg_temp.sess(a, interval '0 minutes');
+    j := pg_temp.psj(100); j := pg_temp.psj(100);
+    r := r || pg_temp.is('G9.10 first run at goal + 70 min: stage 1 only, no burst', pg_temp.pk(a), 'session_goal');
+    j := pg_temp.psj(130);
+    r := r || pg_temp.is('G9.11 next stage only after its own gap (stamps from the send time)', pg_temp.pk(a) || ' ' || pg_temp.stamps(a), 'session_goal,session_reminder 100/130');
+    DELETE FROM active_checkin_sessions WHERE user_id = a; DELETE FROM pg_temp.push_log;
+    PERFORM pg_temp.sess(a, interval '0 minutes'); UPDATE active_checkin_sessions SET planned_duration = 5 WHERE user_id = a;
+    j := pg_temp.psj(14); n := pg_temp.pk(a); j := pg_temp.psj(15);
+    r := r || pg_temp.is('G9.12 planned 5 clamps up to a 15 minute goal', n || ' ' || pg_temp.pk(a), '- session_goal');
+    DELETE FROM active_checkin_sessions WHERE user_id = a; DELETE FROM pg_temp.push_log;
+    PERFORM pg_temp.sess(a, interval '0 minutes'); UPDATE active_checkin_sessions SET planned_duration = NULL WHERE user_id = a;
+    j := pg_temp.psj(29); n := pg_temp.pk(a); j := pg_temp.psj(30);
+    r := r || pg_temp.is('G9.13 no planned duration means a 30 minute goal', n || ' ' || pg_temp.pk(a), '- session_goal');
+    DELETE FROM active_checkin_sessions WHERE user_id = a; DELETE FROM pg_temp.push_log;
+    PERFORM pg_temp.sess(a, interval '0 minutes'); UPDATE active_checkin_sessions SET planned_duration = 400 WHERE user_id = a;
+    j := pg_temp.psj(209); n := pg_temp.pk(a) || ' ' || pg_temp.stamps(a); j := pg_temp.psj(210);
+    r := r || pg_temp.is('G9.14 planned 400 clamps to 210: no push at all, auto-completed at 3h30', n || ' ' || pg_temp.pk(a) || ' ' || pg_temp.stamps(a), '- none - gone');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G9.10-14 crashed: ' || SQLERRM);
+  END;
+
+  -- G9 a session that is finished, deleted or cancelled gets no further push
+  BEGIN
+    c := pg_temp.uc();
+    PERFORM pg_temp.sess(c, interval '20 minutes');  -- goal reached at minute 10 from now()
+    j := pg_temp.psj(10);
+    n := pg_temp.pk(c);
+    j := pg_temp.fin(c);
+    j := pg_temp.psj(40); j := pg_temp.psj(70); j := pg_temp.psj(100);
+    r := r || pg_temp.is('G9.15 finished after stage 1: session gone, nothing more', n || ' ' || pg_temp.stamps(c) || ' ' || pg_temp.pk(c), 'session_goal gone session_goal');
+    e := pg_temp.o2();
+    PERFORM pg_temp.sess(e, interval '0 minutes');
+    j := pg_temp.psj(30);
+    n := pg_temp.u(e, format('DELETE FROM active_checkin_sessions WHERE user_id = %L RETURNING ''x''', e));
+    j := pg_temp.psj(60); j := pg_temp.psj(120);
+    r := r || pg_temp.is('G9.16 cancelled by the user after stage 1: nothing more', n || ' ' || pg_temp.stamps(e) || ' ' || pg_temp.pk(e), 'x gone session_goal');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G9.15-16 crashed: ' || SQLERRM);
+  END;
+
+  -- G9 scope: a session of an in-progress workout the user is still in is workout-overtime-cron's, not this job's
+  BEGIN
+    a := pg_temp.ua(); b := pg_temp.o1();
+    w := pg_temp.buddy_run();
+    j := pg_temp.psj(30); j := pg_temp.psj(60); j := pg_temp.psj(120); j := pg_temp.psj(209);
+    r := r || pg_temp.is('G9.17 in-progress buddy workout, both in: no push, no stamp for either, at any minute before 3h30',
+                         pg_temp.pk(a) || ' ' || pg_temp.pk(b) || ' ' || pg_temp.stamps(a) || ' ' || pg_temp.stamps(b), '- - none none');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G9.17 crashed: ' || SQLERRM);
+  END;
+
+  BEGIN
+    a := pg_temp.ua(); b := pg_temp.o1();
+    w := pg_temp.buddy_run();
+    UPDATE workouts SET buddy_cancelled = true WHERE id = w;  -- b left; the cron skips b, a is still in
+    j := pg_temp.psj(30);
+    r := r || pg_temp.is('G9.18 a participant who left but kept a session gets the pushes (the cron skips them); the one still in does not',
+                         pg_temp.pk(a) || ' ' || pg_temp.pk(b), '- session_goal');
+    UPDATE workouts SET status = 'cancelled', auto_completed = false WHERE id = w;  -- cleanup trigger deletes both sessions
+    j := pg_temp.psj(60); j := pg_temp.psj(120);
+    r := r || pg_temp.is('G9.19 workout cancelled after stage 1: sessions gone, nothing more',
+                         pg_temp.stamps(a) || ' ' || pg_temp.stamps(b) || ' ' || pg_temp.pk(b), 'gone gone session_goal');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G9.18-19 crashed: ' || SQLERRM);
+  END;
+
+  BEGIN
+    e := pg_temp.o3();
+    INSERT INTO workouts (user_id, workout_type, workout_date, workout_time, planned_duration_minutes, status)
+    VALUES (e, 'Strength', current_date + 1, '10:00', 30, 'scheduled') RETURNING id INTO w;
+    INSERT INTO active_checkin_sessions (user_id, started_at, workout_type, planned_duration, workout_id)
+    VALUES (e, now(), 'Strength', 30, w);
+    j := pg_temp.psj(30);
+    r := r || pg_temp.is('G9.20 session linked to a scheduled (not in-progress) workout gets the push', pg_temp.pk(e), 'session_goal');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G9.20 crashed: ' || SQLERRM);
+  END;
+
+  -- G9 the job, the copy and the 3h30 path
+  BEGIN
+    r := r || pg_temp.is('G9.21 process-stale-sessions runs every minute, same command',
+                         (SELECT schedule || ' | ' || command FROM cron.job WHERE jobname = 'process-stale-sessions'),
+                         '* * * * * | SELECT public.process_stale_sessions();');
+    r := r || pg_temp.is('G9.22 the three push templates, exact copy',
+                         (SELECT string_agg(push_templates.key || '|' || push_templates.variant || '|' || push_templates.title || '|' || push_templates.body, E'\n' ORDER BY push_templates.key)
+                          FROM push_templates WHERE push_templates.key LIKE 'session\_%'),
+                         $t$session_goal|1|Timer's done|Your check-in is unlocked. Open the app and tap Complete Check-In.
+session_reminder|1|Still waiting on you|Your workout isn't counted until you check in. It takes one tap.
+session_reminder2|1|Last reminder|Tap Complete Check-In now. If you skip it, it's counted automatically 3½ hours after you started.$t$);
+    r := r || pg_temp.ok('G9.23 templates: within the 100/300 limits, no placeholder left, no emoji, no clock time',
+                         (SELECT bool_and(char_length(push_templates.title) BETWEEN 1 AND 100 AND char_length(push_templates.body) BETWEEN 1 AND 300
+                                          AND push_templates.title !~ '[{}]' AND push_templates.body !~ '[{}]'
+                                          AND (push_templates.title || push_templates.body) !~ '[\U0001F000-\U0001FAFF☀-➿]'
+                                          AND (push_templates.title || push_templates.body) !~ '[0-9]h[0-9]')
+                          FROM push_templates WHERE push_templates.key LIKE 'session\_%'));
+    r := r || pg_temp.ok('G9.24 the pushes go out as type checkin_ready on the high-importance channel, not urgent',
+                         pg_temp.def('public.process_stale_sessions(timestamptz)') LIKE '%''checkin_ready'', s.id::text, ''session_'' || s.id::text, false, NULL)%'
+                         AND pg_temp.def('public.process_stale_sessions(timestamptz)') LIKE '%''high_importance''%');
+  EXCEPTION WHEN OTHERS THEN r := r || ('FAIL G9.21-24 crashed: ' || SQLERRM);
   END;
 
   RAISE EXCEPTION E'SUITE_RESULTS\n%', array_to_string(r, E'\n');
