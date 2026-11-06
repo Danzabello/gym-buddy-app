@@ -90,6 +90,17 @@ class NotificationInboxService {
     };
   }
 
+  /// True only when a row really went. RLS answers a delete it refuses with
+  /// zero rows and no error, so the deleted rows are asked for back.
+  Future<bool> deleteRow(String id) async {
+    final rows = await _client
+        .from('notification_inbox')
+        .delete()
+        .eq('id', id)
+        .select('id');
+    return rows.isNotEmpty;
+  }
+
   /// Per account, on this device only. It holds the created_at of the newest
   /// row shown on the last visit, so it runs on the server's clock.
   Future<DateTime?> readLastSeen() async {

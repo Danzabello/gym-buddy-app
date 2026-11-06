@@ -55,6 +55,8 @@ class _Fake {
   bool sendersFail = false;
   DateTime? lastSeen;
   List<DateTime> writes = [];
+  List<String> deletes = [];
+  Future<bool> Function(String id) deleteResult = (_) async => true;
   int asks = 0;
   int settingsOpens = 0;
   int permissionChecks = 0;
@@ -79,6 +81,10 @@ class _Fake {
     },
     readLastSeen: () async => lastSeen,
     writeLastSeen: (v) async => writes.add(v),
+    deleteRow: (id) {
+      deletes.add(id);
+      return deleteResult(id);
+    },
     checkPermission: () async {
       permissionChecks++;
       if (checkSetsPermission) {
@@ -96,7 +102,7 @@ class _Fake {
   );
 }
 
-Future<void> _open(WidgetTester t, _Fake f, {double textScale = 1, Size size = const Size(400, 4000)}) async {
+Future<void> _open(WidgetTester t, _Fake f, {double textScale = 1, Size size = const Size(400, 4000), bool reduceMotion = true}) async {
   t.view.physicalSize = size;
   t.view.devicePixelRatio = 1;
   addTearDown(t.view.reset);
@@ -105,7 +111,7 @@ Future<void> _open(WidgetTester t, _Fake f, {double textScale = 1, Size size = c
       theme: AppTheme.fromAccent(AccentPalette.emeraldInk),
       builder: (c, w) => MediaQuery(
         data: MediaQuery.of(c).copyWith(
-          disableAnimations: true,
+          disableAnimations: reduceMotion,
           textScaler: TextScaler.linear(textScale),
         ),
         child: w!,
@@ -576,6 +582,7 @@ void main() {
               loadRings: deps.loadRings,
               readLastSeen: () async => throw Exception('read'),
               writeLastSeen: (_) async => throw Exception('write'),
+              deleteRow: deps.deleteRow,
               checkPermission: () async => throw Exception('check'),
               askPermission: deps.askPermission,
               openSystemSettings: deps.openSystemSettings,
@@ -642,6 +649,358 @@ void main() {
       await _open(t, f);
       expect(hasTap(find.semantics.byLabel(RegExp(r'^Mijo is done'))), isFalse);
       h.dispose();
+    });
+  });
+
+  group('swipe to delete', () {
+    const failed = 'Could not delete notification';
+    double slide(WidgetTester t, String text, double restX) => restX - t.getTopLeft(find.text(text)).dx;
+    Future<void> swipe(WidgetTester t, String text, double dx) async {
+      await t.drag(find.text(text), Offset(dx, 0));
+      await t.pumpAndSettle();
+    }
+
+    _Fake two() => _Fake()
+      ..rows = () async => [row('a', title: 'First', body: 'one'), row('b', title: 'Second', body: 'two')];
+
+    testWidgets('past half the panel it holds open at 104, nothing deleted', (t) async {
+      final f = two();
+      await _open(t, f);
+      final x = t.getTopLeft(find.text('First')).dx;
+      await swipe(t, 'First', -80);
+      expect(slide(t, 'First', x), 104);
+      expect(f.deletes, isEmpty);
+      expect(find.text('First'), findsOneWidget);
+    });
+
+    testWidgets('a short swipe springs back', (t) async {
+      final f = two();
+      await _open(t, f);
+      final x = t.getTopLeft(find.text('First')).dx;
+      await swipe(t, 'First', -30);
+      expect(slide(t, 'First', x), 0);
+    });
+
+    testWidgets('a right swipe does nothing on a closed row', (t) async {
+      final f = two();
+      await _open(t, f);
+      final x = t.getTopLeft(find.text('First')).dx;
+      await swipe(t, 'First', 200);
+      expect(slide(t, 'First', x), 0);
+      expect(f.deletes, isEmpty);
+    });
+
+    testWidgets('a right swipe closes an open row', (t) async {
+      final f = two();
+      await _open(t, f);
+      final x = t.getTopLeft(find.text('First')).dx;
+      await swipe(t, 'First', -80);
+      await t.dragFrom(t.getCenter(find.text('First')), const Offset(120, 0));
+      await t.pumpAndSettle();
+      expect(slide(t, 'First', x), 0);
+    });
+
+    testWidgets('swiping all the way deletes once, and only that row', (t) async {
+      final f = two();
+      await _open(t, f);
+      await swipe(t, 'First', -300);
+      expect(f.deletes, ['a']);
+      expect(find.text('First'), findsNothing);
+      expect(find.text('Second'), findsOneWidget);
+      expect(find.text(failed), findsNothing);
+    });
+
+    testWidgets('a fast flick only opens it', (t) async {
+      final f = two();
+      await _open(t, f);
+      final x = t.getTopLeft(find.text('First')).dx;
+      await t.fling(find.text('First'), const Offset(-120, 0), 3000);
+      await t.pumpAndSettle();
+      expect(slide(t, 'First', x), 104);
+      expect(f.deletes, isEmpty);
+    });
+
+    testWidgets('tapping the action deletes', (t) async {
+      final f = two();
+      await _open(t, f);
+      await swipe(t, 'First', -80);
+      await t.tap(find.text('Delete').first);
+      await t.pumpAndSettle();
+      expect(f.deletes, ['a']);
+      expect(find.text('First'), findsNothing);
+    });
+
+    testWidgets('the action is the red token with the trash icon', (t) async {
+      final f = two();
+      await _open(t, f);
+      await swipe(t, 'First', -80);
+      final panel = t.widget<Material>(
+        find.ancestor(of: find.text('Delete').first, matching: find.byType(Material)).first,
+      );
+      expect(panel.color, AppColors.of(t.element(find.byType(NotificationsPage))).danger);
+      expect(find.byIcon(Icons.delete_outline_rounded), findsNWidgets(2));
+    });
+
+    testWidgets('tapping an open row closes it and does not route; the next tap routes', (t) async {
+      final f = _Fake()..rows = () async => [row('a', type: 'friend_request')];
+      await _open(t, f);
+      final x = t.getTopLeft(find.text('Mijo')).dx;
+      await swipe(t, 'Mijo', -80);
+      // The title has slid out of the card; the body is still in view.
+      await t.tap(find.text('is done. Your turn.'));
+      await t.pumpAndSettle();
+      expect(slide(t, 'Mijo', x), 0);
+      expect(find.byType(NotificationsPage), findsOneWidget);
+      expect(NotificationService.tabRequest.value, isNull);
+      expect(f.deletes, isEmpty);
+      await t.tap(find.text('Mijo'));
+      await t.pumpAndSettle();
+      expect(find.byType(NotificationsPage), findsNothing);
+      expect(NotificationService.tabRequest.value, 1);
+    });
+
+    testWidgets('swiping another row closes the open one', (t) async {
+      final f = two();
+      await _open(t, f);
+      final x = t.getTopLeft(find.text('First')).dx;
+      await swipe(t, 'First', -80);
+      await swipe(t, 'Second', -80);
+      expect(slide(t, 'First', x), 0);
+      expect(slide(t, 'Second', x), 104);
+    });
+
+    testWidgets('it animates when motion is allowed', (t) async {
+      final f = two();
+      await _open(t, f, reduceMotion: false);
+      final x = t.getTopLeft(find.text('First')).dx;
+      await t.drag(find.text('First'), const Offset(-80, 0));
+      await t.pump(const Duration(milliseconds: 60));
+      expect(slide(t, 'First', x), inExclusiveRange(52, 104));
+      await t.pumpAndSettle();
+      expect(slide(t, 'First', x), 104);
+    });
+
+    testWidgets('a row with no tap destination can still be deleted', (t) async {
+      final f = _Fake()..rows = () async => [row('a', type: 'something_new'), row('b', title: 'Other')];
+      await _open(t, f);
+      await swipe(t, 'Mijo', -300);
+      expect(f.deletes, ['a']);
+    });
+
+    testWidgets('gone at once, before the server answers', (t) async {
+      final gate = Completer<bool>();
+      final f = two()..deleteResult = (_) => gate.future;
+      await _open(t, f);
+      await swipe(t, 'First', -300);
+      expect(find.text('First'), findsNothing);
+      gate.complete(true);
+      await t.pumpAndSettle();
+      expect(find.text('First'), findsNothing);
+      expect(find.text(failed), findsNothing);
+    });
+
+    testWidgets('a thrown delete puts the row back in its place, closed, with the snackbar', (t) async {
+      final f = _Fake()
+        ..deleteResult = ((_) async => throw Exception('boom'))
+        ..rows = () async => [row('a', title: 'First', body: 'one'), row('b', title: 'Second', body: 'two'), row('c', title: 'Third', body: 'three')];
+      await _open(t, f);
+      final x = t.getTopLeft(find.text('Second')).dx;
+      await swipe(t, 'Second', -300);
+      expect(find.text(failed), findsOneWidget);
+      expect(find.text('Second'), findsOneWidget);
+      expect(slide(t, 'Second', x), 0);
+      final y = [for (final s in ['First', 'Second', 'Third']) t.getTopLeft(find.text(s)).dy];
+      expect(y[0], lessThan(y[1]));
+      expect(y[1], lessThan(y[2]));
+    });
+
+    testWidgets('zero rows deleted (RLS refused it) counts as failed', (t) async {
+      final f = two()..deleteResult = (_) async => false;
+      await _open(t, f);
+      await swipe(t, 'First', -300);
+      expect(f.deletes, ['a']);
+      expect(find.text('First'), findsOneWidget);
+      expect(find.text(failed), findsOneWidget);
+    });
+
+    testWidgets('the last row of a day takes its header with it, and a failure brings it back', (t) async {
+      final n = DateTime.now();
+      var ok = true;
+      final f = _Fake()
+        ..deleteResult = ((_) async => ok)
+        ..rows = () async => [
+          row('a', title: 'Today row', at: _today(9)),
+          row('b', title: 'Old row', at: DateTime(n.year, n.month, n.day - 1, 9)),
+        ];
+      await _open(t, f);
+      ok = false;
+      await swipe(t, 'Old row', -300);
+      expect(find.text('YESTERDAY'), findsOneWidget);
+      expect(find.text('Old row'), findsOneWidget);
+      ok = true;
+      await swipe(t, 'Old row', -300);
+      expect(find.text('YESTERDAY'), findsNothing);
+      expect(find.text('TODAY'), findsOneWidget);
+      expect(find.text('LAST 7 DAYS'), findsOneWidget);
+    });
+
+    testWidgets('the last row of all shows the Coach Max card, no label, no footer', (t) async {
+      final f = _Fake()..rows = () async => [row('a')];
+      await _open(t, f);
+      await swipe(t, 'Mijo', -300);
+      expect(find.byType(AiInlinePill), findsOneWidget);
+      expect(find.text('LAST 7 DAYS'), findsNothing);
+      expect(find.text('TODAY'), findsNothing);
+      expect(find.text('Older than 7 days is cleared.'), findsNothing);
+      expect(find.text('Delete'), findsNothing, reason: 'the welcome card is not deletable');
+    });
+
+    testWidgets('deleting moves neither the dots nor the stored last visit', (t) async {
+      final seen = DateTime.utc(2026, 10, 30, 8);
+      final newest = seen.add(const Duration(minutes: 9));
+      final middle = seen.add(const Duration(minutes: 5));
+      final f = _Fake()
+        ..lastSeen = seen
+        ..rows = () async => [
+          row('a', title: 'Newest', at: newest),
+          row('b', title: 'Middle', at: middle),
+          row('c', title: 'Oldest', at: seen),
+        ];
+      await _open(t, f);
+      expect(_dots, findsNWidgets(2));
+      await swipe(t, 'Newest', -300);
+      expect(_dots, findsOneWidget, reason: 'only the deleted row lost its dot');
+      expect(f.writes, isEmpty);
+      await _back(t);
+      expect(f.writes, [newest], reason: 'the newest row shown, though it was deleted');
+    });
+
+    testWidgets('a reload cannot bring back a row being deleted, or one already deleted', (t) async {
+      final gate = Completer<bool>();
+      final f = two()..deleteResult = (_) => gate.future;
+      await _open(t, f, size: const Size(400, 800));
+      await swipe(t, 'First', -300);
+      await t.fling(find.byType(ListView), const Offset(0, 400), 1000);
+      await t.pumpAndSettle();
+      expect(f.rowLoads, 2);
+      expect(find.text('First'), findsNothing, reason: 'still in flight');
+      gate.complete(true);
+      await t.pumpAndSettle();
+      await t.fling(find.byType(ListView), const Offset(0, 400), 1000);
+      await t.pumpAndSettle();
+      expect(f.rowLoads, 3);
+      expect(find.text('First'), findsNothing, reason: 'a stale reply still lists it');
+    });
+
+    testWidgets('a failed delete during a reload still restores the row', (t) async {
+      final gate = Completer<bool>();
+      final f = two()..deleteResult = (_) => gate.future;
+      await _open(t, f, size: const Size(400, 800));
+      await swipe(t, 'First', -300);
+      await t.fling(find.byType(ListView), const Offset(0, 400), 1000);
+      await t.pumpAndSettle();
+      gate.complete(false);
+      await t.pumpAndSettle();
+      expect(find.text('First'), findsOneWidget);
+      expect(find.text(failed), findsOneWidget);
+    });
+
+    testWidgets('an open row stays open through a reload', (t) async {
+      final gate = Completer<List<InboxRow>>();
+      var calls = 0;
+      final f = _Fake()
+        ..rows = () {
+          calls++;
+          return calls == 1 ? Future.value([row('a', title: 'First', body: 'one')]) : gate.future;
+        };
+      await _open(t, f, size: const Size(400, 800));
+      final x = t.getTopLeft(find.text('First')).dx;
+      await t.fling(find.byType(ListView), const Offset(0, 400), 1000);
+      await t.pump(const Duration(milliseconds: 500));
+      await t.drag(find.text('First'), const Offset(-80, 0));
+      await t.pump(const Duration(milliseconds: 300));
+      gate.complete([row('a', title: 'First', body: 'one')]);
+      await t.pumpAndSettle();
+      expect(slide(t, 'First', x), 104);
+      expect(f.deletes, isEmpty);
+    });
+
+    testWidgets('a failure after leaving the page still shows the snackbar', (t) async {
+      final gate = Completer<bool>();
+      final f = two()..deleteResult = (_) => gate.future;
+      await _open(t, f);
+      await swipe(t, 'First', -300);
+      await _back(t);
+      gate.complete(false);
+      await t.pumpAndSettle();
+      expect(find.text(failed), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('no overflow with a row open at 360 dp and text scale 2', (t) async {
+      final f = _Fake()..rows = () async => [row('a', title: 'A very long title for a small phone', body: 'wants to be your gym buddy.', quiet: true)];
+      await _open(t, f, textScale: 2, size: const Size(360, 640));
+      await t.drag(find.textContaining('A very long'), const Offset(-80, 0));
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+    });
+
+    group('accessibility', () {
+      const action = CustomSemanticsAction(label: 'Delete notification');
+      final id = CustomSemanticsAction.getIdentifier(action);
+      bool hasDelete(SemanticsNode n) => n.getSemanticsData().customSemanticsActionIds?.contains(id) ?? false;
+
+      testWidgets('a row has the Delete notification action, its tap and its label', (t) async {
+        final h = t.ensureSemantics();
+        final f = _Fake()..rows = () async => [row('a', type: 'time_to_start', ref: 'w1', title: 'Mijo', body: 'is here.', quiet: true)];
+        await _open(t, f);
+        final node = find.semantics.byLabel(RegExp(r'^Mijo is here\., .*, new\. No sound, quiet hours$')).evaluate().single;
+        expect(hasDelete(node), isTrue);
+        expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+        h.dispose();
+      });
+
+      testWidgets('running the action deletes through the same path', (t) async {
+        final h = t.ensureSemantics();
+        final f = two()..deleteResult = (_) async => false;
+        await _open(t, f);
+        final node = find.semantics.byLabel(RegExp(r'^First one')).evaluate().single;
+        node.owner!.performAction(node.id, SemanticsAction.customAction, id);
+        await t.pumpAndSettle();
+        expect(f.deletes, ['a']);
+        expect(find.text('First'), findsOneWidget);
+        expect(find.text(failed), findsOneWidget);
+        h.dispose();
+      });
+
+      testWidgets('a row with no tap destination still has the action, and still no tap', (t) async {
+        final h = t.ensureSemantics();
+        final f = _Fake()..rows = () async => [row('a', type: 'something_new')];
+        await _open(t, f);
+        final node = find.semantics.byLabel(RegExp(r'^Mijo is done')).evaluate().single;
+        expect(hasDelete(node), isTrue);
+        expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isFalse);
+        h.dispose();
+      });
+
+      testWidgets('the welcome card has no delete action', (t) async {
+        final h = t.ensureSemantics();
+        await _open(t, _Fake());
+        expect(find.byType(AiInlinePill), findsOneWidget);
+        expect(find.semantics.byPredicate(hasDelete).evaluate(), isEmpty);
+        h.dispose();
+      });
+
+      testWidgets('the panel is hidden from TalkBack until open, then a labelled button with a tap', (t) async {
+        final h = t.ensureSemantics();
+        final f = _Fake()..rows = () async => [row('a')];
+        await _open(t, f);
+        expect(find.semantics.byLabel('Delete notification').evaluate(), isEmpty);
+        await swipe(t, 'Mijo', -80);
+        final node = find.semantics.byLabel('Delete notification').evaluate().single;
+        expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+        h.dispose();
+      });
     });
   });
 
@@ -835,6 +1194,42 @@ void main() {
       expect(q.queryParameters['id'], 'in.("s1","s2")');
       expect(found.keys, ['s1']);
       expect(found['s1']!.border, 'bold');
+    });
+
+    group('deleteRow', () {
+      (NotificationInboxService, List<http.Request>) del(Object body, {int status = 200}) {
+        final calls = <http.Request>[];
+        final client = SupabaseClient(
+          'https://example.supabase.co',
+          'anon',
+          httpClient: MockClient((req) async {
+            calls.add(req);
+            return http.Response(jsonEncode(body), status, request: req, headers: {'content-type': 'application/json'});
+          }),
+        );
+        return (NotificationInboxService(client: client, userId: uid), calls);
+      }
+
+      test('deletes by id and asks for the deleted rows back', () async {
+        final (s, calls) = del([{'id': 'r1'}]);
+        expect(await s.deleteRow('r1'), isTrue);
+        final req = calls.single;
+        expect(req.method, 'DELETE');
+        expect(req.url.path, '/rest/v1/notification_inbox');
+        expect(req.url.queryParameters['id'], 'eq.r1');
+        expect(req.url.queryParameters['select'], 'id');
+        expect(req.headers['Prefer'], contains('return=representation'));
+      });
+
+      test('zero rows back is false, the case RLS answers with no error', () async {
+        final (s, _) = del([]);
+        expect(await s.deleteRow('r1'), isFalse);
+      });
+
+      test('a refused delete throws', () async {
+        final (s, _) = del({'message': 'permission denied', 'code': '42501'}, status: 403);
+        await expectLater(s.deleteRow('r1'), throwsA(isA<PostgrestException>()));
+      });
     });
 
     test('last visit is per account and keeps the microseconds', () async {

@@ -3,6 +3,7 @@ import 'dart:async' show unawaited;
 import 'package:app_settings/app_settings.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:intl/intl.dart';
 
 import '../services/coach_max_service.dart';
@@ -147,6 +148,7 @@ class NotificationsDeps {
   final Future<Map<String, String>> Function(List<String> ids) loadRings;
   final Future<DateTime?> Function() readLastSeen;
   final Future<void> Function(DateTime value) writeLastSeen;
+  final Future<bool> Function(String id) deleteRow;
   final Future<bool> Function() checkPermission;
   final AskPermission askPermission;
   final Future<void> Function() openSystemSettings;
@@ -158,6 +160,7 @@ class NotificationsDeps {
     required this.loadRings,
     required this.readLastSeen,
     required this.writeLastSeen,
+    required this.deleteRow,
     required this.checkPermission,
     required this.askPermission,
     required this.openSystemSettings,
@@ -172,6 +175,7 @@ class NotificationsDeps {
       loadRings: (ids) => CoinService().getEquippedColorHexForUsers(ids),
       readLastSeen: inbox.readLastSeen,
       writeLastSeen: inbox.writeLastSeen,
+      deleteRow: inbox.deleteRow,
       checkPermission: () => NotificationService().checkOsPermission(),
       askPermission: () => NotificationService().requestPermissionFromUser(),
       openSystemSettings: () =>
@@ -193,8 +197,12 @@ class _NotificationsPageState extends State<NotificationsPage>
     with WidgetsBindingObserver {
   late final NotificationsDeps _deps = widget.deps ?? NotificationsDeps.live();
   final _once = RunOnce();
+  final _swipedRow = ValueNotifier<String?>(null); // one row open at a time
 
   List<InboxRow> _rows = [];
+  // Deleted or being deleted. The row stays in _rows until a reload, so a failed
+  // delete puts it back in its place, and a reload's reply can't bring it back.
+  final Set<String> _hidden = {};
   Map<String, InboxSender> _senders = {};
   Map<String, String> _rings = {};
   bool _loading = true;
@@ -225,7 +233,29 @@ class _NotificationsPageState extends State<NotificationsPage>
     WidgetsBinding.instance.removeObserver(this);
     _saveLastSeen();
     _once.dispose();
+    _swipedRow.dispose();
     super.dispose();
+  }
+
+  List<InboxRow> get _visibleRows =>
+      _rows.where((row) => !_hidden.contains(row.id)).toList();
+
+  /// Gone at once. A throw or an empty result (RLS refused it) puts it back.
+  /// The last-visit time is left alone: it comes from what was loaded.
+  Future<void> _delete(InboxRow row) async {
+    if (_hidden.contains(row.id)) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (_swipedRow.value == row.id) _swipedRow.value = null;
+    setState(() => _hidden.add(row.id));
+    var deleted = false;
+    try {
+      deleted = await _deps.deleteRow(row.id);
+    } catch (_) {}
+    if (deleted) return;
+    if (mounted) setState(() => _hidden.remove(row.id));
+    messenger?.showSnackBar(
+      const SnackBar(content: Text('Could not delete notification')),
+    );
   }
 
   /// A failed check leaves NotificationService.osPermission as it was.
@@ -539,7 +569,8 @@ class _NotificationsPageState extends State<NotificationsPage>
         ),
       ];
     }
-    if (_rows.isEmpty) return [_welcomeCard(c, cs)];
+    final rows = _visibleRows;
+    if (rows.isEmpty) return [_welcomeCard(c, cs)];
 
     final now = DateTime.now();
     return [
@@ -547,7 +578,7 @@ class _NotificationsPageState extends State<NotificationsPage>
         padding: const EdgeInsets.fromLTRB(4, 14, 4, 4),
         child: Text('LAST 7 DAYS', style: _labelStyle(c)),
       ),
-      for (final g in groupInboxByDay(_rows, now)) ...[
+      for (final g in groupInboxByDay(rows, now)) ...[
         Padding(
           padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
           // Uppercase on screen only, as Coin history shows it; a screen
@@ -565,14 +596,21 @@ class _NotificationsPageState extends State<NotificationsPage>
             children: [
               for (var i = 0; i < g.rows.length; i++) ...[
                 if (i > 0) Divider(height: 1, color: c.divider),
-                _InboxTile(
-                  row: g.rows[i],
-                  isNew: inboxRowIsNew(g.rows[i].createdAt, _lastSeenAtOpen),
-                  sender: _senders[g.rows[i].senderId],
-                  ringHex: _rings[g.rows[i].senderId],
-                  onTap: tabForType(g.rows[i].type) == null
-                      ? null
-                      : () => _openRow(g.rows[i]),
+                _SwipeToDelete(
+                  key: ValueKey(g.rows[i].id),
+                  id: g.rows[i].id,
+                  openRow: _swipedRow,
+                  onDelete: () => _delete(g.rows[i]),
+                  child: _InboxTile(
+                    row: g.rows[i],
+                    isNew: inboxRowIsNew(g.rows[i].createdAt, _lastSeenAtOpen),
+                    sender: _senders[g.rows[i].senderId],
+                    ringHex: _rings[g.rows[i].senderId],
+                    onTap: tabForType(g.rows[i].type) == null
+                        ? null
+                        : () => _openRow(g.rows[i]),
+                    onDelete: () => _delete(g.rows[i]),
+                  ),
                 ),
               ],
             ],
@@ -675,12 +713,187 @@ class _CoachMaxAvatar extends StatelessWidget {
   }
 }
 
+/// Slides its row left over a red Delete panel. Past half the panel it holds
+/// open; all the way across it deletes. A flick only opens it, so a flick can't
+/// delete by accident. Tapping the open row closes it. Dismissible can't hold
+/// open with a tappable action, so this is written out rather than a new package.
+class _SwipeToDelete extends StatefulWidget {
+  final String id;
+  final ValueNotifier<String?> openRow;
+  final VoidCallback onDelete;
+  final Widget child;
+
+  const _SwipeToDelete({
+    super.key,
+    required this.id,
+    required this.openRow,
+    required this.onDelete,
+    required this.child,
+  });
+
+  @override
+  State<_SwipeToDelete> createState() => _SwipeToDeleteState();
+}
+
+class _SwipeToDeleteState extends State<_SwipeToDelete>
+    with SingleTickerProviderStateMixin {
+  static const double _panel = 104;
+  static const double _deleteAt = 0.6; // share of the row's width
+
+  late final AnimationController _offset = AnimationController.unbounded(
+    vsync: this,
+  );
+  double _width = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.openRow.addListener(_onOpenRowChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.openRow.removeListener(_onOpenRowChanged);
+    _offset.dispose();
+    super.dispose();
+  }
+
+  void _onOpenRowChanged() {
+    if (widget.openRow.value != widget.id) _settle(0);
+  }
+
+  void _settle(double target) {
+    if (_offset.value == target) return;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _offset.stop();
+      _offset.value = target;
+      return;
+    }
+    _offset.animateTo(
+      target,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _close() {
+    if (widget.openRow.value == widget.id) widget.openRow.value = null;
+    _settle(0);
+  }
+
+  void _dragStart(DragStartDetails _) {
+    _offset.stop();
+    widget.openRow.value = widget.id;
+  }
+
+  void _dragUpdate(DragUpdateDetails d) {
+    _offset.value = (_offset.value - d.primaryDelta!).clamp(0.0, _width);
+  }
+
+  void _dragEnd(DragEndDetails _) {
+    if (_offset.value >= _width * _deleteAt) return widget.onDelete();
+    if (_offset.value >= _panel / 2) return _settle(_panel);
+    _close();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final ink = c.readableForeground(c.danger);
+    return LayoutBuilder(
+      builder: (context, box) {
+        _width = box.maxWidth;
+        return GestureDetector(
+          onHorizontalDragStart: _dragStart,
+          onHorizontalDragUpdate: _dragUpdate,
+          onHorizontalDragEnd: _dragEnd,
+          child: AnimatedBuilder(
+            animation: _offset,
+            child: widget.child,
+            builder: (context, row) => Stack(
+              children: [
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  right: 0,
+                  width: _offset.value < _panel ? _panel : _offset.value,
+                  child: ExcludeSemantics(
+                    excluding: _offset.value < _panel,
+                    child: Semantics(
+                      button: true,
+                      label: 'Delete notification',
+                      onTap: widget.onDelete,
+                      excludeSemantics: true,
+                      child: Material(
+                        color: c.danger,
+                        child: InkWell(
+                          onTap: widget.onDelete,
+                          child: Center(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.delete_outline_rounded,
+                                    size: 24,
+                                    color: ink,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Delete',
+                                    style: TextStyle(
+                                      color: ink,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Transform.translate(
+                  offset: Offset(-_offset.value, 0),
+                  child: Stack(
+                    children: [
+                      row!,
+                      // While open, a tap on the row closes it and never routes.
+                      if (_offset.value > 0)
+                        Positioned.fill(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            excludeFromSemantics: true,
+                            onTap: _close,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _InboxTile extends StatelessWidget {
+  static const _deleteAction = CustomSemanticsAction(
+    label: 'Delete notification',
+  );
+
   final InboxRow row;
   final bool isNew;
   final InboxSender? sender;
   final String? ringHex;
   final VoidCallback? onTap;
+  final VoidCallback onDelete;
 
   const _InboxTile({
     required this.row,
@@ -688,6 +901,7 @@ class _InboxTile extends StatelessWidget {
     required this.sender,
     required this.ringHex,
     required this.onTap,
+    required this.onDelete,
   });
 
   Widget _leading(AppColors c, ColorScheme cs, Color surface) {
@@ -731,6 +945,7 @@ class _InboxTile extends StatelessWidget {
     return Semantics(
       button: onTap != null,
       onTap: onTap,
+      customSemanticsActions: {_deleteAction: onDelete},
       excludeSemantics: true,
       label: inboxRowSemantics(
         title: row.title,
