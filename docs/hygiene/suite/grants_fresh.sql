@@ -87,10 +87,9 @@ BEGIN
     EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
     r := r || (CASE WHEN n LIKE '42501%' THEN 'PASS ' ELSE 'FAIL ' END || 'G9.18 authenticated ' || split_part(fn, ' ', 1) || ' auto_checkin_counts -> ' || n);
   END LOOP;
-  -- G12.9 (prompt 27): the inbox is read-only for a client, and only its own rows.
+  -- G12.9 (prompts 27, 40): a client reads its own rows and deletes its own rows, and writes nothing else.
   FOREACH fn IN ARRAY ARRAY['INSERT INTO public.notification_inbox (user_id, notification_type, title, body) VALUES (''' || u || ''', ''nudge'', ''t'', ''b'')',
                             'UPDATE public.notification_inbox SET quiet = true WHERE user_id = ''' || u || '''',
-                            'DELETE FROM public.notification_inbox WHERE user_id = ''' || u || '''',
                             'TRUNCATE public.notification_inbox'] LOOP
     BEGIN EXECUTE fn; n := 'no error';
     EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
@@ -102,7 +101,18 @@ BEGIN
   BEGIN EXECUTE 'SELECT sender_id::text FROM public.notification_inbox WHERE title = ''g12.9 mine''' INTO n;
   EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
   r := r || (CASE WHEN n = '5e67f64d-16e3-4b09-9b00-ddc49df8c3f6' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 authenticated can read sender_id on its own row -> ' || coalesce(n, 'null'));
+  BEGIN EXECUTE 'WITH d AS (DELETE FROM public.notification_inbox WHERE title = ''g12.9 theirs'' RETURNING 1) SELECT count(*)::text FROM d' INTO n;
+  EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+  r := r || (CASE WHEN n = '0' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 authenticated DELETE of another user''s row affects 0 rows, no error -> ' || coalesce(n, 'null'));
+  BEGIN EXECUTE 'WITH d AS (DELETE FROM public.notification_inbox WHERE title = ''g12.9 mine'' RETURNING 1) SELECT count(*)::text FROM d' INTO n;
+  EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+  r := r || (CASE WHEN n = '1' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 authenticated DELETE of its own row affects 1 row -> ' || coalesce(n, 'null'));
+  BEGIN EXECUTE 'SELECT count(*)::text FROM public.notification_inbox WHERE title = ''g12.9 mine''' INTO n;
+  EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+  r := r || (CASE WHEN n = '0' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 its own row is gone afterwards -> ' || coalesce(n, 'null'));
   RESET ROLE;
+  SELECT count(*)::text INTO n FROM public.notification_inbox WHERE title = 'g12.9 theirs';
+  r := r || (CASE WHEN n = '1' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 the other user''s row is still there -> ' || coalesce(n, 'null'));
   -- Rate-limit meters (prompt 13): neither role can read or write them.
   FOREACH fn IN ARRAY ARRAY['authenticated', 'anon'] LOOP
     PERFORM set_config('request.jwt.claims', json_build_object('sub', u, 'role', fn)::text, true);
@@ -127,6 +137,9 @@ BEGIN
   BEGIN EXECUTE 'SELECT count(*)::text FROM public.notification_inbox' INTO n;
   EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
   r := r || (CASE WHEN n LIKE '42501%' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 anon SELECT notification_inbox -> ' || n);
+  BEGIN EXECUTE 'DELETE FROM public.notification_inbox'; n := 'no error';
+  EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+  r := r || (CASE WHEN n LIKE '42501%' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 anon DELETE notification_inbox -> ' || n);
   RESET ROLE;
   SET LOCAL ROLE service_role;
   BEGIN EXECUTE 'INSERT INTO public.notification_inbox (user_id, notification_type, title, body, quiet) VALUES (''' || u || ''', ''nudge'', ''t'', ''b'', true)'; n := 'ok';
@@ -163,12 +176,12 @@ BEGIN
   SELECT string_agg(ro || ' ' || pr, ', ' ORDER BY ro, pr) INTO n
   FROM unnest(ARRAY['anon', 'authenticated', 'public', 'service_role']) ro, unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) pr
   WHERE has_table_privilege(ro, 'public.notification_inbox', pr);
-  r := r || (CASE WHEN n = 'authenticated SELECT, service_role DELETE, service_role INSERT, service_role REFERENCES, service_role SELECT, service_role TRIGGER, service_role TRUNCATE, service_role UPDATE'
-                  THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 notification_inbox privileges: authenticated SELECT only, service_role all, nothing for anon or PUBLIC -> ' || coalesce(n, 'none'));
-  SELECT string_agg(policyname || ' ' || cmd || ' ' || roles::text || ' ' || qual, '; ') INTO n FROM pg_policies WHERE schemaname = 'public' AND tablename = 'notification_inbox';
+  r := r || (CASE WHEN n = 'authenticated DELETE, authenticated SELECT, service_role DELETE, service_role INSERT, service_role REFERENCES, service_role SELECT, service_role TRIGGER, service_role TRUNCATE, service_role UPDATE'
+                  THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 notification_inbox privileges: authenticated SELECT and DELETE only, service_role all, nothing for anon or PUBLIC -> ' || coalesce(n, 'none'));
+  SELECT string_agg(policyname || ' ' || cmd || ' ' || roles::text || ' ' || qual, '; ' ORDER BY policyname) INTO n FROM pg_policies WHERE schemaname = 'public' AND tablename = 'notification_inbox';
   r := r || (CASE WHEN (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.notification_inbox'::regclass)
-                       AND n = 'Users read own inbox SELECT {authenticated} (user_id = ( SELECT auth.uid() AS uid))'
-                  THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 notification_inbox: RLS on, one SELECT policy, own rows -> ' || coalesce(n, 'none'));
+                       AND n = 'Users delete own inbox DELETE {authenticated} (user_id = ( SELECT auth.uid() AS uid)); Users read own inbox SELECT {authenticated} (user_id = ( SELECT auth.uid() AS uid))'
+                  THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 notification_inbox: RLS on, exactly the SELECT and DELETE policies, own rows -> ' || coalesce(n, 'none'));
   SELECT string_agg(a.attname || ' ' || c.confdeltype::text, ', ' ORDER BY a.attname) INTO n
   FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
   WHERE c.conrelid = 'public.notification_inbox'::regclass AND c.contype = 'f' AND c.confrelid = 'public.user_profiles'::regclass;

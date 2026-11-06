@@ -1127,6 +1127,35 @@ session_reminder2|1|Final reminder|This is the final reminder. Open the app and 
             WHEN OTHERS THEN r := r || ('FAIL G12.7, 8, 10 crashed: ' || SQLERRM);
   END;
 
+  -- G12.11-15 (prompt 40) a user deletes only their own rows; RLS answers a delete of anyone else's with zero rows and no error
+  BEGIN
+    a := pg_temp.ua();
+    c := pg_temp.uc();
+    DELETE FROM public.notification_inbox WHERE user_id IN (a, c);
+    INSERT INTO public.notification_inbox (user_id, notification_type, title, body) VALUES (a, 'nudge', 'g12 mine', 'b') RETURNING id INTO i1;
+    INSERT INTO public.notification_inbox (user_id, notification_type, title, body) VALUES (c, 'nudge', 'g12 theirs', 'b') RETURNING id INTO i2;
+    r := r || pg_temp.is('G12.11 a user deletes their own row by id: 1 row, gone afterwards',
+                         pg_temp.u(a, format('WITH d AS (DELETE FROM public.notification_inbox WHERE id = %L RETURNING 1) SELECT count(*)::text FROM d', i1))
+                         || '/' || (SELECT count(*)::text FROM public.notification_inbox WHERE id = i1), '1/0');
+    r := r || pg_temp.is('G12.12 another user''s row by id: 0 rows, no error, the row stays',
+                         pg_temp.u(a, format('WITH d AS (DELETE FROM public.notification_inbox WHERE id = %L RETURNING 1) SELECT count(*)::text FROM d', i2))
+                         || '/' || (SELECT count(*)::text FROM public.notification_inbox WHERE id = i2), '0/1');
+    INSERT INTO public.notification_inbox (user_id, notification_type, title, body) VALUES (a, 'nudge', 'g12 mine 2', 'b'), (a, 'nudge', 'g12 mine 3', 'b');
+    n := pg_temp.u(a, 'WITH d AS (DELETE FROM public.notification_inbox RETURNING 1) SELECT count(*)::text FROM d');
+    r := r || pg_temp.is('G12.13 a delete with no filter removes only the user''s own rows (rows reported, own left, other left)',
+                         n || '/' || (SELECT count(*) FILTER (WHERE user_id = a)::text || '/' || count(*) FILTER (WHERE user_id = c)::text
+                                      FROM public.notification_inbox WHERE user_id IN (a, c)), '2/0/1');
+    n := pg_temp.u(NULL, format('WITH d AS (DELETE FROM public.notification_inbox WHERE id = %L RETURNING 1) SELECT count(*)::text FROM d', i2), 'anon');
+    r := r || pg_temp.ok('G12.14 anon cannot delete', n LIKE 'ERR:42501%', n);
+    n := pg_temp.u(a, format('INSERT INTO public.notification_inbox (user_id, notification_type, title, body) VALUES (%L, ''nudge'', ''t'', ''b'') RETURNING id::text', a));
+    r := r || pg_temp.ok('G12.15 authenticated still cannot insert', n LIKE 'ERR:42501%', n);
+    n := pg_temp.u(c, 'UPDATE public.notification_inbox SET quiet = true RETURNING id::text');
+    r := r || pg_temp.ok('G12.15 authenticated still cannot update', n LIKE 'ERR:42501%', n);
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G12.11-15 crashed: ' || SQLERRM);
+  END;
+
   RAISE EXCEPTION E'SUITE_RESULTS\n%', array_to_string(r, E'\n');
 END
 $suite$;
