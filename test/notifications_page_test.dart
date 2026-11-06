@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_buddy_app/pages/notifications_page.dart';
 import 'package:gym_buddy_app/pages/wardrobe/wardrobe_avatar_render.dart';
@@ -589,6 +590,58 @@ void main() {
       expect(find.text('Mijo'), findsOneWidget);
       await _back(t);
       expect(t.takeException(), isNull);
+    });
+  });
+
+  group('accessibility tap', () {
+    bool hasTap(FinderBase<SemanticsNode> f) =>
+        f.evaluate().single.getSemanticsData().hasAction(SemanticsAction.tap);
+
+    testWidgets('Back exposes a tap that leaves the page', (t) async {
+      final h = t.ensureSemantics();
+      await _open(t, _Fake());
+      final back = find.semantics.byLabel('Back');
+      expect(hasTap(back), isTrue);
+      t.semantics.tap(back);
+      await t.pumpAndSettle();
+      expect(find.byType(NotificationsPage), findsNothing);
+      h.dispose();
+    });
+
+    testWidgets('Notification settings exposes a tap that opens settings', (t) async {
+      final h = t.ensureSemantics();
+      await _open(t, _Fake());
+      final gear = find.semantics.byLabel('Notification settings');
+      expect(hasTap(gear), isTrue);
+      t.semantics.tap(gear);
+      await t.pumpAndSettle();
+      expect(find.text('settings stand-in'), findsOneWidget);
+      h.dispose();
+    });
+
+    testWidgets('a row exposes a tap that does what a real tap does, with its label intact', (t) async {
+      final h = t.ensureSemantics();
+      final f = _Fake()
+        ..rows = () async => [
+          row('q', type: 'time_to_start', ref: 'w1', title: 'Mijo', body: 'is here.', quiet: true),
+        ];
+      await _open(t, f);
+      final r = find.semantics.byLabel(RegExp(r'^Mijo is here\., .*, new\. No sound, quiet hours$'));
+      expect(hasTap(r), isTrue);
+      t.semantics.tap(r);
+      await t.pumpAndSettle();
+      expect(find.byType(NotificationsPage), findsNothing);
+      expect(NotificationService.tabRequest.value, 0);
+      expect(NotificationService.workoutRequest.value, 'w1');
+      h.dispose();
+    });
+
+    testWidgets('a row with no destination exposes no tap, as a real tap does nothing', (t) async {
+      final h = t.ensureSemantics();
+      final f = _Fake()..rows = () async => [row('a', type: 'something_new')];
+      await _open(t, f);
+      expect(hasTap(find.semantics.byLabel(RegExp(r'^Mijo is done'))), isFalse);
+      h.dispose();
     });
   });
 

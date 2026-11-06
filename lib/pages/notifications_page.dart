@@ -335,6 +335,7 @@ class _NotificationsPageState extends State<NotificationsPage>
     return Semantics(
       button: true,
       label: label,
+      onTap: onTap,
       excludeSemantics: true,
       child: Material(
         color: c.claySurface,
@@ -729,6 +730,7 @@ class _InboxTile extends StatelessWidget {
     );
     return Semantics(
       button: onTap != null,
+      onTap: onTap,
       excludeSemantics: true,
       label: inboxRowSemantics(
         title: row.title,
