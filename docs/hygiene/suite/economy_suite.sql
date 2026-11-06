@@ -1134,12 +1134,14 @@ session_reminder2|1|Final reminder|This is the final reminder. Open the app and 
     DELETE FROM public.notification_inbox WHERE user_id IN (a, c);
     INSERT INTO public.notification_inbox (user_id, notification_type, title, body) VALUES (a, 'nudge', 'g12 mine', 'b') RETURNING id INTO i1;
     INSERT INTO public.notification_inbox (user_id, notification_type, title, body) VALUES (c, 'nudge', 'g12 theirs', 'b') RETURNING id INTO i2;
+    -- The delete and the recount are separate statements: a recount in the same statement uses that statement's snapshot,
+    -- which was taken before pg_temp.u ran, so it would still see a deleted row.
+    n := pg_temp.u(a, format('WITH d AS (DELETE FROM public.notification_inbox WHERE id = %L RETURNING 1) SELECT count(*)::text FROM d', i1));
     r := r || pg_temp.is('G12.11 a user deletes their own row by id: 1 row, gone afterwards',
-                         pg_temp.u(a, format('WITH d AS (DELETE FROM public.notification_inbox WHERE id = %L RETURNING 1) SELECT count(*)::text FROM d', i1))
-                         || '/' || (SELECT count(*)::text FROM public.notification_inbox WHERE id = i1), '1/0');
+                         n || '/' || (SELECT count(*)::text FROM public.notification_inbox WHERE id = i1), '1/0');
+    n := pg_temp.u(a, format('WITH d AS (DELETE FROM public.notification_inbox WHERE id = %L RETURNING 1) SELECT count(*)::text FROM d', i2));
     r := r || pg_temp.is('G12.12 another user''s row by id: 0 rows, no error, the row stays',
-                         pg_temp.u(a, format('WITH d AS (DELETE FROM public.notification_inbox WHERE id = %L RETURNING 1) SELECT count(*)::text FROM d', i2))
-                         || '/' || (SELECT count(*)::text FROM public.notification_inbox WHERE id = i2), '0/1');
+                         n || '/' || (SELECT count(*)::text FROM public.notification_inbox WHERE id = i2), '0/1');
     INSERT INTO public.notification_inbox (user_id, notification_type, title, body) VALUES (a, 'nudge', 'g12 mine 2', 'b'), (a, 'nudge', 'g12 mine 3', 'b');
     n := pg_temp.u(a, 'WITH d AS (DELETE FROM public.notification_inbox RETURNING 1) SELECT count(*)::text FROM d');
     r := r || pg_temp.is('G12.13 a delete with no filter removes only the user''s own rows (rows reported, own left, other left)',
