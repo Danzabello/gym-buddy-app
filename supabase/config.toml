@@ -17,6 +17,13 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/delete-account/index.ts"
 
+[functions.stale-accounts-cron]
+enabled = true
+# Scheduled service job only (pg_cron 'stale-accounts-daily', created OFF): the service-role key is the only caller it
+# accepts, checked in the function. verify_jwt stays on so the gateway rejects anything that is not a signed JWT.
+verify_jwt = true
+entrypoint = "./functions/stale-accounts-cron/index.ts"
+
 [functions.invite-redirect]
 enabled = true
 # Public endpoint: hit directly from browsers/Snapchat/email with no JWT.
