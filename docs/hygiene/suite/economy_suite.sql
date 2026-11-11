@@ -1211,6 +1211,26 @@ session_reminder2|1|Final reminder|This is the final reminder. Open the app and 
             WHEN OTHERS THEN r := r || ('FAIL G13 crashed: ' || SQLERRM);
   END;
 
+  -- G14.1-3 (prompt 45) the invite-link IP purge: the job runs every minute, and its own command keeps a 5-minute-old row and deletes an 11-minute-old and a 2-day-old one.
+  -- Rows carry a documentation-range address (203.0.113.77), so the check looks only at its own rows.
+  BEGIN
+    DELETE FROM public.invite_lookup_attempts WHERE ip = '203.0.113.77';
+    INSERT INTO public.invite_lookup_attempts (ip, attempted_at) VALUES
+      ('203.0.113.77', now() - interval '5 minutes'),
+      ('203.0.113.77', now() - interval '11 minutes'),
+      ('203.0.113.77', now() - interval '2 days');
+    r := r || pg_temp.is('G14.1 purge-invite-lookup-attempts runs every minute',
+                         (SELECT schedule FROM cron.job WHERE jobname = 'purge-invite-lookup-attempts'), '* * * * *');
+    EXECUTE (SELECT command FROM cron.job WHERE jobname = 'purge-invite-lookup-attempts');
+    r := r || pg_temp.is('G14.2 the purge command leaves one of the three rows',
+                         (SELECT count(*)::text FROM public.invite_lookup_attempts WHERE ip = '203.0.113.77'), '1');
+    r := r || pg_temp.is('G14.3 and it is the 5-minute-old one',
+                         (SELECT (attempted_at > now() - interval '6 minutes')::text FROM public.invite_lookup_attempts WHERE ip = '203.0.113.77'), 'true');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G14.1-3 crashed: ' || SQLERRM);
+  END;
+
   RAISE EXCEPTION E'SUITE_RESULTS\n%', array_to_string(r, E'\n');
 END
 $suite$;
