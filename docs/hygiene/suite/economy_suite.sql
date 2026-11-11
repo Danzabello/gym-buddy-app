@@ -1158,6 +1158,59 @@ session_reminder2|1|Final reminder|This is the final reminder. Open the app and 
             WHEN OTHERS THEN r := r || ('FAIL G12.11-15 crashed: ' || SQLERRM);
   END;
 
+  -- G13.1-9 (prompt 44) stale-account candidates: unfinished only, never Coach Max, a NULL flag is finished, paired is flagged, the
+  -- preview writes nothing. A window of -36500 days makes every account old enough, so only the other rules decide.
+  BEGIN
+    a := pg_temp.ua();
+    c := pg_temp.uc();
+    UPDATE public.user_profiles SET onboarding_completed = false WHERE id IN (a, '00000000-0000-0000-0000-000000000001'::uuid);
+    r := r || pg_temp.is('G13.1 an unfinished profile is a candidate',
+                         (SELECT count(*)::text FROM public.stale_account_candidates(-36500) WHERE user_id = a), '1');
+    r := r || pg_temp.is('G13.2 Coach Max is never one, flag false or not',
+                         (SELECT count(*)::text FROM public.stale_account_candidates(-36500) WHERE user_id = '00000000-0000-0000-0000-000000000001'::uuid), '0');
+    UPDATE public.user_profiles SET onboarding_completed = true WHERE id = a;
+    r := r || pg_temp.is('G13.3 a finished account is not',
+                         (SELECT count(*)::text FROM public.stale_account_candidates(-36500) WHERE user_id = a), '0');
+    UPDATE public.user_profiles SET onboarding_completed = NULL WHERE id = a;
+    r := r || pg_temp.is('G13.4 a NULL flag counts as finished',
+                         (SELECT count(*)::text FROM public.stale_account_candidates(-36500) WHERE user_id = a), '0');
+    UPDATE public.user_profiles SET onboarding_completed = false WHERE id = a;
+    r := r || pg_temp.is('G13.5 the clock: an account that signed in or was created within the window is not a candidate',
+                         (SELECT count(*)::text FROM public.stale_account_candidates(36500) WHERE user_id = a), '0');
+    r := r || pg_temp.is('G13.6 the paired flag follows team_members',
+                         (SELECT paired::text FROM public.stale_account_candidates(-36500) WHERE user_id = a),
+                         (EXISTS (SELECT 1 FROM public.team_members WHERE user_id = a))::text);
+    r := r || pg_temp.is('G13.7 the preview lists the same accounts as the candidates, and no row shows a full email',
+                         (SELECT count(*)::text FROM public.stale_account_preview(-36500, 25)) || '/'
+                         || (SELECT count(*)::text FROM public.stale_account_preview(-36500, 25) p JOIN auth.users u ON u.id = p.user_id WHERE p.email_masked = u.email),
+                         (SELECT count(*)::text FROM public.stale_account_candidates(-36500)) || '/0');
+    r := r || pg_temp.is('G13.8 the preview marks at most the cap for the next run, never a paired account',
+                         (SELECT count(*) FILTER (WHERE action = 'delete (next run)')::text FROM public.stale_account_preview(-36500, 1)) || '/'
+                         || (SELECT count(*)::text FROM public.stale_account_preview(-36500, 25) WHERE action <> 'skip: paired' AND user_id IN (SELECT user_id FROM public.stale_account_candidates(-36500) WHERE paired)),
+                         (SELECT least(1, count(*) FILTER (WHERE NOT paired))::text FROM public.stale_account_candidates(-36500)) || '/0');
+    ca := (SELECT count(*) FROM public.user_profiles);
+    np := (SELECT count(*) FROM public.stale_account_runs);
+    PERFORM count(*) FROM public.stale_account_preview(-36500, 25);
+    r := r || pg_temp.is('G13.9 a preview deletes and writes nothing (profiles, log rows)',
+                         (SELECT count(*) FROM public.user_profiles)::text || '/' || (SELECT count(*) FROM public.stale_account_runs)::text, ca::text || '/' || np::text);
+    -- G13.10 an account with no profile at all. A throwaway auth.users row, made and rolled back inside this block. If this
+    -- role cannot insert into auth.users here (or the insert fails for any reason), the case is skipped with the reason (a SKIP
+    -- line counts neither PASS nor FAIL), never forced.
+    BEGIN
+      e := gen_random_uuid();
+      INSERT INTO auth.users (id, aud, role, email, created_at) VALUES (e, 'authenticated', 'authenticated', 'stale-suite-' || e::text || '@example.invalid', now());
+      r := r || pg_temp.is('G13.10 no profile: a candidate once the window has passed, not before',
+                           (SELECT count(*)::text FROM public.stale_account_candidates(-36500) WHERE user_id = e AND NOT has_profile) || '/'
+                           || (SELECT count(*)::text FROM public.stale_account_candidates(30) WHERE user_id = e), '1/0');
+      RAISE EXCEPTION 'undo' USING ERRCODE = 'P0097';
+    EXCEPTION WHEN SQLSTATE 'P0097' THEN NULL;
+              WHEN OTHERS THEN r := r || ('SKIP G13.10 no-profile case not run (could not insert a throwaway auth.users row here): ' || SQLSTATE || ' ' || SQLERRM);
+    END;
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL;
+            WHEN OTHERS THEN r := r || ('FAIL G13 crashed: ' || SQLERRM);
+  END;
+
   RAISE EXCEPTION E'SUITE_RESULTS\n%', array_to_string(r, E'\n');
 END
 $suite$;

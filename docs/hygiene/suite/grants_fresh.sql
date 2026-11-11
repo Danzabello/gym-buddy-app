@@ -128,6 +128,21 @@ BEGIN
     END LOOP;
     RESET ROLE;
   END LOOP;
+  -- Stale accounts (prompt 44): neither client role can call the candidate functions or touch the run log.
+  FOREACH fn IN ARRAY ARRAY['authenticated', 'anon'] LOOP
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', u, 'role', fn)::text, true);
+    EXECUTE format('SET LOCAL ROLE %I', fn);
+    FOREACH n IN ARRAY ARRAY['SELECT count(*) FROM public.stale_account_candidates(30)',
+                             'SELECT count(*) FROM public.stale_account_preview(30, 25)',
+                             'SELECT count(*) FROM public.stale_account_runs',
+                             'INSERT INTO public.stale_account_runs (mode, cap, candidates) VALUES (''dry_run'', 1, 0)'] LOOP
+      BEGIN EXECUTE n; ok := false;
+      EXCEPTION WHEN OTHERS THEN ok := SQLSTATE = '42501';
+      END;
+      r := r || (CASE WHEN ok THEN 'PASS ' ELSE 'FAIL ' END || 'G13.1 ' || fn || ' denied: ' || split_part(n, ' (', 1));
+    END LOOP;
+    RESET ROLE;
+  END LOOP;
 
   PERFORM set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true);
   SET LOCAL ROLE anon;
@@ -145,6 +160,15 @@ BEGIN
   BEGIN EXECUTE 'INSERT INTO public.notification_inbox (user_id, notification_type, title, body, quiet) VALUES (''' || u || ''', ''nudge'', ''t'', ''b'', true)'; n := 'ok';
   EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
   r := r || (CASE WHEN n = 'ok' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 service_role can write the row send-notification writes -> ' || n);
+  FOREACH n IN ARRAY ARRAY['SELECT count(*) FROM public.stale_account_candidates(30)',
+                           'SELECT count(*) FROM public.stale_account_preview(30, 25)',
+                           'SELECT count(*) FROM public.stale_account_runs',
+                           'INSERT INTO public.stale_account_runs (mode, cap, candidates) VALUES (''dry_run'', 1, 0)'] LOOP
+    BEGIN EXECUTE n; ok := true;
+    EXCEPTION WHEN OTHERS THEN ok := false;
+    END;
+    r := r || (CASE WHEN ok THEN 'PASS ' ELSE 'FAIL ' END || 'G13.2 service_role allowed: ' || split_part(n, ' (', 1));
+  END LOOP;
   RESET ROLE;
   PERFORM set_config('request.jwt.claims', '', true);
 
@@ -189,6 +213,22 @@ BEGIN
   r := r || (CASE WHEN NOT EXISTS (SELECT 1 FROM pg_depend d JOIN pg_class c ON c.oid = d.objid
                                    WHERE c.relkind = 'S' AND d.refobjid = 'public.notification_inbox'::regclass)
                   THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 notification_inbox owns no sequence, so there is nothing to grant a client');
+
+  -- G13.3-5 (prompt 44) the run log is service_role only with RLS on; both functions are service_role-only SECURITY DEFINER with a pinned search_path; the daily job.
+  SELECT string_agg(ro || ' ' || pr, ', ' ORDER BY ro, pr) INTO n
+  FROM unnest(ARRAY['anon', 'authenticated', 'public', 'service_role']) ro, unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) pr
+  WHERE has_table_privilege(ro, 'public.stale_account_runs', pr);
+  r := r || (CASE WHEN n = 'service_role DELETE, service_role INSERT, service_role REFERENCES, service_role SELECT, service_role TRIGGER, service_role TRUNCATE, service_role UPDATE'
+                       AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.stale_account_runs'::regclass)
+                  THEN 'PASS ' ELSE 'FAIL ' END || 'G13.3 stale_account_runs: RLS on, privileges for service_role only -> ' || coalesce(n, 'none'));
+  SELECT string_agg(p.oid::regprocedure::text || ' ' || p.proacl::text || ' secdef=' || p.prosecdef || ' ' || coalesce(p.proconfig::text, '-'), '; ' ORDER BY p.oid::regprocedure::text) INTO n
+  FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname IN ('stale_account_candidates', 'stale_account_preview');
+  r := r || (CASE WHEN n = 'stale_account_candidates(integer) {postgres=X/postgres,service_role=X/postgres} secdef=true {search_path=public}; '
+                           'stale_account_preview(integer,integer) {postgres=X/postgres,service_role=X/postgres} secdef=true {search_path=public}'
+                  THEN 'PASS ' ELSE 'FAIL ' END || 'G13.4 stale_account functions: service_role only, SECURITY DEFINER, search_path pinned -> ' || coalesce(n, 'none'));
+  SELECT schedule || ' | ' || (command LIKE '%vault.decrypted_secrets%' AND command NOT LIKE '%eyJ%' AND command LIKE '%"cap":25%')::text INTO n
+  FROM cron.job WHERE jobname = 'stale-accounts-daily';
+  r := r || (CASE WHEN n = '47 3 * * * | true' THEN 'PASS ' ELSE 'FAIL ' END || 'G13.5 stale-accounts-daily at 03:47 UTC, key read from the vault, cap 25 -> ' || coalesce(n, 'missing'));
 
   RAISE EXCEPTION E'SUITE_RESULTS\n%', array_to_string(r, E'\n');
 END
