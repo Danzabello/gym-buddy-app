@@ -82,6 +82,34 @@ Future<String?> createOnboardingAuthUser({
   }
 }
 
+/// Where a Google sign-in on the sign-up step goes next.
+enum GoogleSignUpNext { continueOnboarding, goHome, failed }
+
+/// A new or unfinished Google account carries on at step 2, like an email
+/// sign-up (a row with onboarding_completed false is resumed, never deleted).
+/// A finished one is an existing user and goes to the app. A failed read signs
+/// out and fails, so no half-signed-in state is left behind.
+Future<GoogleSignUpNext> routeGoogleSignUp({
+  Future<OnboardingState> Function()? state,
+  Future<void> Function()? signOut,
+}) async {
+  final s = await (state ??
+      () => AuthService()
+          .onboardingState(Supabase.instance.client.auth.currentUser!.id))();
+  switch (s) {
+    case OnboardingState.noProfile:
+    case OnboardingState.incomplete:
+      return GoogleSignUpNext.continueOnboarding;
+    case OnboardingState.complete:
+      return GoogleSignUpNext.goHome;
+    case OnboardingState.unknown:
+      try {
+        await (signOut ?? AuthService().signOut)();
+      } catch (_) {}
+      return GoogleSignUpNext.failed;
+  }
+}
+
 /// The user_profiles row step 5 writes. Goals, gender and buddy preferences
 /// are no longer asked: the columns keep the values the removed steps used to
 /// default to.

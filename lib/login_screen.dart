@@ -13,6 +13,7 @@ import 'services/invite_service.dart';
 import 'services/notification_service.dart';
 import 'home_screen.dart';
 import 'signup_screen.dart';
+import 'onboarding/google_sign_in_section.dart';
 import 'onboarding/onboarding_host.dart';
 import 'onboarding/onboarding_theme.dart';
 import 'onboarding/splash_screen.dart';
@@ -147,44 +148,7 @@ class _LoginScreenState extends State<LoginScreen>
     );
 
     if (error == null) {
-      _failedAttempts = 0;
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user != null) {
-        await NotificationService().initialize();
-        final state = await _authService.onboardingState(user.id);
-        if (!mounted) return;
-        setState(() => _isLoading = false);
-
-        if (state == OnboardingState.noProfile ||
-            state == OnboardingState.incomplete) {
-          // Signed up but never finished: pick the flow up at the avatar
-          // step, as Splash does. An unfinished row is resumed, never
-          // deleted: a Join on the buddy step writes one early, possibly
-          // already paired.
-          Navigator.of(context).pushAndRemoveUntil(
-            FadeSlideRoute(page: const OnboardingHost(resume: true)),
-            (r) => false,
-          );
-          return;
-        }
-
-        if (state != OnboardingState.complete) {
-          // DI-7 audit fix: the read failed (timeout, network error, etc.)
-          // — status is unknown, NOT confirmed orphaned. Fail safe: do not
-          // delete the account, just let the user retry.
-          setState(() => _errorMessage = 'Could not verify your account. Please try again.');
-          return;
-        }
-
-        unawaited(InviteService().discardPendingIfOnboarded(true));
-        unawaited(syncDeviceTimezone());
-        await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
-        if (!mounted) return;
-        Navigator.of(context).pushAndRemoveUntil(
-          FadeSlideRoute(page: const HomeScreen()),
-          (r) => false,
-        );
-      }
+      await _afterSignIn();
     } else {
       setState(() {
         _failedAttempts++;
@@ -208,6 +172,49 @@ class _LoginScreenState extends State<LoginScreen>
               : 'Incorrect email or password. $remaining attempts left.';
         }
       });
+    }
+  }
+
+  /// Everything after a session exists, for the password and Google paths:
+  /// routes to Home or into onboarding.
+  Future<void> _afterSignIn() async {
+    _failedAttempts = 0;
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      await NotificationService().initialize();
+      final state = await _authService.onboardingState(user.id);
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      if (state == OnboardingState.noProfile ||
+          state == OnboardingState.incomplete) {
+        // Signed up but never finished: pick the flow up at the avatar
+        // step, as Splash does. An unfinished row is resumed, never
+        // deleted: a Join on the buddy step writes one early, possibly
+        // already paired.
+        Navigator.of(context).pushAndRemoveUntil(
+          FadeSlideRoute(page: const OnboardingHost(resume: true)),
+          (r) => false,
+        );
+        return;
+      }
+
+      if (state != OnboardingState.complete) {
+        // DI-7 audit fix: the read failed (timeout, network error, etc.)
+        // — status is unknown, NOT confirmed orphaned. Fail safe: do not
+        // delete the account, just let the user retry.
+        setState(() => _errorMessage = 'Could not verify your account. Please try again.');
+        return;
+      }
+
+      unawaited(InviteService().discardPendingIfOnboarded(true));
+      unawaited(syncDeviceTimezone());
+      await _coachMaxService.scheduleCoachMaxCheckIn(user.id);
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        FadeSlideRoute(page: const HomeScreen()),
+        (r) => false,
+      );
     }
   }
 
@@ -321,6 +328,10 @@ class _LoginScreenState extends State<LoginScreen>
               isLoading: _isLoading,
               onTap: _isLockedOut ? null : () => _once.run(_login),
             ),
+            GoogleSignInSection(onSignedIn: () async {
+              await _afterSignIn();
+              return true;
+            }),
             const SizedBox(height: 8),
             ObLinkButton(
               lead: 'New here? ',

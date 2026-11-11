@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../login_screen.dart';
+import '../main.dart' show AuthWrapper;
 import '../theme/app_theme.dart';
 import '../utils/input_validators.dart';
+import 'google_sign_in_section.dart';
 import 'onboarding_account.dart';
 import 'onboarding_host.dart';
 import 'onboarding_max.dart';
@@ -104,6 +108,25 @@ class _SignUpStepState extends State<SignUpStep> {
     if (error == null) host.next();
   }
 
+  /// Runs once Supabase has a Google session. True when the screen carried on.
+  Future<bool> _onGoogleSignedIn() async {
+    final host = OnbScope.of(context);
+    final nav = Navigator.of(context);
+    final next = await routeGoogleSignUp();
+    if (!mounted) return true;
+    switch (next) {
+      case GoogleSignUpNext.continueOnboarding:
+        host.next();
+      case GoogleSignUpNext.goHome:
+        // An existing account: the same path as opening the app signed in.
+        unawaited(nav.pushAndRemoveUntil(
+            FadeSlideRoute(page: const AuthWrapper()), (r) => false));
+      case GoogleSignUpNext.failed:
+        return false;
+    }
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final host = OnbScope.of(context);
@@ -185,6 +208,7 @@ class _SignUpStepState extends State<SignUpStep> {
           const SizedBox(height: 24),
           ObPrimaryButton(
               label: 'Create account', isLoading: _busy, onTap: _create),
+          GoogleSignInSection(onSignedIn: _onGoogleSignedIn),
           const SizedBox(height: 14),
           Center(
             child: Text.rich(
