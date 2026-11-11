@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../login_screen.dart';
+import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../theme/accent_theme_provider.dart';
 import '../theme/app_theme.dart';
@@ -151,7 +152,10 @@ class _AccountPageState extends State<AccountPage> {
       if (kDebugMode) debugLog('❌ AccountPage._deleteAccount: $e');
       return false;
     }
-    await Supabase.instance.client.auth.signOut();
+    await runSignOut(
+      supabaseSignOut: Supabase.instance.client.auth.signOut,
+      googleSignOut: AuthService.signOutGoogle,
+    );
     if (!mounted) return true;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => LoginScreen()),

@@ -55,6 +55,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'theme/app_theme.dart';
 import 'theme/accent_theme_provider.dart';
 import 'data/coach_tips.dart';
+import 'services/auth_service.dart';
 import 'services/notification_service.dart';
 import 'pages/notifications_page.dart';
 import 'widgets/live_event_toast.dart';
@@ -6262,11 +6263,10 @@ class _ProfilePageState extends State<ProfilePage>
 
   Future<void> _logOut() async {
     HapticFeedback.mediumImpact();
-    // Release this handset's FCM token before the session goes away —
-    // removeToken() scopes its delete to auth.uid(), so it has to run
-    // while the user is still signed in.
-    await NotificationService().removeToken();
-    await Supabase.instance.client.auth.signOut();
+    // AuthService.signOut releases this handset's FCM token while the user is
+    // still signed in, ends the Supabase session and clears the Google
+    // session so the account picker shows again.
+    await AuthService().signOut();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => LoginScreen()),
