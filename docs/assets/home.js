@@ -66,7 +66,7 @@
       var qx = g.quickTo(c, 'x', { duration: 0.7, ease: 'power3' });
       var qy = g.quickTo(c, 'y', { duration: 0.7, ease: 'power3' });
       function move(e) { qx(e.clientX); qy(e.clientY); c.classList.add('on'); }
-      function over(e) { c.classList.toggle('grow', !!(e.target.closest && e.target.closest('a, button, .card'))); }
+      function over(e) { c.classList.toggle('grow', !!(e.target.closest && e.target.closest('a, button, .bcard'))); }
       function leave() { c.classList.remove('on'); }
       addEventListener('pointermove', move, { passive: true });
       document.addEventListener('pointerover', over, { passive: true });
