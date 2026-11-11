@@ -3,7 +3,7 @@
 -- B: a direct client insert into friendships meters the sender, 20 / hour overall and 2 / 24 h per target;
 --    over either cap it raises too_many_requests. Server-side inserts (create_invite_team) are not metered.
 -- Both copy accept_invite / invite_accept_attempts: prune first, count, insert a meter row, fail open.
--- Rollback: docs/rollback_20261029200000.sql.
+-- Rollback: dev/rollback_20261029200000.sql.
 
 -- ── A. search meter ───────────────────────────────────────────────────────────
 CREATE TABLE public.username_search_attempts (

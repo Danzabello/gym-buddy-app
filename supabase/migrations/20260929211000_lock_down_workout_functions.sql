@@ -22,7 +22,7 @@
 --
 -- service_role and postgres keep EXECUTE on all three (not touched here).
 -- Grants are restated explicitly per the repo rule for client-facing functions.
--- Rollback (restores grants and SECURITY DEFINER exactly): docs/rollback_functions_20260929211000.sql
+-- Rollback (restores grants and SECURITY DEFINER exactly): dev/rollback_functions_20260929211000.sql
 
 REVOKE EXECUTE ON FUNCTION public.create_buddy_workout_sessions(uuid, uuid, uuid, timestamp with time zone, text, text, integer)
   FROM PUBLIC, anon, authenticated;

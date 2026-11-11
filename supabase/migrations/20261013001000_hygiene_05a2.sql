@@ -1,6 +1,6 @@
 -- Hygiene 05a2: authenticated loses REFERENCES/TRIGGER/MAINTAIN on public tables (and the defaults that would
 -- re-grant them), trigger-only functions lose authenticated EXECUTE, safe_user_tz also serves accepted friends.
--- Rollback: docs/rollback_20261013001000.sql
+-- Rollback: dev/rollback_20261013001000.sql
 REVOKE REFERENCES, TRIGGER, MAINTAIN ON ALL TABLES IN SCHEMA public FROM authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE REFERENCES, TRIGGER, MAINTAIN ON TABLES FROM authenticated, anon;
 

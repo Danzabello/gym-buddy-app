@@ -7,7 +7,7 @@
 -- Complete Check-In (finish_checkin_session, past its gates) deletes the row. Push 3 (session_reminder2) no
 -- longer mentions the auto check-in. The counter is never shown. process_stale_sessions is unchanged.
 -- Lock order: the counter read is lock-free, every counter write is L5 and comes after _credit_checkin (L2/L3).
--- Rollback: docs/rollback_20261105220000.sql.
+-- Rollback: dev/rollback_20261105220000.sql.
 
 CREATE TABLE public.auto_checkin_counts (
   user_id     uuid        PRIMARY KEY REFERENCES public.user_profiles(id) ON DELETE CASCADE,

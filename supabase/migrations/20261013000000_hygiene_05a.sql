@@ -5,7 +5,7 @@
 -- A12 FKs to auth.users, A13 cron.job_run_details purge.
 -- Not here: A11 (rule not mirrorable from DB), A14 (no CURRENT_DATE in notify_buddy_checkin;
 -- workout_date feeds streak logic; vault secret has no consumers, left untouched).
--- Rollback: docs/rollback_20261013000000.sql
+-- Rollback: dev/rollback_20261013000000.sql
 
 -- A1: pin search_path (bodies unchanged; check_duplicate_team is dropped below)
 ALTER FUNCTION public.award_xp(uuid, integer, text, text) SET search_path = public;

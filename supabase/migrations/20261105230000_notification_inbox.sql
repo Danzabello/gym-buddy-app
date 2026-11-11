@@ -9,7 +9,7 @@
 -- p_sender as _send_push already has it (the person who caused the push, the workout partner for time_to_start,
 -- still_going and before_auto, the buddy for invite_expired, Coach Max for his pushes), now also in the request body.
 -- NULL for a push with no person behind it (streak_danger, streak_broken, streak_milestone, checkin_ready, solo overtime).
--- Rollback: docs/rollback_20261105230000.sql.
+-- Rollback: dev/rollback_20261105230000.sql.
 
 CREATE TABLE public.notification_inbox (
   id                uuid        PRIMARY KEY DEFAULT gen_random_uuid(),

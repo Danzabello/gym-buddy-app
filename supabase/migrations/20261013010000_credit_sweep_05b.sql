@@ -1,5 +1,5 @@
--- Credit sweep 05b. Sweep and verdicts: docs/hygiene/05b_sweep.md. Backup: docs/hygiene/05b_backup/
--- Rollback: docs/rollback_20261013010000.sql
+-- Credit sweep 05b. Sweep and verdicts: dev/hygiene/05b_sweep.md. Backup: dev/hygiene/05b_backup/
+-- Rollback: dev/rollback_20261013010000.sql
 
 -- checkin_team_for_user: credited a workout partner with no workout (05c probe). No callers in DB, Dart, edge or cron;
 -- EXECUTE already revoked in 05c. finish_checkin_session is the only client partner-credit path left.

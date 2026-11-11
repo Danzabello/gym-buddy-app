@@ -30,7 +30,7 @@
 --  * If a from-scratch schema initiative is ever undertaken (writing real
 --    migrations for the pre-VC base tables), resolving this ordering conflict
 --    is part of THAT project's scope -- it cannot be fixed in isolation
---    beforehand. See CLAUDE.md (Group F) and docs/pre_vc_schema_baseline_*.
+--    beforehand. See CLAUDE.md (Group F) and dev/pre_vc_schema_baseline_*.
 --  * The baseline IS safe on the two paths that matter today: `db push` skips
 --    it (already recorded applied), and a manual replay against live is a
 --    verified no-op (it matches live).

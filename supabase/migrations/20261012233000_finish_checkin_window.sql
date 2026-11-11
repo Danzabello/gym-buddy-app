@@ -5,7 +5,7 @@
 --      its start (M3 grace, as reconcile_stale_streaks), whenever Finish is
 --      called, start day inside [today-1, today]; auto-completed rows stay
 --      with the cron. In-progress rows keep the 3h30-from-now rule.
--- Rollback: docs/rollback_20261012233000.sql
+-- Rollback: dev/rollback_20261012233000.sql
 CREATE OR REPLACE FUNCTION public.finish_checkin_session(p_workout_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
  LANGUAGE plpgsql

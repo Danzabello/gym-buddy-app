@@ -30,7 +30,7 @@
 --   * Signed-out flows use auth.signUp / signIn, the search_usernames RPC
 --     (SECURITY DEFINER) and invite-redirect (service_role); none writes to a
 --     public table as anon.
--- Rollback (exact reverse of the live grants): docs/rollback_grants_20260929210000.sql
+-- Rollback (exact reverse of the live grants): dev/rollback_grants_20260929210000.sql
 
 REVOKE TRUNCATE ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
 REVOKE INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public FROM anon;

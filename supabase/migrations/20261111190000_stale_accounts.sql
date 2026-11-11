@@ -11,9 +11,9 @@
 --   stale_account_candidates(p_days)   every unfinished account idle for more than p_days, with a paired flag
 --   stale_account_preview(p_days, p_cap)  the same rows with what the next run would do; deletes and writes nothing
 --   stale_account_runs                 one row per run of the function: counts only, no email, no id
--- The daily job is created switched OFF. Switch it on or off with cron.alter_job(...) (docs/hygiene/44_stale_accounts_probe.sql
+-- The daily job is created switched OFF. Switch it on or off with cron.alter_job(...) (dev/hygiene/44_stale_accounts_probe.sql
 -- shows the statements). Everything here is service_role only; nothing is reachable from the app.
--- Rollback: docs/rollback_20261111190000.sql.
+-- Rollback: dev/rollback_20261111190000.sql.
 
 CREATE TABLE public.stale_account_runs (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),

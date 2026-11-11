@@ -10,7 +10,7 @@
 -- batch_key session_goal_<id> / session_reminder_<id> / session_reminder2_<id>.
 -- The cron runs every minute so stage 1 lands within about a minute.
 -- The credit, auto-complete and close logic is the live body, unchanged.
--- Rollback: docs/rollback_20261105120000.sql.
+-- Rollback: dev/rollback_20261105120000.sql.
 
 ALTER TABLE public.active_checkin_sessions ADD COLUMN reminder2_notified_at timestamptz;
 

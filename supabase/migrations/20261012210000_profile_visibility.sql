@@ -5,7 +5,7 @@
 -- row through get_my_profile(). Rows stay visible to signed-in users (that is
 -- what keeps PostgREST embedded selects working); private columns do not.
 -- Writes are unchanged (the column INSERT/UPDATE grants are untouched).
--- Rollback: docs/rollback_20261012210000.sql
+-- Rollback: dev/rollback_20261012210000.sql
 
 -- 1. Table: drop table-level SELECT (the column REVOKE trap: a column revoke is
 --    a no-op while the table-level grant stands), then grant the allowlist.

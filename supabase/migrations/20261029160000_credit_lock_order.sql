@@ -1,5 +1,5 @@
--- 20261029160000_credit_lock_order: RACE-1 and CAP-RACE (prompt 07). Design: docs/hygiene/07_design.md.
--- Rollback: docs/rollback_20261029160000.sql. Credit lock order L0..L5: CLAUDE.md "Lock order for credit paths".
+-- 20261029160000_credit_lock_order: RACE-1 and CAP-RACE (prompt 07). Design: dev/hygiene/07_design.md.
+-- Rollback: dev/rollback_20261029160000.sql. Credit lock order L0..L5: CLAUDE.md "Lock order for credit paths".
 -- No payout amount, cap, credit-day rule, return shape or public signature changes.
 
 CREATE OR REPLACE FUNCTION public._lock_credit(p_users uuid[], p_pay boolean, p_streak_id uuid DEFAULT NULL::uuid)

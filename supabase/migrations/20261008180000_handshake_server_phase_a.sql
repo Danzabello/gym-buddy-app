@@ -1,6 +1,6 @@
 -- H1 Phase A: server-side handshake for the Workout Schedule card.
 -- Additive only: the installed app keeps writing workouts directly until
--- Phase B (docs/handshake/H1_phase_b_lockdown.sql, applied in H4).
+-- Phase B (dev/handshake/H1_phase_b_lockdown.sql, applied in H4).
 -- Error codes are the RAISE message: not_authenticated, not_found,
 -- not_participant, wrong_state, too_early, window_closed, already_in_workout,
 -- invite_cap_reached, nudge_too_soon, not_creator, not_invitee.

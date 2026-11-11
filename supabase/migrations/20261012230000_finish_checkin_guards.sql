@@ -3,7 +3,7 @@
 -- workout; otherwise it returns result = 'nothing_to_finish' (same keys,
 -- checked_in 0, teams []) and writes nothing. Partner credit (M6a) only
 -- through a finisher eligible under (b). Body otherwise unchanged.
--- Rollback: docs/rollback_20261012230000.sql
+-- Rollback: dev/rollback_20261012230000.sql
 CREATE OR REPLACE FUNCTION public.finish_checkin_session(p_workout_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
  LANGUAGE plpgsql

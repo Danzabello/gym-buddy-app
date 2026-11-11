@@ -1,5 +1,5 @@
--- Hygiene 05c (Phase C, destructive). Backup + dry run: docs/hygiene/05c_backup/, docs/hygiene/05c_dry_run_output.txt
--- Rollback: docs/rollback_20261013002000.sql
+-- Hygiene 05c (Phase C, destructive). Backup + dry run: dev/hygiene/05c_backup/, dev/hygiene/05c_dry_run_output.txt
+-- Rollback: dev/rollback_20261013002000.sql
 -- C1 legacy handshake: table workout_invites and its trigger functions, is_user_in_active_workout, the dead join-popup RPC and columns.
 DROP TABLE public.workout_invites;
 DROP FUNCTION public.notify_workout_invite();

@@ -3,7 +3,7 @@
 -- neither participant can forge buddy_status / *_ready / *_cancelled / user_id /
 -- buddy_id any more. Kept: client INSERT (createWorkout; cap + safe defaults are
 -- enforced by _clamp_client_workout_writes) and the owner DELETE policy.
--- Rollback: Phase B reversal in docs/handshake/H1_rollback.sql.
+-- Rollback: Phase B reversal in dev/handshake/H1_rollback.sql.
 
 REVOKE UPDATE ON public.workouts FROM authenticated, anon;
 

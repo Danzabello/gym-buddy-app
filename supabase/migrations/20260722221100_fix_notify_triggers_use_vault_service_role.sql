@@ -17,7 +17,7 @@
 -- aligning them with the project's vault.decrypted_secrets convention.
 --
 -- Supersedes the pre-VC (anon-key, redacted) definitions of these 4 functions
--- captured in docs/pre_vc_schema_baseline_20260720.sql.
+-- captured in dev/pre_vc_schema_baseline_20260720.sql.
 
 CREATE OR REPLACE FUNCTION public.notify_friend_request()
  RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $f$

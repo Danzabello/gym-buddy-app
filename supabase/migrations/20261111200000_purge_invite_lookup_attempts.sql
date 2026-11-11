@@ -4,7 +4,7 @@
 -- request, so this adds a job that makes that true: every minute, delete rows older than 10 minutes. Nothing else changes: the function still
 -- prunes on each request, the table keeps its RLS and no client grants.
 -- ponytail: no index on attempted_at alone, a sequential scan of a table this small every minute is cheaper than a second index to maintain.
--- Rollback: docs/rollback_20261111200000.sql.
+-- Rollback: dev/rollback_20261111200000.sql.
 
 SELECT cron.schedule('purge-invite-lookup-attempts', '* * * * *',
   $$DELETE FROM public.invite_lookup_attempts WHERE attempted_at < now() - interval '10 minutes'$$);
