@@ -1,12 +1,12 @@
 -- 13 rollback test: migration 20261029200000, then its rollback, in one transaction that ends in RAISE (nothing persists).
--- Generated from the migration and docs/rollback_20261029200000.sql; regenerate if either changes.
+-- Generated from the migration and dev/rollback_20261029200000.sql; regenerate if either changes.
 BEGIN;
 -- 20261029200000_search_request_rate: SEARCH-RATE (prompt 13). Not a credit path.
 -- A: search_usernames meters each caller, 60 calls / 10 min; over the cap it returns no rows.
 -- B: a direct client insert into friendships meters the sender, 20 / hour overall and 2 / 24 h per target;
 --    over either cap it raises too_many_requests. Server-side inserts (create_invite_team) are not metered.
 -- Both copy accept_invite / invite_accept_attempts: prune first, count, insert a meter row, fail open.
--- Rollback: docs/rollback_20261029200000.sql.
+-- Rollback: dev/rollback_20261029200000.sql.
 
 -- ── A. search meter ───────────────────────────────────────────────────────────
 CREATE TABLE public.username_search_attempts (
@@ -139,7 +139,7 @@ CREATE TRIGGER meter_friend_request
 
 -- ═════════ rollback ═════════
 -- Rollback for 20261029200000_search_request_rate. Restores search_usernames as dumped from live on 2026-10-29
--- (docs/hygiene/13_backup/search_usernames.sql, md5 5c5f653edbf52d3306099748fd2187dc) with its grants, then drops
+-- (dev/hygiene/13_backup/search_usernames.sql, md5 5c5f653edbf52d3306099748fd2187dc) with its grants, then drops
 -- the friendships trigger, its function and both meter tables.
 -- Pre-change ACL: search_usernames {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}, SET search_path=public.
 

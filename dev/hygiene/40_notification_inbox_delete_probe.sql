@@ -1,7 +1,7 @@
 -- Prompt 40 probe: the inbox delete policy and grants, read from the catalog and tried as a client. One transaction that ends
 -- in RAISE EXCEPTION, so nothing is kept. Run after 20261106120000 is applied:
---   supabase db query --linked -f docs/hygiene/40_notification_inbox_delete_probe.sql
--- Before it is applied:  (printf 'BEGIN;\n'; cat supabase/migrations/20261106120000_notification_inbox_delete.sql; cat docs/hygiene/40_notification_inbox_delete_probe.sql) > /tmp/p.sql
+--   supabase db query --linked -f dev/hygiene/40_notification_inbox_delete_probe.sql
+-- Before it is applied:  (printf 'BEGIN;\n'; cat supabase/migrations/20261106120000_notification_inbox_delete.sql; cat dev/hygiene/40_notification_inbox_delete_probe.sql) > /tmp/p.sql
 --                        supabase db query --linked -f /tmp/p.sql
 -- Test accounts: rokitest1 (the other user), testtest1 (the client). Never a real phone's account.
 DO $probe$

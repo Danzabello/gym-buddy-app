@@ -1,8 +1,8 @@
--- Rollback test: migration 20261028230000, then docs/rollback_20261028230000.sql, in one transaction ending in RAISE.
+-- Rollback test: migration 20261028230000, then dev/rollback_20261028230000.sql, in one transaction ending in RAISE.
 -- Expect every restored body md5 = the live dump, ACLs and comment as before, new functions gone.
 BEGIN;
--- Single server check-in RPC. Design: docs/hygiene/checkin_rpc_design.md. Report: docs/hygiene/checkin_rpc_report.md.
--- Rollback: docs/rollback_20261028230000.sql. Additive: the installed build's direct inserts keep working until Migration B.
+-- Single server check-in RPC. Design: dev/hygiene/checkin_rpc_design.md. Report: dev/hygiene/checkin_rpc_report.md.
+-- Rollback: dev/rollback_20261028230000.sql. Additive: the installed build's direct inserts keep working until Migration B.
 
 -- The one credit-day formula (Q7).
 CREATE OR REPLACE FUNCTION public._credit_day(p_user_id uuid, p_at timestamp with time zone)
@@ -747,7 +747,7 @@ REVOKE EXECUTE ON FUNCTION public.create_invite_team(uuid, uuid) FROM PUBLIC, an
 GRANT  EXECUTE ON FUNCTION public.create_invite_team(uuid, uuid) TO authenticated;
 
 -- Rollback for 20261028230000_single_server_checkin. Restores the bodies dumped from live on 2026-10-28
--- (docs/hygiene/checkin_rpc_backup/) and drops the new functions. CREATE OR REPLACE keeps ACLs.
+-- (dev/hygiene/checkin_rpc_backup/) and drops the new functions. CREATE OR REPLACE keeps ACLs.
 -- Pre-change ACLs (all SET search_path=public):
 --   _server_checkin(uuid,date), _auto_credit(...), _apply_checkin_rewards, _fulfil_invite_reward,
 --   notify_buddy_checkin, process_stale_sessions: {postgres=X/postgres,service_role=X/postgres}

@@ -1,4 +1,4 @@
--- Rollback for 20261013010000_credit_sweep_05b. Run: supabase db query --linked -f docs/rollback_20261013010000.sql
+-- Rollback for 20261013010000_credit_sweep_05b. Run: supabase db query --linked -f dev/rollback_20261013010000.sql
 -- Afterwards record it as a new forward migration; never migration repair --status reverted.
 BEGIN;
 
@@ -64,7 +64,7 @@ $function$;
 REVOKE EXECUTE ON FUNCTION public.checkin_team_for_user(uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.checkin_team_for_user(uuid, uuid) TO service_role;
 
--- 4 test teams from docs/hygiene/05b_backup/teams_four.sql. User triggers off while restoring: no pushes, no invite rewards.
+-- 4 test teams from dev/hygiene/05b_backup/teams_four.sql. User triggers off while restoring: no pushes, no invite rewards.
 ALTER TABLE public.daily_team_checkins DISABLE TRIGGER USER;
 ALTER TABLE public.team_streaks DISABLE TRIGGER USER;
 -- buddy_teams: 4 rows

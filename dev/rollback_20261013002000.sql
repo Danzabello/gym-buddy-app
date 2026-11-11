@@ -1,4 +1,4 @@
--- Rollback for 20261013002000_hygiene_05c. Restores objects and rows from docs/hygiene/05c_backup/.
+-- Rollback for 20261013002000_hygiene_05c. Restores objects and rows from dev/hygiene/05c_backup/.
 -- NOT restorable: the deleted vault secret (its value duplicated service_role_key, which was never touched).
 DROP TRIGGER IF EXISTS scrub_team_names_on_profile_delete ON public.user_profiles;
 DROP FUNCTION IF EXISTS public._scrub_team_names_on_profile_delete();

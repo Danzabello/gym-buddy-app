@@ -1,11 +1,11 @@
-# Builds supabase/migrations/20261028230000_single_server_checkin.sql, docs/rollback_20261028230000.sql,
-# docs/hygiene/checkin_rpc_probes.sql (from checkin_rpc_probes.in.sql) and docs/hygiene/checkin_rpc_rollback_test.sql.
+# Builds supabase/migrations/20261028230000_single_server_checkin.sql, dev/rollback_20261028230000.sql,
+# dev/hygiene/checkin_rpc_probes.sql (from checkin_rpc_probes.in.sql) and dev/hygiene/checkin_rpc_rollback_test.sql.
 # Replaced bodies are derived from the live dumps in checkin_rpc_backup/ by exact, count-checked replacements.
 import hashlib, pathlib
 
 V = "20261028230000"
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-BK = ROOT / "docs/hygiene/checkin_rpc_backup"
+BK = ROOT / "dev/hygiene/checkin_rpc_backup"
 
 
 def live(name):
@@ -238,8 +238,8 @@ PSS = "public.process_stale_sessions(timestamp with time zone)"
 PSS_COMMENT = ("Its inline (start AT TIME ZONE safe_user_tz(u))::date \"already credited?\" guards must stay "
                "equal to public._credit_day(), the credit-day formula _auto_credit uses.")
 
-migration = f"""-- Single server check-in RPC. Design: docs/hygiene/checkin_rpc_design.md. Report: docs/hygiene/checkin_rpc_report.md.
--- Rollback: docs/rollback_{V}.sql. Additive: the installed build's direct inserts keep working until Migration B.
+migration = f"""-- Single server check-in RPC. Design: dev/hygiene/checkin_rpc_design.md. Report: dev/hygiene/checkin_rpc_report.md.
+-- Rollback: dev/rollback_{V}.sql. Additive: the installed build's direct inserts keep working until Migration B.
 
 -- The one credit-day formula (Q7).
 {stmt(credit_day)}
@@ -282,7 +282,7 @@ GRANT  EXECUTE ON FUNCTION public.create_invite_team(uuid, uuid) TO authenticate
 ACL_SVC = "{postgres=X/postgres,service_role=X/postgres}"
 ACL_AUTH = "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
 rollback = f"""-- Rollback for {V}_single_server_checkin. Restores the bodies dumped from live on 2026-10-28
--- (docs/hygiene/checkin_rpc_backup/) and drops the new functions. CREATE OR REPLACE keeps ACLs.
+-- (dev/hygiene/checkin_rpc_backup/) and drops the new functions. CREATE OR REPLACE keeps ACLs.
 -- Pre-change ACLs (all SET search_path=public):
 --   _server_checkin(uuid,date), _auto_credit(...), _apply_checkin_rewards, _fulfil_invite_reward,
 --   notify_buddy_checkin, process_stale_sessions: {ACL_SVC}
@@ -307,7 +307,7 @@ COMMENT ON FUNCTION {PSS} IS NULL;
 NAMES = ["_server_checkin", "finish_checkin_session", "_auto_credit", "_apply_checkin_rewards",
          "notify_buddy_checkin", "create_invite_team", "_fulfil_invite_reward"]
 expect = ",\n    ".join(f"('{n}', '{hashlib.md5(live(n).encode()).hexdigest()}')" for n in NAMES)
-rollback_test = f"""-- Rollback test: migration {V}, then docs/rollback_{V}.sql, in one transaction ending in RAISE.
+rollback_test = f"""-- Rollback test: migration {V}, then dev/rollback_{V}.sql, in one transaction ending in RAISE.
 -- Expect every restored body md5 = the live dump, ACLs and comment as before, new functions gone.
 BEGIN;
 {migration}
@@ -336,8 +336,8 @@ ROLLBACK;
 """
 
 (ROOT / f"supabase/migrations/{V}_single_server_checkin.sql").write_text(migration)
-(ROOT / f"docs/rollback_{V}.sql").write_text(rollback)
-(ROOT / "docs/hygiene/checkin_rpc_rollback_test.sql").write_text(rollback_test)
-tpl = (ROOT / "docs/hygiene/checkin_rpc_probes.in.sql").read_text()
-(ROOT / "docs/hygiene/checkin_rpc_probes.sql").write_text(sub(tpl, "-- @@MIGRATION_A@@\n", migration))
+(ROOT / f"dev/rollback_{V}.sql").write_text(rollback)
+(ROOT / "dev/hygiene/checkin_rpc_rollback_test.sql").write_text(rollback_test)
+tpl = (ROOT / "dev/hygiene/checkin_rpc_probes.in.sql").read_text()
+(ROOT / "dev/hygiene/checkin_rpc_probes.sql").write_text(sub(tpl, "-- @@MIGRATION_A@@\n", migration))
 print("ok")

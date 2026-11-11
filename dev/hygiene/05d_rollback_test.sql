@@ -1,4 +1,4 @@
--- 05d rollback test: applies docs/rollback_20261013020000.sql in a transaction, compares with pre-change captures, RAISE rolls back.
+-- 05d rollback test: applies dev/rollback_20261013020000.sql in a transaction, compares with pre-change captures, RAISE rolls back.
 BEGIN;
 -- Rollback for 20261013020000_hygiene_05d. Restores the definitions and grants captured before the change.
 -- Pre-change ACLs:

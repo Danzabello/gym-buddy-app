@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261001145913_revoke_client_team_inserts.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Restores the INSERT grants and the four INSERT policies exactly as they
 -- were on live on 2026-10-01 (re-opens LIVE-19/23/25). Run as postgres.
 BEGIN;

@@ -49,7 +49,7 @@ Files: signup_screen.dart, login_screen.dart, onboarding/onboarding_theme.dart, 
 - Data the SDK collects by default (from package docs): crash and non-fatal stack traces, device model/OS version/orientation/free memory and disk, app version, and the Crashlytics installation UUID. No analytics SDK added.
 - Timeouts (new `_startupRead` helper in main.dart): `NotificationService.initialize()` 10 s, `checkOnboardingStatus` 15 s, `scheduleCoachMaxCheckIn` 15 s. A timeout reports a non-fatal with the read name only and returns null. Not wrapped: dotenv/Firebase init (local), `Supabase.initialize` (no useful fallback), deep-link reads (local).
 - What the user sees on a timeout today: onboarding-status timeout -> null -> "unknown" branch -> `SplashScreen` (welcome), account untouched, signing in again re-runs the check. The other two just continue. No retry screen added (needs a mockup).
-- docs/release_build.md: 26 lines, adds the `firebase crashlytics:symbols:upload --app=<mobilesdk_app_id> build/symbols` step (owner runs it) and the archive reminder.
+- dev/release_build.md: 26 lines, adds the `firebase crashlytics:symbols:upload --app=<mobilesdk_app_id> build/symbols` step (owner runs it) and the archive reminder.
 - No test crash triggered.
 
 ## Verification

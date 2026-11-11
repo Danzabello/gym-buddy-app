@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20260929211000_lock_down_workout_functions.sql
--- NOT a migration: lives in docs/ on purpose so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ on purpose so `supabase db push` never runs it.
 --
 -- Restores the state captured from the live project on 2026-09-29:
 --   * all three functions: EXECUTE granted to PUBLIC, anon and authenticated

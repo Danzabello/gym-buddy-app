@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261001145912_team_creation_rpcs.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Only safe while M2 (20261001145913) is NOT applied: once client INSERT is
 -- revoked, these RPCs are the only way the app can create teams.
 -- Teams already created through them are left in place. Run as postgres.

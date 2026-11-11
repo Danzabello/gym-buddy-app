@@ -1,6 +1,6 @@
 # Prompt 13 report: SEARCH-RATE
 
-Date: 2026-10-29 (UTC). Migration `20261029200000_search_request_rate` is applied on live. `db push --dry-run` reports up to date. The rollback is `docs/rollback_20261029200000.sql`, and `13_rollback_test.sql` passes 4/4: the restored body matches the backup byte for byte, the ACL is restored, and the tables, trigger and function are gone.
+Date: 2026-10-29 (UTC). Migration `20261029200000_search_request_rate` is applied on live. `db push --dry-run` reports up to date. The rollback is `dev/rollback_20261029200000.sql`, and `13_rollback_test.sql` passes 4/4: the restored body matches the backup byte for byte, the ACL is restored, and the tables, trigger and function are gone.
 
 ## What changed
 
@@ -28,7 +28,7 @@ Date: 2026-10-29 (UTC). Migration `20261029200000_search_request_rate` is applie
 
 ## Suite
 
-`docs/hygiene/suite/run.sh` now runs 135 assertions, up from 101:
+`dev/hygiene/suite/run.sh` now runs 135 assertions, up from 101:
 
 - `grants_fresh`: 32 (G9.15 ×8, G9.16)
 - `economy_suite`: 78

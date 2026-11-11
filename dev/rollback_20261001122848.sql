@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261001122848_fix_iron_will_completed_at_column.sql
--- NOT a migration: lives in docs/ on purpose so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ on purpose so `supabase db push` never runs it.
 --
 -- Restores the pre-fix body of verify_achievement_progress(text) (iron_will branch
 -- referencing the nonexistent workouts.completed_at), captured with

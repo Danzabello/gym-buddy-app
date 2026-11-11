@@ -188,7 +188,7 @@ Nothing was modified.
 | Latest migration | PASS | `max(version) = 20261013020000` |
 | md5 parity | PASS | `20261013020000 remote=ea760c0e9835c4421141da6f50a7c7e9 local=ea760c0e9835c4421141da6f50a7c7e9 MATCH` (normalised method from 05d) |
 | `db push --dry-run` | PASS | "Remote database is up to date." |
-| 05d files tracked | PASS | `git ls-files`: 05d_fresh_probe.sql, 05d_probes.sql, 05d_race_A.sql, 05d_race_B.sql, 05d_report.md, 05d_rollback_test.sql, docs/rollback_20261013020000.sql |
+| 05d files tracked | PASS | `git ls-files`: 05d_fresh_probe.sql, 05d_probes.sql, 05d_race_A.sql, 05d_race_B.sql, 05d_report.md, 05d_rollback_test.sql, dev/rollback_20261013020000.sql |
 
 ## Dead-code leftovers (listed, not fixed)
 - `lib/services/level_service.dart:79` `awardWorkoutXP` → `:97` calls `_applyXp` (defined at `:184`). The client `update({'xp','level'})` at `:207` and the `xp_transactions` insert at `:213` would get 42501. Callers across `lib/`, `test/` and `integration_test/`: none (the only other hit is the comment at `:7`).

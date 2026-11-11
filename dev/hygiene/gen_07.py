@@ -1,11 +1,11 @@
-# Builds supabase/migrations/20261029160000_credit_lock_order.sql, docs/rollback_20261029160000.sql and
-# docs/hygiene/07_rollback_test.sql. Replaced bodies are derived from the live dumps in 07_backup/ (2026-10-29)
+# Builds supabase/migrations/20261029160000_credit_lock_order.sql, dev/rollback_20261029160000.sql and
+# dev/hygiene/07_rollback_test.sql. Replaced bodies are derived from the live dumps in 07_backup/ (2026-10-29)
 # by exact, count-checked replacements, so the body diff is exactly the lock lines.
 import hashlib, pathlib
 
 V = "20261029160000"
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-BK = ROOT / "docs/hygiene/07_backup"
+BK = ROOT / "dev/hygiene/07_backup"
 LIVE_MD5 = {
     "_credit_checkin": "6b96429f2c9bd74af229aeca79541bb0",
     "_recompute_team_streak": "d924df92c84adc0fe82b2e80ec5577cb",
@@ -129,8 +129,8 @@ reconcile = sub(reconcile, "      AND (last_workout_date IS NULL OR last_workout
 NEW = {"_credit_checkin": credit, "_recompute_team_streak": recompute, "finish_checkin_session": finish,
        "check_in_coach_max": coach, "reconcile_stale_streaks": reconcile}
 
-mig = [f"-- {V}_credit_lock_order: RACE-1 and CAP-RACE (prompt 07). Design: docs/hygiene/07_design.md.\n"
-       f"-- Rollback: docs/rollback_{V}.sql. Credit lock order L0..L5: CLAUDE.md \"Lock order for credit paths\".\n"
+mig = [f"-- {V}_credit_lock_order: RACE-1 and CAP-RACE (prompt 07). Design: dev/hygiene/07_design.md.\n"
+       f"-- Rollback: dev/rollback_{V}.sql. Credit lock order L0..L5: CLAUDE.md \"Lock order for credit paths\".\n"
        "-- No payout amount, cap, credit-day rule, return shape or public signature changes.\n\n",
        stmt(LOCK_CREDIT),
        "REVOKE EXECUTE ON FUNCTION public._lock_credit(uuid[], boolean, uuid) FROM PUBLIC, anon, authenticated;\n"
@@ -140,7 +140,7 @@ for name in ["_credit_checkin", "_recompute_team_streak", "finish_checkin_sessio
 migration = "".join(mig)
 
 rb = [f"-- Rollback for {V}_credit_lock_order. Restores the five bodies dumped from live on 2026-10-29\n"
-      "-- (docs/hygiene/07_backup/, md5 in gen_07.py) with their grants, then drops _lock_credit.\n"
+      "-- (dev/hygiene/07_backup/, md5 in gen_07.py) with their grants, then drops _lock_credit.\n"
       "-- Pre-change ACLs (all SET search_path=public):\n"
       "--   finish_checkin_session, check_in_coach_max: {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}\n"
       "--   _credit_checkin, _recompute_team_streak, reconcile_stale_streaks: {postgres=X/postgres,service_role=X/postgres}\n\n"]
@@ -166,6 +166,6 @@ rollback_test = (
     "  RAISE EXCEPTION E'SUITE_RESULTS\\n%', array_to_string(r, E'\\n');\nEND\n$t$;\nROLLBACK;\n")
 
 (ROOT / f"supabase/migrations/{V}_credit_lock_order.sql").write_text(migration)
-(ROOT / f"docs/rollback_{V}.sql").write_text(rollback)
-(ROOT / "docs/hygiene/07_rollback_test.sql").write_text(rollback_test)
+(ROOT / f"dev/rollback_{V}.sql").write_text(rollback)
+(ROOT / "dev/hygiene/07_rollback_test.sql").write_text(rollback_test)
 print("ok", hashlib.md5(migration.encode()).hexdigest())

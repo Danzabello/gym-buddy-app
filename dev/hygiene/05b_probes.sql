@@ -1,5 +1,5 @@
 -- 05b probes: one DO block ending in RAISE => fully rolled back. Applies 20261013010000_credit_sweep_05b inline, then checks.
--- PASS/FAIL lines are expectations. FINDING lines record NEEDS-DECISION behaviour (docs/hygiene/05b_sweep.md); no fix is expected.
+-- PASS/FAIL lines are expectations. FINDING lines record NEEDS-DECISION behaviour (dev/hygiene/05b_sweep.md); no fix is expected.
 -- Users: mijotest 6dfac56a (Coach Max streak 8bef7476), rokitest1 5e67f64d, testtest4 068f10c8, testtest1 cf4946f5. Bot and d557efec untouched.
 DO $probe$
 #variable_conflict use_column

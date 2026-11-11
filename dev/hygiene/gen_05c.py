@@ -1,4 +1,4 @@
-# Builds supabase/migrations/20261013002000_hygiene_05c.sql, docs/rollback_20261013002000.sql and the two probe scripts.
+# Builds supabase/migrations/20261013002000_hygiene_05c.sql, dev/rollback_20261013002000.sql and the two probe scripts.
 import json, subprocess
 V = "20261013002000"
 SIX = ["d168695d-f788-477a-80e7-78bb1c7b876b", "bd6736f1-410c-483f-939a-3119ac08d5c8", "dc1ee1ab-d474-4ffd-a540-ef059511d1fd",
@@ -8,8 +8,8 @@ ALLOWED = ["5e67f64d-16e3-4b09-9b00-ddc49df8c3f6", "6ef4e82e-a54d-4b91-8ce4-b5f1
 IDS = ",".join(f"'{i}'" for i in SIX)
 AL = ",".join(f"'{i}'" for i in ALLOWED)
 VAULT = "fbae4dec-efe3-48ca-9230-9f326a206e48"
-mig = f"""-- Hygiene 05c (Phase C, destructive). Backup + dry run: docs/hygiene/05c_backup/, docs/hygiene/05c_dry_run_output.txt
--- Rollback: docs/rollback_{V}.sql
+mig = f"""-- Hygiene 05c (Phase C, destructive). Backup + dry run: dev/hygiene/05c_backup/, dev/hygiene/05c_dry_run_output.txt
+-- Rollback: dev/rollback_{V}.sql
 -- C1 legacy handshake: table workout_invites and its trigger functions, is_user_in_active_workout, the dead join-popup RPC and columns.
 DROP TABLE public.workout_invites;
 DROP FUNCTION public.notify_workout_invite();
@@ -84,10 +84,10 @@ def restore(table, where):
 ts = f"team_id in ({IDS})"
 six = "-- 6 deleted teams (parents first)\n" + restore("public.buddy_teams", f"id in ({IDS})") + restore("public.team_members", ts) + \
       restore("public.team_streaks", ts) + restore("public.daily_team_checkins", f"team_streak_id in (select id from public.team_streaks where {ts})") + restore("public.streak_events", ts)
-open("docs/hygiene/05c_backup/04b_teams_six_deleted.sql", "w").write(six)
+open("dev/hygiene/05c_backup/04b_teams_six_deleted.sql", "w").write(six)
 
-rd = lambda f: open(f"docs/hygiene/05c_backup/{f}", newline="").read()
-rb = f"""-- Rollback for {V}_hygiene_05c. Restores objects and rows from docs/hygiene/05c_backup/.
+rd = lambda f: open(f"dev/hygiene/05c_backup/{f}", newline="").read()
+rb = f"""-- Rollback for {V}_hygiene_05c. Restores objects and rows from dev/hygiene/05c_backup/.
 -- NOT restorable: the deleted vault secret (its value duplicated service_role_key, which was never touched).
 DROP TRIGGER IF EXISTS scrub_team_names_on_profile_delete ON public.user_profiles;
 DROP FUNCTION IF EXISTS public._scrub_team_names_on_profile_delete();
@@ -105,4 +105,4 @@ REVOKE EXECUTE ON FUNCTION public.notify_workout_invite_response() FROM PUBLIC, 
 REVOKE EXECUTE ON FUNCTION public.is_user_in_active_workout(uuid) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.get_workouts_awaiting_creator_join(uuid) FROM PUBLIC, anon;
 """
-open(f"docs/rollback_{V}.sql", "w", newline="").write(rb)
+open(f"dev/rollback_{V}.sql", "w", newline="").write(rb)

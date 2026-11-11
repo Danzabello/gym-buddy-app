@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261002224500_auto_complete_credits_ready_partner.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Restores process_stale_sessions as of M3 (prosrc md5
 -- 2feb1ced5796c0a44486b78f6b845f55) and drops _auto_credit: session-less
 -- participants are no longer credited, orphans close without credit again.

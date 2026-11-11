@@ -1,6 +1,6 @@
 # Prompt 07 report: reward/streak suite, RACE-1 and CAP-RACE
 
-Date: 2026-10-29 (UTC). Design and owner decisions are in `docs/hygiene/07_design.md`:
+Date: 2026-10-29 (UTC). Design and owner decisions are in `dev/hygiene/07_design.md`:
 
 - Q1: L0 yes.
 - Q2: the reconcile re-check yes.
@@ -17,14 +17,14 @@ Date: 2026-10-29 (UTC). Design and owner decisions are in `docs/hygiene/07_desig
 - **CAP-RACE is fixed and race-tested.** A teammate paid on two streaks at once is now capped exactly.
   - Control: 110 coins against a cap of 100.
   - Fix: exactly 100.
-- **The suite is repeatable.** `docs/hygiene/suite/run.sh` runs 101 assertions on live inside transactions that always abort. It is one command, and `--with <migration>` tests a migration before it is pushed.
+- **The suite is repeatable.** `dev/hygiene/suite/run.sh` runs 101 assertions on live inside transactions that always abort. It is one command, and `--with <migration>` tests a migration before it is pushed.
 - **No behaviour change outside the two races.** Payout amounts, caps, credit-day rules, return shapes and public signatures are unchanged. The equivalence probes are byte-identical on all 7 fixtures.
 
 | Commit | What |
 |---|---|
-| 1 | Migration `20261029160000_credit_lock_order` (applied), `docs/rollback_20261029160000.sql`, the live backups (`07_backup/`) and the rollback test |
-| 2 | The suite: `docs/hygiene/suite/` (`economy_suite.sql`, `grants_fresh.sql`, `run.sh`) and `gen_07.py` |
-| 3 | This report, the race scripts (`docs/hygiene/07_race/`), the suite outputs, the design doc and the CLAUDE.md "Lock order for credit paths" section |
+| 1 | Migration `20261029160000_credit_lock_order` (applied), `dev/rollback_20261029160000.sql`, the live backups (`07_backup/`) and the rollback test |
+| 2 | The suite: `dev/hygiene/suite/` (`economy_suite.sql`, `grants_fresh.sql`, `run.sh`) and `gen_07.py` |
+| 3 | This report, the race scripts (`dev/hygiene/07_race/`), the suite outputs, the design doc and the CLAUDE.md "Lock order for credit paths" section |
 
 Nothing is pushed to git. No commit carries attribution trailers.
 
@@ -62,7 +62,7 @@ The other residuals are in `07_design.md` §3.5:
 
 ## Function body diffs
 
-Old is the live dump of 2026-10-29 (`docs/hygiene/07_backup/`). New is live after `20261029160000`.
+Old is the live dump of 2026-10-29 (`dev/hygiene/07_backup/`). New is live after `20261029160000`.
 
 The new function `_lock_credit(uuid[], boolean, uuid)` is not SECURITY DEFINER, has `search_path=public`, and EXECUTE is granted to service_role only. Its body is in the migration file.
 
@@ -197,7 +197,7 @@ The snapshot taken immediately before the push (16:54:15) and the one immediatel
 
 ## Suite results
 
-Run with `docs/hygiene/suite/run.sh`. Full output is in `07_suite_output_prepush.txt`, `07_suite_output_negative_control.txt` and `07_suite_output_live.txt`.
+Run with `dev/hygiene/suite/run.sh`. Full output is in `07_suite_output_prepush.txt`, `07_suite_output_negative_control.txt` and `07_suite_output_live.txt`.
 
 | Run | grants_fresh | economy_suite | Total |
 |---|---|---|---|
@@ -364,7 +364,7 @@ The CAP control pair was then run on the existing seed. The real files keep thei
 
 ### Seed script
 
-`docs/hygiene/07_race/07_race_seed.sql`, full text:
+`dev/hygiene/07_race/07_race_seed.sql`, full text:
 
 ```sql
 -- 07 race seed (COMMITTED in the approved rounds). As postgres. Fixture ids are fixed literals (no fixture table).
@@ -422,7 +422,7 @@ SELECT 'seeded' AS s, now()::text AS at;
 
 ### Cleanup script
 
-`docs/hygiene/07_race/07_race_cleanup.sql`, full text:
+`dev/hygiene/07_race/07_race_cleanup.sql`, full text:
 
 ```sql
 -- 07 race cleanup (COMMITTED in the approved rounds), as postgres, one transaction.
@@ -467,7 +467,7 @@ The session files (`07_race1_A/B.sql`, `07_cap_A/B.sql`), `07_race_verify.sql`, 
 **What happened.** At 16:57 UTC, my first attempt to generate this file passed the report text to Python through an **unquoted** shell heredoc. Bash therefore ran every backtick-quoted span in the text as a command substitution. Most of them were just words and failed with `command not found`. Two were real commands:
 
 - **`supabase db push`.** Remote was already up to date (128 = 128), so nothing was applied.
-- **`docs/hygiene/suite/run.sh`.** This is the suite, which runs only in transactions that abort.
+- **`dev/hygiene/suite/run.sh`.** This is the suite, which runs only in transactions that abort.
   - Its client process hung after the server had finished. Live `pg_stat_activity` showed no active session from it.
   - I killed the local processes at about 17:02.
 

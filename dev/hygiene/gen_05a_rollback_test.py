@@ -1,9 +1,9 @@
-# Builds docs/hygiene/05a_rollback_test.sql: apply 05a, then its rollback script, inside one DO that raises at the end
+# Builds dev/hygiene/05a_rollback_test.sql: apply 05a, then its rollback script, inside one DO that raises at the end
 # (everything rolled back). Output lists any catalog difference between pre-state and post-rollback state.
 V = "20261013000000"
 strip = lambda t: "".join(l for l in t.splitlines(keepends=True) if not l.startswith("--"))
 mig = strip(open(f"supabase/migrations/{V}_hygiene_05a.sql").read()).replace("SELECT cron.schedule(", "PERFORM cron.schedule(")
-rb = strip(open(f"docs/rollback_{V}.sql", "rb").read().decode()).replace("SELECT cron.unschedule(", "PERFORM cron.unschedule(")
+rb = strip(open(f"dev/rollback_{V}.sql", "rb").read().decode()).replace("SELECT cron.unschedule(", "PERFORM cron.unschedule(")
 acl = lambda c: f"coalesce((SELECT string_agg(e::text, ',' ORDER BY e::text) FROM unnest({c}) e),'')"
 fp = f"""(SELECT string_agg(k, E'\\n' ORDER BY k) FROM (
  SELECT 'fn:'||p.oid::regprocedure||':'||{acl('p.proacl')}||':'||coalesce(p.proconfig::text,'')||':'||md5(p.prosrc) k FROM pg_proc p WHERE p.pronamespace='public'::regnamespace
@@ -26,4 +26,4 @@ SELECT string_agg(x, E'\\n') INTO d FROM (
 RAISE EXCEPTION E'ROLLBACK_DIFF\\n%', coalesce(d, 'IDENTICAL');
 END $t$;
 """
-open("docs/hygiene/05a_rollback_test.sql", "wb").write(("-- Applies 05a then its rollback in ONE DO block that raises at the end (all rolled back); prints catalog differences.\n" + sql).encode())
+open("dev/hygiene/05a_rollback_test.sql", "wb").write(("-- Applies 05a then its rollback in ONE DO block that raises at the end (all rolled back); prints catalog differences.\n" + sql).encode())

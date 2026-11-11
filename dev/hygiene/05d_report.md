@@ -1,10 +1,10 @@
 # Hygiene 05d report
 
-Migration `supabase/migrations/20261013020000_hygiene_05d.sql`, applied on live with `supabase db push` on 2026-10-27. Before this, the latest applied version was 20261013010000 (05b). Rollback: `docs/rollback_20261013020000.sql`. This was a server-only change: no Dart changes, no rebuild needed.
+Migration `supabase/migrations/20261013020000_hygiene_05d.sql`, applied on live with `supabase db push` on 2026-10-27. Before this, the latest applied version was 20261013010000 (05b). Rollback: `dev/rollback_20261013020000.sql`. This was a server-only change: no Dart changes, no rebuild needed.
 
 ## Fix 1: check_in_coach_max_with_buddy. DONE
 No caller found:
-- `lib/`, `supabase/functions/`, `test/`: 0 hits. Repo-wide, the only hits are `docs/` and the migrations that created it. `git log -S` on `lib/` puts the last caller removal at b99b0b2.
+- `lib/`, `supabase/functions/`, `test/`: 0 hits. Repo-wide, the only hits are `dev/` and the migrations that created it. `git log -S` on `lib/` puts the last caller removal at b99b0b2.
 - `pg_proc.prosrc`: one hit, `_finish_coach_max_checkin`. It is a comment ("the instant-mirror path (check_in_coach_max_with_buddy) can fire …"), not a call.
 - Triggers (`pg_trigger.tgfoid`), views, policies, `cron.job`: 0 hits.
 
@@ -30,20 +30,20 @@ Change: `REVOKE EXECUTE … FROM PUBLIC, anon, authenticated`. The function is k
 - After (21): the same list without rest_tokens_available. Column ACL went from `{authenticated=aw/postgres}` to `{authenticated=a/postgres}`.
 
 ## Probes
-- `docs/hygiene/05d_probes.sql`: one transaction with the migration inline, ending in RAISE, so all of it rolls back. Permission probes run first, before any privileged call in the session. **17/17 PASS.** Afterwards, live showed no constraint and an unchanged ACL, confirming the rollback.
+- `dev/hygiene/05d_probes.sql`: one transaction with the migration inline, ending in RAISE, so all of it rolls back. Permission probes run first, before any privileged call in the session. **17/17 PASS.** Afterwards, live showed no constraint and an unchanged ACL, confirming the rollback.
   - Run 1 had 16 PASS and 1 FAIL (F3.2). The cause was the probe, not the grants: `SET preferred_workout_time = preferred_workout_time` reads a column that authenticated cannot SELECT (LIVE-10 allowlist). F3.2 was rewritten to the avatar picker payload (`avatar_id`, `avatar_border`, `updated_at`) plus `display_name` and `looking_for_buddy`, and it passed.
   - F1: authenticated and anon calls give `42501 permission denied for function`. service_role and postgres keep EXECUTE. `check_in_coach_max` as mijotest returned `{"checked_in": true, "already_done": true}`, no error.
   - F2: 99 coins with cost 100 returned insufficient_funds, balance still 99, no inventory row. 100 coins with cost 100 succeeded, balance 0, inventory row and -100 `shop_purchase` ledger row written. An immediate second purchase (cost 150) returned insufficient_funds, balance 0. Rebuying an owned item returned already_owned. A direct `UPDATE coin_balance = -1`: as postgres it gave `23514` (CHECK); as authenticated it gave `42501`. The def contains FOR UPDATE, and ACL, search_path and DEFINER are unchanged. The constraint is validated.
   - F3: authenticated UPDATE of rest_tokens_available gives `42501`. The avatar picker payload updates 1 row. 21 UPDATE columns remain, INSERT is unchanged.
-- `docs/hygiene/05d_fresh_probe.sql`: run after apply on its own connection, authenticated only. **3/3 PASS** (with_buddy denied, rest_tokens UPDATE denied, avatar payload updates 1 row).
-- Two-session race (`docs/hygiene/05d_race_A.sql` / `_B.sql`): testtest1 at its committed balance of 0. Session A calls `purchase_shop_item` and holds its transaction open for 8s. B starts about 2s later. Both get insufficient_funds, so nothing is written, and both RAISE, so both roll back.
+- `dev/hygiene/05d_fresh_probe.sql`: run after apply on its own connection, authenticated only. **3/3 PASS** (with_buddy denied, rest_tokens UPDATE denied, avatar payload updates 1 row).
+- Two-session race (`dev/hygiene/05d_race_A.sql` / `_B.sql`): testtest1 at its committed balance of 0. Session A calls `purchase_shop_item` and holds its transaction open for 8s. B starts about 2s later. Both get insufficient_funds, so nothing is written, and both RAISE, so both roll back.
   - Before apply: B's call took 0.00s (no lock).
   - After apply: B's call took 5.33s. It waited for A's row lock, so per-user purchases now serialise.
   - Not tested: an actual overdraw attempt with real coins, because it would need a committed balance on a test account. It is covered by the serialisation result plus the CHECK.
-- `docs/hygiene/05d_rollback_test.sql`: rollback applied inside a rolled-back transaction. **4/4 PASS.** The purchase def md5 is identical to the pre-change capture. The ACL entries are identical, though re-GRANT appends `authenticated` at the end, so the order differs. The rest_tokens ACL is identical and the constraint is gone.
+- `dev/hygiene/05d_rollback_test.sql`: rollback applied inside a rolled-back transaction. **4/4 PASS.** The purchase def md5 is identical to the pre-change capture. The ACL entries are identical, though re-GRANT appends `authenticated` at the end, so the order differs. The rest_tokens ACL is identical and the constraint is gone.
 
 ## Snapshots
-- Economy hashes (`docs/hygiene/economy_snapshot.sql`), before vs after apply: **identical.**
+- Economy hashes (`dev/hygiene/economy_snapshot.sql`), before vs after apply: **identical.**
   - h=886b65c53656fded08dc54d4871befb7 | n=5567 | t=daily_team_checkins
   - h=c60486dc8fefd2536c1f1aaa98c2eda3 | n=17 | t=workout_logs
   - h=df4e1370aca270f8415d9abbef1a7dc8 | n=111 | t=xp_transactions
@@ -63,4 +63,4 @@ Change: `REVOKE EXECUTE … FROM PUBLIC, anon, authenticated`. The function is k
 ## Noticed, not fixed
 - `lib/services/level_service.dart` `_applyXp` does a client `update({'xp', 'level'})` on `user_profiles` and a client insert into `xp_transactions`. authenticated has no UPDATE on xp or level, so this would fail with 42501. Its only entry point, `awardWorkoutXP`, has no callers, so it is dead code and could be deleted.
 - `cron.job` `expire-stale-workout-invites` still runs after 05c dropped `workout_invites`. It succeeds (576 runs in 2 days, all succeeded), so no action is needed.
-  - **Correction (05e):** this conclusion was reached from run status alone, without looking at the job's command, so it was unproven. 05e (`docs/hygiene/05e_report.md`, Check 1) showed why the job succeeds. The job calls `expire_stale_workout_invites()`, which is the handshake Phase A expiry on `workouts` (migration 20261008180000) and never touches `workout_invites`. The job is alive and useful, so no change was made.
+  - **Correction (05e):** this conclusion was reached from run status alone, without looking at the job's command, so it was unproven. 05e (`dev/hygiene/05e_report.md`, Check 1) showed why the job succeeds. The job calls `expire_stale_workout_invites()`, which is the handshake Phase A expiry on `workouts` (migration 20261008180000) and never touches `workout_invites`. The job is alive and useful, so no change was made.

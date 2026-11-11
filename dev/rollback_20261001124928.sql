@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261001124928_pin_client_checkin_date.sql
--- NOT a migration: lives in docs/ on purpose so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ on purpose so `supabase db push` never runs it.
 --
 -- Restores the pre-fix state captured 2026-10-01: no BEFORE INSERT trigger,
 -- authenticated has table-level UPDATE, and the client UPDATE policy below.

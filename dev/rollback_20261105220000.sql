@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261105220000_auto_checkin_limit.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Restores _auto_credit (md5 of pg_get_functiondef 07c8616e7579f33694804679bc220189, as of 20261028230000) and
 -- finish_checkin_session (md5 34ff932cdfcb9f358c88676bbc81c98b, as of 20261029160000), puts the session_reminder2
 -- copy back, deletes the coach_max_auto_limit templates and drops auto_checkin_counts (its rows are lost: the

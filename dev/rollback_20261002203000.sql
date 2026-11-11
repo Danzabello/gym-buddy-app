@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261002203000_rule1_start_day_and_reconcile_grace.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Restores both bodies live before M3 (reconcile prosrc md5
 -- 0113ae25db528c9c81e0542234dcbdf0, process_stale_sessions prosrc md5
 -- 70b6dff758d70ca5ee28914530ed1995): auto-complete credits the completion

@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261105120000_checkin_ready_pushes.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Restores process_stale_sessions as of 20261008200000 (md5 of pg_get_functiondef 929c250cf1b7e98ad9c9d593d786ba32, no sends),
 -- drops active_checkin_sessions.reminder2_notified_at, deletes the three session_* push templates and puts the
 -- cron back to every 5 minutes. Run as postgres.

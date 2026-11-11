@@ -16,7 +16,7 @@ From `docs/audits/audit-2026-09-29.md`:
 - **DI-9** (line 137): "DI-9 FriendService writes for partner | OPEN | `_backfillTodaysCheckIns` inserts a row with `user_id` = the *other* user (`friend_service.dart:295-311`); RLS rejects it, so one side's backfill silently fails"
 - Refactor line (line 533): "Single server check-in RPC; delete the 3 client check-in/backfill paths (A-1, A-3, DI-9, DI-5) | L | Opus"
 
-From `docs/hygiene/05b_sweep.md`:
+From `dev/hygiene/05b_sweep.md`:
 
 - **F1** (line 75): "direct check-in plus recompute advances a streak with no workout (open audit item A-3, table grant, not a function). `authenticated` has INSERT on `daily_team_checkins` … Fixing this needs the client backfill inserts removed (`team_sync_service.dart:106`, `friend_service.dart:250,261`) and the INSERT grant/policy dropped."
 - **F3** (line 80): "invitee bonus is per inviter with no activity gate. As rokitest1: `accept_invite` for codes from testtest4 and testtest1, then `create_invite_team` for each, paid +40 coins (2 `invite_bonus` rows) … a new user can farm 20 coins per inviter."
@@ -185,7 +185,7 @@ Rows written by old client backfills stay as they are. The CAP-2 change only aff
 - `notify_buddy_checkin` (skip copies, §15 Q2b).
 - `create_invite_team` (bonus block removed, grants re-stated) and `_fulfil_invite_reward` (invitee bonus).
 - Every SECDEF function gets `search_path` pinned. Internal functions are revoked from PUBLIC, anon and authenticated.
-- `docs/rollback_<A>.sql` drops the new functions and recreates `_server_checkin` and every replaced body **exactly as dumped from live on 2026-10-28**, with their grants. The comment on `process_stale_sessions` is reset to NULL.
+- `dev/rollback_<A>.sql` drops the new functions and recreates `_server_checkin` and every replaced body **exactly as dumped from live on 2026-10-28**, with their grants. The comment on `process_stale_sessions` is reset to NULL.
 
 The installed build still inserts directly (C1–C3) and still works, because INSERT is still granted.
 
@@ -202,7 +202,7 @@ The installed build still inserts directly (C1–C3) and still works, because IN
 
 There is also an **equivalence probe**, run in the same rolled-back transaction: the old bodies (from the dump) and the new bodies on identical fixtures (a normal finish, a partner credit, a stale auto-complete), showing identical check-in rows, streaks and payouts except for the intended CAP-2 and credit-day differences. The run also includes a security-advisor diff and economy table-hash snapshots before and after. These exclude the 23:05 UTC nightly reset, mijotest's real check-ins and the Coach Max test streak `d557efec`. The report includes an old-versus-new diff of every replaced function body.
 
-**Migration B (after the Step 4 device check):** `REVOKE INSERT ON public.daily_team_checkins FROM authenticated`. A table-level REVOKE also removes the 6 column-level INSERT grants, which I will verify with `information_schema.column_privileges` (there is a known column-list trap from LIVE-23/25). The INSERT policy and trigger T1 are left alone as dead-code items. `docs/rollback_<B>.sql` re-grants.
+**Migration B (after the Step 4 device check):** `REVOKE INSERT ON public.daily_team_checkins FROM authenticated`. A table-level REVOKE also removes the 6 column-level INSERT grants, which I will verify with `information_schema.column_privileges` (there is a known column-list trap from LIVE-23/25). The INSERT policy and trigger T1 are left alone as dead-code items. `dev/rollback_<B>.sql` re-grants.
 
 Versions: new timestamps (`20261028…`) sort after the live head `20261013020000`. They are applied with `supabase db push` after a dry-run and a `schema_migrations` check.
 

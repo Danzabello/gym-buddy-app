@@ -1,4 +1,4 @@
--- Reward and streak suite (prompt 07). Run with docs/hygiene/suite/run.sh, never by hand against live without reading it.
+-- Reward and streak suite (prompt 07). Run with dev/hygiene/suite/run.sh, never by hand against live without reading it.
 -- One transaction: helpers; phase 1 runs the CURRENT live bodies on the equivalence fixtures (each captured, then
 -- rolled back); the migration under test is inlined at @@MIGRATION@@ (run.sh --with), or nothing; phase 2 runs the
 -- equivalence fixtures again plus every group, each group in its own sub-block that is rolled back. The block ends

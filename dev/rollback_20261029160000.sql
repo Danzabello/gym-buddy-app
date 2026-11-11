@@ -1,5 +1,5 @@
 -- Rollback for 20261029160000_credit_lock_order. Restores the five bodies dumped from live on 2026-10-29
--- (docs/hygiene/07_backup/, md5 in gen_07.py) with their grants, then drops _lock_credit.
+-- (dev/hygiene/07_backup/, md5 in gen_07.py) with their grants, then drops _lock_credit.
 -- Pre-change ACLs (all SET search_path=public):
 --   finish_checkin_session, check_in_coach_max: {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   _credit_checkin, _recompute_team_streak, reconcile_stale_streaks: {postgres=X/postgres,service_role=X/postgres}

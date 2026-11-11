@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261012210000_profile_visibility.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Restores the pre-LIVE-10 state exactly (all columns readable by any signed-in
 -- user, anon table grants, both SELECT policies, the two INVOKER functions).
 -- Run as postgres. The client on fix/profile-visibility calls get_my_profile and

@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261005172138_checkin_sessions_own_rows_only.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Restores the four linked_workout_id policies, anon's table grants and the
 -- previous _pin_client_session_start body (M1, 20261002181833). Run as postgres.
 -- WARNING: this reopens the session-planting hole.

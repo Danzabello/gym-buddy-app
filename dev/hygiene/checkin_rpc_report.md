@@ -1,6 +1,6 @@
 # Single server check-in RPC: report
 
-Date: 2026-10-28 (UTC). Spec: `docs/hygiene/checkin_rpc_design.md` (703d054) plus the owner's Step 2 message, which takes precedence where the two differ.
+Date: 2026-10-28 (UTC). Spec: `dev/hygiene/checkin_rpc_design.md` (703d054) plus the owner's Step 2 message, which takes precedence where the two differ.
 
 ## Result
 
@@ -93,7 +93,7 @@ The only new finding is `public.submit_checkin()`, which is intended: it is the 
 
 ## Probes (one transaction, ROLLBACK)
 
-`docs/hygiene/checkin_rpc_probes.sql` is generated from `checkin_rpc_probes.in.sql` with Migration A inline. Full output is in `docs/hygiene/checkin_rpc_probe_output.txt`.
+`dev/hygiene/checkin_rpc_probes.sql` is generated from `checkin_rpc_probes.in.sql` with Migration A inline. Full output is in `dev/hygiene/checkin_rpc_probe_output.txt`.
 
 **Result: 56 PASS, 0 FAIL.** (The first run had one probe-side bug, a `te` alias clashing with a plpgsql variable. It was fixed and the whole set re-run.)
 
@@ -338,7 +338,7 @@ Text-only (uiautomator dump to file, logcat, DB reads by id, API logs).
 
 ## Migration B (20261029010000), applied 23:45 UTC, after "session done"
 
-- Contents: `REVOKE INSERT ON public.daily_team_checkins FROM authenticated;`. Before it the ACL was `authenticated=ar`, with no column ACLs. The rollback (`docs/rollback_20261029010000.sql`) re-grants INSERT.
+- Contents: `REVOKE INSERT ON public.daily_team_checkins FROM authenticated;`. Before it the ACL was `authenticated=ar`, with no column ACLs. The rollback (`dev/rollback_20261029010000.sql`) re-grants INSERT.
 - Dry run: only `20261029010000` pending. `schema_migrations` had 126 remote versions against 127 local, the only local-only version was ours, nothing was remote-only, and the remote max was `20261028230000`. Applied with `supabase db push`. Afterwards the database is up to date.
 - md5 parity: `20261029010000` remote=`c3991cd8008ee689a1140e8760ad931f` local=`c3991cd8008ee689a1140e8760ad931f`, **MATCH**.
 - Economy hashes are identical before and after B, at 23:45:08 and 23:45:11:

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Reward, streak and rate-limit suite, one command. Everything runs on live inside transactions that abort, so nothing persists.
-#   docs/hygiene/suite/run.sh                      # test what is live
-#   docs/hygiene/suite/run.sh --with <migration>   # test a migration before it is pushed (inlined, rolled back)
+#   dev/hygiene/suite/run.sh                      # test what is live
+#   dev/hygiene/suite/run.sh --with <migration>   # test a migration before it is pushed (inlined, rolled back)
 # Needs `supabase login` and a linked project. Exit 0 only when every line is PASS.
 set -euo pipefail
 dir=$(cd "$(dirname "$0")" && pwd)

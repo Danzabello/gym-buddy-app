@@ -1,8 +1,8 @@
 -- Prompt 27 probe: the REAL _send_push (the suite stubs it), checked on the requests it queues, and the inbox read by a
 -- client. One transaction that ends in RAISE EXCEPTION, so nothing is ever sent or kept (net.http_request_queue is
 -- transactional: rolled-back rows are never picked up by the pg_net worker). Run after 20261105230000 is applied:
---   supabase db query --linked -f docs/hygiene/27_notification_inbox_probe.sql
--- Before it is applied:  (printf 'BEGIN;\n'; cat supabase/migrations/20261105230000_notification_inbox.sql; cat docs/hygiene/27_notification_inbox_probe.sql) > /tmp/p.sql
+--   supabase db query --linked -f dev/hygiene/27_notification_inbox_probe.sql
+-- Before it is applied:  (printf 'BEGIN;\n'; cat supabase/migrations/20261105230000_notification_inbox.sql; cat dev/hygiene/27_notification_inbox_probe.sql) > /tmp/p.sql
 --                        supabase db query --linked -f /tmp/p.sql
 -- Test accounts: rokitest1 (A, gets a fake device token here), testtest1 (C, its tokens are removed here). Never a real phone's account.
 -- The Authorization header is reported as its first 7 characters only.

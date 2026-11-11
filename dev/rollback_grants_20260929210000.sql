@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20260929210000_revoke_truncate_and_anon_writes.sql
--- NOT a migration: lives in docs/ on purpose so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ on purpose so `supabase db push` never runs it.
 --
 -- Restores EXACTLY the table-level grants that existed on the live project at
 -- the time the migration was drafted (captured with aclexplode(pg_class.relacl)

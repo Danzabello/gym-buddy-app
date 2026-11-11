@@ -1,8 +1,8 @@
 -- Prompt 44 probe: stale-account candidates, the preview, the run log and the daily job, read from the catalog and tried as
 -- each role. One transaction that ends in RAISE EXCEPTION, so nothing is kept (the profile flags it flips are rolled back).
 -- Run after 20261111190000 is applied:
---   supabase db query --linked -f docs/hygiene/44_stale_accounts_probe.sql
--- Before it is applied:  (printf 'BEGIN;\n'; cat supabase/migrations/20261111190000_stale_accounts.sql; cat docs/hygiene/44_stale_accounts_probe.sql) > /tmp/p.sql
+--   supabase db query --linked -f dev/hygiene/44_stale_accounts_probe.sql
+-- Before it is applied:  (printf 'BEGIN;\n'; cat supabase/migrations/20261111190000_stale_accounts.sql; cat dev/hygiene/44_stale_accounts_probe.sql) > /tmp/p.sql
 --                        supabase db query --linked -f /tmp/p.sql      (the cron.schedule inside is rolled back with the rest)
 -- Test accounts: rokitest1, testtest1. Never a real phone's account. Role checks come first, before any privileged call.
 --

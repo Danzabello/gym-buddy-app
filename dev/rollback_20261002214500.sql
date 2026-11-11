@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261002214500_streak_events.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Restores reconcile_stale_streaks (M3 body, prosrc md5
 -- 15e9471d6e4536233d0999871c9fc1e1) and recompute_team_streak (prosrc md5
 -- 133189417637180d81b0cde19ef338f2), then drops streak_events and its

@@ -51,7 +51,7 @@ Removed the second summary tile, its `SizedBox`, and `_bestStreak()`. The remain
 `kShowPlaceholderUnlockNodes = false` in `lib/pages/wardrobe/avatar_unlock_tree_screen.dart`. Gates: the two Social "Coming soon" nodes, the hardcoded Seasonal Creature node, the Social connectors, and the Special tier-2 connector. Node positions are fixed coordinates in a fixed-size canvas, so real nodes did not move and no pan/zoom bounds are affected. `isSocialPlaceholder` branches are kept (reachable when the flag is true).
 
 ## C Release build
-`flutter build apk --release --obfuscate --split-debug-info=build/symbols` -> `app-release.apk` 66.0 MB. `build/symbols` produced (arm64, arm, x64). `build/` is gitignored (`/build/`). Doc: `docs/release_build.md`; CLAUDE.md pointer added.
+`flutter build apk --release --obfuscate --split-debug-info=build/symbols` -> `app-release.apk` 66.0 MB. `build/symbols` produced (arm64, arm, x64). `build/` is gitignored (`/build/`). Doc: `dev/release_build.md`; CLAUDE.md pointer added.
 - Build printed "ELF library contains unobfuscated DWARF debugging information ... use --strip". Not acted on (not asked); the symbols folder is still produced.
 - Signing (apksigner): Verifies; v2 scheme true (v1 false, fine for minSdk 24+); signer CN=Daniels Zabello, O=Gym Buddy; SHA-256 `c4734c65...409f295`. This is the release keystore, not the Android debug cert.
 

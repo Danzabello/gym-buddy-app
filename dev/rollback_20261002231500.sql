@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261002231500_recompute_team_streak_member_check.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Puts the full body back into recompute_team_streak (prosrc md5
 -- 4f95daa2e349d7af8c062b569338f0a9), points _finish_coach_max_checkin and
 -- _server_checkin back at it, drops _recompute_team_streak. Re-opens SEC-C.

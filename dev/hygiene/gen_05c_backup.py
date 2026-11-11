@@ -1,6 +1,6 @@
-# Phase C backup. Reads LIVE through the CLI (read-only) and writes restore scripts into docs/hygiene/05c_backup/.
+# Phase C backup. Reads LIVE through the CLI (read-only) and writes restore scripts into dev/hygiene/05c_backup/.
 import json, subprocess, os
-OUT = "docs/hygiene/05c_backup"
+OUT = "dev/hygiene/05c_backup"
 TEAMS = "'d168695d','3847194a','a3ae42dc','c06f57ea','05c20a6a','bd6736f1','dc1ee1ab','2a45a481','0e596a48','c2e4b37e'"
 def q(sql):
     p = subprocess.run(["supabase", "db", "query", "--linked", sql], capture_output=True, text=True)

@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261001145914_lock_profile_created_at_and_verifier_fixes.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Restores the created_at column grants and the verify_achievement_progress
 -- body live before M3 (md5 of pg_get_functiondef bf7fe1c501dc73f29e6e6e2ffd3372f1).
 -- Re-opens the LIVE-23 account-age bypass. Run as postgres.

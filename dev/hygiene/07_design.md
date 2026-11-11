@@ -8,7 +8,7 @@ Date: 2026-10-29. I read the live DB with `supabase db query --linked` (SELECT a
 
 | Question | Answer |
 |---|---|
-| Why does `supabase db reset` fail? | The first migration, `20260621151208_s2_s3_server_authoritative_economy.sql`, fails at line 329 with `DROP POLICY IF EXISTS … ON public.daily_team_checkins`. `IF EXISTS` only covers the policy, so on an empty database the missing table is an error. The base tables (`daily_team_checkins`, `coin_transactions`, `user_profiles`, `team_streaks`, …) predate version control. Their DDL exists only in `docs/pre_vc_schema_baseline_20260720.sql`, which is reference-only. A replay cannot get past the first file. |
+| Why does `supabase db reset` fail? | The first migration, `20260621151208_s2_s3_server_authoritative_economy.sql`, fails at line 329 with `DROP POLICY IF EXISTS … ON public.daily_team_checkins`. `IF EXISTS` only covers the policy, so on an empty database the missing table is an error. The base tables (`daily_team_checkins`, `coin_transactions`, `user_profiles`, `team_streaks`, …) predate version control. Their DDL exists only in `dev/pre_vc_schema_baseline_20260720.sql`, which is reference-only. A replay cannot get past the first file. |
 | Does a local stack run? | No. Docker is installed and the daemon is active, but `docker ps` returns `permission denied … /var/run/docker.sock`: the user is not in the `docker` group. Getting into the group needs `sudo usermod -aG docker` (an owner action). Even with Docker, `db reset` fails as above. A schema-only `supabase db dump` into a local stack would also need Docker, and it would not include `vault`, `pg_net`, `cron`, the `auth.users` rows the probes join on, or the test accounts. It would also drift from live from day one. |
 | pgTAP? | Available on live (`pgtap` 1.2.0) but **not installed**. Installing it means a `CREATE EXTENSION` (about 1,000 functions) on the production database. That could be done inside a rolled-back transaction, but `supabase db query` returns only the last statement's result set, so pgTAP's row-per-assertion output would be lost anyway. |
 | Live reads | Working (`supabase login` valid in this shell). |
@@ -17,10 +17,10 @@ Date: 2026-10-29. I read the live DB with `supabase db query --linked` (SELECT a
 
 This is the harness the 05a–05d and check-in probes already use. I would harden it into a suite rather than add anything new:
 
-- `docs/hygiene/suite/economy_suite.sql`: a single `DO` block. Each group runs inside its own `BEGIN … RAISE 'undo' (P0098) … EXCEPTION` sub-block, so every group starts from live state and groups cannot leak into each other. The block ends with `RAISE EXCEPTION E'SUITE_RESULTS\n…'`, so the whole transaction aborts **even if** a `ROLLBACK` line were missing. Nothing can commit by construction.
+- `dev/hygiene/suite/economy_suite.sql`: a single `DO` block. Each group runs inside its own `BEGIN … RAISE 'undo' (P0098) … EXCEPTION` sub-block, so every group starts from live state and groups cannot leak into each other. The block ends with `RAISE EXCEPTION E'SUITE_RESULTS\n…'`, so the whole transaction aborts **even if** a `ROLLBACK` line were missing. Nothing can commit by construction.
 - The helpers are the existing ones from `checkin_rpc_probes.in.sql`: `pg_temp.u(uid, sql, role)` (JWT claims plus `SET LOCAL ROLE`), `ok`/`is`, `snap()`, and the `_send_push` stub that records into `pg_temp.push_log`, so no HTTP goes out.
-- `docs/hygiene/suite/grants_fresh.sql`: the grant and denied-write checks. This file runs in its **own fresh connection**, and the first call in it is the authenticated or anon one (the CLAUDE.md rule on per-session plan caching). It also ends in `RAISE`.
-- `docs/hygiene/suite/run.sh`: the one command. It runs both files with `supabase db query --linked -f`, extracts the `PASS`/`FAIL` lines, and prints `N PASS, M FAIL`. It exits non-zero on any FAIL, on a crash, or when no result lines come back. `run.sh --with <migration.sql>` inlines a not-yet-applied migration at the top of the transaction (the generator pattern from `gen_checkin_rpc.py`), so the same suite tests a migration before it is pushed. Run after the push, it tests what is live.
+- `dev/hygiene/suite/grants_fresh.sql`: the grant and denied-write checks. This file runs in its **own fresh connection**, and the first call in it is the authenticated or anon one (the CLAUDE.md rule on per-session plan caching). It also ends in `RAISE`.
+- `dev/hygiene/suite/run.sh`: the one command. It runs both files with `supabase db query --linked -f`, extracts the `PASS`/`FAIL` lines, and prints `N PASS, M FAIL`. It exits non-zero on any FAIL, on a crash, or when no result lines come back. `run.sh --with <migration.sql>` inlines a not-yet-applied migration at the top of the transaction (the generator pattern from `gen_checkin_rpc.py`), so the same suite tests a migration before it is pushed. Run after the push, it tests what is live.
 - It needs no branch, no Docker and no pgTAP, and nothing persists.
 
 ## 2. Suite scope
@@ -213,7 +213,7 @@ That is 4 committed credit calls per round. See **Q3**.
 
 ## 6. Step 2 deliverables (after approval)
 
-1. Migration `20261029xxxxxx_credit_lock_order.sql` and `docs/rollback_<version>.sql`, which restores the five bodies exactly as dumped on 2026-10-29 with their grants and drops `_lock_credit`. EXECUTE grants are re-stated for every replaced client-facing or definer function, and search_path is pinned.
+1. Migration `20261029xxxxxx_credit_lock_order.sql` and `dev/rollback_<version>.sql`, which restores the five bodies exactly as dumped on 2026-10-29 with their grants and drops `_lock_credit`. EXECUTE grants are re-stated for every replaced client-facing or definer function, and search_path is pinned.
 2. Before the push: the suite with `--with` the migration (PASS everywhere), the equivalence probe, the rollback test, the `schema_migrations` check (127 = 127, head `20261029010000`), a dry run, then the control race round.
 3. `supabase db push`. Then md5 parity of `statements` against the local file, the security and performance advisor diff, the snapshots, the fresh-session grants file, the suite against live, and the fix race round.
 4. Commits: the migration with its rollback; the suite (with `run.sh`); the report `07_report.md`. They are separate, plain, carry no trailers, and are not pushed.

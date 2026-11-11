@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261005163755_reward_cap_payout_guard.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Restores the previous _apply_checkin_rewards body exactly (no lock, XP cap
 -- and teammate owed-base check on transaction_type). Run as postgres.
 BEGIN;

@@ -1,5 +1,5 @@
 -- 05c dry run: READ ONLY. Prints exactly what 05c will drop or delete, with counts. Run:
---   supabase db query --linked -f docs/hygiene/05c_dry_run.sql
+--   supabase db query --linked -f dev/hygiene/05c_dry_run.sql
 with allowed(uid, label) as (values
   ('5e67f64d-16e3-4b09-9b00-ddc49df8c3f6'::uuid,'rokitest1'), ('6ef4e82e-a54d-4b91-8ce4-b5f179a65f66','newesttest'),
   ('cf4946f5-f921-4e81-bbf4-88d574e8baf5','testtest1'), ('6dfac56a-74a1-4a60-b7fa-e200338350f3','mijotest'),

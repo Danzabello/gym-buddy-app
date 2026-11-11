@@ -1,7 +1,7 @@
 -- 07 rollback test: Migration 20261029160000, then its rollback, in one transaction that ends in RAISE (nothing persists).
 BEGIN;
--- 20261029160000_credit_lock_order: RACE-1 and CAP-RACE (prompt 07). Design: docs/hygiene/07_design.md.
--- Rollback: docs/rollback_20261029160000.sql. Credit lock order L0..L5: CLAUDE.md "Lock order for credit paths".
+-- 20261029160000_credit_lock_order: RACE-1 and CAP-RACE (prompt 07). Design: dev/hygiene/07_design.md.
+-- Rollback: dev/rollback_20261029160000.sql. Credit lock order L0..L5: CLAUDE.md "Lock order for credit paths".
 -- No payout amount, cap, credit-day rule, return shape or public signature changes.
 
 CREATE OR REPLACE FUNCTION public._lock_credit(p_users uuid[], p_pay boolean, p_streak_id uuid DEFAULT NULL::uuid)
@@ -602,7 +602,7 @@ GRANT EXECUTE ON FUNCTION public.reconcile_stale_streaks() TO service_role;
 
 -- ═════ rollback ═════
 -- Rollback for 20261029160000_credit_lock_order. Restores the five bodies dumped from live on 2026-10-29
--- (docs/hygiene/07_backup/, md5 in gen_07.py) with their grants, then drops _lock_credit.
+-- (dev/hygiene/07_backup/, md5 in gen_07.py) with their grants, then drops _lock_credit.
 -- Pre-change ACLs (all SET search_path=public):
 --   finish_checkin_session, check_in_coach_max: {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}
 --   _credit_checkin, _recompute_team_streak, reconcile_stale_streaks: {postgres=X/postgres,service_role=X/postgres}

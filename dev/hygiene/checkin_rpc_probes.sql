@@ -217,8 +217,8 @@ END
 $p1$;
 
 -- ═════════ Migration A ═════════
--- Single server check-in RPC. Design: docs/hygiene/checkin_rpc_design.md. Report: docs/hygiene/checkin_rpc_report.md.
--- Rollback: docs/rollback_20261028230000.sql. Additive: the installed build's direct inserts keep working until Migration B.
+-- Single server check-in RPC. Design: dev/hygiene/checkin_rpc_design.md. Report: dev/hygiene/checkin_rpc_report.md.
+-- Rollback: dev/rollback_20261028230000.sql. Additive: the installed build's direct inserts keep working until Migration B.
 
 -- The one credit-day formula (Q7).
 CREATE OR REPLACE FUNCTION public._credit_day(p_user_id uuid, p_at timestamp with time zone)

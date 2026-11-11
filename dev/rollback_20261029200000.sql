@@ -1,5 +1,5 @@
 -- Rollback for 20261029200000_search_request_rate. Restores search_usernames as dumped from live on 2026-10-29
--- (docs/hygiene/13_backup/search_usernames.sql, md5 5c5f653edbf52d3306099748fd2187dc) with its grants, then drops
+-- (dev/hygiene/13_backup/search_usernames.sql, md5 5c5f653edbf52d3306099748fd2187dc) with its grants, then drops
 -- the friendships trigger, its function and both meter tables.
 -- Pre-change ACL: search_usernames {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}, SET search_path=public.
 

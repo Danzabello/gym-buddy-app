@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261002223000_finish_credits_ready_partner.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Restores finish_checkin_session as of M2 (prosrc md5
 -- 8a0fe261cba6c572a3e6d0e1185a57b0): Finish credits only the caller again.
 -- Run as postgres.

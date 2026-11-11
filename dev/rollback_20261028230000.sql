@@ -1,5 +1,5 @@
 -- Rollback for 20261028230000_single_server_checkin. Restores the bodies dumped from live on 2026-10-28
--- (docs/hygiene/checkin_rpc_backup/) and drops the new functions. CREATE OR REPLACE keeps ACLs.
+-- (dev/hygiene/checkin_rpc_backup/) and drops the new functions. CREATE OR REPLACE keeps ACLs.
 -- Pre-change ACLs (all SET search_path=public):
 --   _server_checkin(uuid,date), _auto_credit(...), _apply_checkin_rewards, _fulfil_invite_reward,
 --   notify_buddy_checkin, process_stale_sessions: {postgres=X/postgres,service_role=X/postgres}

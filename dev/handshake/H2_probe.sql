@@ -1,5 +1,5 @@
 -- H2 probe: pushes. One transaction, ends in RAISE EXCEPTION (rolls back,
--- so nothing queued here is ever sent). Prepend docs/handshake/H1_probe.sql's
+-- so nothing queued here is ever sent). Prepend dev/handshake/H1_probe.sql's
 -- helper section (everything above its DO block) when running.
 -- Test accounts: rokitest1 (A), newesttest (B), testtest1 (C).
 CREATE FUNCTION pg_temp.mark() RETURNS bigint LANGUAGE sql AS

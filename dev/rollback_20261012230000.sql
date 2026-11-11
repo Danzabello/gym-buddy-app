@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261012230000_finish_checkin_guards.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Restores finish_checkin_session byte-identical to the live definition before
 -- FIN-1 (re-opens FINISH-1 and FINISH-2). Grants are unchanged by FIN-1. Run as postgres.
 BEGIN;

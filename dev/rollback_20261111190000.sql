@@ -1,5 +1,5 @@
 -- ROLLBACK for supabase/migrations/20261111190000_stale_accounts.sql
--- NOT a migration: lives in docs/ so `supabase db push` never runs it.
+-- NOT a migration: lives in dev/ so `supabase db push` never runs it.
 -- Removes the daily job, the two functions and the run log. Accounts the job already deleted do not come back.
 -- The Edge Function is separate: supabase functions delete stale-accounts-cron. Run as postgres.
 BEGIN;

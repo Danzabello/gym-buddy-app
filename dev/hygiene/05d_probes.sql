@@ -1,6 +1,6 @@
 -- 05d probes: BEGIN; migration 20261013020000 inline; probes; DO block ends in RAISE so the whole transaction rolls back.
 BEGIN;
--- Hygiene 05d. Report: docs/hygiene/05d_report.md. Rollback: docs/rollback_20261013020000.sql
+-- Hygiene 05d. Report: dev/hygiene/05d_report.md. Rollback: dev/rollback_20261013020000.sql
 
 -- check_in_coach_max_with_buddy: no caller in Dart, edge functions, SQL bodies, triggers or cron since b99b0b2.
 -- Kept for service_role/postgres; closed to clients.

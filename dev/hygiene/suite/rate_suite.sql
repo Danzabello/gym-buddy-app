@@ -1,5 +1,5 @@
 -- Rate-limit suite (prompt 13, SEARCH-RATE): the search_usernames meter and the friendships insert meter.
--- Run with docs/hygiene/suite/run.sh. One transaction: the migration under test is inlined at @@MIGRATION@@
+-- Run with dev/hygiene/suite/run.sh. One transaction: the migration under test is inlined at @@MIGRATION@@
 -- (run.sh --with), then every group runs in its own sub-block that is rolled back. Fixture profiles are created
 -- inside the transaction (fresh ids, never a real account). The block ends in RAISE: nothing persists.
 -- _send_push is stubbed (no HTTP). Meter-table grants are in grants_fresh.sql.

@@ -5,7 +5,7 @@ Flutter (Dart, Material 3) app on **Supabase** (Postgres + Auth + Realtime) and 
 ## Commands
 ```bash
 flutter analyze && flutter test
-# release: see docs/release_build.md (archive build/symbols per shipped build)
+# release: see dev/release_build.md (archive build/symbols per shipped build)
 supabase functions deploy <name>   # coach-max-cron, delete-account, invite-redirect, send-notification, workout-overtime-cron
 ```
 `db reset` fails (see Migrations).
@@ -39,9 +39,9 @@ GRANT  EXECUTE ON FUNCTION public.<fn>(<args>) TO authenticated;  -- anon only i
 
 **Testing permissions:** run the trusted call in a clean session. PL/pgSQL caches plans per session, so an earlier more-privileged call can make a later `SET ROLE authenticated` call wrongly succeed. Verify with a fresh authenticated-only call.
 
-**Migrations:** `supabase/migrations/` and live history are reconciled (local files and remote versions match one-to-one, and `supabase db push --dry-run` should say "up to date"), but a from-scratch replay / `db reset` fails. The base tables (`team_members`, `user_profiles`, `friendships`, …) predate version control. Their DDL is in `docs/pre_vc_schema_baseline_20260720.sql`, which is REFERENCE ONLY and never applied. Don't retime the baseline migration `20260628000000` to fix ordering; it only moves the failure. Apply migrations with the CLI (`supabase db query --linked -f <file>`, then `migration repair --status applied <version>`), never the MCP `apply_migration` tool: it stamps its own version, which causes drift. Never run `migration repair --status reverted` on existing versions: it deletes history and `db push` would re-run the local files. `migration repair` is metadata-only (never runs SQL). Files in supabase/migrations/ that match an already-applied remote version are history records, not to be edited or re-run.
+**Migrations:** `supabase/migrations/` and live history are reconciled (local files and remote versions match one-to-one, and `supabase db push --dry-run` should say "up to date"), but a from-scratch replay / `db reset` fails. The base tables (`team_members`, `user_profiles`, `friendships`, …) predate version control. Their DDL is in `dev/pre_vc_schema_baseline_20260720.sql`, which is REFERENCE ONLY and never applied. Don't retime the baseline migration `20260628000000` to fix ordering; it only moves the failure. Apply migrations with the CLI (`supabase db query --linked -f <file>`, then `migration repair --status applied <version>`), never the MCP `apply_migration` tool: it stamps its own version, which causes drift. Never run `migration repair --status reverted` on existing versions: it deletes history and `db push` would re-run the local files. `migration repair` is metadata-only (never runs SQL). Files in supabase/migrations/ that match an already-applied remote version are history records, not to be edited or re-run.
 
-**Lock order for credit paths** (prompt 07, `docs/hygiene/07_design.md` §3). Take locks in this order, ascending key order within a level. Every added lock carries a `-- L<n>` comment, and `docs/hygiene/suite/run.sh` (G0) fails if a body reorders them.
+**Lock order for credit paths** (prompt 07, `dev/hygiene/07_design.md` §3). Take locks in this order, ascending key order within a level. Every added lock carries a `-- L<n>` comment, and `dev/hygiene/suite/run.sh` (G0) fails if a body reorders them.
 
 | Level | Lock | Key order |
 |---|---|---|

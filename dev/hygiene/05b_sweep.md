@@ -1,6 +1,6 @@
 # 05b credit-path sweep (2026-10-13)
 
-Migration `20261013010000_credit_sweep_05b`. Probes: `docs/hygiene/05b_probes.sql`. Rollback: `docs/rollback_20261013010000.sql` (tested by `docs/hygiene/05b_rollback_test.sql`, result IDENTICAL).
+Migration `20261013010000_credit_sweep_05b`. Probes: `dev/hygiene/05b_probes.sql`. Rollback: `dev/rollback_20261013010000.sql` (tested by `dev/hygiene/05b_rollback_test.sql`, result IDENTICAL).
 
 ## Step 1: references to objects dropped in 05c
 
@@ -14,7 +14,7 @@ Searched for `workout_invites`, `ready_expires_at`, `creator_popup_shown`, `work
 | `net._http_response` since 05c | 6 × 200, no errors |
 | Edge functions, repo and deployed (all 5 downloaded) | none. Deployed matches repo except a trailing newline in `invite-redirect`. |
 | Dart `lib/`, `test/` | filename only: `lib/pages/schedule_page.dart:9` and `test/handshake_card_test.dart:6` import `widgets/workout_invites_list.dart`, which reads `workouts.buddy_status`. Not a reference to the dropped table. No client change needed. |
-| docs / seed SQL | Historical probe, rollback and backup files only (05a/05a2/05c, H1/H2, the pre-VC baseline). There is no seed file. `docs/handshake/H1_phase_b_lockdown.sql:15` mentions `ready_expires_at` in a comment only. |
+| docs / seed SQL | Historical probe, rollback and backup files only (05a/05a2/05c, H1/H2, the pre-VC baseline). There is no seed file. `dev/handshake/H1_phase_b_lockdown.sql:15` mentions `ready_expires_at` in a comment only. |
 
 No server-side fix needed.
 

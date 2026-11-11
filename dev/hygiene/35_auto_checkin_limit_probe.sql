@@ -1,8 +1,8 @@
 -- Prompt 35 probe: the REAL _send_push through process_stale_sessions -> _auto_credit (the suite stubs it), checked on the
 -- request it queues. One transaction that ends in RAISE EXCEPTION, so nothing is ever sent or kept (net.http_request_queue is
 -- transactional: rolled-back rows are never picked up by the pg_net worker). Run after 20261105220000 is applied:
---   supabase db query --linked -f docs/hygiene/35_auto_checkin_limit_probe.sql
--- Before it is applied:  (printf 'BEGIN;\n'; cat supabase/migrations/20261105220000_auto_checkin_limit.sql; cat docs/hygiene/35_auto_checkin_limit_probe.sql) > /tmp/p.sql
+--   supabase db query --linked -f dev/hygiene/35_auto_checkin_limit_probe.sql
+-- Before it is applied:  (printf 'BEGIN;\n'; cat supabase/migrations/20261105220000_auto_checkin_limit.sql; cat dev/hygiene/35_auto_checkin_limit_probe.sql) > /tmp/p.sql
 --                        supabase db query --linked -f /tmp/p.sql
 -- Test account: rokitest1 (A, gets a fake device token here). Never a real phone's account. Four forgotten sessions in a row for A:
 -- counts 1, 2, 3 (one Coach Max request on the third only), the fourth refused. The day rows are cleared between runs (rolled back).

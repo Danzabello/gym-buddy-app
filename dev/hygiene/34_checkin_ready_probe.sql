@@ -1,9 +1,9 @@
 -- Prompt 34 probe: the REAL _send_push through process_stale_sessions (the suite stubs it), checked on the request
 -- it queues. One transaction that ends in RAISE EXCEPTION, so nothing is ever sent or kept (net.http_request_queue
 -- is transactional: rolled-back rows are never picked up by the pg_net worker).
---   Before the migration is applied:  (printf 'BEGIN;\n'; cat supabase/migrations/20261105120000_checkin_ready_pushes.sql; cat docs/hygiene/34_checkin_ready_probe.sql) > /tmp/p.sql
+--   Before the migration is applied:  (printf 'BEGIN;\n'; cat supabase/migrations/20261105120000_checkin_ready_pushes.sql; cat dev/hygiene/34_checkin_ready_probe.sql) > /tmp/p.sql
 --                                      supabase db query --linked -f /tmp/p.sql
---   After it is applied:               supabase db query --linked -f docs/hygiene/34_checkin_ready_probe.sql
+--   After it is applied:               supabase db query --linked -f dev/hygiene/34_checkin_ready_probe.sql
 -- NOTE (prompt 35): stage 3 reads "Final reminder" since 20261105220000; against a database without that migration this probe's stage 3 reports MISMATCH.
 -- Test accounts: rokitest1 (A, gets a fake device token here) and testtest1 (C, no token). Never a real phone's account.
 -- The Authorization header is reported as its first 7 characters only.
