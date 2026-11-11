@@ -25,7 +25,7 @@
     --surface: #FFFFFF;
     --section: #F0F2F7;
     --text: #1A1A2E;
-    --muted: #6B7280;
+    --muted: #5F6673;     /* app token is #6B7280 (4.51:1 on bg, 4.32 on section); darkened so it holds 4.5:1 on every surface and over tinted layers */
     --accent: #0057FF;
     --danger: #DC2626;
     --border: #E5E7EB;
