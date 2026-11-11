@@ -6,12 +6,11 @@
   <title>Privacy Policy &mdash; Gym Buddy</title>
   <meta name="description" content="How Gym Buddy collects, uses, and protects your information.">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       background: #0a0a0f;
       color: #d8d8e4;
-      font-family: 'Syne', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       font-size: 17px;
       line-height: 1.7;
       padding: 24px 20px 64px;
@@ -134,124 +133,144 @@
       <span class="brand">Gym Buddy</span>
       <a href="privacy-policy.html" aria-current="page">Privacy Policy</a>
       <a href="terms.html">Terms of Service</a>
+      <a href="delete-account.html">Delete account</a>
     </div>
 
     <h1>Privacy Policy for <span>Gym Buddy</span></h1>
     <p class="meta"><strong>Last updated:</strong> November 11, 2026</p>
 
     <div class="lede">
-      <p>Gym Buddy ("the App", "we", "us") is developed by Keep Going! ("the Developer"). This Privacy Policy explains what information the App collects, how it's used, who can see it, and what choices you have.</p>
-      <p>Gym Buddy is completely free to use. We do not sell your data, and we do not run ads.</p>
-      <p>If you have questions about this policy or want to exercise any of the rights described below, contact us at <strong><a href="mailto:danielsgymbuddy@gmail.com">danielsgymbuddy@gmail.com</a></strong>.</p>
+      <p>Gym Buddy ("the App", "we", "us") is developed by Keep Going!, Ireland. This policy explains what the App collects, why, who can see it, how long we keep it, and what you can do about it.</p>
+      <p>Gym Buddy is free to use. We do not sell your data and we do not show ads.</p>
+      <p>Questions or requests: <strong><a href="mailto:danielsgymbuddy@gmail.com">danielsgymbuddy@gmail.com</a></strong>. To delete your account, see <a href="delete-account.html">Delete your account</a>.</p>
     </div>
 
     <h2 id="1-information-we-collect">1. Information We Collect</h2>
 
-    <h3>Account information</h3>
-    <p>When you sign up, we collect an <strong>email address</strong> and <strong>password</strong> to create your account (handled securely by our authentication provider, Supabase &mdash; we never see or store your plain-text password).</p>
+    <h3>Account</h3>
+    <p>You can create an account with an email address and a password, or with Google. If you use email and password, we store your email address; your password is handled by our sign-in provider, Supabase, and we cannot read it.</p>
 
-    <h3>Profile information</h3>
-    <p>During onboarding, we collect:</p>
-    <ul>
-      <li><strong>Display name</strong> and <strong>username</strong> (required)</li>
-      <li><strong>Age</strong> (required, minimum 16 &mdash; see <a href="#7-childrens-privacy">Children's Privacy</a> below)</li>
-      <li><strong>Fitness goals</strong> and <strong>fitness level</strong> (required/self-selected)</li>
-      <li><strong>Gender</strong> (optional)</li>
-      <li><strong>Avatar</strong> and cosmetic preferences (a preset image you choose &mdash; we do not access your camera or photo library)</li>
-      <li><strong>Timezone</strong>, detected automatically from your device, used to determine your daily streak and check-in windows correctly</li>
-    </ul>
+    <h3>Sign in with Google</h3>
+    <p>If you choose "Continue with Google", Google's sign-in screen on your phone asks you to pick a Google account. Google gives the App a sign-in token, which we pass to Supabase to create or find your Gym Buddy account. The token identifies your Google account and its email address. Supabase also stores the name and picture web address that Google includes in the token; the App never reads or uses them, and they are deleted with your account. You choose a display name, a username and an avatar in the App, like every other user. We do not ask Google for access to your contacts, calendar, files or any other Google data.</p>
 
-    <h3>Activity data</h3>
-    <p>As you use the App, we store the fitness activity you log: workout type, category, date, time, planned and actual duration, check-in history, streak counts, and break days you take. If you write anything in an optional notes field, whatever you type there is stored as-is &mdash; please avoid including sensitive personal information (such as health conditions) in free-text fields, since we do not ask for or process that kind of data.</p>
-    <p>We do <strong>not</strong> collect weight, height, heart rate, calories, sleep, nutrition, or any medical or health-measurement data. Gym Buddy tracks activity scheduling and consistency, not health metrics.</p>
+    <h3>Profile</h3>
+    <p>During setup you give us a display name, a username and your age (you must be 16 or over), and you choose an avatar from the App's preset list. The App also stores your phone's timezone, so that your daily streak and check-in times are correct. Your profile also holds a fitness level and a "looking for a buddy" setting; the App sets both to default values, and older accounts may also hold a workouts-per-week answer from an earlier version.</p>
+    <p>Earlier versions of the App also asked for fitness goals and gender (both optional). The App no longer asks; if you answered, those answers are kept until you delete your account.</p>
 
-    <h3>Social data</h3>
-    <p>Information related to your buddy connections: friend requests and friendships, buddy teams, invite codes you send or receive, and nudges sent between buddies.</p>
+    <h3>Activity</h3>
+    <p>We store the activity you log: workouts (type, date and time, planned and actual length, and an optional note of up to 500 characters), check-ins, streaks, break days, and the experience points, level, coins, cosmetics and achievements you earn. Please do not put health conditions or other sensitive details in notes. We do not collect weight, height, heart rate, calories, sleep or other health measurements.</p>
 
-    <h3>Device and notification data</h3>
-    <p>To send you push notifications (like a buddy checking in or a streak reminder), we store a <strong>device token</strong> issued by Firebase Cloud Messaging (see <a href="#3-third-party-services">Third-Party Services</a> below). This token is tied to your account and is removed when you sign out.</p>
+    <h3>Buddies</h3>
+    <p>We store your friend requests and friendships, your buddy teams, the invite codes you create or use, nudges between buddies, and nicknames you give friends.</p>
 
-    <h3>Automatically collected data</h3>
-    <p>When you use an invite link, our system briefly logs the <strong>IP address</strong> making the request, solely to prevent abuse (automated guessing of invite codes). This data is automatically deleted within approximately 10 minutes and is never used for any other purpose.</p>
+    <h3>Notifications and device</h3>
+    <p>To send push notifications we store a device token from Firebase Cloud Messaging and your notification settings. We keep a copy of each notification's text inside the App for 7 days so that you can read it again. The token is removed when you log out or delete your account.</p>
 
-    <h3>What we don't collect</h3>
-    <p>We do not access your device's location, camera, photo library, or contacts. We do not use any analytics, advertising, or crash-reporting services &mdash; Gym Buddy has no third-party tracking of any kind beyond what's described in this policy.</p>
+    <h3>Crash reports</h3>
+    <p>In the released App, Firebase Crashlytics (Google) collects crash and error reports: the technical error and where it happened in the code, your phone model, Android version, App version, and an installation identifier created by Crashlytics. We do not add your name, email address or account to these reports, and we do not add any custom information to them. The error message itself is produced by the App and its software libraries, and in some cases it can include a technical identifier, such as an account identifier or a username that was part of a failed request. Google governs how long these reports are kept.</p>
+
+    <h3>Invite links</h3>
+    <p>When someone opens an invite link, we record the IP address of the request for a short time, to stop automated guessing of invite codes. These records are deleted automatically 10 to 11 minutes after the request, and they are used for nothing else.</p>
+
+    <h3>On your phone</h3>
+    <p>The App keeps on your phone: your sign-in session, your theme choices, a few short-lived markers it needs to work (for example, whether you have checked in today), and, if you arrived through an invite link, the invite code until you use it or finish setup. If you installed the App from Google Play through an invite link, Google Play passes the invite code to the App once; the App keeps it only if it matches the invite-code format.</p>
+
+    <h3>What we do not collect</h3>
+    <p>We do not access your location, camera, photos, microphone or contacts. The App has no advertising or analytics services, and we do not use an advertising identifier.</p>
 
     <h2 id="2-how-we-use-your-information">2. How We Use Your Information</h2>
-    <p>We use the information above to:</p>
+    <p>We use your information to:</p>
     <ul>
-      <li>Create and maintain your account</li>
-      <li>Operate the App's core features (streaks, check-ins, buddy pairing, teams)</li>
-      <li>Send push notifications you'd expect (buddy activity, streak status, friend requests)</li>
-      <li>Prevent abuse of features like invite links</li>
-      <li>Provide customer support if you contact us</li>
+      <li><strong>Run your account and the App's features</strong> (sign-in, streaks, check-ins, buddies, teams), including replying when you contact us. Our legal basis is contract: we need this information to provide the App to you (Article 6(1)(b) GDPR).</li>
+      <li><strong>Send push notifications.</strong> Our legal basis is your consent, which you give when you allow notifications. You can withdraw it at any time by turning notifications off in your phone's settings or in the App's notification settings (Article 6(1)(a) GDPR).</li>
+      <li><strong>Prevent abuse and diagnose crashes</strong> (for example, invite-code guessing and App errors). Our legal basis is legitimate interests: keeping the App secure and working (Article 6(1)(f) GDPR).</li>
     </ul>
-    <p>We do not use your data for advertising, and we do not sell or rent your information to anyone.</p>
+    <p>Giving us an email address or Google account, and an age of 16 or over, is needed to use the App. We do not use your information for advertising, we do not sell or rent it, and we do not make automated decisions about you that have legal or similarly significant effects.</p>
 
-    <h2 id="3-third-party-services">3. Third-Party Services</h2>
-    <p>Gym Buddy uses two infrastructure providers to operate:</p>
-    <p><strong>Firebase Cloud Messaging (Google)</strong> delivers push notifications. To do this, Google receives your device's notification token, the notification text (which may include a buddy's display name and activity, such as "Alex wants to be your gym buddy!"), and a general event type. Google does not receive your email address, password, or internal account ID.</p>
-    <p><strong>Supabase</strong> hosts our database, authentication, and backend logic. All of your account and activity data described in this policy is stored on Supabase's infrastructure, located in the United Kingdom (London region).</p>
-    <p>Because Gym Buddy is distributed through the Google Play Store, Google Play Services also operate on your device as part of standard app distribution and installation &mdash; this is governed by Google's own policies, separate from Gym Buddy.</p>
-    <p>We do not use any other third-party SDKs, analytics platforms, or advertising networks.</p>
+    <h2 id="3-third-party-services">3. Services We Use</h2>
+    <p><strong>Supabase</strong> hosts our database, sign-in and server code. Our project runs in the United Kingdom (London, eu-west-2).</p>
+    <p><strong>Firebase Cloud Messaging (Google)</strong> delivers push notifications. Google receives your device token, the notification title and text, a notification type, an identifier of the item the notification is about (for a nudge, this is the account identifier of the person who sent it), the sender's display name and avatar choice, and colour and style hints.</p>
+    <p><strong>Firebase Crashlytics (Google)</strong> receives crash reports, as described above.</p>
+    <p><strong>Google Sign-In</strong> (Google Play services on your phone) handles the sign-in screen when you choose Google.</p>
+    <p><strong>Google Play</strong> distributes the App and tells it the invite code from an invite link when you install through one. Google's own policies apply.</p>
+    <p><strong>GitHub Pages</strong> hosts this website and the invite page; GitHub receives the web address and IP address of visitors. These pages use no cookies, no analytics and no fonts from other websites.</p>
+    <p>We do not use any other third-party services.</p>
 
     <h2 id="4-coach-max">4. Coach Max</h2>
-    <p>Coach Max is an automated in-app character that sends motivational tips and check-in reminders. Coach Max is <strong>not</strong> powered by artificial intelligence, and no data is sent to any AI service, external or otherwise &mdash; its messages are pre-written content selected and delivered automatically by our own systems. Notifications from Coach Max reach you through the same push notification system described above.</p>
+    <p>Coach Max is an automated character, not a person. He appears in your buddy list, joins a team with you and checks in once a day. What he says is written in advance and chosen by our own systems; no message is generated by an outside AI service and none of your data is sent to one. The App marks him "AI" only so that you can tell he is not a real user. His notifications use the same push system as everyone else's.</p>
 
     <h2 id="5-who-can-see-your-information">5. Who Can See Your Information</h2>
     <p>Gym Buddy is a social fitness app, and some information is visible to other users by design:</p>
     <ul>
-      <li><strong>Your profile</strong> (display name, age, gender if provided, fitness goals, fitness level, and activity stats) is visible to any other signed-in user of the App, to support finding and connecting with workout buddies.</li>
-      <li><strong>Check-in activity, streak status, and break days</strong> are visible to your confirmed buddies and teammates.</li>
-      <li><strong>Team check-in history</strong> is visible to your teammates and your accepted (mutual) friends.</li>
-      <li><strong>Live workout status</strong> (e.g., that you're mid-workout right now) is visible to a buddy you're actively paired with for that session.</li>
-      <li>Information you set privately &mdash; such as nicknames you give friends, or friend requests you've sent &mdash; is visible only to you.</li>
+      <li><strong>Your profile:</strong> every signed-in user can see your username, display name, avatar and avatar border, fitness level, whether you are looking for a buddy, your workouts-per-week setting, and the date you joined. Other details on your profile, such as your age, email address, gender and fitness goals, are not visible to other users. Your timezone is shared with your team members so that shared check-in times are correct.</li>
+      <li><strong>Check-ins</strong> are visible to you, your team members and your accepted friends.</li>
+      <li><strong>Team streaks</strong> are visible to the members of that team only.</li>
+      <li><strong>Workouts</strong> are visible to their owner and to the buddy on the workout.</li>
     </ul>
-    <p>We do not share your information with anyone outside the App except as described in <a href="#3-third-party-services">Third-Party Services</a>.</p>
+    <p>We do not share your information with anyone outside the App except as described in <a href="#3-third-party-services">Services We Use</a>.</p>
 
-    <h2 id="6-data-retention-and-deletion">6. Data Retention and Deletion</h2>
-    <p>You can delete your account at any time from within the App. When you do, we permanently delete:</p>
+    <h2 id="6-data-retention-and-deletion">6. Keeping and Deleting Your Data</h2>
+    <h3>How long we keep it</h3>
     <ul>
-      <li>Your profile and account credentials</li>
-      <li>Your activity data (workouts, check-ins, streaks, break days)</li>
-      <li>Your social data (friendships, nicknames, nudges, sent invites)</li>
+      <li>Your account data is kept until you delete your account.</li>
+      <li>If you create an account but do not finish setting it up, we delete that account and its email address automatically after 30 days. The 30 days count from the day you created it or last signed in, whichever is later.</li>
+      <li>The copy of each notification kept inside the App is deleted after 7 days.</li>
+      <li>Invite-link IP records are deleted automatically 10 to 11 minutes after the request.</li>
+      <li>Crash reports are kept by Google, which governs how long.</li>
+    </ul>
+
+    <h3>Delete your account in the App</h3>
+    <p>Open Gym Buddy, go to the Profile tab, tap Account, then Delete Account, type DELETE and tap Delete My Account. You are signed out and your account is removed straight away.</p>
+
+    <h3>Delete your account without the App</h3>
+    <p>Email <a href="mailto:danielsgymbuddy@gmail.com">danielsgymbuddy@gmail.com</a> from the email address of the account, with the subject "Delete my Gym Buddy account". We delete the account within 30 days. See <a href="delete-account.html">Delete your account</a>.</p>
+
+    <h3>What is deleted, and what stays</h3>
+    <p>When your account is deleted, we permanently delete:</p>
+    <ul>
+      <li>Your profile and sign-in account, including the Google name and picture address Supabase stored if you signed in with Google</li>
+      <li>Your workouts and check-ins, streaks and break days, experience points, coins and cosmetics</li>
+      <li>Your buddy team memberships, friendships, nicknames, nudges and invites you sent</li>
       <li>Your device token and notification settings</li>
     </ul>
-    <p>If you create an account but do not finish setting it up, we delete that account and its email address automatically after 30 days.</p>
-    <p>Some information does <strong>not</strong> get deleted, because it belongs to shared, ongoing records rather than to you individually:</p>
+    <p>Some information does <strong>not</strong> get deleted, because it belongs to shared records rather than to you alone:</p>
     <ul>
-      <li><strong>Shared team streak history</strong> (e.g., your team's current or longest streak) is retained for the benefit of remaining team members, though it is no longer linked to your personal account.</li>
-      <li>If you were paired with a buddy on a shared workout, that workout record is retained on your former buddy's account, with your identifying information removed from it.</li>
+      <li>A team's streak record stays with the remaining team members, no longer linked to you.</li>
+      <li>A workout your buddy created with you stays on your buddy's account, with the link to you removed.</li>
+      <li>Records held by Google, such as crash reports, are governed by Google.</li>
     </ul>
-    <p>If you have questions about what happens to your data after deletion, contact us at <a href="mailto:danielsgymbuddy@gmail.com">danielsgymbuddy@gmail.com</a>.</p>
 
-    <h2 id="7-childrens-privacy">7. Children's Privacy</h2>
-    <p>Gym Buddy is not intended for anyone under the age of 16. We require users to confirm they are 16 or older during sign-up, and our systems enforce this minimum. We do not knowingly collect information from anyone under 16. If you believe a user under 16 has created an account, please contact us and we will investigate and remove the account if confirmed.</p>
+    <h2 id="7-childrens-privacy">7. Children</h2>
+    <p>Gym Buddy is not for anyone under 16. The App asks for your age before you can finish creating an account and will not accept an age under 16, and our database rejects it too. The App cannot check that the age you enter is true. An account that is not finished is deleted after 30 days. If you believe a user is under 16, contact us and we will investigate and remove the account if confirmed.</p>
 
     <h2 id="8-your-rights">8. Your Rights</h2>
-    <p>Depending on where you live, you may have rights over your personal information, which can include the right to:</p>
+    <p>You can ask us to:</p>
     <ul>
-      <li><strong>Access</strong> the information we hold about you</li>
-      <li><strong>Correct</strong> inaccurate information</li>
-      <li><strong>Delete</strong> your account and associated data (available directly in the App)</li>
-      <li><strong>Object to or restrict</strong> certain processing</li>
-      <li><strong>Data portability</strong>, where applicable</li>
+      <li><strong>Give you a copy</strong> of the information we hold about you</li>
+      <li><strong>Correct</strong> information that is wrong</li>
+      <li><strong>Delete</strong> your account and data</li>
+      <li><strong>Restrict</strong> or <strong>object</strong> to our use of your information</li>
+      <li><strong>Give it to you in a portable form</strong></li>
     </ul>
-    <p>To exercise any of these rights, contact us at <a href="mailto:danielsgymbuddy@gmail.com">danielsgymbuddy@gmail.com</a>. We will respond within a reasonable timeframe and in accordance with applicable law (including, where relevant, the UK/EU General Data Protection Regulation and other regional privacy laws).</p>
+    <p>You can change your username in the App under Account and delete your account as described above. For anything else, email <a href="mailto:danielsgymbuddy@gmail.com">danielsgymbuddy@gmail.com</a>. We answer rights requests within one month.</p>
+    <p>You also have the right to complain to your data protection authority. In Ireland this is the Data Protection Commission (<a href="https://www.dataprotection.ie">dataprotection.ie</a>).</p>
 
-    <h2 id="9-security">9. Security</h2>
-    <p>We take reasonable technical and organizational measures to protect your information, including encrypted data storage, access controls, and regular security review. However, no method of transmission or storage is 100% secure, and we cannot guarantee absolute security.</p>
+    <h2 id="9-international-transfers">9. International Transfers</h2>
+    <p>Our data is stored with Supabase in London, United Kingdom. The Google services described above (push notifications, crash reports and sign-in) may process data outside the UK and the European Economic Area, under Google's own safeguards. See <a href="https://policies.google.com/privacy">Google's Privacy Policy</a>.</p>
 
-    <h2 id="10-changes-to-this-policy">10. Changes to This Policy</h2>
-    <p>We may update this Privacy Policy from time to time. If we make material changes, we will update the "Last updated" date above. Continued use of the App after changes take effect constitutes acceptance of the updated policy.</p>
+    <h2 id="10-security">10. Security</h2>
+    <p>Data travels between the App and our servers over encrypted connections (HTTPS), and the App refuses unencrypted traffic. Access to the database is limited by rules that keep each user to their own data and the data shared with them, and your password is handled by our sign-in provider, which means we cannot read it. No method of transmission or storage is completely secure.</p>
 
-    <h2 id="11-contact-us">11. Contact Us</h2>
-    <p>If you have any questions about this Privacy Policy or how we handle your information, contact us at:</p>
+    <h2 id="11-changes-to-this-policy">11. Changes to This Policy</h2>
+    <p>We may update this policy from time to time. When we do, we change the "Last updated" date above.</p>
+
+    <h2 id="12-contact-us">12. Contact Us</h2>
+    <p>Questions about this policy or how we handle your information:</p>
     <p><strong><a href="mailto:danielsgymbuddy@gmail.com">danielsgymbuddy@gmail.com</a></strong></p>
 
     <div class="doc-foot">
-      <p>See also: <a href="terms.html">Terms of Service</a></p>
-      <p>Gym Buddy is developed by Keep Going!</p>
+      <p>See also: <a href="terms.html">Terms of Service</a> &middot; <a href="delete-account.html">Delete your account</a></p>
+      <p>Gym Buddy is developed by Keep Going!, Ireland.</p>
     </div>
   </main>
 </body>
