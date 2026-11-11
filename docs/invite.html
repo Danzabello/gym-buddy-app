@@ -4,91 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gym Buddy Invite</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: #0a0a0f;
-      color: #f0f0f8;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-    .card {
-      background: #13131a;
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 24px;
-      padding: 48px 32px;
-      max-width: 400px;
-      width: 100%;
-      text-align: center;
-    }
-    .emoji { font-size: 64px; margin-bottom: 24px; display: block; }
-    h1 { font-size: 28px; font-weight: 800; margin-bottom: 12px; line-height: 1.2; }
-    h1 span {
-      background: linear-gradient(135deg, #00ff88, #4d9fff);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    p { color: #6b6b85; font-size: 15px; line-height: 1.6; margin-bottom: 32px; }
-    .btn {
-      display: block;
-      background: linear-gradient(135deg, #00ff88, #4d9fff);
-      color: #0a0a0f;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      font-weight: 700;
-      font-size: 16px;
-      padding: 16px 24px;
-      border-radius: 14px;
-      text-decoration: none;
-      margin-bottom: 16px;
-      transition: opacity 0.2s;
-    }
-    .btn:hover { opacity: 0.9; }
-    .code-pill {
-      display: inline-block;
-      background: rgba(0,255,136,0.08);
-      border: 1px solid rgba(0,255,136,0.2);
-      color: #00ff88;
-      font-size: 13px;
-      padding: 6px 14px;
-      border-radius: 100px;
-      letter-spacing: 0.15em;
-      font-family: monospace;
-      margin-bottom: 24px;
-    }
-    .code-row {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      margin-bottom: 24px;
-    }
-    .code-row .code-pill { margin-bottom: 0; }
-    .copy-btn {
-      min-height: 44px;
-      background: transparent;
-      border: 1px solid rgba(0,255,136,0.4);
-      color: #00ff88;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      font-weight: 700;
-      font-size: 13px;
-      padding: 0 14px;
-      border-radius: 12px;
-      cursor: pointer;
-    }
-    .note { font-size: 13px; margin-bottom: 24px; }
-    .error { color: #ff6b35; font-size: 15px; }
-    #loading { color: #6b6b85; font-size: 15px; }
-  </style>
+  <meta name="robots" content="noindex">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0B1F1A" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#F8F7F4" media="(prefers-color-scheme: light)">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="stylesheet" href="assets/site.css?v=1">
 </head>
-<body>
+<body class="invite">
   <div class="card">
     <div id="loading">
-      <span class="emoji">&#x23F3;</span>
+      <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12M6 21h12M7 3v3.5a5 5 0 0 0 2 4L12 12l-3 1.5a5 5 0 0 0-2 4V21M17 3v3.5a5 5 0 0 1-2 4L12 12l3 1.5a5 5 0 0 1 2 4V21"/></svg></span>
       <p>Loading your invite...</p>
     </div>
     <div id="content" style="display:none"></div>
@@ -112,7 +39,7 @@
 
     if (error || !validCode) {
       content.innerHTML = `
-        <span class="emoji">&#x1F62C;</span>
+        <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5v.01"/></svg></span>
         <h1>Invite <span>Not Found</span></h1>
         <p class="error">This invite link is invalid, expired, or has already been used.</p>
         <p>Ask your buddy to send you a fresh invite link.</p>
@@ -120,7 +47,7 @@
     } else {
       // Static markup only. The name and code go in with textContent below.
       content.innerHTML = `
-        <span class="emoji">&#x1F4AA;</span>
+        <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5c3.5 4 6.5 6.5 6.5 11a6.5 6.5 0 0 1-13 0c0-4.5 3-7 6.5-11z"/><path d="M12 21a3 3 0 0 0 3-3c0-2-1.5-3-3-4.5C10.5 15 9 16 9 18a3 3 0 0 0 3 3z"/></svg></span>
         <h1><span id="inviter"></span> wants to be your Gym Buddy!</h1>
         <p>Stay accountable together. You both check in daily &mdash; miss a day and the streak dies. No solo streaks. That's the point.</p>
         <div class="code-row">

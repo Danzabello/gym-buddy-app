@@ -5,132 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Delete your account &mdash; Gym Buddy</title>
   <meta name="description" content="How to delete your Gym Buddy account, in the app or by email, and what is deleted.">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: #0a0a0f;
-      color: #d8d8e4;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      font-size: 17px;
-      line-height: 1.7;
-      padding: 24px 20px 64px;
-      -webkit-font-smoothing: antialiased;
-    }
-    .doc {
-      background: #13131a;
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 24px;
-      max-width: 680px;
-      margin: 24px auto 0;
-      padding: 44px 40px 40px;
-    }
-
-    /* ── Header / nav ─────────────────────────────────────────── */
-    .doc-nav {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 20px;
-      align-items: baseline;
-      padding-bottom: 28px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      margin-bottom: 36px;
-    }
-    .brand {
-      font-weight: 800;
-      font-size: 15px;
-      letter-spacing: 0.02em;
-      background: linear-gradient(135deg, #00ff88, #4d9fff);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-right: auto;
-    }
-    .doc-nav a {
-      font-size: 13px;
-      color: #6b6b85;
-      text-decoration: none;
-      border-bottom: none;
-    }
-    .doc-nav a:hover { color: #4d9fff; }
-    .doc-nav a[aria-current="page"] { color: #f0f0f8; font-weight: 700; }
-
-    /* ── Typography ───────────────────────────────────────────── */
-    h1 {
-      font-size: 34px;
-      font-weight: 800;
-      line-height: 1.15;
-      color: #f0f0f8;
-      margin-bottom: 10px;
-      letter-spacing: -0.01em;
-    }
-    h1 span {
-      background: linear-gradient(135deg, #00ff88, #4d9fff);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .meta {
-      color: #6b6b85;
-      font-size: 14px;
-      margin-bottom: 36px;
-    }
-    .meta strong { color: #9a9ab0; font-weight: 700; }
-    .lede p { margin-bottom: 18px; }
-    h2 {
-      font-size: 23px;
-      font-weight: 800;
-      color: #f0f0f8;
-      line-height: 1.25;
-      margin-top: 44px;
-      padding-top: 34px;
-      border-top: 1px solid rgba(255,255,255,0.06);
-      margin-bottom: 18px;
-      scroll-margin-top: 24px;
-      letter-spacing: -0.01em;
-    }
-    h3 {
-      font-size: 17px;
-      font-weight: 700;
-      color: #f0f0f8;
-      margin-top: 28px;
-      margin-bottom: 10px;
-      scroll-margin-top: 24px;
-    }
-    p { margin-bottom: 18px; }
-    ul, ol { margin: 0 0 20px; padding-left: 22px; }
-    li { margin-bottom: 9px; }
-    li::marker { color: #4d9fff; }
-    strong { color: #f0f0f8; font-weight: 700; }
-    a {
-      color: #4d9fff;
-      text-decoration: none;
-      border-bottom: 1px solid rgba(77,159,255,0.35);
-      transition: border-color 0.15s, color 0.15s;
-    }
-    a:hover { border-bottom-color: #4d9fff; }
-
-    /* ── Footer ───────────────────────────────────────────────── */
-    .doc-foot {
-      margin-top: 48px;
-      padding-top: 28px;
-      border-top: 1px solid rgba(255,255,255,0.06);
-      font-size: 14px;
-      color: #6b6b85;
-    }
-    .doc-foot p { margin-bottom: 8px; }
-
-    @media (max-width: 600px) {
-      body { font-size: 16px; padding: 16px 14px 48px; }
-      .doc { padding: 32px 22px 28px; border-radius: 20px; margin-top: 12px; }
-      h1 { font-size: 27px; }
-      h2 { font-size: 20px; margin-top: 36px; padding-top: 28px; }
-    }
-  </style>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0B1F1A" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#F8F7F4" media="(prefers-color-scheme: light)">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="stylesheet" href="assets/site.css?v=1">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Gym Buddy">
+  <meta property="og:title" content="Delete your account &mdash; Gym Buddy">
+  <meta property="og:description" content="How to delete your Gym Buddy account, in the app or by email, and what is deleted.">
+  <meta property="og:url" content="https://danzabello.github.io/gym-buddy-app/delete-account.html">
+  <meta property="og:image" content="https://danzabello.github.io/gym-buddy-app/assets/icon-192.png">
+  <meta name="twitter:card" content="summary">
 </head>
 <body>
   <main class="doc">
     <div class="doc-nav">
-      <span class="brand">Gym Buddy</span>
+      <a class="brand" href="index.html">Gym Buddy</a>
       <a href="privacy-policy.html">Privacy Policy</a>
       <a href="terms.html">Terms of Service</a>
       <a href="delete-account.html" aria-current="page">Delete account</a>
