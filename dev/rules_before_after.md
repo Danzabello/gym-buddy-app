@@ -179,18 +179,26 @@ Added on owner answer 1:
 - allow: `Bash(deno test *)`, `Bash(dev/hygiene/suite/run.sh *)`
 - deny: `Bash(git worktree add *)`
 
-The file parses as JSON and now holds 60 allow, 26 ask and 21 deny entries.
+Added on the owner's follow-up answer, same day:
+
+- deny: `Bash(git -C * push *)`, `Bash(git -c * push *)`
+- Accepted side effect: other commands of that shape are blocked too, for example `git -C <dir> stash push`.
+- No rules were added for other forms (`--git-dir`, `env git push`), by the owner's decision: the NEVER line and the missing credentials cover those.
+
+The file parses as JSON and now holds 60 allow, 26 ask and 23 deny entries.
 
 ### What the deny list does to `git push`
 
-The deny entries that name push are `Bash(git push --force*)`, `Bash(git push -f*)`, `Bash(git push * --delete*)`, `Bash(git push * --force*)`, `Bash(git push * -f*)` and `Bash(git push *)`. No allow or ask entry names push.
+The deny entries that name push are `Bash(git push --force*)`, `Bash(git push -f*)`, `Bash(git push * --delete*)`, `Bash(git push * --force*)`, `Bash(git push * -f*)`, `Bash(git push *)`, `Bash(git -C * push *)` and `Bash(git -c * push *)`. No allow or ask entry names push.
 
 Checked against the Claude Code permissions page (code.claude.com/docs/en/permissions) on 2026-11-12, without running a push:
 
 - `Bash(git push *)` matches `git push` followed by any arguments, and also the bare `git push`. A trailing `*` with a space before it matches the bare command.
 - Deny is evaluated before ask and allow, so no allow entry can carve an exception out of it.
 - It also applies when the push is one part of a compound command (`&&`, `;`, `|`), is inside a subshell or command substitution, or sits behind `timeout`, `time`, `nice`, `nohup`, `stdbuf` or `command`.
-- **It does not match a push written with an option before the subcommand**, such as `git -C . push origin main` or `git -c push.default=current push`. The page says a deny rule "isn't a security boundary around the program". Such a command matches no rule and falls to the default permission prompt.
+- `Bash(git push *)` alone does not match a push written with an option before the subcommand, such as `git -C . push origin main` or `git -c push.default=current push origin main`. The two entries added in the follow-up now deny those.
+- **One form is still not denied: `git -C <dir> push` or `git -c <setting> push` with nothing after `push`.** The page says a trailing `*` matches the bare command only when it is the rule's only wildcard, and these two rules have two. Such a command matches no rule and falls to the default permission prompt. So do `--git-dir` and `env git push`, by the owner's decision.
+- The page says a deny rule "isn't a security boundary around the program".
 
 Second backstop, read without printing any values: `origin` is an HTTPS URL, no git credential helper is configured, there is no `~/.git-credentials` file, and `gh` is not installed. That agrees with the owner's note that Claude Code has no push credentials.
 
