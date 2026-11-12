@@ -58,8 +58,8 @@ Known residual: `process_stale_sessions` takes L1 before L0 (CRON-ORDER, pre-exi
 ## Rules
 - **Coach Max gradient** `0xFF1D4ED8` → `0xFF7C3AED` is scoped to his badge/avatar. Never change or tokenise it; it doesn't follow the accent skin and isn't app-wide. This is the first permitted raw hex. Everything else uses `AppColors`/`colorScheme`. Warm/orange is for the primary CTA only.
 - **Avatar illustration colours** (`lib/widgets/avatars/`) are the second permitted raw hex, alongside the Coach Max gradient. Everything else uses AppColors/colorScheme.
-- One page at a time: when a request is about a single page, touch only that page's file. Reason: tight, reviewable diffs with no surprise side effects. A task that spans pages or files changes what it needs and nothing else.
-- UI changes: show or describe the plan and wait for approval before code. Reason: no throwaway work on a rejected design. In a multi-page task, stop only at the UI item that has no approved mockup (write its spec) and carry on with the rest.
+- One page at a time: a request about one page changes only that page. A prompt that spans files changes what it needs and nothing else. Reason: tight, reviewable diffs with no surprise side effects.
+- UI changes: show or describe the plan and wait for approval before code. For UI without an approved mockup, write the spec, stop at that item, and carry on with the rest. Reason: no throwaway work on a rejected design.
 - Branches: one branch per prompt, created in the main folder. No worktrees (owner's ways-of-working rule).
 - Commit before starting anything new. Reason: each unit of work stays clean and reversible.
 - Widgets referencing `AppColors.of(context)`/`Theme.of(context)` can't be `const`.
