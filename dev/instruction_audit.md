@@ -24,7 +24,7 @@ Verified on 2026-11-12, read-only: `supabase migration list --linked` (136 local
 | `.claude/settings.json` | 2026-07-23 | Hooks: `code-review-graph update` after each edit, `status` at session start | Yes. |
 | `.claude/settings.local.json` | 2026-10-27 | 156 allow entries, 12 deny entries | Deny list yes. Allow list conflicts with the header. See C8. |
 | `.claude/skills/*` (4) | 2026-09-29 | How to use the code-review-graph tools | Yes. Opt-in, no rules. |
-| `.agents/skills/*` (9, tracked) | 2026-05-24 | caveman, cavecrew, impeccable skill text | Not read by Claude Code from here. See S16. |
+| `.agents/skills/*` (8, tracked) | 2026-05-24 | caveman, cavecrew, impeccable skill text | Not read by Claude Code from here. See S16. |
 | `~/.claude/CLAUDE.md` | 2026-10-09 | Use the graphify skill "before doing anything else" on `/graphify` | No. The skill is not installed. See S6. |
 | `~/.claude/settings.json` | 2026-10-01 | Blank attribution; enables Ponytail and claude-mem | Yes. |
 | `~/.claude/skills/*` | 2026-05 to 2026-09 | caveman set, cavecrew, find-skills, impeccable, security-and-hardening | Opt-in. See C10, S21, S23. |
@@ -81,7 +81,7 @@ Severity: High = can cause an action you forbid, or stops a long task. Medium = 
 | S13 | memory `project_checkin_rpc.md`, `project_27_notification_inbox.md`, `project_onboarding_rebuild.md`, `project_timezone_rework.md`, `project_naive_timestamp_sweep.md` | descriptions | Descriptions describe an earlier state than the body or the code (for example "Migration B waits", "mockups next", "in-flight", "~25 sites"; 6 remain). | Low | **Applied.** |
 | S14 | memory: 8 files | paths | 16 references to `docs/…` paths that moved to `dev/`. | Low | **Applied.** |
 | S15 | claude-mem plugin | SessionStart hook | Injects about 17,000 tokens of "recent context" per session. The newest observation is from 2026-10-28, and some lines are now false (for example "incomplete accounts are deleted on re-login"). It overlaps the file memory. | Medium | Disable it or repair capture. Q10. |
-| S16 | `.agents/skills/` | 9 folders, tracked | Byte-identical to `~/.agents/skills`. Claude Code does not load `.agents/` from a repo. | Low | Remove from the repo. Q9. |
+| S16 | `.agents/skills/` | 8 folders, tracked | Byte-identical to their counterparts in `~/.agents/skills`. Claude Code does not load `.agents/` from a repo. | Low | Remove from the repo. Q9. |
 | S17 | `.claude/settings.local.json` | `permissions.allow` | About 60 one-off entries (fixed `sed` line ranges, old scratchpad paths, a `docs/architecture_map.md` grep). Harmless, but they bury the five entries in C8. | Low | Prune when editing for Q1. |
 | S18 | session header (your pasted block) | FREE list; task text | `docs/hygiene/suite/run.sh` is now `dev/hygiene/suite/run.sh`. "Tracker and handoff files under docs/" are under `dev/`. The deliverable path was `docs/`. | Medium | Update the prompt template. |
 | S19 | `docs/audits/audit-2026-09-29.md` | location | The only working file left under `docs/`. It is kept out of git by `.git/info/exclude`, so it is not published, but it sits in the public folder. | Low | Move to `dev/audits/` and update the exclude line. Q9. |
@@ -111,19 +111,19 @@ None of the G lines are applied. They are new rules, so they need your yes. Reco
 
 | ID | Winner | Files that change | Status |
 |---|---|---|---|
-| C1 | Ponytail | `CLAUDE.md` (one line) | Needs Q4 |
+| C1 | Ponytail | `CLAUDE.md` (one line) | Applied, section 8 |
 | C2 | One branch per prompt, in the main folder | `CLAUDE.md` (Rules) | Applied, section 7 |
 | C3 | Text-only checks | `.claude/settings.local.json` | Applied, section 7 |
-| C4 | Header: local commits are free | memory `feedback_diff_review_format.md`, `project_timezone_rework.md` | Needs Q5 |
+| C4 | Header: local commits are free | memory `feedback_diff_review_format.md`, `project_timezone_rework.md` | Applied, section 8 |
 | C5 | The session's model | none | Closed |
 | C6 | No conflict | none | Closed |
 | C7 | No worktrees | `CLAUDE.md` (Rules); memory `feedback_side_fixes_worktree.md` deleted | Applied, section 7 |
 | C8 | Header | `.claude/settings.local.json` | Applied, section 7 |
-| C9 | Open | `CLAUDE.md` (Migrations), unchanged | Owner decides, evidence in section 7 |
-| C10 | Repo commit style | `CLAUDE.md` (one line) | Needs Q4 |
+| C9 | The written rule stays the default; `db push` is permitted after a clean dry run | `CLAUDE.md` (Migrations) | Applied, section 8 |
+| C10 | Repo commit style | `CLAUDE.md` (one line) | Applied, section 8 |
 | C11 | Scoped to single-page requests | `CLAUDE.md` (Rules), memory `feedback_rules.md` | Applied, section 7 |
-| C12 | Scoped rule | the generated file, or `CLAUDE.md` (Rules) | Needs Q7 |
-| C13 | Your choice | `CLAUDE.md` (Rules) | Needs Q8 |
+| C12 | Scoped rule | the generated file and `CLAUDE.md` (Rules) | Applied, section 8 |
+| C13 | Emerald Ink; other skins keep their values | `CLAUDE.md` (Rules) | Applied, section 8 |
 | C14 | Header wording | `CLAUDE.md` (Rules) | Applied, section 7 |
 
 ## 5. Applied in this branch
@@ -200,3 +200,69 @@ CLAUDE.md is unchanged. Its rule (`supabase db query --linked -f`, then `migrati
 ### Q5: disabling claude-mem
 
 The owner does this at user level. Steps are in the session recap; nothing was changed here.
+
+## 8. Owner decisions, second round, 2026-11-12
+
+Every question in section 6 is now answered. Where this section differs from section 7, this section is current.
+
+| Question | Decision | Where it landed |
+|---|---|---|
+| Q1 | Tighten the allowlist and prune it | `.claude/settings.local.json` (gitignored, not in a commit) |
+| Q2 | Scope "one page at a time"; stop only at the UI item with no mockup | `CLAUDE.md`, commit c51faa5 |
+| Q3 | One branch per prompt, named in the prompt, from `main` in the main folder; no git worktrees | `CLAUDE.md`, commit a6327aa; memory `feedback_side_fixes_worktree.md` rewritten to say the same |
+| Q4 | Ponytail; plain commit subjects; `docs/` is the public site | `CLAUDE.md`, commit 98874a8 |
+| Q5 | No standing hold on local commits | memory `feedback_diff_review_format.md`, `project_timezone_rework.md` |
+| Q6 | Keep the written rule; `db push` is also fine after a clean dry run | `CLAUDE.md`, commit 5d8f8cb |
+| Q7 | Commit the generated macOS file; scope the commit rule | commits 44db24a and 23856ab |
+| Q8 | Work in Emerald Ink; do not change the other skins' values; placeholders for new tokens | `CLAUDE.md`, commit 5f6c51a |
+| Q9 | Four clean-ups | see below |
+| Q10 | Disable claude-mem | `~/.claude/settings.json` |
+| Q11 | Add G1, G2, G3, G5, G8; skip G4, G6, G7 | `CLAUDE.md`: G1 in 98874a8, the rest in eb4dcba |
+| S24 | Retire the duplicate rules memory | memory `feedback_rules.md` deleted after the CLAUDE.md commits |
+
+### Q1: the permission file
+
+- **Pruned:** 97 one-off entries that were there before the audit, plus 1 created during this session. The allow list went from 156 entries to 58.
+- **Deny now includes:** `git push *`, `flutter install *`, `flutter run *`, `adb uninstall *`, `adb -s * uninstall *`, `adb exec-out screencap *`, `adb -s * exec-out screencap *`, `adb shell screencap *`. The `-s` forms cover commands that name a device.
+- **Allow now includes:** `flutter pub get *`, `supabase db push --dry-run *`, `supabase migration list *`.
+- **Ask does not contain the literal `supabase db *` or `flutter pub *`.** An ask rule wins over a narrower allow rule, so those two patterns would make the three allowed commands prompt. The ask list names every other subcommand instead:
+  - `supabase db` followed by `query`, `diff`, `dump`, `pull`, `reset`, `lint`, `start`, `advisors` or `schema`;
+  - `supabase db push` with no flags, or starting with `--linked`, `--include-all`, `--include-roles`, `--include-seed`, `--db-url`, `--local`, `--password` or `-p`;
+  - `flutter pub` followed by `add`, `remove`, `upgrade`, `downgrade`, `global`, `run`, `cache` or `publish`.
+- **Limit of this approach:** a real `supabase db push` written with some other flag first matches no rule. It still gets the default permission prompt, but not a forced one.
+
+### Q3: state of `../gym_buddy_dark`
+
+Read-only check. Nothing in the worktree was changed.
+
+- Branch `style/dark-only`, created from `main` at 4d9a176, which is still the tip of `main`. It is 3 commits ahead and 0 behind.
+- Commits, all from 2026-11-12: 534e6d9 (remove the light theme from `site.css` and `home.css`), 1f4f30c (pin all six page heads to the dark theme), 9580b9f (cap hero spark opacity at 0.45).
+- Files: 8, all under `docs/` (six HTML pages and two stylesheets), 24 insertions and 55 deletions.
+- None of the three is in `main` under another hash (`git cherry` marks all three as missing, and no commit on `main` has the same subject).
+- The working tree is clean, the branch is not on any remote, and a trial merge into `main` has no conflicts.
+
+Options, none taken:
+1. Fast-forward `main` to `style/dark-only`, then run `git worktree remove ../gym_buddy_dark`. The branch and commits stay.
+2. Leave the work unmerged and run `git worktree remove ../gym_buddy_dark`. The branch stays and can be checked out in the main folder later.
+3. Leave the worktree as it is until the dark-only work is finished, as the one exception to the new rule.
+4. Drop the work: remove the worktree and delete the branch. This loses the three commits.
+
+### Q9
+
+1. `~/.claude/CLAUDE.md`: the graphify section was the whole file, so the file is now empty.
+2. `.claude-backup/CLAUDE.md` is renamed to `CLAUDE.md.bak`. The only `CLAUDE.md` under the repo folder is the root one.
+3. `.agents/` is removed from the repo in commit daa767f, after `diff -r` showed its 8 skill folders identical to `~/.agents/skills`.
+4. The tracker is now `dev/audits/audit-2026-09-29.md`, and `.git/info/exclude` line 18 reads `dev/audits/`. The file is not tracked and `git status` does not list it. `dev/hygiene/checkin_rpc_design.md` points at the new path (commit 97e80d9). `dev/hygiene/06_report.md` line 34 still names the old path, because it records what that prompt left in place.
+
+### Q10
+
+`~/.claude/settings.json`: `"claude-mem@thedotmack": true` became `false`. No other line changed. The plugin's background worker from earlier sessions keeps running until it is stopped or the machine restarts.
+
+### Backups
+
+Everything changed outside the repo was copied first to `.claude-backup/instruction-audit-20261112/` (gitignored):
+
+- `global-CLAUDE.md.bak` and `global-settings.json.bak`
+- `git-info-exclude.bak`
+- `settings.local.json.before-audit` (as it was before this audit) and `settings.local.json.before-round3`
+- `memory-before-audit/` (25 files, as they were before this audit) and `memory-before-round3/` (25 files, before this round)
