@@ -4854,8 +4854,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
   Future<void> _showRenameDialog(TeamStreak streak) async {
     final appColors = AppColors.of(context);
     final cs = Theme.of(context).colorScheme;
-    final controller =
-        TextEditingController(text: streak.teamName);
+    var input = streak.teamName;
 
     final newName = await showDialog<String>(
       context: context,
@@ -4881,8 +4880,9 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
                 style: TextStyle(
                     fontSize: 13, color: appColors.subtleText)),
             const SizedBox(height: 14),
-            TextField(
-              controller: controller,
+            TextFormField(
+              initialValue: input,
+              onChanged: (v) => input = v,
               autofocus: true,
               textCapitalization: TextCapitalization.words,
               style: TextStyle(color: cs.onSurface),
@@ -4893,7 +4893,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
                     borderRadius: BorderRadius.circular(10)),
                 prefixIcon: const Icon(Icons.group_outlined),
               ),
-              onSubmitted: (v) => Navigator.pop(context, v),
+              onFieldSubmitted: (v) => Navigator.pop(context, v),
             ),
           ],
         ),
@@ -4906,7 +4906,7 @@ class _AllStreaksDialogState extends State<_AllStreaksDialog> {
           ),
           GestureDetector(
             onTap: () =>
-                Navigator.pop(context, controller.text),
+                Navigator.pop(context, input),
             child: Container(
               padding: const EdgeInsets.symmetric(
                   horizontal: 16, vertical: 8),

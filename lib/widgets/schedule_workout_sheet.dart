@@ -835,6 +835,12 @@ class _BuddyPickerSheetState extends State<_BuddyPickerSheet> {
     _filteredFriends = widget.friends;
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   void _filter(String query) {
     setState(() {
       _filteredFriends = query.isEmpty

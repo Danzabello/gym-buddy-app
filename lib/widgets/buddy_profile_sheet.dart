@@ -90,7 +90,7 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
   }
 
   Future<void> _showSetNicknameDialog() async {
-    final controller = TextEditingController(text: _currentNickname ?? '');
+    var input = _currentNickname ?? '';
 
     final newNickname = await showDialog<String?>(
       context: context,
@@ -112,8 +112,9 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
-            TextField(
-              controller: controller,
+            TextFormField(
+              initialValue: input,
+              onChanged: (v) => input = v,
               autofocus: false,
               textCapitalization: TextCapitalization.words,
               decoration: InputDecoration(
@@ -122,7 +123,7 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 prefixIcon: const Icon(Icons.person_outline),
               ),
-              onSubmitted: (value) => Navigator.pop(context, value),
+              onFieldSubmitted: (value) => Navigator.pop(context, value),
             ),
             const SizedBox(height: 8),
             Text(
@@ -143,7 +144,7 @@ class _BuddyProfileSheetState extends State<BuddyProfileSheet> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, controller.text),
+            onPressed: () => Navigator.pop(context, input),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue[600],
               foregroundColor: Colors.white,

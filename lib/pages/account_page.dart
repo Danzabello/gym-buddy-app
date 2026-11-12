@@ -43,7 +43,7 @@ class _AccountPageState extends State<AccountPage> {
   // ACCOUNT
   // ══════════════════════════════════════════════════════════════
   Future<void> _showEditUsernameDialog() async {
-    final controller = TextEditingController(text: _username ?? '');
+    var input = _username ?? '';
     final appColors = AppColors.of(context);
     String? errorText;
     bool isSaving = false;
@@ -61,8 +61,9 @@ class _AccountPageState extends State<AccountPage> {
               color: Theme.of(dialogContext).colorScheme.onSurface,
             ),
           ),
-          content: TextField(
-            controller: controller,
+          content: TextFormField(
+            initialValue: input,
+            onChanged: (v) => input = v,
             autofocus: true,
             inputFormatters: InputFormatters.username,
             decoration: InputDecoration(
@@ -80,7 +81,7 @@ class _AccountPageState extends State<AccountPage> {
               onPressed: isSaving
                   ? null
                   : () async {
-                      final value = controller.text.trim().toLowerCase();
+                      final value = input.trim().toLowerCase();
                       final err = InputValidators.username(value);
                       if (err != null) {
                         setDialogState(() => errorText = err);
