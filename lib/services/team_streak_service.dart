@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'break_day_service.dart';
+import 'coach_max_service.dart';
 import 'workout_history_service.dart';
 import 'economy_sync.dart';
 import 'dart:async' show unawaited;
@@ -122,7 +123,7 @@ class TeamStreakService {
   final SupabaseClient _supabase = Supabase.instance.client;
   final BreakDayService _breakDayService = BreakDayService();
   
-  static const String coachMaxId = '00000000-0000-0000-0000-000000000001';
+  static const String coachMaxId = CoachMaxService.coachMaxId;
 
   // ============================================
   // GET ALL USER'S ACTIVE STREAKS
