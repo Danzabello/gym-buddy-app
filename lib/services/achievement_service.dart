@@ -153,7 +153,7 @@ class AchievementService {
         'user_id':        uid,
         'achievement_id': achievementId,
         'progress':       clamped,
-        if (didUnlock) 'unlocked_at': DateTime.now().toIso8601String(),
+        if (didUnlock) 'unlocked_at': DateTime.now().toUtc().toIso8601String(),
       }, onConflict: 'user_id,achievement_id');
 
       if (!didUnlock) return null;
@@ -178,7 +178,7 @@ class AchievementService {
       return AchievementUnlockResult(
         achievement: Achievement.fromRow(def, {
           'progress':    clamped,
-          'unlocked_at': DateTime.now().toIso8601String(),
+          'unlocked_at': DateTime.now().toUtc().toIso8601String(),
         }),
         xpAwarded:    xp,
         coinsAwarded: coins,
@@ -217,7 +217,7 @@ class AchievementService {
       return AchievementUnlockResult(
         achievement: Achievement.fromRow(def, {
           'progress': def['target_value'],
-          'unlocked_at': DateTime.now().toIso8601String(),
+          'unlocked_at': DateTime.now().toUtc().toIso8601String(),
         }),
         xpAwarded: result['xp_awarded'] as int? ?? 0,
         coinsAwarded: result['coins_awarded'] as int? ?? 0,

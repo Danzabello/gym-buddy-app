@@ -114,7 +114,7 @@ class BreakDayService {
 
     final cancelled = await _supabase
         .from('break_day_usage')
-        .update({'cancelled_at': DateTime.now().toIso8601String()})
+        .update({'cancelled_at': DateTime.now().toUtc().toIso8601String()})
         .eq('user_id', userId)
         .eq('break_date', todayStr)
         .isFilter('cancelled_at', null)

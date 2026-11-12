@@ -659,7 +659,7 @@ class NotificationService {
       await _supabase.from('notification_settings').upsert({
         'user_id': userId,
         ...settings,
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       });
 
       debugLog('✅ Notification settings updated');
