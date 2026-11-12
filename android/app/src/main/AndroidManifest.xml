@@ -71,5 +71,11 @@
             <action android:name="android.intent.action.SEND"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Required for url_launcher's canLaunchUrl on Android 11+: without
+             this the Terms and Privacy links on Help & Support do nothing. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 </manifest>
