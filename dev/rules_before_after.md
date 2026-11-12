@@ -2,12 +2,14 @@
 
 Branch `chore/loosen-rules`, built on `main` at 261a44e. Task 4: restructure the rules in `CLAUDE.md` into NEVER, ASK FIRST and FREE, and loosen what is left.
 
+"Before" is `CLAUDE.md` on `main`. "After" is the file on this branch, including the owner's answers of 2026-11-12 (section 9), which changed several lines written in the first commit (d825ecd).
+
 ## 1. Summary
 
 - `CLAUDE.md` went from 75 lines to 121. It gained two sections, **Working style** and **Permission tiers**, placed before **Rules**.
-- Five existing lines were reworded, two were moved into the NEVER tier, and one duplicated sentence was deleted from Migrations.
-- Nothing was moved out to `dev/`. The file is well under the 250-line target, and every long paragraph that is left is a Supabase rule the task said to keep in place.
-- `.claude/` is unchanged. It is gitignored and holds permissions and hooks only, no prose rules. Section 6 lists where the permission file and the new tiers differ.
+- Five existing lines were reworded, two were moved into the NEVER tier, one duplicated sentence was deleted from Migrations, and the "Known gap" line was moved to the tracker.
+- Nothing else was moved out to `dev/`. The file is well under the 250-line target, and every long paragraph that is left is a Supabase rule the task said to keep in place.
+- `.claude/settings.local.json` gained two allow entries and one deny entry, on the owner's answer. The file is gitignored, so that change is on disk and not in a commit. Section 6 has the entries.
 - Every owner answer to audit questions 1 to 11 was found applied (section 4), so none was re-applied.
 
 ## 2. Changed lines
@@ -41,9 +43,9 @@ Branch `chore/loosen-rules`, built on `main` at 261a44e. Task 4: restructure the
 - **Before:** "**Coach Max gradient** `0xFF1D4ED8` → `0xFF7C3AED` is scoped to his badge/avatar. Never change or tokenise it; it doesn't follow the accent skin and isn't app-wide. This is the first permitted raw hex. Everything else uses `AppColors`/`colorScheme`. Warm/orange is for the primary CTA only."
 - **After:** three lines.
   - "**Coach Max gradient** `0xFF1D4ED8` → `0xFF7C3AED` is scoped to his badge/avatar. Do not change its values, tokenise it or use it elsewhere. Reason: it doesn't follow the accent skin and isn't app-wide."
-  - "**Raw hex** is permitted in two places: the Coach Max gradient and the avatar illustration colours (`lib/widgets/avatars/`). Everything else uses `AppColors`/`colorScheme`. Reason: owner preference, no recorded cause."
+  - "**Raw hex** is permitted in two places: the Coach Max gradient and the avatar illustration colours (`lib/widgets/avatars/`). Everything else uses `AppColors`/`colorScheme`. Reason: avatar illustrations are character art, like Coach Max, and give the app personality."
   - "Warm/orange is for the primary CTA only. Reason: owner preference, no recorded cause."
-- **Reason:** one line held three rules. The gradient rule keeps its own recorded words as its reason. The raw-hex rule and the orange rule have no cause recorded in any file (audit S20 says so for orange), so both carry the fallback text and no invented reason.
+- **Reason:** one line held three rules. The gradient rule keeps its own recorded words as its reason. The raw-hex reason is the owner's, given on 2026-11-12. The orange rule has no recorded cause, and the owner confirmed the fallback text for it.
 
 ### 2.6 Rules, avatar illustration colours
 
@@ -71,6 +73,12 @@ Branch `chore/loosen-rules`, built on `main` at 261a44e. Task 4: restructure the
 - **After:** "…go in `dev/`. A `docs/` path that a prompt gives for a working file means the same path under `dev/`. Reason: Pages served the working files until commit f44a77e moved them out."
 - **Reason:** the PATH NOTE at the top of the prompt, so later prompts need not repeat it.
 
+### 2.10 Supabase rules, "Known gap"
+
+- **Before:** "**Known gap:** leaked-password protection is off (needs Pro plan). Enable it before public launch."
+- **After:** removed from `CLAUDE.md`. The same text is appended to the "Leaked-password protection" row of the Play Store checklist in `dev/audits/audit-2026-09-29.md`, with the date and the advisor status. That tracker already listed the gap in three places (lines 112, 512 and 565).
+- **Reason:** owner answer 5. `CLAUDE.md` is public; the tracker is kept out of git. The line is still in git history. "Known residual" (CRON-ORDER) stays where it is, on the same answer.
+
 ## 3. Added lines
 
 ### 3.1 Working style (new section, an intro line and 7 bullets)
@@ -83,48 +91,53 @@ Branch `chore/loosen-rules`, built on `main` at 261a44e. Task 4: restructure the
 | Plans: post, then proceed | task step 2 | loosens: replaces "wait for approval" |
 | Obstacles: diagnose, retry with a fix, continue | task step 2 | loosens. No "stop at the first error", "never retry" or "always confirm" line existed in `CLAUDE.md`, `.claude/` or memory, so this line is new and replaces nothing |
 | Where you must ask: prepare, put it in the recap, carry on | prompt, Working style | loosens |
-| Subagents: read-only searches or review of your own diff, on Sonnet, no delegated edits | prompt, Working style | keeps. Reason is the fallback text; audit S23 records only that the header says so |
+| Subagents: read-only searches or review of your own diff, on Sonnet, no delegated edits | prompt, Working style | keeps. Reason: "they can account for a large share of a session's cost (Anthropic's Fable 5.2 guidance)", from the owner's notes |
 | Model and effort: Fable 5.2, high by default, medium for mechanical work, xhigh when measurably needed | task step 2 | new. The second sentence, about the old "Opus" and "Sonnet-medium" labels, is the audit's C5 resolution |
 
 ### 3.2 Permission tiers, NEVER
 
-Each line has a scope and a reason. "Fallback" means the text "owner preference, no recorded cause": no file or memory records why.
+Eleven lines, each with a scope and a reason, and one pointer line.
 
 | Line | Source | Reason used | Where the reason comes from |
 |---|---|---|---|
-| `git push` | task step 1 | fallback | none found |
+| `git push` | task step 1 | a push to `main` publishes the website and the repo is public, so the owner decides when; Claude Code has no push credentials | owner's notes, 2026-11-12 |
 | Git worktrees | task step 1; was in Rules | owner's ways-of-working rule | the Rules line it moved from |
-| `flutter run`, `flutter install`, uninstall | task step 1 | fallback | none found |
-| Screenshots | prompt NEVER list | fallback | none found. Audit C3 records the decision, not a cause |
+| `flutter run` | task step 1 | it breaks FCM and wipes device data on a debug install. The line also names the path to use: `flutter build apk --release`, and the owner installs it | owner's notes, 2026-11-12 |
+| `flutter install` and uninstalling the app | task step 1 | the owner installs builds himself; a debug-signed build once refused a release install (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`); an uninstall wipes the login and data | owner's notes, 2026-11-12 |
+| Screenshots | prompt NEVER list | screenshot loops are the biggest token and context cost; `uiautomator dump`, `dumpsys` and `logcat` answer the same questions | owner's notes, 2026-11-12 |
 | Secret values in output | task step 1 | "this repo is public on GitHub; no incident on record" | the prompt's PATH NOTE |
 | Credit or streak functions outside a rolled-back transaction | task step 1 | "on live they pay real coins and move real streaks" | a statement of what the functions do; the suite header says it runs on live |
 | Migration or deploy without the owner's go-ahead | task step 1 | the linked project is live and history must match one-to-one | Migrations paragraph |
 | `SELECT` on the private `user_profiles` columns | task step 1 | owner decision 2026-10-12 | memory `project_live10_profile_visibility.md`; migration `20261012210000` |
 | Attribution in commits or PRs | task step 1 | global settings blank it; no trailer since 2026-09-28 | audit C6 |
 | UI code without an approved mockup | task step 1; was in Rules | no throwaway work on a rejected design | the Rules line it moved from |
-| Emojis in pushes, toasts or dialogs | prompt NEVER list | fallback | none found |
-| "Also NEVER" pointer line | existing rules | n/a | links to Migrations, Lock order and Rules instead of copying them |
+| "Also NEVER" pointer line | existing rules | n/a | links to Migrations, Lock order and Rules instead of copying them. The unquoted-heredoc rule is reached through this line |
+
+The first commit had `flutter run`, `flutter install` and uninstall on one line with the text "owner preference, no recorded cause", and the same text on `git push` and Screenshots. The owner supplied the reasons above, and the line was split because `flutter run` has a different reason from the other two.
 
 ### 3.3 Permission tiers, ASK FIRST
 
-Six lines, all from the prompt's ASK FIRST list, plus the instruction to name the exact action. "Any `supabase db` command" became "any `supabase db` command that is not in FREE", because the owner's Q1 answer allows `supabase db push --dry-run` and the prompt's FREE list allows read-only queries.
+Seven lines. Six are from the prompt's ASK FIRST list, plus the instruction to name the exact action.
+
+- "Any `supabase db` command" became "any `supabase db` command that is not in FREE", because the owner's Q1 answer allows `supabase db push --dry-run` and the prompt's FREE list allows read-only queries.
+- "Merging a branch into `main`. The owner merges after review." Added on owner answer 3.
 
 ### 3.4 Permission tiers, FREE
 
 Seven lines, all from the prompt's FREE list. Two additions:
 
 - `supabase db push --dry-run` and `supabase migration list`, from the owner's Q1 answer.
-- A sentence saying a read-only `supabase db query` still raises a permission prompt and that the prompt is not a reason to stop the task (audit section 7, "Side effect").
+- "This includes a read-only `supabase db query` (the permission prompt still appears; approve it): the permission file cannot tell a `SELECT` from a write, so the prompt is not a reason to stop the task." The bracketed words are the owner's, from answer 6.
 
 ### 3.5 Permission tiers, intro
 
-- "An action in no list and under no rule is FREE when it is local to the repo and reversible (name it in the recap); otherwise it is ASK FIRST." New. Without it an unlisted action has no tier.
+- "An action in no list and under no rule is FREE when it is local to the repo and reversible (name it in the recap); otherwise it is ASK FIRST." New. Without it an unlisted action has no tier. It does not cover a merge into `main`, which is now a listed ASK FIRST action.
 - "`.claude/settings.local.json` … enforces part of these lists; where it and this file disagree, the stricter one holds." New. See section 6.
 
-### 3.6 Rules, public file
+### 3.6 Rules, two new lines
 
-- "`CLAUDE.md` is public on GitHub. Do not add security gaps or internal weaknesses to it; they go in the tracker under `dev/audits/`, which is kept out of git. Reason: owner instruction, 2026-11-12."
-- Source: the prompt's PATH NOTE. `dev/audits/` is excluded by `.git/info/exclude` line 18.
+- "No emojis in pushes, toasts or dialogs (text the app shows or sends). Reason: owner preference, no recorded cause." From the prompt's NEVER list. The first commit put it in the NEVER tier; owner answer 4 moved it to Rules.
+- "`CLAUDE.md` is public on GitHub. Do not add security gaps or internal weaknesses to it; they go in the tracker under `dev/audits/`, which is kept out of git. Reason: owner instruction, 2026-11-12." From the prompt's PATH NOTE. `dev/audits/` is excluded by `.git/info/exclude` line 18.
 
 ## 4. Skipped because the audit round did them
 
@@ -149,36 +162,49 @@ Step 2 items that needed no change:
 - "Stop at the first error", "never retry", "always confirm": no such line exists in `CLAUDE.md`, `.claude/` or the memory folder. The Working style "Obstacles" line states the new behaviour.
 - The tap rule, the heredoc rule, the theme rule and the two `migration repair` and MCP-tool rules already had a scope and a reason. They are unchanged.
 
-## 5. Kept, though the task's keep-list did not name them
+## 5. The three items the task's keep-list did not name
 
-The prompt's own NEVER list has three items that step 1's keep-list leaves out. They are kept, because nothing in the task says to drop them:
+The prompt's own NEVER list has three items that step 1's keep-list leaves out. The owner decided each on 2026-11-12 (answer 4):
 
-- **Screenshots.** In the NEVER tier. The permission file also denies `screencap`.
-- **Emojis in pushes, toasts or dialogs.** In the NEVER tier.
-- **Unquoted heredocs with backticks.** Left in Rules, where the audit round put it with its reason, and linked from the NEVER tier.
+- **Screenshots.** Stay in the NEVER tier. The permission file also denies `screencap`.
+- **Unquoted heredocs with backticks.** Stay NEVER. The rule and its reason are in Rules, where the audit round put them, and the NEVER tier's pointer line links to it.
+- **Emojis in pushes, toasts or dialogs.** Moved from the NEVER tier to Rules.
 
-## 6. Where the tiers and the permission file differ
+## 6. The permission file
 
-Nothing in `.claude/settings.local.json` was changed: the audit round settled it. These differences mean a FREE action can still raise a prompt.
+`.claude/settings.local.json` is gitignored, so these changes are on disk only.
 
-| FREE in `CLAUDE.md` | Permission file | Effect |
-|---|---|---|
-| `deno test` | only `deno check *` is allowed | prompts |
-| `dev/hygiene/suite/run.sh` | no entry | prompts |
-| read-only `supabase db query` | in `ask` | always prompts (owner's Q1 decision) |
-| read-only SQL through the Supabase MCP `execute_sql` | no entry | prompts |
-
-And one NEVER line with no deny entry: `git worktree`. It matches no rule, so it gets the default prompt and not a block.
-
-Entries that would close the first two rows and the worktree gap, if the owner wants them:
+Added on owner answer 1:
 
 - allow: `Bash(deno test *)`, `Bash(dev/hygiene/suite/run.sh *)`
 - deny: `Bash(git worktree add *)`
 
+The file parses as JSON and now holds 60 allow, 26 ask and 21 deny entries.
+
+### What the deny list does to `git push`
+
+The deny entries that name push are `Bash(git push --force*)`, `Bash(git push -f*)`, `Bash(git push * --delete*)`, `Bash(git push * --force*)`, `Bash(git push * -f*)` and `Bash(git push *)`. No allow or ask entry names push.
+
+Checked against the Claude Code permissions page (code.claude.com/docs/en/permissions) on 2026-11-12, without running a push:
+
+- `Bash(git push *)` matches `git push` followed by any arguments, and also the bare `git push`. A trailing `*` with a space before it matches the bare command.
+- Deny is evaluated before ask and allow, so no allow entry can carve an exception out of it.
+- It also applies when the push is one part of a compound command (`&&`, `;`, `|`), is inside a subshell or command substitution, or sits behind `timeout`, `time`, `nice`, `nohup`, `stdbuf` or `command`.
+- **It does not match a push written with an option before the subcommand**, such as `git -C . push origin main` or `git -c push.default=current push`. The page says a deny rule "isn't a security boundary around the program". Such a command matches no rule and falls to the default permission prompt.
+
+Second backstop, read without printing any values: `origin` is an HTTPS URL, no git credential helper is configured, there is no `~/.git-credentials` file, and `gh` is not installed. That agrees with the owner's note that Claude Code has no push credentials.
+
+### Where the tiers and the file still differ
+
+| FREE in `CLAUDE.md` | Permission file | Effect |
+|---|---|---|
+| read-only `supabase db query` | in `ask` | always prompts (owner's Q1 decision; answer 6 says to approve it) |
+| read-only SQL through the Supabase MCP `execute_sql` | no entry | prompts |
+
 ## 7. The three rules I was least sure about loosening
 
 1. **"Plan first, wait for approval" became "post the plan, then proceed".** The old line was written for UI. The new Working style line covers every plan, so a migration design or a refactor plan now proceeds without a wait unless it contains an owner decision or an ASK FIRST action. Applying the migration still asks.
-2. **The default for unlisted actions.** "Local to the repo and reversible is FREE" is new policy that no file stated before. It covers, for example, merging a finished branch into local `main` or deleting a merged local branch. The alternative is to treat every unlisted action as ASK FIRST.
+2. **The default for unlisted actions.** "Local to the repo and reversible is FREE" is new policy that no file stated before. It covers, for example, deleting a local branch that is already merged. A merge into `main` is not an example: the owner made it ASK FIRST on 2026-11-12.
 3. **Read-only `supabase db` queries as FREE.** The prompt's ASK FIRST list says "any `supabase db` command" and its FREE list says "read-only Supabase queries". `CLAUDE.md` now says read-only is FREE and everything else under `supabase db` is ASK FIRST. Nothing tells a `SELECT` from a write except the agent's own reading of the SQL, which is why the permission prompt stays.
 
 ## 8. Audit questions left open
@@ -190,8 +216,15 @@ None of questions 1 to 11 is open. Three things the audit recorded are still as 
 - `dev/hygiene/06_report.md` line 34 names the tracker's old path, on purpose.
 - Noticed now, not changed: the header of `dev/pre_vc_schema_baseline_20260720.sql` points at a `CLAUDE.md` section called "Migration history & schema baseline (Group F)". That heading no longer exists; the content is the Migrations paragraph.
 
-## 9. Questions for the owner
+## 9. Owner answers, 2026-11-12
 
-1. **Two lines already in `CLAUDE.md` describe open weaknesses**: "Known gap" (leaked-password protection) and "Known residual" (CRON-ORDER). The new rule says not to add such lines. These two were left where they are. Moving them to the tracker under `dev/audits/` would take them out of the current file, though not out of git history.
-2. **The three permission entries in section 6.** They are an edit to `.claude/settings.local.json`, which the task said not to redo.
-3. **Screenshots, emojis and the heredoc rule** (section 5): kept as NEVER. Say so if any of them should drop a tier.
+| Answer | Decision | Where it landed |
+|---|---|---|
+| 1 | Add the two allow entries and the worktree deny entry; confirm the push deny | `.claude/settings.local.json`; section 6 |
+| 2 | Replace the fallback reason with recorded reasons for `git push`, `flutter run`, `flutter install` and uninstall, screenshots, subagents and avatar raw hex. Keep the fallback for emojis and the orange primary CTA only | `CLAUDE.md` NEVER tier, Working style and Rules; sections 2.5, 3.1 and 3.2 |
+| 3 | Merging a branch into `main` is ASK FIRST | `CLAUDE.md` ASK FIRST; sections 3.3, 3.5 and 7 |
+| 4 | Emojis move to Rules; screenshots and unquoted heredocs stay NEVER | `CLAUDE.md`; sections 3.6 and 5 |
+| 5 | "Known gap" moves to the tracker; "Known residual" stays | `CLAUDE.md` and `dev/audits/audit-2026-09-29.md` (not in git); section 2.10 |
+| 6 | Add "(the permission prompt still appears; approve it)" to the read-only query line | `CLAUDE.md` FREE; section 3.4 |
+
+After these answers, "owner preference, no recorded cause" appears on two lines of `CLAUDE.md`: the orange primary CTA and the emoji rule.

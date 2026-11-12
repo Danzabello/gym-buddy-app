@@ -57,8 +57,6 @@ GRANT  EXECUTE ON FUNCTION public.<fn>(<args>) TO authenticated;  -- anon only i
 
 Known residual: `process_stale_sessions` takes L1 before L0 (CRON-ORDER, pre-existing; a cycle aborts one side with 40P01).
 
-**Known gap:** leaked-password protection is off (needs Pro plan). Enable it before public launch.
-
 ## Working style
 The owner is the only developer and wants fewer stops (owner, 2026-11-12). These lines apply to every session.
 - Say in one line what you are about to do before you start. Give a short update every few tool calls. Close with a recap that makes sense to a reader who saw none of the tool calls: what changed, what you verified and how, what is left, what you need from the owner. Plain full sentences, key points first.
@@ -66,30 +64,31 @@ The owner is the only developer and wants fewer stops (owner, 2026-11-12). These
 - Plans: post the plan, then proceed. Wait for an answer only when the plan contains an owner decision or an ASK FIRST action.
 - Obstacles (errors, timeouts, failing tools, empty results): diagnose, retry with a fix, continue. Stop only for a real blocker: a decision only the owner can make, a missing approved mockup (stop at that item only), or an action in NEVER or ASK FIRST.
 - Where you must ask, prepare everything first (the exact command, the verification steps), put the question in the recap, and carry on with the work that does not depend on the answer.
-- Subagents: for parallel read-only searches or an independent review of your own diff, run on Sonnet. Edits stay in the main session. Reason: owner preference, no recorded cause.
+- Subagents: for parallel read-only searches or an independent review of your own diff, run on Sonnet. Edits stay in the main session. Reason: they can account for a large share of a session's cost (Anthropic's Fable 5.2 guidance).
 - Model and effort: Fable 5.2 at high effort by default, medium for mechanical work, xhigh only when a task measurably needs it. The "Opus" and "Sonnet-medium" labels in older `dev/` trackers are history; use only their size.
 
 ## Permission tiers
 Three lists. A rule that already lives in another section is linked, not repeated. An action in no list and under no rule is FREE when it is local to the repo and reversible (name it in the recap); otherwise it is ASK FIRST. `.claude/settings.local.json` (local, not in git) enforces part of these lists; where it and this file disagree, the stricter one holds.
 
 ### NEVER
-- **`git push`**: any remote, any branch, any flag. Local branches and commits are FREE. Reason: owner preference, no recorded cause.
+- **`git push`**: any remote, any branch, any flag. Local branches and commits are FREE. Reason: a push to `main` publishes the website (GitHub Pages serves `docs/`) and the repo is public, so the owner decides when. Claude Code has no push credentials.
 - **Git worktrees**: none, for any purpose. Use the prompt's branch in the main folder ([Rules](#rules), Branches). Reason: owner's ways-of-working rule.
-- **`flutter run`, `flutter install`, uninstalling the app**: on any device or emulator, any build. Reason: owner preference, no recorded cause.
-- **Screenshots**: no `screencap` in any form. If a visual check is truly needed, name the screen and let the owner look. Reason: owner preference, no recorded cause.
+- **`flutter run`**: on any device or emulator. Use `flutter build apk --release` and the owner installs it. Reason: it breaks FCM and wipes device data on a debug install.
+- **`flutter install` and uninstalling the app**: on any device, any build. Reason: the owner installs builds himself; the phone once held a debug-signed build that refused a release install (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`), and an uninstall wipes the login and data.
+- **Screenshots**: no `screencap` in any form. If a visual check is truly needed, name the screen and let the owner look. Reason: screenshot loops are the biggest token and context cost, and `uiautomator dump`, `dumpsys` and `logcat` answer the same questions.
 - **Secret values in output**: do not print the value of an `.env` key, the service-role key, a token or a vault entry in chat, reports, commits or logs. Refer to it by name. Reason: this repo is public on GitHub; no incident on record.
 - **Credit or streak functions outside a rolled-back transaction**: on the live project, a call to any function on a credit path ([Supabase rules](#supabase-rules), Lock order) runs inside a transaction that ends in `ROLLBACK`, as `dev/hygiene/suite/run.sh` does. Reason: on live they pay real coins and move real streaks.
 - **Applying a migration or deploying an Edge Function without the owner's go-ahead**: the go-ahead names that file or function, and an earlier one does not carry over. Ask as in ASK FIRST. Reason: the linked project is the live one, and its history must match `supabase/migrations/` one-to-one ([Supabase rules](#supabase-rules), Migrations).
 - **Granting `SELECT` on the private `user_profiles` columns**: to `authenticated` or `anon`, at table or column level. The allowlist is in `supabase/migrations/20261012210000_profile_visibility.sql`, and clients read their own private columns through `get_my_profile`. Reason: owner decision 2026-10-12, other users see discovery fields only.
 - **Attribution in commits or PRs**: no `Co-Authored-By`, no session links ([Rules](#rules), commit subjects). Reason: the global settings blank it, and history has had none since 2026-09-28.
 - **UI code without an approved mockup**: any UI change. With an approved mockup, post the plan and proceed. Without one, write the UI spec, stop at that item, and carry on with the rest. Reason: no throwaway work on a rejected design.
-- **Emojis in pushes, toasts or dialogs**: text the app shows or sends. Reason: owner preference, no recorded cause.
 - Also NEVER, with scope and reason where they live: the MCP `apply_migration` tool and `migration repair --status reverted` on existing versions ([Supabase rules](#supabase-rules), Migrations); a function body that reorders credit locks (Lock order); and, under [Rules](#rules), report text or backticks in an unquoted heredoc or a `-m` message, a tap near a destructive control on a real account, and any change to the Coach Max gradient.
 
 ### ASK FIRST
 Name the exact action each time: the command, the file or function, and what it changes. One answer covers one action.
 - Applying a migration to the live project ([Supabase rules](#supabase-rules), Migrations, has the steps).
 - Deploying an Edge Function (`supabase functions deploy <name>`).
+- Merging a branch into `main`. The owner merges after review.
 - Any `supabase db` command that is not in FREE.
 - Any `flutter pub` subcommand other than `get`, and adding a dependency to any manifest.
 - Changing a table grant or an RLS policy, including inside a migration: name the table, the role and the privilege ([Supabase rules](#supabase-rules) has the grant rules).
@@ -101,13 +100,14 @@ Name the exact action each time: the command, the file or function, and what it 
 - Local commits on the working branch once `flutter analyze` and `flutter test` pass.
 - `flutter analyze`, `flutter test`, `deno test`, `flutter pub get`.
 - `dev/hygiene/suite/run.sh`, with `--with <migration.sql>` for an unapplied migration. It runs only rolled-back transactions.
-- Read-only Supabase queries and logs, `supabase db push --dry-run` and `supabase migration list`. A read-only `supabase db query` still raises a permission prompt, because the permission file cannot tell a `SELECT` from a write. That prompt is the owner's check on the command, not a reason to stop the task.
+- Read-only Supabase queries and logs, `supabase db push --dry-run` and `supabase migration list`. This includes a read-only `supabase db query` (the permission prompt still appears; approve it): the permission file cannot tell a `SELECT` from a write, so the prompt is not a reason to stop the task.
 - Text-only adb checks: `uiautomator dump` to a file then grep, `dumpsys`, `logcat`.
 
 ## Rules
 - **Coach Max gradient** `0xFF1D4ED8` → `0xFF7C3AED` is scoped to his badge/avatar. Do not change its values, tokenise it or use it elsewhere. Reason: it doesn't follow the accent skin and isn't app-wide.
-- **Raw hex** is permitted in two places: the Coach Max gradient and the avatar illustration colours (`lib/widgets/avatars/`). Everything else uses `AppColors`/`colorScheme`. Reason: owner preference, no recorded cause.
+- **Raw hex** is permitted in two places: the Coach Max gradient and the avatar illustration colours (`lib/widgets/avatars/`). Everything else uses `AppColors`/`colorScheme`. Reason: avatar illustrations are character art, like Coach Max, and give the app personality.
 - Warm/orange is for the primary CTA only. Reason: owner preference, no recorded cause.
+- No emojis in pushes, toasts or dialogs (text the app shows or sends). Reason: owner preference, no recorded cause.
 - One page at a time: a request about one page changes only that page. A prompt that spans files changes what it needs and nothing else. Reason: tight, reviewable diffs with no surprise side effects.
 - Branches: one branch per prompt, named in the prompt, created from `main` in the main folder. Worktrees are in the NEVER tier.
 - Commit your own work before starting something new. Reason: each unit of work stays clean and reversible.
