@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/level_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/debug_logger.dart';
 import '../utils/run_once.dart';
 import 'avatars/avatar_art.dart';
 
@@ -210,7 +211,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
       
       widget.onComplete!();
     } catch (e) {
-      debugPrint('❌ Avatar save failed: $e');
+      debugLog('❌ Avatar save failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to save — please try again')),
