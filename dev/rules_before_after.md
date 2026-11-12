@@ -6,7 +6,7 @@ Branch `chore/loosen-rules`, built on `main` at 261a44e. Task 4: restructure the
 
 ## 1. Summary
 
-- `CLAUDE.md` went from 75 lines to 121. It gained two sections, **Working style** and **Permission tiers**, placed before **Rules**.
+- `CLAUDE.md` went from 75 lines to 122. It gained two sections, **Working style** and **Permission tiers**, placed before **Rules**.
 - Five existing lines were reworded, two were moved into the NEVER tier, one duplicated sentence was deleted from Migrations, and the "Known gap" line was moved to the tracker.
 - Nothing else was moved out to `dev/`. The file is well under the 250-line target, and every long paragraph that is left is a Supabase rule the task said to keep in place.
 - `.claude/settings.local.json` gained two allow entries and one deny entry, on the owner's answer. The file is gitignored, so that change is on disk and not in a commit. Section 6 has the entries.
@@ -117,10 +117,11 @@ The first commit had `flutter run`, `flutter install` and uninstall on one line 
 
 ### 3.3 Permission tiers, ASK FIRST
 
-Seven lines. Six are from the prompt's ASK FIRST list, plus the instruction to name the exact action.
+Eight lines. Six are from the prompt's ASK FIRST list, plus the instruction to name the exact action.
 
 - "Any `supabase db` command" became "any `supabase db` command that is not in FREE", because the owner's Q1 answer allows `supabase db push --dry-run` and the prompt's FREE list allows read-only queries.
 - "Merging a branch into `main`. The owner merges after review." Added on owner answer 3.
+- "Deleting anything git cannot restore: untracked or gitignored files (`dev/audits/`, `.claude-backup/`, `.env`), and destructive git commands (`git reset --hard`, `git clean`, `git branch -D`, `git stash drop`, `git checkout -- <path>` or `git restore` over uncommitted work). Name the files or the branch and what is lost. Reason: `dev/audits/` and `.claude-backup/` exist only on disk, and an unmerged branch such as `style/dark-only` exists only as local commits." Added last, after "Deleting files outside the repo.", in the owner's words; only the code formatting on paths and commands is mine. Before this line, deleting an untracked file inside the repo fell under the default for unlisted actions, which would have had to judge whether it was reversible. The permission file already denies `git reset --hard`, `git clean -f`, `git stash drop`, `git stash clear` and `rm -rf` outright, and the stricter one holds, so for those forms the answer is a block and not a question.
 
 ### 3.4 Permission tiers, FREE
 
@@ -213,7 +214,7 @@ Second backstop, read without printing any values: `origin` is an HTTPS URL, no 
 ## 7. The three rules I was least sure about loosening
 
 1. **"Plan first, wait for approval" became "post the plan, then proceed".** The old line was written for UI. The new Working style line covers every plan, so a migration design or a refactor plan now proceeds without a wait unless it contains an owner decision or an ASK FIRST action. Applying the migration still asks.
-2. **The default for unlisted actions.** "Local to the repo and reversible is FREE" is new policy that no file stated before. It covers, for example, deleting a local branch that is already merged. A merge into `main` is not an example: the owner made it ASK FIRST on 2026-11-12.
+2. **The default for unlisted actions.** "Local to the repo and reversible is FREE" is new policy that no file stated before. It covers, for example, deleting a local branch that is already merged, with `git branch -d`. Two things are not examples, because the owner made them ASK FIRST on 2026-11-12: a merge into `main`, and deleting anything git cannot restore (`git branch -D` included).
 3. **Read-only `supabase db` queries as FREE.** The prompt's ASK FIRST list says "any `supabase db` command" and its FREE list says "read-only Supabase queries". `CLAUDE.md` now says read-only is FREE and everything else under `supabase db` is ASK FIRST. Nothing tells a `SELECT` from a write except the agent's own reading of the SQL, which is why the permission prompt stays.
 
 ## 8. Audit questions left open
@@ -235,5 +236,7 @@ None of questions 1 to 11 is open. Three things the audit recorded are still as 
 | 4 | Emojis move to Rules; screenshots and unquoted heredocs stay NEVER | `CLAUDE.md`; sections 3.6 and 5 |
 | 5 | "Known gap" moves to the tracker; "Known residual" stays | `CLAUDE.md` and `dev/audits/audit-2026-09-29.md` (not in git); section 2.10 |
 | 6 | Add "(the permission prompt still appears; approve it)" to the read-only query line | `CLAUDE.md` FREE; section 3.4 |
+| Follow-up | Deny the `-C` and `-c` forms of push, then their bare forms; the list of push forms is closed | `.claude/settings.local.json`; section 6 |
+| Follow-up | Deleting anything git cannot restore is ASK FIRST | `CLAUDE.md` ASK FIRST; sections 3.3 and 7 |
 
 After these answers, "owner preference, no recorded cause" appears on two lines of `CLAUDE.md`: the orange primary CTA and the emoji rule.

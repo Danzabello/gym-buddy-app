@@ -93,6 +93,7 @@ Name the exact action each time: the command, the file or function, and what it 
 - Any `flutter pub` subcommand other than `get`, and adding a dependency to any manifest.
 - Changing a table grant or an RLS policy, including inside a migration: name the table, the role and the privilege ([Supabase rules](#supabase-rules) has the grant rules).
 - Deleting files outside the repo.
+- Deleting anything git cannot restore: untracked or gitignored files (`dev/audits/`, `.claude-backup/`, `.env`), and destructive git commands (`git reset --hard`, `git clean`, `git branch -D`, `git stash drop`, `git checkout -- <path>` or `git restore` over uncommitted work). Name the files or the branch and what is lost. Reason: `dev/audits/` and `.claude-backup/` exist only on disk, and an unmerged branch such as `style/dark-only` exists only as local commits.
 
 ### FREE
 - Reading any file (secret values stay out of output) and editing repo files.
