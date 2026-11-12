@@ -60,6 +60,6 @@ Known residual: `process_stale_sessions` takes L1 before L0 (CRON-ORDER, pre-exi
 - **Avatar illustration colours** (`lib/widgets/avatars/`) are the second permitted raw hex, alongside the Coach Max gradient. Everything else uses AppColors/colorScheme.
 - One page at a time: a request about one page changes only that page. A prompt that spans files changes what it needs and nothing else. Reason: tight, reviewable diffs with no surprise side effects.
 - UI changes: show or describe the plan and wait for approval before code. For UI without an approved mockup, write the spec, stop at that item, and carry on with the rest. Reason: no throwaway work on a rejected design.
-- Branches: one branch per prompt, created in the main folder. No worktrees (owner's ways-of-working rule).
+- Branches: one branch per prompt, named in the prompt, created from `main` in the main folder. No git worktrees (owner's ways-of-working rule).
 - Commit before starting anything new. Reason: each unit of work stays clean and reversible.
 - Widgets referencing `AppColors.of(context)`/`Theme.of(context)` can't be `const`.
