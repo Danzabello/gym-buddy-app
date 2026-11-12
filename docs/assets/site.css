@@ -1,6 +1,7 @@
-/* Gym Buddy web: shared tokens and base. Emerald ink (dark) by default,
-   Signal blue (light) through prefers-color-scheme. Values mirror
-   lib/theme/app_theme.dart. No outside fonts, no scripts needed. */
+/* Gym Buddy web: shared tokens and base. Emerald ink, dark only: every visitor
+   gets this theme whatever the device setting, so there is no light theme and
+   nothing here reads the device's colour preference. Values mirror lib/theme/app_theme.dart.
+   No outside fonts, no scripts needed. */
 :root {
   color-scheme: dark;
   --bg: #0B1F1A;
@@ -18,22 +19,6 @@
   --shadow-light: rgba(255, 255, 255, 0.06);
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
-@media (prefers-color-scheme: light) {
-  :root {
-    color-scheme: light;
-    --bg: #F8F7F4;
-    --surface: #FFFFFF;
-    --section: #F0F2F7;
-    --text: #1A1A2E;
-    --muted: #5F6673;     /* app token is #6B7280 (4.51:1 on bg, 4.32 on section); darkened so it holds 4.5:1 on every surface and over tinted layers */
-    --accent: #0057FF;
-    --danger: #DC2626;
-    --border: #E5E7EB;
-    --shadow-dark: rgba(0, 0, 0, 0.12);
-    --shadow-light: rgba(255, 255, 255, 0.9);
-  }
-}
-
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
