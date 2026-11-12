@@ -34,6 +34,10 @@ GRANT  EXECUTE ON FUNCTION public.<fn>(<args>) TO authenticated;  -- anon only i
 
 **Table grants must be explicit.** New `public` tables get `anon` and `authenticated` grants from default privileges, so every migration that creates a table must enable RLS, `REVOKE ALL … FROM anon`, `REVOKE TRUNCATE … FROM authenticated`, and grant only the privileges the client needs.
 
+**Grant traps.** A column-level `REVOKE` does nothing against a table-level grant: revoke the table privilege, then grant the safe columns back. `REVOKE INSERT, UPDATE (col)` revokes table-level INSERT: write `INSERT (col), UPDATE (col)`. Reason: the first left the economy columns writable until 2026-07-17, and the second nearly broke the onboarding upsert on 2026-10-01.
+
+**Replacing a function.** Before `CREATE OR REPLACE FUNCTION`, diff the new body against `pg_get_functiondef` on live and account for every removed line. Reason: migration `20261008200000` replaced `process_stale_sessions` and dropped its pushes, so solo check-ins got none until `20261105120000`.
+
 **Account deletion** goes through the `delete-account` Edge Function (service_role deletes `user_profiles`, then `auth.admin.deleteUser`). A postgres-owned `SECURITY DEFINER` RPC cannot delete `auth.users` when called as `authenticated`, so the old `delete_own_account` RPC only ever removed the profile. Call site: `AccountPage` (self-serve delete). Unfinished accounts (no profile row, or `onboarding_completed` false, which a Join on the buddy step writes early) are resumed at step 2 and never deleted at sign-in. The daily `stale-accounts-daily` job (`stale-accounts-cron` Edge Function, same two steps) deletes them 30 days after creation or last sign-in, whichever is later. It never deletes paired accounts, Coach Max, or a row with a NULL flag.
 
 **Testing permissions:** run the trusted call in a clean session. PL/pgSQL caches plans per session, so an earlier more-privileged call can make a later `SET ROLE authenticated` call wrongly succeed. Verify with a fresh authenticated-only call.
@@ -63,6 +67,8 @@ Known residual: `process_stale_sessions` takes L1 before L0 (CRON-ORDER, pre-exi
 - Branches: one branch per prompt, named in the prompt, created from `main` in the main folder. No git worktrees (owner's ways-of-working rule).
 - Commit your own work before starting something new. Reason: each unit of work stays clean and reversible.
 - Widgets referencing `AppColors.of(context)`/`Theme.of(context)` can't be `const`.
+- Write reports, and any text that contains backticks, with the Write tool, and commit with `git commit -F <file>`. Reason: an unquoted heredoc ran `supabase db push` and the suite on 2026-10-29, and a `-m` message ran its backticked words as commands.
+- Before any `adb shell input tap`, read the element's bounds from a `uiautomator dump`. Never tap near a destructive control on an account that is not a test account. Reason: guessed coordinates triggered two real account deletions.
 - Theme work: build and check in Emerald Ink. Do not change the values of Signal Blue or Lime Spark. When a new token is added, give the other two skins a placeholder equal to the Emerald Ink value so the app compiles. Reason: only Emerald Ink is being designed, but all three skins must keep compiling.
 - Coding style: the Ponytail plugin, not karpathy-guidelines. Reason: one guide, so advice on tests and dead code does not conflict.
 - Commit subjects are one plain sentence, no type prefix, no attribution (no Co-Authored-By, no session links). Reason: it matches the history since October 2026 and the blank attribution in the global settings.
