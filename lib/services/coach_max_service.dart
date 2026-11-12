@@ -231,67 +231,10 @@ class CoachMaxService {
 
       unawaited(AchievementService().checkSpecialAchievements());
 
-      // Check if both have checked in and update streak
-      await _checkAndUpdateStreak(streakId, teamId, today);
-
       return true;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error checking in Coach Max: $e');
       return false;
-    }
-  }
-
-  /// Check if both team members checked in and update streak
-  Future<void> _checkAndUpdateStreak(String streakId, String teamId, String today) async {
-    try {
-      // Get all non-Coach-Max members
-      final members = await _supabase
-          .from('team_members')
-          .select('user_id')
-          .eq('team_id', teamId)
-          .neq('user_id', coachMaxId);
-
-      final totalMembers = members.length;
-
-      // Get today's check-ins (excluding Coach Max)
-      final checkIns = await _supabase
-          .from('daily_team_checkins')
-          .select('user_id')
-          .eq('team_streak_id', streakId)
-          .eq('check_in_date', today)
-          .neq('user_id', coachMaxId);
-
-      final checkedInMembers = checkIns.length;
-
-      if (kDebugMode) {
-        debugLog('📊 Team status: $checkedInMembers/$totalMembers members checked in');
-      }
-
-      // If all members checked in, update streak
-      if (checkedInMembers >= totalMembers) {
-        await _updateStreak(streakId, today);
-      }
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error checking streak status: $e');
-    }
-  }
-
-  /// Update the streak when both team members have checked in
-  Future<void> _updateStreak(String streakId, String today) async {
-    try {
-      // Streak math now lives server-side (recompute_team_streak RPC)
-      // — single source of truth shared with TeamStreakService, the
-      // Coach Max cron, and TeamSyncService.
-      final result = await _supabase.rpc('recompute_team_streak', params: {
-        'p_streak_id': streakId,
-        'p_check_in_date': today,
-      });
-
-      if (kDebugMode) {
-        debugLog('✅ Streak updated via recompute_team_streak → $result');
-      }
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error updating streak: $e');
     }
   }
 
