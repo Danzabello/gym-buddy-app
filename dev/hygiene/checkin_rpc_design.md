@@ -8,7 +8,7 @@ Revision 2 (same day) records the owner's answers to Q1–Q7 (§14) and the foll
 
 `claude/Fix Tracker.md` does not exist on this machine. I searched the repo, `~/.claude` and the whole filesystem. FS-1, FS-2 and CAP-2 below therefore use the planner prompt's wording. A-1, A-3, DI-5, DI-9 and F1/F3 are quoted from the files where I found them.
 
-From `docs/audits/audit-2026-09-29.md`:
+From `dev/audits/audit-2026-09-29.md`:
 
 - **A-1** (line 68): "A-1 five streak writers | PARTIAL | server `recompute_team_streak` is the only streak writer; client still inserts check-ins from 3 places (P3 Duplication)"
 - **A-3** (line 70): "A-3 three check-in-all-teams paths | OPEN | `checkInAllTeams`, TeamSyncService backfill and FriendService backfill (P3)"
