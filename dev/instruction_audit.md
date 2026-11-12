@@ -55,7 +55,7 @@ Severity: High = can cause an action you forbid, or stops a long task. Medium = 
 | C6 | `~/.claude/settings.json` | `attribution` | Blank commit and PR attribution, no session link. Set 2026-09-29. History has 110 trailers, the last on 2026-09-28. Agrees with the header. | None | No change. |
 | C7 | memory `feedback_side_fixes_worktree.md` | whole file | "Side fixes go in a git worktree, never a branch switch in the main folder." No file says "no worktrees". One worktree exists (`../gym_buddy_dark`, `style/dark-only`, 3 commits ahead). This task's "commit on branch" in the main folder contradicts the unscoped "never". | Medium | Scope added (applied): the rule holds while other work is in flight in the main folder. Policy: Q3. |
 | C8 | `.claude/settings.local.json` | `permissions.allow` | Pre-approved: `git push origin main`, `flutter install *`, `adb exec-out screencap *` (all NEVER in the header); `supabase db *` (covers `db push` and `db query -f`, which apply migrations: ASK FIRST); `flutter pub *` (covers `pub add`: ASK FIRST). | High | Header wins. Move the five entries out of `allow`. Q1. |
-| C9 | `CLAUDE.md` | Supabase rules, Migrations | Says apply with `supabase db query --linked -f` then `migration repair`. Reports show `supabase db push` after a dry run for 05d, the check-in RPC and 07. Both avoid the MCP tool, which is the rule's reason. | Medium | Name `db push` as the default. Q6. |
+| C9 | `CLAUDE.md` | Supabase rules, Migrations | Says apply with `supabase db query --linked -f` then `migration repair`. Four migrations between 2026-10-27 and 2026-10-29 were applied with `supabase db push` instead (list in section 7). The rule dates from 2026-09-29, so those were departures from it, not a newer practice. Both ways avoid the MCP tool, which is the rule's reason. | Medium | Owner decides. CLAUDE.md is unchanged. |
 | C10 | `~/.claude/skills/caveman-commit` | Rules | Conventional Commits, subject at most 50 characters, "auto-triggers when staging changes". The repo has used plain-sentence subjects with no prefix since October (0 of 49 November commits use a prefix; 36 of the last 100 subjects are over 72 characters). No file documents the style. | Low | Repo practice wins. Document it in CLAUDE.md. Q4. |
 | C11 | `CLAUDE.md`; memory `feedback_rules.md` rule 3 | Rules | "One page at a time: touch only the file asked about", and in memory "if a fix touches another file, stop and ask first". 49 of the last 60 commits touch more than one file. Conflicts with "finish the whole task". | High | Scope it to single-page UI requests. Q2. |
 | C12 | `CLAUDE.md`; memory `feedback_rules.md` rule 5 | Rules | "Commit before starting anything new", and in memory "if the tree is not clean, prompt to commit first". `macos/Flutter/GeneratedPluginRegistrant.swift` has been modified and uncommitted since Google sign-in landed (2026-11-11), so every session starts dirty. | Medium | Commit that file, or scope the rule to the agent's own work. Q7. |
@@ -112,19 +112,19 @@ None of the G lines are applied. They are new rules, so they need your yes. Reco
 | ID | Winner | Files that change | Status |
 |---|---|---|---|
 | C1 | Ponytail | `CLAUDE.md` (one line) | Needs Q4 |
-| C2 | Your choice | `CLAUDE.md` (one line) | Needs Q3 |
-| C3 | Text-only checks | `.claude/settings.local.json` | Needs Q1 |
+| C2 | One branch per prompt, in the main folder | `CLAUDE.md` (Rules) | Applied, section 7 |
+| C3 | Text-only checks | `.claude/settings.local.json` | Applied, section 7 |
 | C4 | Header: local commits are free | memory `feedback_diff_review_format.md`, `project_timezone_rework.md` | Needs Q5 |
 | C5 | The session's model | none | Closed |
 | C6 | No conflict | none | Closed |
-| C7 | Scoped worktree rule | memory `feedback_side_fixes_worktree.md`, `MEMORY.md` | Scope applied; policy needs Q3 |
-| C8 | Header | `.claude/settings.local.json` | Needs Q1 |
-| C9 | `supabase db push` after a dry run | `CLAUDE.md` (Migrations) | Needs Q6 |
+| C7 | No worktrees | `CLAUDE.md` (Rules); memory `feedback_side_fixes_worktree.md` deleted | Applied, section 7 |
+| C8 | Header | `.claude/settings.local.json` | Applied, section 7 |
+| C9 | Open | `CLAUDE.md` (Migrations), unchanged | Owner decides, evidence in section 7 |
 | C10 | Repo commit style | `CLAUDE.md` (one line) | Needs Q4 |
-| C11 | Header: finish the task | `CLAUDE.md` (Rules), memory `feedback_rules.md` | Needs Q2 |
+| C11 | Scoped to single-page requests | `CLAUDE.md` (Rules), memory `feedback_rules.md` | Applied, section 7 |
 | C12 | Scoped rule | the generated file, or `CLAUDE.md` (Rules) | Needs Q7 |
 | C13 | Your choice | `CLAUDE.md` (Rules) | Needs Q8 |
-| C14 | Header wording | `CLAUDE.md` (Rules) | Needs Q2 |
+| C14 | Header wording | `CLAUDE.md` (Rules) | Applied, section 7 |
 
 ## 5. Applied in this branch
 
@@ -163,3 +163,40 @@ Each has a recommendation. The exact change is ready for each.
 9. **Clean up four leftovers?** Delete the graphify section from `~/.claude/CLAUDE.md`; rename `.claude-backup/CLAUDE.md` to `CLAUDE.md.bak`; `git rm -r .agents`; move the tracker to `dev/audits/` and update `.git/info/exclude`. **Recommend yes to all four.** The first two are outside the repo, so they need your word.
 10. **Turn off claude-mem?** It has recorded nothing for this project since 2026-10-28 and adds about 17,000 tokens of old context to every session. **Recommend disabling it** in `~/.claude/settings.json`; the file memory covers the same ground.
 11. **Add gap rules G1, G3, G5, G8 to CLAUDE.md?** **Recommend yes.**
+
+## 7. Owner decisions, 2026-11-12
+
+Answers to questions 1 to 5. Questions 6 to 11 are still open. Section 6 is kept as it was asked.
+
+### Applied
+
+1. **Allowlist (Q1).** `.claude/settings.local.json` is gitignored, so this change is on disk but not in a commit.
+   - Removed from `allow`: `Bash(git push origin main)`, `Bash(flutter install *)`, `Bash(adb exec-out screencap *)`, `Bash(supabase db *)`, `Bash(flutter pub *)`.
+   - Added to `deny`: `Bash(git push *)`, `Bash(flutter install *)`, `Bash(adb exec-out screencap *)`, `Bash(adb shell screencap *)`. The push rule covers every push, not only `origin main`, and the second screencap rule covers the other common form of the same command.
+   - Added to `allow`: `Bash(flutter pub get *)`.
+   - New `ask` list: `Bash(supabase db *)`, and `flutter pub` followed by `add`, `remove`, `upgrade`, `downgrade`, `global`, `run`, `cache` or `publish`.
+   - Why the `ask` list names subcommands: an `ask` rule wins over a narrower `allow` rule, so `Bash(flutter pub *)` in `ask` would also prompt for `flutter pub get`. Any other `flutter pub` subcommand matches no rule and prompts by default.
+   - Side effect: read-only `supabase db query --linked "select …"` now prompts too. `dev/hygiene/suite/run.sh` does not, because the rule matches the command the agent types, not what a script runs.
+2. **"One page at a time" (Q2).** CLAUDE.md now scopes the rule to requests about a single page. A task that spans pages or files changes what it needs and nothing else. For UI with no approved mockup in a multi-page task: write the spec, stop at that item, carry on with the rest. Memory `feedback_rules.md` rules 3 and 4 say the same; the "stop and ask first" step is gone.
+3. **Branches (Q3).** CLAUDE.md Rules: "one branch per prompt, created in the main folder. No worktrees." Memory `feedback_side_fixes_worktree.md` and its index line are deleted. Left alone: the existing worktree `../gym_buddy_dark` (`style/dark-only`, 3 commits not on `main`).
+
+### Q4: where `supabase db push` appears
+
+CLAUDE.md is unchanged. Its rule (`supabase db query --linked -f`, then `migration repair --status applied`) was added in 52cae37 on 2026-09-29, before every entry below.
+
+| Migration | Prompt | Applied (UTC) | Where it is recorded |
+|---|---|---|---|
+| `20261013020000_hygiene_05d` | 05d | 2026-10-27 | `dev/hygiene/05d_report.md` line 3 |
+| `20261028230000_single_server_checkin` | check-in RPC, A | 2026-10-28 | `dev/hygiene/checkin_rpc_report.md` line 61; planned in `checkin_rpc_design.md` line 207; commit e9eeb60 |
+| `20261029010000` (revoke client INSERT) | check-in RPC, B | 2026-10-28 23:45 | `dev/hygiene/checkin_rpc_report.md` line 342; commit 431285a |
+| `20261029160000_credit_lock_order` | 07 | 2026-10-29 16:54 | `dev/hygiene/07_report.md` line 159; planned in `07_design.md` line 218; commit 29f57c5 |
+| none (accident) | 07 | 2026-10-29 16:57 | `dev/hygiene/07_report.md` line 469: the unquoted heredoc ran `supabase db push`; the remote was up to date, so nothing was applied |
+
+- Each of the four ran a dry run first that listed only the new file, and checked md5 parity afterwards. None of the reports notes that it departed from CLAUDE.md. `07_report.md` line 161 says only that the MCP tool was not used.
+- No report names `db push` after 2026-10-29. `dev/hygiene/13_report.md` (2026-10-29) says the migration is applied and the dry run is up to date, without naming the command. There are no report files for prompts 30, 34 or 35.
+- Not determined: how `20261013010000` (05b, 2026-10-13) was applied. A memory note says "pushed live"; `05b_sweep.md` does not name the command.
+- So the record is four uses over three days, all before prompt 13. The recommendation in Q6 was based on those reports alone and is withdrawn: the written rule is the one in use.
+
+### Q5: disabling claude-mem
+
+The owner does this at user level. Steps are in the session recap; nothing was changed here.
