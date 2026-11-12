@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'break_day_service.dart';
 import 'workout_history_service.dart';
-import 'level_service.dart';
 import 'economy_sync.dart';
 import 'dart:async' show unawaited;
 import 'achievement_service.dart';
@@ -122,7 +121,6 @@ String? finishNoopMessage(Map<String, dynamic> res) => switch (res['result']) {
 class TeamStreakService {
   final SupabaseClient _supabase = Supabase.instance.client;
   final BreakDayService _breakDayService = BreakDayService();
-  final LevelService levelService = LevelService();
   
   static const String coachMaxId = '00000000-0000-0000-0000-000000000001';
 
@@ -468,18 +466,6 @@ class TeamStreakService {
           }
         }
       }());
-
-      // Grant milestone cosmetic unlocks
-      final milestoneKey = switch (newStreak) {
-        30  => 'streak_30',
-        60  => 'streak_60',
-        90  => 'streak_90',
-        100 => 'streak_100',
-        _   => null,
-      };
-      if (milestoneKey != null) {
-        levelService.grantMilestoneUnlock(milestoneKey: milestoneKey); // fire-and-forget
-      }
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error after streak update: $e');
     }
