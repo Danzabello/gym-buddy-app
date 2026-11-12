@@ -63,3 +63,6 @@ Known residual: `process_stale_sessions` takes L1 before L0 (CRON-ORDER, pre-exi
 - Branches: one branch per prompt, named in the prompt, created from `main` in the main folder. No git worktrees (owner's ways-of-working rule).
 - Commit before starting anything new. Reason: each unit of work stays clean and reversible.
 - Widgets referencing `AppColors.of(context)`/`Theme.of(context)` can't be `const`.
+- Coding style: the Ponytail plugin, not karpathy-guidelines. Reason: one guide, so advice on tests and dead code does not conflict.
+- Commit subjects are one plain sentence, no type prefix, no attribution (no Co-Authored-By, no session links). Reason: it matches the history since October 2026 and the blank attribution in the global settings.
+- `docs/` is the public website (GitHub Pages). Working files (reports, audits, rollbacks, probes) go in `dev/`. Reason: Pages served the working files until commit f44a77e moved them out.
