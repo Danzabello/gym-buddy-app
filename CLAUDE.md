@@ -6,20 +6,19 @@ Flutter (Dart, Material 3) app on **Supabase** (Postgres + Auth + Realtime) and 
 ```bash
 flutter analyze && flutter test
 # release: see dev/release_build.md (archive build/symbols per shipped build)
-supabase functions deploy <name>   # coach-max-cron, delete-account, invite-redirect, send-notification, workout-overtime-cron
+supabase functions deploy <name>   # coach-max-cron, delete-account, invite-redirect, send-notification, stale-accounts-cron, workout-overtime-cron
 ```
 `db reset` fails (see Migrations).
 
 ## Architecture
-- `lib/main.dart`: loads `.env`, inits Firebase (mobile only) + Supabase, mounts `AuthWrapper`. It checks `user_profiles.onboarding_completed` and routes to `SplashScreen` or `HomeScreen`. Deep links (`app_links`) are intercepted here; invite codes go through `InviteService.storePendingInviteCode`.
-- `lib/home_screen.dart`: 5-tab shell (Dashboard, Friends `FriendsPageModern`, Schedule, Shop, Profile).
+- `lib/main.dart`: loads `.env`, inits Firebase (mobile only) + Supabase, mounts `AuthWrapper`. It reads the onboarding state (`AuthService.onboardingState`, from `user_profiles.onboarding_completed`) and routes to `HomeScreen` (complete), `OnboardingHost` (unfinished account, resumed) or `SplashScreen` (signed out, or state unknown). Deep links (`app_links`) are intercepted here; invite codes go through `InviteService.storePendingInviteCode`.
+- `lib/home_screen.dart`: 5-tab shell (Schedule, Friends `FriendsPageModern`, Dashboard, Shop, Profile). Opens on Dashboard.
 - `lib/services/`: plain Dart classes calling `Supabase.instance.client` directly. All business logic lives here.
 - Theming: `AppColors` ThemeExtension. Use `AppColors.of(context).x` or Material colour slots.
 
 ### Non-obvious service facts
 - `WorkoutService` spans two tables: `workouts` and `active_checkin_sessions`.
 - `TeamStreakService` defines `TeamMember`, `CheckInStatus`, `TeamStreak` at the top of the file.
-- `PresenceService` is a singleton on channel `gym_buddy_presence`. `join()` on auth, `leave()` on sign-out.
 - `InviteService` uses the `create_invite` RPC. Share links point at the `invite-redirect` Edge Function.
 - Coach Max has fixed UUID `00000000-0000-0000-0000-000000000001`.
 
@@ -35,7 +34,7 @@ GRANT  EXECUTE ON FUNCTION public.<fn>(<args>) TO authenticated;  -- anon only i
 
 **Table grants must be explicit.** New `public` tables get `anon` and `authenticated` grants from default privileges, so every migration that creates a table must enable RLS, `REVOKE ALL … FROM anon`, `REVOKE TRUNCATE … FROM authenticated`, and grant only the privileges the client needs.
 
-**Account deletion** goes through the `delete-account` Edge Function (service_role deletes `user_profiles`, then `auth.admin.deleteUser`). A postgres-owned `SECURITY DEFINER` RPC cannot delete `auth.users` when called as `authenticated`, so the old `delete_own_account` RPC only ever removed the profile. Call site: `AccountPage` (self-serve delete). Unfinished accounts (no profile row, or `onboarding_completed` false, which a Join on the buddy step writes early) are resumed at step 2, never deleted automatically.
+**Account deletion** goes through the `delete-account` Edge Function (service_role deletes `user_profiles`, then `auth.admin.deleteUser`). A postgres-owned `SECURITY DEFINER` RPC cannot delete `auth.users` when called as `authenticated`, so the old `delete_own_account` RPC only ever removed the profile. Call site: `AccountPage` (self-serve delete). Unfinished accounts (no profile row, or `onboarding_completed` false, which a Join on the buddy step writes early) are resumed at step 2 and never deleted at sign-in. The daily `stale-accounts-daily` job (`stale-accounts-cron` Edge Function, same two steps) deletes them 30 days after creation or last sign-in, whichever is later. It never deletes paired accounts, Coach Max, or a row with a NULL flag.
 
 **Testing permissions:** run the trusted call in a clean session. PL/pgSQL caches plans per session, so an earlier more-privileged call can make a later `SET ROLE authenticated` call wrongly succeed. Verify with a fresh authenticated-only call.
 
@@ -59,7 +58,7 @@ Known residual: `process_stale_sessions` takes L1 before L0 (CRON-ORDER, pre-exi
 ## Rules
 - **Coach Max gradient** `0xFF1D4ED8` → `0xFF7C3AED` is scoped to his badge/avatar. Never change or tokenise it; it doesn't follow the accent skin and isn't app-wide. This is the first permitted raw hex. Everything else uses `AppColors`/`colorScheme`. Warm/orange is for the primary CTA only.
 - **Avatar illustration colours** (`lib/widgets/avatars/`) are the second permitted raw hex, alongside the Coach Max gradient. Everything else uses AppColors/colorScheme.
-- One page at a time: touch only the file asked about.
-- UI changes: show or describe the plan and wait for approval before code.
-- Commit before starting anything new.
+- One page at a time: touch only the file asked about. Reason: tight, reviewable diffs with no surprise side effects.
+- UI changes: show or describe the plan and wait for approval before code. Reason: no throwaway work on a rejected design.
+- Commit before starting anything new. Reason: each unit of work stays clean and reversible.
 - Widgets referencing `AppColors.of(context)`/`Theme.of(context)` can't be `const`.
