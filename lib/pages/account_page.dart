@@ -142,7 +142,6 @@ class _AccountPageState extends State<AccountPage> {
   /// Signs out only on success: a failed delete must leave the account (and
   /// session) intact.
   Future<bool> _deleteAccount() async {
-    await NotificationService().removeToken();
     try {
       await Supabase.instance.client.functions.invoke(
         'delete-account',
@@ -153,6 +152,9 @@ class _AccountPageState extends State<AccountPage> {
       if (kDebugMode) debugLog('❌ AccountPage._deleteAccount: $e');
       return false;
     }
+    // After the delete, so a failed delete keeps this device's pushes. The
+    // server row is already gone with the account; this drops the FCM token.
+    await NotificationService().removeToken();
     await runSignOut(
       supabaseSignOut: Supabase.instance.client.auth.signOut,
       googleSignOut: AuthService.signOutGoogle,
