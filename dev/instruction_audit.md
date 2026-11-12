@@ -247,6 +247,8 @@ Options, none taken:
 3. Leave the worktree as it is until the dark-only work is finished, as the one exception to the new rule.
 4. Drop the work: remove the worktree and delete the branch. This loses the three commits.
 
+Decision, 2026-11-12: option 2. The worktree was removed with `git worktree remove` (no force). Branch `style/dark-only` stays at 9580b9f, unmerged, 3 commits ahead of `main`. To merge it later, run `git merge style/dark-only` while on `main`.
+
 ### Q9
 
 1. `~/.claude/CLAUDE.md`: the graphify section was the whole file, so the file is now empty.
