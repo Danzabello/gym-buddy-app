@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../pages/wardrobe/wardrobe_avatar_render.dart' show hexToColor;
+import '../utils/hex_color.dart';
 import '../services/coin_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/user_avatar.dart';

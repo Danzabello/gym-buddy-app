@@ -114,6 +114,3 @@ class _WardrobeBorderPainter extends CustomPainter {
 
 String borderStyleLabel(AvatarBorderStyle style) =>
     style.name[0].toUpperCase() + style.name.substring(1);
-
-Color hexToColor(String hex) =>
-    Color(int.parse('FF${hex.replaceFirst('#', '')}', radix: 16));

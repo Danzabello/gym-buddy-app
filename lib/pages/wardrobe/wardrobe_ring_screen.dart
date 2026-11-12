@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/coin_glyph.dart';
-import 'wardrobe_avatar_render.dart';
+import '../../utils/hex_color.dart';
 import 'wardrobe_preview_header.dart';
 import 'wardrobe_selection_state.dart';
 import 'wardrobe_tile.dart';

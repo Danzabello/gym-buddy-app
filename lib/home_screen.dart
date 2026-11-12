@@ -62,11 +62,9 @@ import 'widgets/live_event_toast.dart';
 import 'widgets/coin_glyph.dart';
 import 'widgets/workout_celebration.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'package:gym_buddy_app/utils/hex_color.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
 import 'package:gym_buddy_app/utils/run_once.dart';
-
-Color _hexToColor(String hex) =>
-    Color(int.parse('FF${hex.replaceFirst('#', '')}', radix: 16));
 
 
 
@@ -3579,7 +3577,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         await CoinService().getEquippedColorHexForUsers(allMemberIds.toList());
     final memberRingColors = <String, Color>{
       for (final entry in ringColorHexById.entries)
-        entry.key: _hexToColor(entry.value),
+        entry.key: hexToColor(entry.value),
     };
 
     // Highest streak (already sorted, just pick first)

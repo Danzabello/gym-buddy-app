@@ -4,11 +4,9 @@ import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import '../services/coin_service.dart';
 import '../services/level_service.dart';
+import '../utils/hex_color.dart';
 import '../utils/run_once.dart';
 import '../widgets/coin_glyph.dart';
-
-Color _hexToColor(String hex) =>
-    Color(int.parse('FF${hex.replaceFirst('#', '')}', radix: 16));
 
 class ShopPage extends StatefulWidget {
   const ShopPage({super.key});
@@ -81,7 +79,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
         height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: _hexToColor(item.colorHex!),
+          color: hexToColor(item.colorHex!),
           border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 2),
         ),
       );
