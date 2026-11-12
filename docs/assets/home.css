@@ -201,7 +201,7 @@ html.motion .rv { opacity: 0; transform: translateY(34px); }
 @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
 @keyframes rise {
   0% { transform: translate(0, 0) scale(0.8); opacity: 0; }
-  10% { opacity: 0.7; }
+  10% { opacity: 0.45; } /* capped so muted text keeps 4.5:1 when a spark drifts behind it */
   80% { opacity: 0.3; }
   100% { transform: translate(var(--dx, 24px), -112vh) scale(1); opacity: 0; }
 }
