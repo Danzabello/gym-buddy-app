@@ -1,9 +1,19 @@
 -- Rollback for 20261113231829_drop_legacy_objects.sql.
 -- Table DDL is copied from dev/pre_vc_schema_baseline_20260720.sql (lines 547-569, 140-153, 199-224, 405-415),
--- which records these four tables as of 2026-07-20. weekly_commitments first: daily_check_ins has a foreign key to it.
+-- which records these four tables as of 2026-07-20, with the table names schema-qualified here.
+-- weekly_commitments first: daily_check_ins has a foreign key to it.
+--
+-- Each table is locked down in the statements right after its CREATE TABLE, before its constraints, indexes,
+-- rows or policies: default privileges hand a new public table to anon and authenticated, so a rollback that
+-- stops part-way must not leave one open. The lock-down is: RLS on, REVOKE ALL from anon, REVOKE ALL from
+-- authenticated (TRUNCATE, REFERENCES, TRIGGER and MAINTAIN go with it), then GRANT authenticated only the
+-- commands the table's restored policies cover. anon gets nothing on any of the four, also on team_names,
+-- whose policy is written TO public: nothing signed-out ever read it.
+-- The 13 policies are copied from supabase/migrations/20260628000000_baseline_rls_policies_snapshot.sql
+-- (no later migration altered them).
 
 -- table: weekly_commitments
-CREATE TABLE weekly_commitments (
+CREATE TABLE public.weekly_commitments (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
   week_start_date date NOT NULL,
@@ -18,16 +28,30 @@ CREATE TABLE weekly_commitments (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now()
 );
-ALTER TABLE weekly_commitments ADD CONSTRAINT weekly_commitments_pkey PRIMARY KEY (id);
-ALTER TABLE weekly_commitments ADD CONSTRAINT weekly_commitments_user_id_week_start_date_key UNIQUE (user_id, week_start_date);
-ALTER TABLE weekly_commitments ADD CONSTRAINT weekly_commitments_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-ALTER TABLE weekly_commitments ADD CONSTRAINT weekly_commitments_planned_workout_days_check CHECK (((planned_workout_days >= 4) AND (planned_workout_days <= 7)));
-ALTER TABLE weekly_commitments ADD CONSTRAINT weekly_commitments_week_status_check CHECK ((week_status = ANY (ARRAY['active'::text, 'completed'::text, 'failed'::text])));
+ALTER TABLE public.weekly_commitments ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.weekly_commitments FROM anon;
+REVOKE ALL ON public.weekly_commitments FROM authenticated;  -- includes TRUNCATE
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.weekly_commitments TO authenticated;  -- its four policies are own-row SELECT, INSERT, UPDATE and DELETE
+ALTER TABLE public.weekly_commitments ADD CONSTRAINT weekly_commitments_pkey PRIMARY KEY (id);
+ALTER TABLE public.weekly_commitments ADD CONSTRAINT weekly_commitments_user_id_week_start_date_key UNIQUE (user_id, week_start_date);
+ALTER TABLE public.weekly_commitments ADD CONSTRAINT weekly_commitments_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE public.weekly_commitments ADD CONSTRAINT weekly_commitments_planned_workout_days_check CHECK (((planned_workout_days >= 4) AND (planned_workout_days <= 7)));
+ALTER TABLE public.weekly_commitments ADD CONSTRAINT weekly_commitments_week_status_check CHECK ((week_status = ANY (ARRAY['active'::text, 'completed'::text, 'failed'::text])));
 CREATE INDEX idx_weekly_commitments_active ON public.weekly_commitments USING btree (user_id, week_status) WHERE (week_status = 'active'::text);
 CREATE INDEX idx_weekly_commitments_user_date ON public.weekly_commitments USING btree (user_id, week_start_date);
 
+-- policies on weekly_commitments
+CREATE POLICY "Users can delete their own weekly commitments" ON public.weekly_commitments
+  FOR DELETE TO public USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own weekly commitments" ON public.weekly_commitments
+  FOR INSERT TO public WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can view their own weekly commitments" ON public.weekly_commitments
+  FOR SELECT TO public USING (auth.uid() = user_id);
+CREATE POLICY "Users can update their own weekly commitments" ON public.weekly_commitments
+  FOR UPDATE TO public USING (auth.uid() = user_id);
+
 -- table: check_ins
-CREATE TABLE check_ins (
+CREATE TABLE public.check_ins (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
   check_in_date date NOT NULL,
@@ -35,14 +59,28 @@ CREATE TABLE check_ins (
   notes text,
   created_at timestamp with time zone DEFAULT now()
 );
-ALTER TABLE check_ins ADD CONSTRAINT check_ins_pkey PRIMARY KEY (id);
-ALTER TABLE check_ins ADD CONSTRAINT check_ins_user_id_check_in_date_key UNIQUE (user_id, check_in_date);
-ALTER TABLE check_ins ADD CONSTRAINT check_ins_user_id_fkey FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE CASCADE;
-ALTER TABLE check_ins ADD CONSTRAINT check_ins_workout_id_fkey FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE SET NULL;
+ALTER TABLE public.check_ins ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.check_ins FROM anon;
+REVOKE ALL ON public.check_ins FROM authenticated;  -- includes TRUNCATE
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.check_ins TO authenticated;  -- its four policies are own-row SELECT, INSERT, UPDATE and DELETE
+ALTER TABLE public.check_ins ADD CONSTRAINT check_ins_pkey PRIMARY KEY (id);
+ALTER TABLE public.check_ins ADD CONSTRAINT check_ins_user_id_check_in_date_key UNIQUE (user_id, check_in_date);
+ALTER TABLE public.check_ins ADD CONSTRAINT check_ins_user_id_fkey FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE CASCADE;
+ALTER TABLE public.check_ins ADD CONSTRAINT check_ins_workout_id_fkey FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE SET NULL;
 CREATE INDEX idx_check_ins_user_date ON public.check_ins USING btree (user_id, check_in_date DESC);
 
+-- policies on check_ins
+CREATE POLICY "Users can delete own check-ins" ON public.check_ins
+  FOR DELETE TO public USING (auth.uid() = user_id);
+CREATE POLICY "Users can create own check-ins" ON public.check_ins
+  FOR INSERT TO public WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can view own check-ins" ON public.check_ins
+  FOR SELECT TO public USING (auth.uid() = user_id);
+CREATE POLICY "Users can update own check-ins" ON public.check_ins
+  FOR UPDATE TO public USING (auth.uid() = user_id);
+
 -- table: daily_check_ins
-CREATE TABLE daily_check_ins (
+CREATE TABLE public.daily_check_ins (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
   check_in_date date NOT NULL,
@@ -56,29 +94,47 @@ CREATE TABLE daily_check_ins (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now()
 );
-ALTER TABLE daily_check_ins ADD CONSTRAINT daily_check_ins_pkey PRIMARY KEY (id);
-ALTER TABLE daily_check_ins ADD CONSTRAINT daily_check_ins_user_id_check_in_date_key UNIQUE (user_id, check_in_date);
-ALTER TABLE daily_check_ins ADD CONSTRAINT daily_check_ins_buddy_id_fkey FOREIGN KEY (buddy_id) REFERENCES auth.users(id) ON DELETE SET NULL;
-ALTER TABLE daily_check_ins ADD CONSTRAINT daily_check_ins_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
-ALTER TABLE daily_check_ins ADD CONSTRAINT daily_check_ins_weekly_commitment_id_fkey FOREIGN KEY (weekly_commitment_id) REFERENCES weekly_commitments(id) ON DELETE SET NULL;
-ALTER TABLE daily_check_ins ADD CONSTRAINT daily_check_ins_workout_id_fkey FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE SET NULL;
-ALTER TABLE daily_check_ins ADD CONSTRAINT daily_check_ins_confirmation_type_check CHECK ((confirmation_type = ANY (ARRAY['manual_checkin'::text, 'scheduled_workout'::text, 'rest_day_confirmation'::text])));
-ALTER TABLE daily_check_ins ADD CONSTRAINT daily_check_ins_status_check CHECK ((status = ANY (ARRAY['workout_completed'::text, 'rest_day_taken'::text, 'missed'::text, 'extra_workout'::text])));
+ALTER TABLE public.daily_check_ins ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.daily_check_ins FROM anon;
+REVOKE ALL ON public.daily_check_ins FROM authenticated;  -- includes TRUNCATE
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.daily_check_ins TO authenticated;  -- its four policies are own-row SELECT, INSERT, UPDATE and DELETE
+ALTER TABLE public.daily_check_ins ADD CONSTRAINT daily_check_ins_pkey PRIMARY KEY (id);
+ALTER TABLE public.daily_check_ins ADD CONSTRAINT daily_check_ins_user_id_check_in_date_key UNIQUE (user_id, check_in_date);
+ALTER TABLE public.daily_check_ins ADD CONSTRAINT daily_check_ins_buddy_id_fkey FOREIGN KEY (buddy_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE public.daily_check_ins ADD CONSTRAINT daily_check_ins_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE public.daily_check_ins ADD CONSTRAINT daily_check_ins_weekly_commitment_id_fkey FOREIGN KEY (weekly_commitment_id) REFERENCES weekly_commitments(id) ON DELETE SET NULL;
+ALTER TABLE public.daily_check_ins ADD CONSTRAINT daily_check_ins_workout_id_fkey FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE SET NULL;
+ALTER TABLE public.daily_check_ins ADD CONSTRAINT daily_check_ins_confirmation_type_check CHECK ((confirmation_type = ANY (ARRAY['manual_checkin'::text, 'scheduled_workout'::text, 'rest_day_confirmation'::text])));
+ALTER TABLE public.daily_check_ins ADD CONSTRAINT daily_check_ins_status_check CHECK ((status = ANY (ARRAY['workout_completed'::text, 'rest_day_taken'::text, 'missed'::text, 'extra_workout'::text])));
 CREATE INDEX idx_daily_check_ins_buddy ON public.daily_check_ins USING btree (buddy_id, check_in_date);
 CREATE INDEX idx_daily_check_ins_status ON public.daily_check_ins USING btree (user_id, status);
 CREATE INDEX idx_daily_check_ins_user_date ON public.daily_check_ins USING btree (user_id, check_in_date);
 
+-- policies on daily_check_ins
+CREATE POLICY "Users can delete their own check-ins" ON public.daily_check_ins
+  FOR DELETE TO public USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own check-ins" ON public.daily_check_ins
+  FOR INSERT TO public WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can view their own check-ins" ON public.daily_check_ins
+  FOR SELECT TO public USING ((auth.uid() = user_id) OR (auth.uid() = buddy_id));
+CREATE POLICY "Users can update their own check-ins" ON public.daily_check_ins
+  FOR UPDATE TO public USING (auth.uid() = user_id);
+
 -- table: team_names
-CREATE TABLE team_names (
+CREATE TABLE public.team_names (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   name text NOT NULL,
   category text,
   emoji text,
   created_at timestamp with time zone DEFAULT now()
 );
-ALTER TABLE team_names ADD CONSTRAINT team_names_pkey PRIMARY KEY (id);
-ALTER TABLE team_names ADD CONSTRAINT team_names_name_key UNIQUE (name);
-ALTER TABLE team_names ADD CONSTRAINT team_names_category_check CHECK ((category = ANY (ARRAY['funny'::text, 'serious'::text, 'silly'::text])));
+ALTER TABLE public.team_names ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.team_names FROM anon;
+REVOKE ALL ON public.team_names FROM authenticated;  -- includes TRUNCATE
+GRANT SELECT ON public.team_names TO authenticated;  -- its one policy is a read-all SELECT; there is no write policy
+ALTER TABLE public.team_names ADD CONSTRAINT team_names_pkey PRIMARY KEY (id);
+ALTER TABLE public.team_names ADD CONSTRAINT team_names_name_key UNIQUE (name);
+ALTER TABLE public.team_names ADD CONSTRAINT team_names_category_check CHECK ((category = ANY (ARRAY['funny'::text, 'serious'::text, 'silly'::text])));
 
 -- ── team_names seed rows (live, 2026-11-12) ──
 INSERT INTO public.team_names (id, name, category, emoji, created_at) VALUES
@@ -113,42 +169,9 @@ INSERT INTO public.team_names (id, name, category, emoji, created_at) VALUES
 ('58419258-060f-4a31-bcdb-34a80667fea0','Victory Crew','serious','🏆','2025-10-15 16:04:21.227846+00'),
 ('36a52920-abfa-42b7-b181-c5488a7591b6','Workout Weirdos','silly','👽','2025-10-15 16:04:21.227846+00');
 
--- ── RLS as it was: enabled on all four, with the 13 policies copied from
---    supabase/migrations/20260628000000_baseline_rls_policies_snapshot.sql (no later migration altered them) ──
-ALTER TABLE public.check_ins ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.daily_check_ins ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.weekly_commitments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.team_names ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.check_ins, public.daily_check_ins, public.weekly_commitments, public.team_names FROM anon, authenticated;
--- Client grants are not restored: nothing reads these tables, and the grants at drop time were not captured.
--- The policies below are back in the catalog but admit nothing until a grant is added under the CLAUDE.md
--- table-grant rule.
-CREATE POLICY "Users can delete own check-ins" ON public.check_ins
-  FOR DELETE TO public USING (auth.uid() = user_id);
-CREATE POLICY "Users can create own check-ins" ON public.check_ins
-  FOR INSERT TO public WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can view own check-ins" ON public.check_ins
-  FOR SELECT TO public USING (auth.uid() = user_id);
-CREATE POLICY "Users can update own check-ins" ON public.check_ins
-  FOR UPDATE TO public USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete their own check-ins" ON public.daily_check_ins
-  FOR DELETE TO public USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert their own check-ins" ON public.daily_check_ins
-  FOR INSERT TO public WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can view their own check-ins" ON public.daily_check_ins
-  FOR SELECT TO public USING ((auth.uid() = user_id) OR (auth.uid() = buddy_id));
-CREATE POLICY "Users can update their own check-ins" ON public.daily_check_ins
-  FOR UPDATE TO public USING (auth.uid() = user_id);
+-- policies on team_names
 CREATE POLICY "Anyone can view team names" ON public.team_names
   FOR SELECT TO public USING (true);
-CREATE POLICY "Users can delete their own weekly commitments" ON public.weekly_commitments
-  FOR DELETE TO public USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert their own weekly commitments" ON public.weekly_commitments
-  FOR INSERT TO public WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can view their own weekly commitments" ON public.weekly_commitments
-  FOR SELECT TO public USING (auth.uid() = user_id);
-CREATE POLICY "Users can update their own weekly commitments" ON public.weekly_commitments
-  FOR UPDATE TO public USING (auth.uid() = user_id);
 
 -- ── functions (pg_get_functiondef from live, 2026-11-12; CRLF line ends normalised) ──
 CREATE OR REPLACE FUNCTION public.can_take_rest_day(p_user_id uuid)
