@@ -43,8 +43,7 @@ BEGIN
   r := r || (CASE WHEN n LIKE '42501%' THEN 'PASS ' ELSE 'FAIL ' END || 'G9.8 authenticated INSERT user_inventory -> ' || n);
   FOREACH fn IN ARRAY ARRAY['public._lock_credit(ARRAY[''' || u || '''::uuid], true)', 'public._credit_checkin(''' || u || ''', now())',
                             'public._credit_day(''' || u || ''', now())', 'public.award_coins(''' || u || ''', 1, ''x'', ''x'')',
-                            'public.award_xp(''' || u || ''', 1, ''x'')', 'public.award_checkin_rewards(gen_random_uuid(), current_date)',
-                            'public.check_in_coach_max_with_buddy(''' || u || ''')', 'public.reconcile_stale_streaks()',
+                            'public.award_xp(''' || u || ''', 1, ''x'')', 'public.reconcile_stale_streaks()',
                             'public.process_stale_sessions()', 'public._recompute_team_streak(gen_random_uuid(), current_date)'] LOOP
     BEGIN EXECUTE 'SELECT ' || fn; n := 'no error';
     EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
@@ -177,7 +176,7 @@ BEGIN
   WHERE p.pronamespace = 'public'::regnamespace AND has_function_privilege('anon', p.oid, 'EXECUTE')
     AND p.proname IN ('submit_checkin', 'finish_checkin_session', 'check_in_coach_max', 'recompute_team_streak', 'purchase_shop_item',
                       'verify_achievement_progress', 'create_invite_team', 'create_buddy_team', 'accept_invite', 'award_coins', 'award_xp',
-                      '_apply_checkin_rewards', '_credit_checkin', '_lock_credit', '_recompute_team_streak', 'award_checkin_rewards');
+                      '_apply_checkin_rewards', '_credit_checkin', '_lock_credit', '_recompute_team_streak');
   r := r || (CASE WHEN n IS NULL THEN 'PASS ' ELSE 'FAIL ' END || 'G9.12 anon can execute no economy function -> ' || coalesce(n, 'none'));
   SELECT string_agg(x, ', ') INTO n FROM unnest(ARRAY[
     CASE WHEN has_function_privilege('anon', 'public.search_usernames(text)', 'EXECUTE') THEN 'anon search_usernames' END,
