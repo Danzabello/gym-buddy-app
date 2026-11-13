@@ -179,16 +179,6 @@ class AuthService {
     }
   }
 
-  // Safe way to get current user ID - throws if not authenticated
-  // Use this instead of accessing currentUser directly in sensitive operations
-  String requireAuthenticatedUserId() {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) {
-      throw Exception('User not authenticated');
-    }
-    return userId;
-  }
-
   /// DI-7 audit fix: a failed read must be distinguishable from "this account
   /// really never finished onboarding" (callers once treated `false` as
   /// orphaned and deleted). A successful read that finds no profile row is
