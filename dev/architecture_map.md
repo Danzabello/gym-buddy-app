@@ -12,12 +12,12 @@ Full-screen routes. Modal sheets/dialogs that carry real logic are listed separa
 
 | Screen | File | Purpose | Entered from | Navigates to |
 |---|---|---|---|---|
-| `AuthWrapper` | `lib/main.dart` | Root router; checks session + `user_profiles.onboarding_completed`; deep-link (`app_links`) interception; deletes orphaned accounts via `delete_own_account` | App launch | `SplashScreen` (no session), `OnboardingValueProps` (incomplete onboarding), `HomeScreen` (complete) |
-| `SplashScreen` | `lib/onboarding/splash_screen.dart` | Branding / entry | `AuthWrapper` (unauthenticated) | `LoginScreen` |
-| `LoginScreen` | `lib/login_screen.dart` | Email/Google sign-in; orphan-account cleanup (`delete_own_account`) | `SplashScreen`, sign-out from `HomeScreen` | `SignUpScreen`, `AuthWrapper` re-route on success |
-| `SignUpScreen` | `lib/signup_screen.dart` | Account creation | `LoginScreen` | back to auth flow → `OnboardingValueProps` |
-| `OnboardingValueProps` | `lib/onboarding/onboarding_value_props.dart` | 3-slide value pitch; buddy search/invite teaser | `AuthWrapper` (authenticated, onboarding incomplete) | `OnboardingBasicInfoNew` |
-| `OnboardingBasicInfoNew` | `lib/onboarding/onboarding_basic_info_new.dart` | 5-step wizard (username → avatar → goals → buddy prefs → confirmation); saves profile; redeems pending invite (`create_invite_team`); sends queued friend requests | `OnboardingValueProps` | `HomeScreen` (`pushAndRemoveUntil`) |
+| `AuthWrapper` | `lib/main.dart` | Root router. Reads the session and `AuthService.onboardingState` (complete, incomplete, no profile row, unknown) with a 15 s timeout; intercepts invite deep links (`app_links`) and reads the Play install referrer once. It never deletes an account | App launch | `HomeScreen` (complete), `OnboardingHost` in resume mode (incomplete, or no profile row), `SplashScreen` (signed out, or the state could not be read) |
+| `SplashScreen` | `lib/onboarding/splash_screen.dart` | Branding and entry: start, or log in | `AuthWrapper`; `LoginScreen` (back); `OnboardingHost` (back from step 1, or "Not you?") | `OnboardingValueProps` (start), `OnboardingHost` in resume mode (start, when already signed in), `LoginScreen` |
+| `LoginScreen` | `lib/login_screen.dart` | Email or Google sign-in and password reset. After sign-in it reads the onboarding state; an unfinished account is resumed, never deleted | `SplashScreen`, sign-out from `HomeScreen` | `HomeScreen` (complete), `OnboardingHost` in resume mode (unfinished), `SplashScreen` (back) |
+| `SignUpScreen` | `lib/signup_screen.dart` | Thin wrapper: builds `OnboardingHost` at step 1 | `OnboardingValueProps` | (it is `OnboardingHost`) |
+| `OnboardingValueProps` | `lib/onboarding/onboarding_value_props.dart` | Intro slides, shown before any account exists | `SplashScreen` (signed out) | `SignUpScreen` |
+| `OnboardingHost` | `lib/onboarding/onboarding_host.dart` (steps in `onboarding_step_*.dart`) | The six-step flow in one route, with one Coach Max layer above every step: sign up, avatar, identity, buddy, streak, notifications, then the All set page. Holds the `OnboardingDraft`; see flow 7.10 | `SignUpScreen` (step 1); `AuthWrapper`, `SplashScreen`, `LoginScreen` (resume mode) | `HomeScreen` (`pushAndRemoveUntil` from All set); `SplashScreen` (back from step 1, or "Not you?" sign-out) |
 | `HomeScreen` (shell) | `lib/home_screen.dart` | 5-tab bottom-nav shell + central fire check-in button | `AuthWrapper`, onboarding completion | Tabs below; `LoginScreen` on sign-out |
 | ├ `DashboardPage` | `lib/home_screen.dart:143` | Streak cards, check-in button, break-day section, Coach Max widget, workout invites, join-workout popups | HomeScreen tab 1 | `WorkoutCheckInSheet`, `WorkoutSelectionModal`, `_AllStreaksDialog`, `_WeeklyPlanDialog`, `CustomStreakSelector` |
 | ├ `FriendsPageModern` | `lib/widgets/friends_page_modern.dart` | Buddy list with presence + break-day badges; friend requests; nudges; invite links | HomeScreen tab 2 | `_SearchBuddiesPage`, `_AddBuddiesPage`, `BuddyProfileSheet`, `ProfileViewDialog` |
@@ -27,7 +27,7 @@ Full-screen routes. Modal sheets/dialogs that carry real logic are listed separa
 | `AchievementsPage` | `lib/pages/achievements_page.dart` | Achievement grid, progress-first stats, verify/claim rewards | `ProfilePage` (home_screen:6520) | detail sheet (`_Sheet`) |
 | `NotificationSettingsPage` | `lib/pages/notification_settings_page.dart` | Notification category toggles + quiet hours | `ProfilePage` (two entries, home_screen:6542/6772) | — |
 | `WorkoutHistoryPage` | `lib/pages/workout_history_page.dart` | Calendar + list of logged workouts | Dashboard/Profile history entry | `WorkoutHistorySheet` |
-| `AvatarPickerScreen` | `lib/widgets/avatar_picker_screen.dart` | Avatar + border picker (level/shop gated) | `ProfilePage`, `OnboardingBasicInfoNew` | — |
+| `AvatarPickerScreen` | `lib/widgets/avatar_picker_screen.dart` | Avatar + border picker (level/shop gated). Not part of onboarding: step 2 has its own starter picker (`onboarding_step_avatar.dart`) | `ProfilePage` | — |
 
 Key modal sheets/dialogs (logic-bearing):
 
@@ -56,9 +56,9 @@ Key modal sheets/dialogs (logic-bearing):
 | `checkin_team_for_user(p_target_user_id, p_workout_id)` | `TeamStreakService.checkInAllTeamsForUser` (buddy-workout completion in `home_screen.dart:5719/5736`) | `workouts` (validates real participation), `team_members` | `daily_team_checkins`, `team_streaks` | int (teams checked in) |
 | `create_buddy_workout_sessions(...)` | `WorkoutService` (ready-check start) | — | `active_checkin_sessions` (one row per participant) | void |
 | `create_invite(p_inviter_id)` | `InviteService.createInvite` | — | `invites` | text (code) |
-| `create_invite_team(p_inviter_id, p_invitee_id)` | `OnboardingBasicInfoNew._createBuddyTeam` | — | `buddy_teams`, `team_members` (both users), `team_streaks` | uuid (team_id) |
+| `create_invite_team(p_inviter_id, p_invitee_id)` | `InviteService.redeem` (onboarding buddy step) and `InviteService.retryPendingTeam` (`AuthWrapper`) | — | `buddy_teams`, `team_members` (both users), `team_streaks` | uuid (team_id) |
 | `declare_break_day()` | `BreakDayService.declareBreakDay` (`BreakDaySection`, Dashboard) | `weekly_break_plans`, `break_day_usage` (advisory-locked count) | `break_day_usage` (upsert, server-computed local date) | jsonb (`success`, `used`, `max`, `reason`) |
-| `delete_own_account()` | `AuthWrapper`, `LoginScreen`, `OnboardingBasicInfoNew` (orphan cleanup) | — | deletes `user_profiles` + cascading user data + auth user | void |
+| `delete_own_account()` | **DROPPED 2026-11-13** (migration `20261113231829`). No client has called it since 2026-07-18: deletion goes through the `delete-account` Edge Function, and unfinished accounts are resumed, then removed by `stale-accounts-cron` after 30 days | — | — | — |
 | `get_level_for_xp(total_xp)` | `LevelService` | `level_definitions` | — | int |
 | `get_user_streaks(p_user_id)` | `TeamStreakService.getAllUserStreaks` (viewer-tz aware) | `buddy_teams`, `team_streaks`, `team_members`, `daily_team_checkins`, `user_profiles`, `workouts`, `check_ins` | — | json (all streaks + members + today's check-ins) |
 | `get_workouts_awaiting_creator_join(creator_id)` | `WorkoutService.getWorkoutsAwaitingCreatorJoin` (`WorkoutJoinChecker`) | `workouts`, `user_profiles` | — | table (join-window rows) |
@@ -202,10 +202,10 @@ Key modal sheets/dialogs (logic-bearing):
 
 ### 7.3 Buddy invite flow
 1. `FriendsPageModern` (or onboarding) → `InviteService.createInviteLink()` → RPC `create_invite` → INSERT `invites` → share URL `…/functions/v1/invite-redirect?code=X`
-2. Recipient opens link → `invite-redirect` Edge Fn reads `invites`+`user_profiles` → 302 to GitHub Pages invite.html (Play Store CTA, code in localStorage)
-3. Recipient installs/opens app → deep link caught in `main.dart` (`app_links`) → `InviteService.storePendingInviteCode` (SharedPreferences)
-4. After signup, `OnboardingBasicInfoNew` final step → `consumePendingInviteCode` → `InviteService.acceptInvite` (UPDATE `invites` status='accepted') → RPC `create_invite_team(inviter, invitee)` → INSERT `buddy_teams` + 2× `team_members` + `team_streaks` → trigger `backfill_team_checkins_on_creation`
-5. → `HomeScreen`; both users now share a team streak
+2. Recipient opens link → `invite-redirect` Edge Fn reads `invites`+`user_profiles` → 302 to the GitHub Pages `invite.html`, which opens the app when it is installed or the Play Store with the code in the install referrer (`invite_code=X`)
+3. The code reaches the app one of two ways, both ending in `InviteService.storePendingInviteCode` (SharedPreferences): the deep link caught in `main.dart` (`app_links`), or `InviteService.readInstallReferrerOnce` on first launch
+4. Onboarding buddy step (step 4): the waiting code, or one typed by hand, is redeemed by `InviteService.redeem` → the profile row is written first with `onboarding_completed` false (a team needs a row) → RPC `accept_invite(p_code)` → RPC `create_invite_team(inviter, invitee)` → INSERT `buddy_teams` + 2× `team_members` + `team_streaks`. If the team call fails it is retried once, then remembered and retried by `AuthWrapper` (`retryPendingTeam`)
+5. The user finishes onboarding → `HomeScreen`; both users now share a team streak
 
 ### 7.4 Break day flow
 1. Monday / no plan → `_WeeklyPlanDialog` → `BreakDayService.setWeeklyBreakPlan` → upsert `weekly_break_plans` + `user_profiles.current_weekly_goal`
@@ -239,3 +239,19 @@ Key modal sheets/dialogs (logic-bearing):
 ### 7.9 Hourly streak reconcile
 1. pg_cron `reconcile-stale-streaks-hourly` (`5 * * * *`) → `reconcile_stale_streaks()`
 2. For each active `team_streaks` not touched today (per member's own tz, STRICT mode): if yesterday's participation (check-ins ∪ break days) incomplete → reset `current_streak` → UPDATE `team_streaks` → trigger `notify_streak_update`
+
+### 7.10 Onboarding (six steps, one route)
+`OnboardingHost` owns the step index, the draft (`OnboardingDraft`) and the Coach Max layer. Steps are numbered here in the order they are shown; some code comments still carry the older numbers from when a Border step sat third.
+1. **Sign up** (`onboarding_step_signup.dart`): email and password, or Continue with Google. `createOnboardingAuthUser` calls `auth.signUp`; a sign-up that fails is retried as a sign-in with the same credentials, so someone who quit part-way picks up again, and a finished account is signed straight back out with the same generic message. Every later step runs signed in. Nothing is written to `user_profiles` yet.
+2. **Avatar** (`onboarding_step_avatar.dart`): one of the starters (wolf, bear, lion). Kept in the draft.
+3. **Identity** (`onboarding_step_identity.dart`): display name, age and username, with a live preview card. Kept in the draft.
+4. **Buddy** (`onboarding_step_buddy.dart`): invite a buddy or start with Coach Max. The main button calls `saveOnboardingProfile`: the `user_profiles` row with `onboarding_completed` true (update, then insert when no row matched; never an upsert), then `syncDeviceTimezone`, `NotificationService.initialize` and `CoachMaxService.initializeCoachMaxForUser` (RPC `ensure_coach_max_team`). Choosing invite then opens the share sheet with `InviteService.createInviteLink` (RPC `create_invite`). A Join (flow 7.3, step 4) writes the row early with `onboarding_completed` false and pairs at once.
+5. **Streak** (`onboarding_step_streak.dart`): the two-ring explainer. No writes.
+6. **Notifications** (`onboarding_step_notify.dart`): the one place onboarding asks for notification permission, and only from its button (`requestPermissionFromUser`). "Not now" never asks.
+7. **All set** (`onboarding_step_allset.dart`) → `HomeScreen` with `pushAndRemoveUntil`.
+
+Back is offered on Identity and Buddy only. Goals, gender and buddy preferences are no longer asked; their columns get fixed defaults in `onboardingProfileRow`.
+
+**Resume.** An account that exists but never finished (no profile row, or `onboarding_completed` false) is never deleted at sign-in. `AuthWrapper`, `SplashScreen` and `LoginScreen` open `OnboardingHost` in resume mode: at step 2, or at the buddy step when the row read by `loadOnboardingResume` is already complete (a Join wrote it). The first step shown has Max's welcome-back line and a "Not you?" link that signs out to the splash and keeps the account. The daily `stale-accounts-cron` deletes unfinished accounts 30 days after creation or last sign-in, whichever is later.
+
+**Parked.** `lib/onboarding/onboarding_step_border.dart` (ring colour) is not in the flow and nothing imports it. It is kept on purpose for re-adding the Border step.
