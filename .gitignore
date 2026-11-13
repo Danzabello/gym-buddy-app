@@ -63,3 +63,6 @@ supabase/.temp/
 
 # graphify
 graphify-out/
+
+# agent skills lock file (local tooling, not part of the app)
+skills-lock.json
