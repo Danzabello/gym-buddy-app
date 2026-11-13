@@ -113,14 +113,42 @@ INSERT INTO public.team_names (id, name, category, emoji, created_at) VALUES
 ('58419258-060f-4a31-bcdb-34a80667fea0','Victory Crew','serious','🏆','2025-10-15 16:04:21.227846+00'),
 ('36a52920-abfa-42b7-b181-c5488a7591b6','Workout Weirdos','silly','👽','2025-10-15 16:04:21.227846+00');
 
--- ── RLS as it was: enabled on all four, policies restated by shape (exact text was not captured) ──
+-- ── RLS as it was: enabled on all four, with the 13 policies copied from
+--    supabase/migrations/20260628000000_baseline_rls_policies_snapshot.sql (no later migration altered them) ──
 ALTER TABLE public.check_ins ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_check_ins ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.weekly_commitments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.team_names ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.check_ins, public.daily_check_ins, public.weekly_commitments, public.team_names FROM anon, authenticated;
--- Nothing reads these tables, so no client grant or policy is restored. If one is needed again, write it
--- under the CLAUDE.md table-grant rule (explicit grants, own-row policies).
+-- Client grants are not restored: nothing reads these tables, and the grants at drop time were not captured.
+-- The policies below are back in the catalog but admit nothing until a grant is added under the CLAUDE.md
+-- table-grant rule.
+CREATE POLICY "Users can delete own check-ins" ON public.check_ins
+  FOR DELETE TO public USING (auth.uid() = user_id);
+CREATE POLICY "Users can create own check-ins" ON public.check_ins
+  FOR INSERT TO public WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can view own check-ins" ON public.check_ins
+  FOR SELECT TO public USING (auth.uid() = user_id);
+CREATE POLICY "Users can update own check-ins" ON public.check_ins
+  FOR UPDATE TO public USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own check-ins" ON public.daily_check_ins
+  FOR DELETE TO public USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own check-ins" ON public.daily_check_ins
+  FOR INSERT TO public WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can view their own check-ins" ON public.daily_check_ins
+  FOR SELECT TO public USING ((auth.uid() = user_id) OR (auth.uid() = buddy_id));
+CREATE POLICY "Users can update their own check-ins" ON public.daily_check_ins
+  FOR UPDATE TO public USING (auth.uid() = user_id);
+CREATE POLICY "Anyone can view team names" ON public.team_names
+  FOR SELECT TO public USING (true);
+CREATE POLICY "Users can delete their own weekly commitments" ON public.weekly_commitments
+  FOR DELETE TO public USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own weekly commitments" ON public.weekly_commitments
+  FOR INSERT TO public WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can view their own weekly commitments" ON public.weekly_commitments
+  FOR SELECT TO public USING (auth.uid() = user_id);
+CREATE POLICY "Users can update their own weekly commitments" ON public.weekly_commitments
+  FOR UPDATE TO public USING (auth.uid() = user_id);
 
 -- ── functions (pg_get_functiondef from live, 2026-11-12; CRLF line ends normalised) ──
 CREATE OR REPLACE FUNCTION public.can_take_rest_day(p_user_id uuid)
