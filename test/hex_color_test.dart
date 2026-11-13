@@ -11,5 +11,7 @@ void main() {
   test('hexToColor gives transparent for a malformed value', () {
     expect(hexToColor('not-a-colour'), Colors.transparent);
     expect(hexToColor(''), Colors.transparent);
+    expect(hexToColor('#FFF'), Colors.transparent);
+    expect(hexToColor('-12345'), Colors.transparent);
   });
 }
