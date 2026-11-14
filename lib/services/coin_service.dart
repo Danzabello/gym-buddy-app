@@ -5,11 +5,13 @@ import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'economy_sync.dart';
 
 class CoinService {
-  static final CoinService _instance = CoinService._internal();
-  factory CoinService() => _instance;
-  CoinService._internal();
+  static final CoinService _instance =
+      CoinService._internal(Supabase.instance.client);
+  factory CoinService({SupabaseClient? client}) =>
+      client == null ? _instance : CoinService._internal(client);
+  CoinService._internal(this._supabase);
 
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
 
   // ============================================================
   // GET BALANCE
@@ -213,33 +215,17 @@ class CoinService {
   // ============================================================
   // EQUIP ITEM
   // ============================================================
-  Future<bool> equipItem({required String itemId, required String category}) async {
+  // One statement on the server (equip_shop_item): the other owned items in
+  // the item's category are unequipped and this one equipped together, or
+  // nothing changes. False when the caller does not own the item.
+  Future<bool> equipItem({required String itemId}) async {
     try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return false;
-
-      final itemsInCategory = await _supabase
-          .from('user_inventory')
-          .select('shop_item_id, shop_items!inner(category)')
-          .eq('user_id', userId)
-          .eq('shop_items.category', category);
-
-      for (final item in itemsInCategory) {
-        await _supabase
-            .from('user_inventory')
-            .update({'equipped': false})
-            .eq('user_id', userId)
-            .eq('shop_item_id', item['shop_item_id']);
+      final ok = await _supabase
+          .rpc('equip_shop_item', params: {'p_shop_item_id': itemId});
+      if (kDebugMode) {
+        debugLog(ok == true ? '✅ Equipped item $itemId' : '❌ Item $itemId not equipped');
       }
-
-      await _supabase
-          .from('user_inventory')
-          .update({'equipped': true})
-          .eq('user_id', userId)
-          .eq('shop_item_id', itemId);
-
-      if (kDebugMode) debugLog('✅ Equipped item $itemId');
-      return true;
+      return ok == true;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error equipping item: $e');
       return false;

@@ -101,7 +101,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
     }
 
     if (item.isOwned) {
-      await _coinService.equipItem(itemId: item.id, category: item.category);
+      await _coinService.equipItem(itemId: item.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

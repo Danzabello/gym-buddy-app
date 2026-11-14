@@ -120,8 +120,7 @@ class WardrobeSelectionState extends ChangeNotifier {
     }
 
     if (_ringItem != null && _ringItem!.id != _seedRingItemId) {
-      await CoinService()
-          .equipItem(itemId: _ringItem!.id, category: 'ring_color');
+      await CoinService().equipItem(itemId: _ringItem!.id);
     }
   }
 }
