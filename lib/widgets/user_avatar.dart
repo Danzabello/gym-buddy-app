@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/avatar_catalog.dart';
 import 'avatars/avatar_art.dart';
 
 /// Displays a user's avatar with emoji-based profile pictures
@@ -36,26 +37,10 @@ class UserAvatar extends StatelessWidget {
     this.semanticLabel,
   });
   
-  // Available avatar emojis
-  static const Map<String, String> avatars = {
-    'lion': '🦁',
-    'bear': '🐻',
-    'eagle': '🦅',
-    'shark': '🦈',
-    'wolf': '🐺',
-    'gorilla': '🦍',
-    'tiger': '🐯',
-    'buffalo': '🦬',
-    'robot': '🤖',
-    'flexed': '💪',
-    'weightlifter': '🏋️',
-    'runner': '🏃',
-  };
-  
   @override
   Widget build(BuildContext context) {
     // Get emoji for the avatar ID, default to lion if not found
-    final emoji = avatars[avatarId] ?? '🦁';
+    final emoji = avatarEmoji(avatarId);
 
     Widget face = avatarArt(avatarId, size: size, animate: animated) ??
         Text(emoji, style: TextStyle(fontSize: size * (bare ? 0.54 : 0.6)));

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:intl/intl.dart';
 
+import '../data/avatar_catalog.dart';
 import '../services/coach_max_service.dart';
 import '../services/coin_service.dart';
 import '../services/notification_inbox_service.dart';
@@ -15,7 +16,6 @@ import '../utils/run_once.dart';
 import '../widgets/ai_disclosure_tag.dart';
 import '../widgets/avatar_picker_screen.dart' show AvatarBorderStyle;
 import '../widgets/avatars/animated_coach_max.dart';
-import '../widgets/user_avatar.dart';
 import '../widgets/workout_schedule_card.dart' show ringFromHex;
 import 'notification_settings_page.dart';
 import 'wardrobe/wardrobe_avatar_render.dart';
@@ -903,7 +903,7 @@ class _InboxTile extends StatelessWidget {
     final s = sender;
     if (s != null) {
       return WardrobeAvatarRender(
-        emoji: UserAvatar.avatars[s.avatarId] ?? UserAvatar.avatars['lion']!,
+        emoji: avatarEmoji(s.avatarId),
         avatarId: s.avatarId,
         borderStyle:
             AvatarBorderStyle.values.asNameMap()[s.border] ??

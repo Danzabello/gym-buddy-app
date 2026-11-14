@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../data/avatar_catalog.dart';
 import '../services/level_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/debug_logger.dart';
@@ -36,7 +37,6 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
   static const _starters = [
     _AvatarOption(
       id: 'lion',
-      emoji: '🦁',
       name: 'Lion',
       desc: 'Power & Courage',
       traits: ['Strength', 'Bold', 'Leader'],
@@ -45,7 +45,6 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
     ),
     _AvatarOption(
       id: 'wolf',
-      emoji: '🐺',
       name: 'Wolf',
       desc: 'Speed & Loyalty',
       traits: ['Speed', 'Loyal', 'Sharp'],
@@ -54,7 +53,6 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
     ),
     _AvatarOption(
       id: 'bear',
-      emoji: '🐻',
       name: 'Bear',
       desc: 'Power & Endurance',
       traits: ['Strength', 'Steady', 'Calm'],
@@ -65,15 +63,15 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
 
   // ── All earnable avatars — order matches the grid display ───────────────
   static const _earnable = [
-    _EarnableAvatar(id: 'eagle',        emoji: '🦅', name: 'Eagle',       req: '30-day streak'),
-    _EarnableAvatar(id: 'shark',        emoji: '🦈', name: 'Shark',       req: '60-day streak'),
-    _EarnableAvatar(id: 'gorilla',      emoji: '🦍', name: 'Gorilla',     req: '100-day streak'),
-    _EarnableAvatar(id: 'tiger',        emoji: '🐯', name: 'Tiger',       req: '50 co-ops'),
-    _EarnableAvatar(id: 'buffalo',      emoji: '🦬', name: 'Buffalo',     req: 'Level 5'),
-    _EarnableAvatar(id: 'robot',        emoji: '🤖', name: 'Robot',       req: 'Level 10'),
-    _EarnableAvatar(id: 'flexed',       emoji: '💪', name: 'Flex',        req: '90-day streak'),
-    _EarnableAvatar(id: 'weightlifter', emoji: '🏋️', name: 'Lifter',     req: '100 co-ops'),
-    _EarnableAvatar(id: 'runner',       emoji: '🏃', name: 'Runner',      req: '150 co-ops'),
+    _EarnableAvatar(id: 'eagle',        name: 'Eagle',       req: '30-day streak'),
+    _EarnableAvatar(id: 'shark',        name: 'Shark',       req: '60-day streak'),
+    _EarnableAvatar(id: 'gorilla',      name: 'Gorilla',     req: '100-day streak'),
+    _EarnableAvatar(id: 'tiger',        name: 'Tiger',       req: '50 co-ops'),
+    _EarnableAvatar(id: 'buffalo',      name: 'Buffalo',     req: 'Level 5'),
+    _EarnableAvatar(id: 'robot',        name: 'Robot',       req: 'Level 10'),
+    _EarnableAvatar(id: 'flexed',       name: 'Flex',        req: '90-day streak'),
+    _EarnableAvatar(id: 'weightlifter', name: 'Lifter',     req: '100 co-ops'),
+    _EarnableAvatar(id: 'runner',       name: 'Runner',      req: '150 co-ops'),
   ];
 
   // ── State ───────────────────────────────────────────────────────────────
@@ -807,16 +805,16 @@ class _BorderPainter extends CustomPainter {
 // ── Data models ─────────────────────────────────────────────────────────────
 class _AvatarOption {
   final String id;
-  final String emoji;
   final String name;
   final String desc;
   final List<String> traits;
   final Color color;
   final Color borderColor;
 
+  String get emoji => avatarEmoji(id);
+
   const _AvatarOption({
     required this.id,
-    required this.emoji,
     required this.name,
     required this.desc,
     required this.traits,
@@ -827,12 +825,11 @@ class _AvatarOption {
 
 class _EarnableAvatar {
   final String id;
-  final String emoji;
   final String name;
   final String req;
+  String get emoji => avatarEmoji(id);
   const _EarnableAvatar({
     required this.id,
-    required this.emoji,
     required this.name,
     required this.req,
   });

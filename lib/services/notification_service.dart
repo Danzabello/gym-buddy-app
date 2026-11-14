@@ -9,9 +9,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import '../data/avatar_catalog.dart';
 import '../widgets/avatars/animated_bear.dart';
 import '../widgets/live_event_toast.dart';
-import '../widgets/user_avatar.dart';
 
 // ── Push payload (data-only pushes from send-notification) ──────────────────
 
@@ -219,7 +219,7 @@ Future<Uint8List> renderAvatarPng(String? avatarId, String? border, String? ring
   } else {
     final tp = TextPainter(
       text: TextSpan(
-          text: UserAvatar.avatars[avatarId] ?? UserAvatar.avatars['lion'],
+          text: avatarEmoji(avatarId),
           style: TextStyle(fontSize: inner * 0.6)),
       textDirection: TextDirection.ltr,
     )..layout();

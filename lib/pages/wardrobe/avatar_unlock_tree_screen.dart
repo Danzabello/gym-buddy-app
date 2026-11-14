@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../data/avatar_catalog.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/avatars/avatar_art.dart';
 import '../../utils/run_once.dart';
@@ -32,18 +33,18 @@ const _nodeRadius = 28.0;
 
 class _HubSpec {
   final String slug;
-  final String emoji;
   final String name;
   final Offset pos;
-  const _HubSpec(this.slug, this.emoji, this.name, this.pos);
+  String get emoji => avatarEmoji(slug);
+  const _HubSpec(this.slug, this.name, this.pos);
 }
 
 // Fixed coordinates, not derived from a radius/angle formula — each hub's
 // two paths render as straight columns beneath it, not a radial fan.
 const _hubs = <_HubSpec>[
-  _HubSpec('wolf', '🐺', 'Wolf', Offset(67, 60)),
-  _HubSpec('bear', '🐻', 'Bear', Offset(200, 60)),
-  _HubSpec('lion', '🦁', 'Lion', Offset(333, 60)),
+  _HubSpec('wolf', 'Wolf', Offset(67, 60)),
+  _HubSpec('bear', 'Bear', Offset(200, 60)),
+  _HubSpec('lion', 'Lion', Offset(333, 60)),
 ];
 
 class _PathLayout {

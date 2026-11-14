@@ -88,3 +88,8 @@ const List<AvatarCatalogEntry> avatarCatalog = [
 
 AvatarCatalogEntry avatarCatalogById(String id) =>
     avatarCatalog.firstWhere((a) => a.id == id, orElse: () => avatarCatalog.first);
+
+/// The one emoji lookup for an avatar id: UserAvatar, the picker, the unlock
+/// tree and the push avatar all read it. An unknown or missing id gets the
+/// lion, the first catalogue entry.
+String avatarEmoji(String? id) => avatarCatalogById(id ?? 'lion').emoji;

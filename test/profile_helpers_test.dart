@@ -79,8 +79,15 @@ void main() {
       'runner': '🏃',
     };
 
-    test('UserAvatar.avatars has the twelve ids and their emoji', () {
-      expect(UserAvatar.avatars, expected);
+    test('avatarEmoji gives each of the twelve ids its emoji', () {
+      expected.forEach((id, emoji) => expect(avatarEmoji(id), emoji, reason: id));
+    });
+
+    test('avatarEmoji gives an unknown or missing id the lion', () {
+      expect(avatarEmoji(null), '🦁');
+      expect(avatarEmoji(''), '🦁');
+      expect(avatarEmoji('zebra'), '🦁');
+      expect(avatarEmoji('Lion'), '🦁');
     });
 
     test('the catalogue lists the same ids with the same emoji', () {
