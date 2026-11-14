@@ -5,6 +5,7 @@ import '../services/workout_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
+import '../utils/workout_time.dart';
 
 class QuickScheduleSheet extends StatefulWidget {
   final String buddyUserId;
@@ -172,7 +173,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(color: dialColor.withValues(alpha: 0.4), width: 2),
                   ),
-                  child: Text(_formatDuration(tempDuration),
+                  child: Text(formatDuration(tempDuration),
                       style: TextStyle(
                         fontSize: 52, fontWeight: FontWeight.bold,
                         color: dialColor,
@@ -234,7 +235,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
                             width: isSelected ? 2 : 1,
                           ),
                         ),
-                        child: Text(_formatDuration(mins),
+                        child: Text(formatDuration(mins),
                             style: TextStyle(
                               fontSize: 15, fontWeight: FontWeight.w600,
                               color: isSelected ? chipColor
@@ -528,7 +529,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
                   fontSize: 16, fontWeight: FontWeight.w600,
                   color: Theme.of(context).colorScheme.onSurface,  // ✅
                 )),
-            Text(_formatDuration(_duration),
+            Text(formatDuration(_duration),
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: appColors.successGreen)),
           ],
         ),
@@ -578,7 +579,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
           ),
         ),
         child: Text(
-          _formatDuration(minutes),
+          formatDuration(minutes),
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 14,
@@ -619,7 +620,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
                     : appColors.subtleText),
             const SizedBox(width: 4),
             Text(
-              isSelected ? _formatDuration(_duration) : 'Custom',
+              isSelected ? formatDuration(_duration) : 'Custom',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
@@ -643,12 +644,5 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
     if (selected == tomorrow) return 'Tomorrow';
     final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return '${days[date.weekday - 1]}, ${date.month}/${date.day}';
-  }
-
-  String _formatDuration(int minutes) {
-    if (minutes < 60) return '${minutes}m';
-    final hours = minutes ~/ 60;
-    final mins = minutes % 60;
-    return mins > 0 ? '${hours}h ${mins}m' : '${hours}h';
   }
 }

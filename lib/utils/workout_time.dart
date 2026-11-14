@@ -13,3 +13,11 @@ String startsInText(Duration d) {
   final m = (d.inSeconds / 60).ceil().clamp(1, 1 << 30);
   return m >= 60 ? '${m ~/ 60}h ${(m % 60).toString().padLeft(2, '0')}m' : '${m}m';
 }
+
+/// "45m", "1h", "1h 30m" for a whole number of minutes.
+String formatDuration(int minutes) {
+  if (minutes < 60) return '${minutes}m';
+  final hours = minutes ~/ 60;
+  final mins = minutes % 60;
+  return mins > 0 ? '${hours}h ${mins}m' : '${hours}h';
+}

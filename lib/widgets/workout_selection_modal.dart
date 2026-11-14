@@ -8,6 +8,7 @@ import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
 import '../services/achievement_service.dart';
 import '../utils/run_once.dart';
+import '../utils/workout_time.dart';
 
 class WorkoutSelectionModal extends StatefulWidget {
   final Function(WorkoutTemplate, int, String?, List<AchievementUnlockResult>) onWorkoutSelected;
@@ -221,7 +222,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        _formatDuration(customDuration),
+                        formatDuration(customDuration),
                         style: TextStyle(
                           fontSize: 52,
                           fontWeight: FontWeight.bold,
@@ -298,7 +299,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                             ),
                           ),
                           child: Text(
-                            _formatDuration(mins),
+                            formatDuration(mins),
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
@@ -356,13 +357,6 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
     final appColors = AppColors.of(context);
     if (minutes <= 30) return appColors.subtleText;
     return appColors.streakOrange; // resolves to accentPalette.action
-  }
-
-  String _formatDuration(int minutes) {
-    if (minutes < 60) return '${minutes}m';
-    final h = minutes ~/ 60;
-    final m = minutes % 60;
-    return m > 0 ? '${h}h ${m}m' : '${h}h';
   }
 
   // ══════════════════════════════════════════════════════════════

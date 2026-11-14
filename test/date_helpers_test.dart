@@ -66,6 +66,16 @@ void main() {
     });
   });
 
+  test('formatDuration shows minutes under an hour, then hours and minutes', () {
+    expect(formatDuration(0), '0m');
+    expect(formatDuration(15), '15m');
+    expect(formatDuration(59), '59m');
+    expect(formatDuration(60), '1h');
+    expect(formatDuration(90), '1h 30m');
+    expect(formatDuration(120), '2h');
+    expect(formatDuration(185), '3h 5m');
+  });
+
   group('startsInText', () {
     test('rounds up to the minute, at least one', () {
       expect(startsInText(Duration.zero), '1m');

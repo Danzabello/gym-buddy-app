@@ -6,6 +6,7 @@ import '../utils/run_once.dart';
 import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
 import 'quick_schedule_sheet.dart';
+import '../utils/workout_time.dart';
 
 class WorkoutHistorySheet extends StatefulWidget {
   final String buddyUserId;
@@ -346,7 +347,7 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
                           Icon(Icons.timer, size: 12, color: _durationColor(duration)),
                           const SizedBox(width: 4),
                           Text(
-                            _formatDuration(duration),
+                            formatDuration(duration),
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
@@ -388,13 +389,6 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
                       'Jul','Aug','Sep','Oct','Nov','Dec'];
       return '${months[date.month - 1]} ${date.day}';
     } catch (e) { return dateStr; }
-  }
-
-  String _formatDuration(int minutes) {
-    if (minutes < 60) return '${minutes}m';
-    final hours = minutes ~/ 60;
-    final mins = minutes % 60;
-    return mins > 0 ? '${hours}h ${mins}m' : '${hours}h';
   }
 
   /// Workout-type identity hues. Deliberately NOT themed: these encode which
