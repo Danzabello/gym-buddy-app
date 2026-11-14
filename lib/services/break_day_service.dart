@@ -3,7 +3,8 @@ import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
 
 class BreakDayService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
+  BreakDayService({SupabaseClient? client}) : _supabase = client ?? Supabase.instance.client;
 
   /// Monday of the week containing [date], as the user's LOCAL calendar date.
   ///

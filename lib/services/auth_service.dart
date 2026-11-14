@@ -61,7 +61,8 @@ Future<void> runSignOut({
 }
 
 class AuthService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
+  AuthService({SupabaseClient? client}) : _supabase = client ?? Supabase.instance.client;
 
   // google_sign_in must be initialised exactly once; a failed init may retry.
   static Future<void>? _googleInit;

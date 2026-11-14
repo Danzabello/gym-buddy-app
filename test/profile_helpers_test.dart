@@ -4,8 +4,9 @@ import 'package:gym_buddy_app/data/avatar_catalog.dart';
 import 'package:gym_buddy_app/home_screen.dart';
 import 'package:gym_buddy_app/widgets/user_avatar.dart';
 
-// Pins the pure profile helpers and the avatar emoji data as they were before
-// the client refactor (refactor/client-2026-11), so a move cannot change them.
+// Pins the pure profile helpers and the avatar emoji data as they stood at the
+// start of the client refactor (refactor/client-2026-11), so a move cannot
+// change them.
 void main() {
   group('formatYear', () {
     test('year of an ISO timestamp', () {
@@ -91,6 +92,11 @@ void main() {
       await tester.pumpWidget(const Directionality(
         textDirection: TextDirection.ltr,
         child: UserAvatar(avatarId: 'zebra'),
+      ));
+      expect(find.text('🦁'), findsOneWidget);
+      await tester.pumpWidget(const Directionality(
+        textDirection: TextDirection.ltr,
+        child: UserAvatar(),
       ));
       expect(find.text('🦁'), findsOneWidget);
     });

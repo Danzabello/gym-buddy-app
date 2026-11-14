@@ -120,7 +120,8 @@ String? finishNoopMessage(Map<String, dynamic> res) => switch (res['result']) {
     };
 
 class TeamStreakService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
+  TeamStreakService({SupabaseClient? client}) : _supabase = client ?? Supabase.instance.client;
   final BreakDayService _breakDayService = BreakDayService();
   
   static const String coachMaxId = CoachMaxService.coachMaxId;

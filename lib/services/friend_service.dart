@@ -4,7 +4,8 @@ import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/services/team_sync_service.dart';
 
 class FriendService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
+  FriendService({SupabaseClient? client}) : _supabase = client ?? Supabase.instance.client;
 
   // Search for users by USERNAME (not display name)
   Future<List<Map<String, dynamic>>> searchUsers(String query) async {

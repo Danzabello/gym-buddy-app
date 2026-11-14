@@ -116,7 +116,8 @@ class CalendarDay {
 }
 
 class WorkoutHistoryService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
+  WorkoutHistoryService({SupabaseClient? client}) : _supabase = client ?? Supabase.instance.client;
 
   Future<List<WorkoutTemplate>> getWorkoutTemplates() async {
     try {

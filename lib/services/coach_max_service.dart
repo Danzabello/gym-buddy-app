@@ -7,7 +7,8 @@ import 'package:gym_buddy_app/utils/app_dates.dart';
 import 'achievement_service.dart';
 
 class CoachMaxService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
+  CoachMaxService({SupabaseClient? client}) : _supabase = client ?? Supabase.instance.client;
   
   static const String coachMaxId = '00000000-0000-0000-0000-000000000001';
   static const String coachMaxName = 'Coach Max';

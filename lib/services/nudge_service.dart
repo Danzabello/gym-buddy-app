@@ -4,7 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 
 class NudgeService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
+  NudgeService({SupabaseClient? client}) : _supabase = client ?? Supabase.instance.client;
 
   static const int _earliestHour = 10; // no nudges before 10am
 

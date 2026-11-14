@@ -5,7 +5,8 @@ import 'package:gym_buddy_app/utils/debug_logger.dart';
 /// Service to manage friend nicknames
 /// Nicknames are personal - only YOU see the nicknames YOU set
 class NicknameService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
+  NicknameService({SupabaseClient? client}) : _supabase = client ?? Supabase.instance.client;
   
   Map<String, String>? _nicknameCache;
   DateTime? _cacheTime;
