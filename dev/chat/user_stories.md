@@ -40,10 +40,11 @@ The design that answers these stories is in [design.md](design.md). Story number
 
 | # | Story | When |
 |---|---|---|
-| R1 | I remove a buddy. Our conversation and every message in it are deleted right away, for both of us. | Launch |
+| R1 | I remove a buddy. Our conversation disappears right away, for both of us, and neither of us can open it again. | Launch |
 | R2 | My buddy removes me. The conversation disappears for me too. If I had it open, I am told I can no longer message this person, and I cannot send. | Launch |
 | R3 | We become buddies again later. The conversation starts empty. | Launch |
 | R4 | My buddy deletes their account. Our conversation and its messages are deleted. | Launch |
+| R7 | A buddy sends me something abusive and removes me straight away. I can still report that message while I have it in front of me. | Launch |
 | R5 | I delete my account. My messages, my conversations and my block list are deleted. | Launch |
 | R6 | I was in the middle of sending when my buddy removed me. The message is not delivered, and I am told why. | Launch |
 
