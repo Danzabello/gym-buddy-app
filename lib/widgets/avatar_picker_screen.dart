@@ -738,7 +738,7 @@ class _AvatarWithBorder extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size(size, size),
-      foregroundPainter: _BorderPainter(borderStyle, borderColor),
+      foregroundPainter: AvatarBorderPainter(borderStyle, borderColor),
       child: Container(
         width: size,
         height: size,
@@ -752,10 +752,12 @@ class _AvatarWithBorder extends StatelessWidget {
   }
 }
 
-class _BorderPainter extends CustomPainter {
+/// Draws the avatar ring in one of the three border styles. Public so the
+/// Wardrobe render (wardrobe_avatar_render.dart) paints with the same code.
+class AvatarBorderPainter extends CustomPainter {
   final AvatarBorderStyle style;
   final Color color;
-  _BorderPainter(this.style, this.color);
+  AvatarBorderPainter(this.style, this.color);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -798,7 +800,7 @@ class _BorderPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_BorderPainter old) =>
+  bool shouldRepaint(AvatarBorderPainter old) =>
       old.style != style || old.color != color;
 }
 
