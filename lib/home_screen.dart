@@ -75,6 +75,35 @@ String checkInBannerSubtitle({required bool viewerCheckedIn}) => viewerCheckedIn
     ? 'Your streak is safe today'
     : 'Your turn to check in';
 
+// Pure profile helpers, top-level so test/profile_helpers_test.dart can pin them.
+@visibleForTesting
+String formatYear(String? dateStr) {
+  if (dateStr == null) return '2025';
+  try { return '${DateTime.parse(dateStr).year}'; } catch (_) { return '2025'; }
+}
+
+@visibleForTesting
+List<Color> levelGradient(int level) {
+  if (level >= 91) return [const Color(0xFF7F77DD), const Color(0xFF534AB7)];
+  if (level >= 76) return [const Color(0xFFD85A30), const Color(0xFF993C1D)];
+  if (level >= 56) return [const Color(0xFFD4537E), const Color(0xFF993556)];
+  if (level >= 46) return [const Color(0xFFEF9F27), const Color(0xFFBA7517)];
+  if (level >= 26) return [const Color(0xFF1D9E75), const Color(0xFF0F6E56)];
+  if (level >= 11) return [const Color(0xFF378ADD), const Color(0xFF185FA5)];
+  return [const Color(0xFFFFB300), const Color(0xFFFF8F00)];
+}
+
+@visibleForTesting
+String titleIcon(String title) {
+  const map = {
+    'Newcomer': '🌱', 'Beginner': '⚡', 'Rookie': '🔥',
+    'Athlete': '💪', 'Warrior': '⚔️', 'Iron': '🛡️',
+    'Beast': '🦁', 'Legend': '👑', 'Elite': '💎',
+    'Champion': '🏆', 'Gym Pro': '🌟',
+  };
+  return map[title] ?? '⭐';
+}
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -5419,34 +5448,10 @@ class _ProfilePageState extends State<ProfilePage>
     }
   }
 
-  String _formatYear(String? dateStr) {
-    if (dateStr == null) return '2025';
-    try { return '${DateTime.parse(dateStr).year}'; } catch (_) { return '2025'; }
-  }
-
   int get _bestStreak => _allStreaks.isEmpty
       ? 0
       : _allStreaks.map((s) => s.bestStreak).reduce((a, b) => a > b ? a : b);
 
-  List<Color> _levelGradient(int level) {
-    if (level >= 91) return [const Color(0xFF7F77DD), const Color(0xFF534AB7)];
-    if (level >= 76) return [const Color(0xFFD85A30), const Color(0xFF993C1D)];
-    if (level >= 56) return [const Color(0xFFD4537E), const Color(0xFF993556)];
-    if (level >= 46) return [const Color(0xFFEF9F27), const Color(0xFFBA7517)];
-    if (level >= 26) return [const Color(0xFF1D9E75), const Color(0xFF0F6E56)];
-    if (level >= 11) return [const Color(0xFF378ADD), const Color(0xFF185FA5)];
-    return [const Color(0xFFFFB300), const Color(0xFFFF8F00)];
-  }
-
-  String _titleIcon(String title) {
-    const map = {
-      'Newcomer': '🌱', 'Beginner': '⚡', 'Rookie': '🔥',
-      'Athlete': '💪', 'Warrior': '⚔️', 'Iron': '🛡️',
-      'Beast': '🦁', 'Legend': '👑', 'Elite': '💎',
-      'Champion': '🏆', 'Gym Pro': '🌟',
-    };
-    return map[title] ?? '⭐';
-  }
  
   // ══════════════════════════════════════════════════════════════
   // BUILD
@@ -5461,7 +5466,7 @@ class _ProfilePageState extends State<ProfilePage>
     final title    = _levelInfo?.title ?? 'Newcomer';
     final avatarId = profile['avatar_id'] as String? ?? 'lion';
     final name     = profile['display_name'] as String? ?? 'User';
-    final year     = _formatYear(profile['created_at'] as String?);
+    final year     = formatYear(profile['created_at'] as String?);
 
     return Scaffold(
       backgroundColor: appColors.sectionBackground,
@@ -5828,14 +5833,14 @@ class _ProfilePageState extends State<ProfilePage>
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   gradient: LinearGradient(
-                                    colors: _levelGradient(level),
+                                    colors: levelGradient(level),
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                   ),
                                   border: Border.all(color: Colors.white, width: 2),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: _levelGradient(level).last.withValues(alpha: 0.5),
+                                      color: levelGradient(level).last.withValues(alpha: 0.5),
                                       blurRadius: 8,
                                     ),
                                   ],
@@ -5875,7 +5880,7 @@ class _ProfilePageState extends State<ProfilePage>
                                 border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
                               ),
                               child: Text(
-                                '${_titleIcon(title)}  $title',
+                                '${titleIcon(title)}  $title',
                                 style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
                               ),
                             ),
@@ -6103,7 +6108,7 @@ class _ProfilePageState extends State<ProfilePage>
   // Category keys/labels mirror WorkoutSelectionModal._categoryDefs (the
   // canonical "10 category tile" list from the check-in grid). Not shared as
   // a common lookup — this page only touches its own file, matching
-  // _titleIcon above.
+  // titleIcon above.
   //
   // The per-category emoji lookup that used to live here is gone: rows are
   // ranked 1/2/3 by number now, and neither of the two new cards uses emoji.
