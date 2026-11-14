@@ -71,6 +71,7 @@ part 'home/capped_count.dart';
 part 'home/checkin_ring.dart';
 part 'home/dashboard_page.dart';
 part 'home/home_shell.dart';
+part 'home/logout_button.dart';
 part 'home/nav_bar.dart';
 part 'home/profile_page.dart';
 part 'home/weekly_plan_dialog.dart';
@@ -334,48 +335,3 @@ List<TeamStreak> sortStreaks(List<TeamStreak> streaks, StreakSortMode mode) {
 /// Brand gradient, fixed per CLAUDE.md. Coach Max's identity depends on it, so
 /// it is deliberately NOT an accent token — it must not shift with the skin.
 const _kBrandGradient = [Color(0xFF1D4ED8), Color(0xFF7C3AED)];
-
-/// The Log Out control. A repeat tap while a log out is running is ignored.
-class LogoutButton extends StatefulWidget {
-  final Future<void> Function() onLogout;
-  const LogoutButton({super.key, required this.onLogout});
-
-  @override
-  State<LogoutButton> createState() => _LogoutButtonState();
-}
-
-class _LogoutButtonState extends State<LogoutButton> {
-  final _once = RunOnce();
-
-  @override
-  void dispose() {
-    _once.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _once.run(widget.onLogout),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: const Color(0xFFE53935).withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE53935).withValues(alpha: 0.3), width: 1.5),
-        ),
-        child: const Center(
-          child: Text(
-            'Log Out',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFFE53935),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
