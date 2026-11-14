@@ -47,6 +47,8 @@ export function isQuietHour(hour: number, start: number, end: number): boolean {
 export const categoryMap: Record<string, string> = {
   'friend_request': 'notif_social',
   'friend_accepted': 'notif_social',
+  // Raised only by the database (send_chat_message); deliberately not in CLIENT_TYPES in index.ts.
+  'chat_message': 'notif_social',
   'workout_invite': 'notif_workouts',
   'workout_accepted': 'notif_workouts',
   'workout_declined': 'notif_workouts',

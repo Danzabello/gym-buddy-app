@@ -62,6 +62,12 @@ test('categoryDisabled: checkin_ready follows the workouts toggle', () => {
   assert.equal(categoryDisabled('checkin_ready', resolveSettings(null)), false)
 })
 
+test('categoryDisabled: chat_message follows the social toggle', () => {
+  assert.equal(categoryDisabled('chat_message', resolveSettings({ notif_social: false })), true)
+  assert.equal(categoryDisabled('chat_message', resolveSettings({ notif_workouts: false })), false)
+  assert.equal(categoryDisabled('chat_message', resolveSettings(null)), false)
+})
+
 test('categoryDisabled: defaults disable nothing', () => {
   assert.equal(categoryDisabled('buddy_checked_in', resolveSettings(null)), false)
   assert.equal(categoryDisabled('friend_request', resolveSettings(null)), false)
