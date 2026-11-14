@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../services/achievement_service.dart';
 import '../utils/run_once.dart';
 import '../utils/workout_time.dart';
+import 'duration_picker.dart';
 
 class WorkoutSelectionModal extends StatefulWidget {
   final Function(WorkoutTemplate, int, String?, List<AchievementUnlockResult>) onWorkoutSelected;
@@ -177,7 +178,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
         builder: (dialogContext, setDialogState) {
           // Dynamic colour by duration band (shared pattern with the
           // schedule sheets — see _durationColor).
-          final dialColor = _durationColor(customDuration);
+          final dialColor = durationColor(context, customDuration);
           return AlertDialog(
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -277,7 +278,7 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
                     alignment: WrapAlignment.center,
                     children: [30, 60, 90, 120].map((mins) {
                       final isSelected = customDuration == mins;
-                      final chipColor = _durationColor(mins);
+                      final chipColor = durationColor(context, mins);
                       return GestureDetector(
                         onTap: () {
                           HapticFeedback.lightImpact();
@@ -346,17 +347,6 @@ class _WorkoutSelectionModalState extends State<WorkoutSelectionModal>
         },
       ),
     );
-  }
-
-  // Duration band colour + label — copied from schedule_workout_sheet.dart /
-  // quick_schedule_sheet.dart to reuse their duration-picker visual language.
-  // (Candidate for extraction to a shared util; kept local to stay surgical.)
-  // Two tiers, theme-driven: short sessions read as neutral, longer ones
-  // get the accent nod. (Was a 7-step rainbow duplicated across sheets.)
-  Color _durationColor(int minutes) {
-    final appColors = AppColors.of(context);
-    if (minutes <= 30) return appColors.subtleText;
-    return appColors.streakOrange; // resolves to accentPalette.action
   }
 
   // ══════════════════════════════════════════════════════════════

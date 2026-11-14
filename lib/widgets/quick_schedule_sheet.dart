@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
 import '../utils/workout_time.dart';
+import 'duration_picker.dart';
 
 class QuickScheduleSheet extends StatefulWidget {
   final String buddyUserId;
@@ -139,7 +140,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
         final appColors = AppColors.of(sheetContext);
         return StatefulBuilder(
           builder: (sheetContext, setSheetState) {
-            final dialColor = _durationColor(tempDuration);
+            final dialColor = durationColor(context, tempDuration);
             return Container(
             padding: EdgeInsets.fromLTRB(
               24, 20, 24, MediaQuery.of(sheetContext).padding.bottom + 20,
@@ -216,7 +217,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
                   alignment: WrapAlignment.center,
                   children: [15, 30, 45, 60, 90, 120].map((mins) {
                     final isSelected = tempDuration == mins;
-                    final chipColor = _durationColor(mins);
+                    final chipColor = durationColor(context, mins);
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.lightImpact();
@@ -550,14 +551,6 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
     );
   }
 
-  // Two tiers, theme-driven: short sessions read as neutral, longer ones
-  // get the accent nod. (Was a 7-step rainbow duplicated across sheets.)
-  Color _durationColor(int minutes) {
-    final appColors = AppColors.of(context);
-    if (minutes <= 30) return appColors.subtleText;
-    return appColors.streakOrange; // resolves to accentPalette.action
-  }
-
   Widget _buildDurationChip(int minutes, AppColors appColors) {
     final isSelected = _duration == minutes && !_isCustomDuration;
     return GestureDetector(
@@ -570,11 +563,11 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: isSelected
-              ? _durationColor(minutes).withValues(alpha: 0.12)
+              ? durationColor(context, minutes).withValues(alpha: 0.12)
               : appColors.sectionBackground,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? _durationColor(minutes) : appColors.cardBorder,
+            color: isSelected ? durationColor(context, minutes) : appColors.cardBorder,
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -584,7 +577,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
           style: TextStyle(
             fontSize: 14,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? _durationColor(minutes) : appColors.subtleText,
+            color: isSelected ? durationColor(context, minutes) : appColors.subtleText,
           ),
         ),
       ),
@@ -603,11 +596,11 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: isSelected
-              ? _durationColor(_duration).withValues(alpha: 0.12)
+              ? durationColor(context, _duration).withValues(alpha: 0.12)
               : appColors.sectionBackground,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? _durationColor(_duration) : appColors.cardBorder,
+            color: isSelected ? durationColor(context, _duration) : appColors.cardBorder,
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -616,7 +609,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
           children: [
             Icon(Icons.edit, size: 14,
                 color: isSelected
-                    ? _durationColor(_duration)
+                    ? durationColor(context, _duration)
                     : appColors.subtleText),
             const SizedBox(width: 4),
             Text(
@@ -625,7 +618,7 @@ class _QuickScheduleSheetState extends State<QuickScheduleSheet> {
                 fontSize: 13,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                 color: isSelected
-                    ? _durationColor(_duration)
+                    ? durationColor(context, _duration)
                     : appColors.subtleText,
               ),
             ),

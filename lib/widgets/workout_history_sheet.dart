@@ -7,6 +7,7 @@ import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
 import 'quick_schedule_sheet.dart';
 import '../utils/workout_time.dart';
+import 'duration_picker.dart';
 
 class WorkoutHistorySheet extends StatefulWidget {
   final String buddyUserId;
@@ -337,21 +338,21 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: _durationColor(duration).withValues(alpha: 0.12),
+                        color: durationColor(context, duration).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: _durationColor(duration).withValues(alpha: 0.4)),
+                        border: Border.all(color: durationColor(context, duration).withValues(alpha: 0.4)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.timer, size: 12, color: _durationColor(duration)),
+                          Icon(Icons.timer, size: 12, color: durationColor(context, duration)),
                           const SizedBox(width: 4),
                           Text(
                             formatDuration(duration),
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
-                              color: _durationColor(duration),
+                              color: durationColor(context, duration),
                             ),
                           ),
                         ],
@@ -408,14 +409,6 @@ class _WorkoutHistorySheetState extends State<WorkoutHistorySheet> {
       case 'yoga':        return Colors.teal[600]!;
       default:            return Colors.green[600]!;
     }
-  }
-
-  // Two tiers, theme-driven: short sessions read as neutral, longer ones
-  // get the accent nod. (Was a 7-step rainbow duplicated across sheets.)
-  Color _durationColor(int minutes) {
-    final appColors = AppColors.of(context);
-    if (minutes <= 30) return appColors.subtleText;
-    return appColors.streakOrange; // resolves to accentPalette.action
   }
 
   IconData _getWorkoutIcon(String type) {

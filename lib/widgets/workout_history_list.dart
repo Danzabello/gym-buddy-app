@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../services/workout_history_service.dart';
+import 'duration_picker.dart';
 
 class WorkoutHistoryList extends StatefulWidget {
   const WorkoutHistoryList({super.key});
@@ -28,15 +29,6 @@ class _WorkoutHistoryListState extends State<WorkoutHistoryList> {
       _workouts = workouts;
       _isLoading = false;
     });
-  }
-
-  // Two tiers, theme-driven: short sessions read as neutral, longer ones
-  // get the accent nod. (Was a 7-step rainbow duplicated across sheets.)
-  Color _durationColor(int? minutes) {
-    final appColors = AppColors.of(context);
-    if (minutes == null) return appColors.subtleText;
-    if (minutes <= 30) return appColors.subtleText;
-    return appColors.streakOrange; // resolves to accentPalette.action
   }
 
   @override
@@ -225,24 +217,24 @@ class _WorkoutHistoryListState extends State<WorkoutHistoryList> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: _durationColor(workout.actualDurationMinutes).withValues(alpha: 0.12),
+                            color: durationColor(context, workout.actualDurationMinutes).withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: _durationColor(workout.actualDurationMinutes).withValues(alpha: 0.4),
+                              color: durationColor(context, workout.actualDurationMinutes).withValues(alpha: 0.4),
                             ),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.timer, size: 12,
-                                  color: _durationColor(workout.actualDurationMinutes)),
+                                  color: durationColor(context, workout.actualDurationMinutes)),
                               const SizedBox(width: 4),
                               Text(
                                 '${workout.actualDurationMinutes}m',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
-                                  color: _durationColor(workout.actualDurationMinutes),
+                                  color: durationColor(context, workout.actualDurationMinutes),
                                 ),
                               ),
                             ],

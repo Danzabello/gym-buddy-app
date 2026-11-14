@@ -8,6 +8,7 @@ import '../services/workout_service.dart';
 import '../services/friend_service.dart';
 import 'user_avatar.dart';
 import '../utils/workout_time.dart';
+import 'duration_picker.dart';
 
 class ScheduleWorkoutSheet extends StatefulWidget {
   final String? preSelectedBuddyId;
@@ -163,7 +164,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
         final appColors = AppColors.of(sheetContext);
         return StatefulBuilder(
           builder: (sheetContext, setSheetState) {
-            final dialColor = _durationColor(tempDuration);
+            final dialColor = durationColor(context, tempDuration);
             return Container(
             padding: EdgeInsets.fromLTRB(
               24, 20, 24, MediaQuery.of(sheetContext).padding.bottom + 20,
@@ -240,7 +241,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                   alignment: WrapAlignment.center,
                   children: [15, 30, 45, 60, 90, 120].map((mins) {
                     final isSelected = tempDuration == mins;
-                    final chipColor = _durationColor(mins);
+                    final chipColor = durationColor(context, mins);
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.lightImpact();
@@ -681,14 +682,6 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
     );
   }
 
-  // Two tiers, theme-driven: short sessions read as neutral, longer ones
-  // get the accent nod. (Was a 7-step rainbow duplicated across sheets.)
-  Color _durationColor(int minutes) {
-    final appColors = AppColors.of(context);
-    if (minutes <= 30) return appColors.subtleText;
-    return appColors.streakOrange; // resolves to accentPalette.action
-  }
-
   Widget _buildDurationSelector(AppColors appColors) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -701,7 +694,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                     color: Theme.of(context).colorScheme.onSurface)),
             Text(formatDuration(_duration),
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold,
-                    color: _durationColor(_duration))),  // ← dynamic colour
+                    color: durationColor(context, _duration))),  // ← dynamic colour
           ],
         ),
         const SizedBox(height: 12),
@@ -722,11 +715,11 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? _durationColor(m).withValues(alpha: 0.12)
+                            ? durationColor(context, m).withValues(alpha: 0.12)
                             : appColors.sectionBackground,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: isSelected ? _durationColor(m) : appColors.cardBorder,
+                          color: isSelected ? durationColor(context, m) : appColors.cardBorder,
                           width: isSelected ? 2 : 1,
                         ),
                       ),
@@ -735,7 +728,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                            color: isSelected ? _durationColor(m) : appColors.subtleText,
+                            color: isSelected ? durationColor(context, m) : appColors.subtleText,
                           )),
                     ),
                   ),
@@ -754,12 +747,12 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   decoration: BoxDecoration(
                     color: _isCustomDuration
-                        ? _durationColor(_duration).withValues(alpha: 0.12)
+                        ? durationColor(context, _duration).withValues(alpha: 0.12)
                         : appColors.sectionBackground,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: _isCustomDuration
-                          ? _durationColor(_duration) : appColors.cardBorder,
+                          ? durationColor(context, _duration) : appColors.cardBorder,
                       width: _isCustomDuration ? 2 : 1,
                     ),
                   ),
@@ -768,7 +761,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                     children: [
                       Icon(Icons.edit, size: 14,
                           color: _isCustomDuration
-                              ? _durationColor(_duration) : appColors.subtleText),
+                              ? durationColor(context, _duration) : appColors.subtleText),
                       const SizedBox(width: 4),
                       Text(
                         _isCustomDuration ? formatDuration(_duration) : 'Custom',
@@ -777,7 +770,7 @@ class _ScheduleWorkoutSheetState extends State<ScheduleWorkoutSheet> {
                           fontWeight: _isCustomDuration
                               ? FontWeight.bold : FontWeight.w500,
                           color: _isCustomDuration
-                              ? _durationColor(_duration) : appColors.subtleText,
+                              ? durationColor(context, _duration) : appColors.subtleText,
                         ),
                       ),
                     ],

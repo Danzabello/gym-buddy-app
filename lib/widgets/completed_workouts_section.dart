@@ -8,6 +8,7 @@ import '../services/workout_service.dart';
 import '../data/coach_comments.dart';
 import '../utils/run_once.dart';
 import 'user_avatar.dart';
+import 'duration_picker.dart';
 
 class CompletedWorkoutsSection extends StatefulWidget {
   const CompletedWorkoutsSection({super.key, this.refreshTrigger = 0});
@@ -63,15 +64,6 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
       case 'yoga':        return Colors.teal[600]!;
       default:            return Colors.green[600]!;
     }
-  }
-
-  // Two tiers, theme-driven: short sessions read as neutral, longer ones
-  // get the accent nod. (Was a 7-step rainbow duplicated across sheets.)
-  Color _durationColor(int? minutes) {
-    final appColors = AppColors.of(context);
-    if (minutes == null) return appColors.subtleText;
-    if (minutes <= 30) return appColors.subtleText;
-    return appColors.streakOrange; // resolves to accentPalette.action
   }
 
   IconData _typeIcon(String? type) {
@@ -390,11 +382,11 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: _durationColor(workout['actual_duration_minutes'] as int?)
+                              color: durationColor(context, workout['actual_duration_minutes'] as int?)
                                   .withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
-                                color: _durationColor(workout['actual_duration_minutes'] as int?)
+                                color: durationColor(context, workout['actual_duration_minutes'] as int?)
                                     .withValues(alpha: 0.4),
                               ),
                             ),
@@ -402,14 +394,14 @@ class _CompletedWorkoutsSectionState extends State<CompletedWorkoutsSection> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(Icons.timer_outlined, size: 10,
-                                    color: _durationColor(workout['actual_duration_minutes'] as int?)),
+                                    color: durationColor(context, workout['actual_duration_minutes'] as int?)),
                                 const SizedBox(width: 3),
                                 Text(
                                   _duration(workout['actual_duration_minutes'] as int?),
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
-                                    color: _durationColor(workout['actual_duration_minutes'] as int?),
+                                    color: durationColor(context, workout['actual_duration_minutes'] as int?),
                                   ),
                                 ),
                               ],
