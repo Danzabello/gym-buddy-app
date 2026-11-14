@@ -289,6 +289,7 @@ Reports must be handled inside 30 days; after that they are gone. Checking the o
 | A is blocked while sending | The pair lock orders the two. If the send finishes first, the message was sent before the block and is stored, and the blocker's side hides it. If the block finishes first, the send returns `blocked` |
 | The buddy row is deleted while sending | The friendship row lock orders the two. If the send is first, the removal waits and then hides the new message with the rest. If the removal is first, the send returns `not_buddies` |
 | Someone sends an abusive message and removes the buddy at once | The message is hidden from both, but stays stored until it is 24 hours old, and its receiver can report it in that time |
+| An invite code is redeemed while a friend request between the same two people is still pending, so they share a team but the friendship stays pending | `send_chat_message` answers `not_buddies` until the request is accepted; nothing is stored |
 | Two people send the same new id at the same instant | One is stored; the other gets `id_taken` |
 | A buddy removal and the expiry job touch the same rows | The job skips rows that are locked and takes them on its next run |
 | The same message is sent twice (retry, double tap) | Same id: stored once, the second call returns the stored message |

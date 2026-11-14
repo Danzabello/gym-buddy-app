@@ -22,6 +22,8 @@ The entry points already exist in the Buddies tab and are switched off. The mock
 3. **Search buddies** (search icon in the Buddies header): pick a buddy, opens the conversation.
 4. **Notification tap**: opens the conversation with the buddy who wrote.
 
+A chat entry point is active only for an accepted buddy. For someone whose buddy request is still pending, including a person the user already shares a team and a streak with, the card tap, the "Message" row and the search result must not appear as active chat entries: show them disabled or leave them out, and point to the pending request instead.
+
 There is no separate conversation list in this version. The buddy card is the list. Decide in the mockup whether a card needs a hint that a chat has messages in it; the service has no unread count yet (story L5 is later), so the hint, if any, can only be "has messages from the last 24 hours".
 
 ## Screens and states
@@ -48,7 +50,8 @@ The main screen. Header with the buddy's avatar (with their ring), their name (t
 | **Too long** | A counter appears near the limit ("480/500"). At 500 the field stops accepting text. No error dialog | `chatMaxLength` (500 characters) |
 | **Blocked by me** | No messages. Centred: "You blocked {name}. You will not get messages from each other." with an "Unblock" button. No input row | `blockedByMe` true |
 | **I am blocked** | Shown only after a send is refused. The message is not added. A line where the input was: "You can't message this buddy." The earlier messages stay until they disappear. No mention of who did what | `send()` returned `blocked` |
-| **No longer buddies** | The input row is replaced by: "You are no longer buddies, so you can't send messages." Messages that were on the screen stay, read-only, and can still be reported. Leaving the screen clears them | `isBuddy` false, or `send()` returned `notBuddies` |
+| **No longer buddies** | The input row is replaced by: "You are no longer buddies, so you can't send messages." Messages that were on the screen stay, read-only, and can still be reported. Leaving the screen clears them. The server gives the same answer for the next state, so the screen must tell the two apart | `isBuddy` false, or `send()` returned `notBuddies` |
+| **Request still pending** | The same server answer as No longer buddies, but a different situation: a buddy request between the two is waiting, and they may already share a team and a streak (an invite code was redeemed while the request was pending). It needs its own wording, plain and with no emoji. No messages, no input row. If the user received the request: "Accept {name}'s buddy request to chat." with an "Accept" button. If the user sent it: "{name} has not accepted your buddy request yet. You can chat once they do." The entry points should keep the user from reaching this screen at all; it is the fallback for a notification tap or a stale screen | `isBuddy` false together with a pending request for this person from the Buddies tab data (`FriendService`); the chat service alone cannot tell pending from removed |
 
 ### 2. Message actions
 
@@ -149,6 +152,9 @@ All strings in one place, for the copy pass. `{name}` is the buddy's name. `{tim
 | I am blocked | You can't message this buddy. |
 | Blocked by me | You blocked {name}. You will not get messages from each other. |
 | No longer buddies | You are no longer buddies, so you can't send messages. |
+| Request pending, received | Accept {name}'s buddy request to chat. |
+| Request pending, received, button | Accept |
+| Request pending, sent | {name} has not accepted your buddy request yet. You can chat once they do. |
 | Menu | Block {name} / Unblock {name} / Report {name} / View profile |
 | Message sheet | Report message / Copy text |
 | Report title | Report this message |
