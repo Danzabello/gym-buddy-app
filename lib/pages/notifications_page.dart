@@ -28,14 +28,6 @@ typedef AskPermission = Future<AuthorizationStatus?> Function();
 /// to be off; unknown (not checked yet) shows nothing, so neither flickers on.
 bool bellDotVisible(bool? osPermission) => osPermission == false;
 
-/// Android answers at once, without a dialog, when the permission was denied
-/// for good; the only way forward is the system settings page. The same rule
-/// lives in notification_settings_page.dart (_enableNotifications).
-bool dialogWasBlocked(Duration elapsed, AuthorizationStatus? status) =>
-    elapsed < const Duration(milliseconds: 400) &&
-    status != null &&
-    status != AuthorizationStatus.authorized;
-
 /// "Today", "Yesterday", else like "Wed 28 Oct". [day] and [now] are local.
 @visibleForTesting
 String inboxDayLabel(DateTime day, DateTime now) {

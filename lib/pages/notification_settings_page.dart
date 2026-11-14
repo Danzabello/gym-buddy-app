@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../services/notification_service.dart';
 import 'package:app_settings/app_settings.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
@@ -106,11 +105,7 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
     final started = DateTime.now();
     final status = await _notificationService.requestPermissionFromUser();
     if (!mounted) return;
-    // Android reports only authorized/denied, never "not determined". A denial
-    // that comes back at once means no dialog was shown (permanently denied),
-    // so the only way forward is the system settings page.
-    final instant = DateTime.now().difference(started) < const Duration(milliseconds: 400);
-    if (instant && status != null && status != AuthorizationStatus.authorized) {
+    if (dialogWasBlocked(DateTime.now().difference(started), status)) {
       await AppSettings.openAppSettings(type: AppSettingsType.notification);
     }
     await _refreshPermission();

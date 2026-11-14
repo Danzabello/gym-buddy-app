@@ -252,6 +252,15 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await NotificationService.showPush(push);
 }
 
+/// Android reports only authorized/denied, never "not determined", and answers
+/// at once, without a dialog, when the permission was denied for good; the only
+/// way forward is then the system settings page. One rule for the
+/// notifications page and the notification settings page.
+bool dialogWasBlocked(Duration elapsed, AuthorizationStatus? status) =>
+    elapsed < const Duration(milliseconds: 400) &&
+    status != null &&
+    status != AuthorizationStatus.authorized;
+
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
