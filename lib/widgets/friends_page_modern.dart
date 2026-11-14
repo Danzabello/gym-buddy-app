@@ -7,6 +7,7 @@ import '../utils/run_once.dart';
 import '../services/friend_service.dart';
 import '../services/nudge_service.dart';
 import '../services/achievement_service.dart';
+import '../services/break_day_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
@@ -50,7 +51,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   // Which friend IDs have been checked in today
   Set<String> _checkedInToday = {};
   // Which friend IDs are on an uncancelled break for THEIR local today
-  // (server-resolved via is_on_break_today; non-partners resolve to false)
+  // (server-resolved via are_on_break_today; non-partners resolve to false)
   Set<String> _onBreakToday = {};
   // Which friend IDs have already been nudged today
   Set<String> _nudgedToday = {};
@@ -143,21 +144,11 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     }
   }
 
-  // Break status is resolved server-side (is_on_break_today RPC) so each
+  // Break status is resolved server-side (are_on_break_today RPC) so each
   // buddy's own local "today" applies, same as the dashboard carousel.
-  Future<Set<String>> _getOnBreakToday(List<String> friendIds) async {
-    final result = <String>{};
-    await Future.wait(friendIds.map((id) async {
-      try {
-        final res = await Supabase.instance.client
-            .rpc('is_on_break_today', params: {'p_user_id': id});
-        if (res == true) result.add(id);
-      } catch (_) {
-        // no badge on failure — decoration only
-      }
-    }));
-    return result;
-  }
+  // No badge on failure — decoration only.
+  Future<Set<String>> _getOnBreakToday(List<String> friendIds) =>
+      BreakDayService().usersOnBreakToday(friendIds);
 
   // ── Separated buddy lists ─────────────────────────────────
   List<Map<String, dynamic>> get _checkedInFriends =>

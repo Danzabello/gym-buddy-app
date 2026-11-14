@@ -2954,7 +2954,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         .toSet();
 
     // Buddy break badges: a buddy's break is dated in THEIR own local today
-    // (per-user tz), so resolution happens server-side via is_on_break_today
+    // (per-user tz), so resolution happens server-side via are_on_break_today
     // (safe_user_tz) — never with the viewer's local date. Failures degrade
     // to no badge.
     final buddyIds = uniqueStreaks
@@ -2963,16 +2963,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         .map((m) => m.userId)
         .where((id) => id != currentUserId)
         .toSet();
-    final buddyOnBreak = <String, bool>{};
-    await Future.wait(buddyIds.map((id) async {
-      try {
-        final res = await Supabase.instance.client
-            .rpc('is_on_break_today', params: {'p_user_id': id});
-        buddyOnBreak[id] = res == true;
-      } catch (_) {
-        buddyOnBreak[id] = false;
-      }
-    }));
+    final onBreakIds = await _breakDayService.usersOnBreakToday(buddyIds);
+    final buddyOnBreak = <String, bool>{
+      for (final id in buddyIds) id: onBreakIds.contains(id),
+    };
 
     // Buddy zones for the danger countdown: the deadline is the BUDDY's local
     // midnight — theirs is the miss that breaks the streak (reconcile_stale_

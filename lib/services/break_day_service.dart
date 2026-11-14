@@ -146,6 +146,25 @@ class BreakDayService {
     return breakDay != null;
   }
 
+  /// Which of [userIds] are on a break for THEIR own local today, in one
+  /// call (are_on_break_today: the server resolves each user's day in their
+  /// own zone, and RLS hides non-partners). A failed call gives nobody: the
+  /// badge is decoration only.
+  Future<Set<String>> usersOnBreakToday(Iterable<String> userIds) async {
+    final ids = userIds.toSet().toList();
+    if (ids.isEmpty) return {};
+    try {
+      final rows = await _supabase
+          .rpc('are_on_break_today', params: {'p_user_ids': ids}) as List;
+      return {
+        for (final r in rows)
+          if (r['on_break'] == true) r['user_id'] as String,
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
   /// Check if current user is on a break today
   Future<bool> isCurrentUserOnBreakToday() async {
     final userId = _supabase.auth.currentUser!.id;
