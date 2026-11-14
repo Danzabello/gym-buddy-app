@@ -385,7 +385,7 @@ BEGIN
   -- ── G0 catalog: ACL, SECURITY DEFINER, search_path, pinned bodies, lock order in the bodies ──
   SELECT string_agg(p.oid::regprocedure::text || ' ' || p.proacl::text || ' ' || coalesce(p.proconfig::text, '-') || ' secdef=' || p.prosecdef, '; ' ORDER BY p.oid::regprocedure::text),
          bool_and(p.proconfig = '{search_path=public}' AND p.proacl::text = CASE
-           WHEN p.proname IN ('finish_checkin_session', 'create_invite_team', 'check_in_coach_max', 'recompute_team_streak',
+           WHEN p.proname IN ('finish_checkin_session', 'create_invite_team', 'check_in_coach_max',
                               'submit_checkin', 'purchase_shop_item', 'verify_achievement_progress')
              THEN '{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}'
            ELSE '{postgres=X/postgres,service_role=X/postgres}' END
