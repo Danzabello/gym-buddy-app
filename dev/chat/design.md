@@ -59,7 +59,7 @@ Three new tables in `public`. All have RLS enabled, nothing for `anon`, and only
 
 - `CHECK (sender_id <> recipient_id)`.
 - **Sender must be a participant.** A trigger (`_chat_message_guard`) rejects a new row unless `friendship_id` is an accepted friendship whose two parties are exactly `sender_id` and `recipient_id`. On update it rejects any change to the sender or the recipient, and any change to `friendship_id` other than clearing it. This holds for every writer, not only the send function.
-- Indexes: `(friendship_id, created_at)` for the buddy-removal update; `(sender_id, created_at)` for loading and the rate limit; `(recipient_id)` for account deletion; `(created_at)` for the expiry job.
+- Indexes: `(friendship_id)` for the buddy-removal update; `(sender_id, created_at)` for loading and the rate limit; `(recipient_id)` for account deletion; `(created_at)` for the expiry job.
 - Replica identity stays the default, so a Realtime delete event carries the row id only.
 
 ### 3.2 `chat_blocks`
@@ -143,15 +143,16 @@ The three client-facing write functions take the caller from `auth.uid()` and ne
 3. Take the sender lock: `pg_advisory_xact_lock(hashtext('chat_send'), hashtext(sender id))`. One sender's sends run one at a time on every device, which makes the retry check and the rate limit exact.
 4. **Retry check.** If a row with `p_id` exists: when it is the caller's own message to the same recipient, still under 24 hours old and still attached to a friendship, return it with `duplicate: true` and stop (F2). The caller's own message whose buddy has been removed: `not_buddies`. Anything else, including an expired row and a row that belongs to someone else: `id_taken`, with nothing about the row. A stored message is only ever returned to its own author.
 5. Take the pair lock: `pg_advisory_xact_lock(hashtext('chat_pair'), hashtext(smaller id || larger id))`. Blocking takes the same lock, so a send and a block for the same pair never interleave.
-6. Find the accepted friendship between caller and recipient and lock its row `FOR KEY SHARE`. None: `not_buddies` (M2, R6). The lock makes a concurrent buddy removal wait until this send has committed, and then the removal hides the new message with the rest.
+6. Lock the two `user_profiles` rows `FOR KEY SHARE`, in id order. A profile that is gone: `not_buddies`. An account deletion locks the profile first and the friendship after it, so the send takes them in the same order and the two cannot deadlock. This lock does not get in the way of coin, XP or level updates on the same rows.
+6b. Find the accepted friendship between caller and recipient and lock its row `FOR KEY SHARE`. None: `not_buddies` (M2, R6). The lock makes a concurrent buddy removal wait until this send has committed, and then the removal hides the new message with the rest.
 7. Either party is a bot: `not_buddies` (M4). The same answer as for a stranger, so the private `is_bot` flag cannot be read through this function.
 8. A block exists in either direction: `blocked` (B1, B4).
 9. **Rate limit** (D7). Count the caller's messages in the last minute and the last hour. At 20 or 200: `rate_limited` with `retry_after_seconds`, the time until the oldest counted message leaves its window. Retries of an already stored message do not count.
 10. Insert the row with `created_at = clock_timestamp()` and `ON CONFLICT (id) DO NOTHING`. If another sender stored the same id in this instant, the answer is `id_taken`. Because the pair lock is held, messages in one conversation get strictly increasing times in the order they were accepted, so both phones sort them the same way (S5).
-11. Ask for the push (6). A push failure never fails the send.
+11. Ask for the push (6). A push failure never fails the send; it is written to the database log as a warning, without the message text.
 12. Return `{ ok: true, duplicate: false, message: {...}, server_now }`.
 
-Lock order inside chat: sender lock, then pair lock, then the friendship row. `set_chat_block` takes only the pair lock, and `report_chat_message` takes only its own per-reporter lock (`'chat_report'`). No path takes them in another order, and none of them is a credit-path lock. A send that has to wait for a lock is bounded by the role's statement timeout; it then fails as an error and the retry is safe because of the id.
+Lock order inside chat: sender lock, then pair lock, then the two profile rows, then the friendship row. `set_chat_block` takes a per-blocker lock (`'chat_blocker'`, which nothing else takes) and then the pair lock, and `report_chat_message` takes only its own per-reporter lock (`'chat_report'`). No path takes them in another order, and none of them is a credit-path lock. A send that has to wait for a lock is bounded by the role's statement timeout; it then fails as an error and the retry is safe because of the id.
 
 What the client sees for each refusal is in the UI brief. For the rate limit it is a message that says to slow down and when to try again; the typed text stays in the box (F3).
 
@@ -161,7 +162,7 @@ The existing path is reused: the send function calls the database helper `_send_
 
 - **Template** `chat_message`: title `{name}`, body `sent you a message. It disappears after 24 hours.` No message text and no emoji (D8).
 - **Name**: the nickname the receiver set for the sender (`friend_nicknames`), cut to 40 characters; otherwise the sender's first name as `_send_push` already works it out.
-- **How often** (D9): the send function calls `_send_push` once per stored message with the reference `<sender id>:<floor(epoch / 300)>`. That reference is the dedupe key in `send-notification`, so a receiver gets at most one chat push per buddy per 5-minute window. The reference starts with the sender's id, which is what a tap on the notification will use to open the right conversation. The Android tag is `chat_<sender id>`, so a newer chat notification from the same buddy replaces the older one.
+- **How often** (D9): the send function calls `_send_push` once per stored message with the reference `<sender id>:<floor(epoch / 300)>`. That reference is the dedupe key in `send-notification`, so a receiver gets at most one chat push per buddy per 5-minute window. The windows are fixed (clock time divided into 5-minute slots), so two pushes can be less than 5 minutes apart when two messages fall on either side of a slot boundary. The reference starts with the sender's id, which is what a tap on the notification will use to open the right conversation. The Android tag is `chat_<sender id>`, so a newer chat notification from the same buddy replaces the older one.
 - **Settings**: type `chat_message` is mapped to the Social toggle in `send-notification` (`settings.ts`, one line). Quiet hours apply; chat is not urgent. Client callers cannot send this type: it is not in the function's client allow-list, so only the database can raise a chat push.
 - **Inbox**: like every push, a row with the same generic text is kept in the notification inbox for 7 days. It holds the buddy's name and the fact that a message was sent, never the text.
 - **Blocked or removed**: the send is refused before the push step, so there is no push. A push for a message that was accepted a moment before a block or a removal is still delivered; it names the sender and nothing else.
@@ -183,7 +184,7 @@ Polling alone was the other option. It was not chosen because every message woul
 
 ## 8. Block (D13, D14)
 
-`set_chat_block(user, true)` adds a row `(caller, user)`; `set_chat_block(user, false)` removes it. Both take the pair lock. The target must be an existing account and not the caller (`invalid_user` otherwise), and a block list holds at most 200 people (`too_many_blocks`).
+`set_chat_block(user, true)` adds a row `(caller, user)`; `set_chat_block(user, false)` removes it. Both take the pair lock. The target must be an existing account and not the caller (`invalid_user` otherwise), and a block list holds at most 200 people (`too_many_blocks`). The target does not have to be a buddy: a block on someone who is not one takes effect if the two become buddies.
 
 | | Effect |
 |---|---|
@@ -295,7 +296,8 @@ Reports must be handled inside 30 days; after that they are gone. Checking the o
 | A message expires while the screen is open | The phone removes it at its expiry time by server clock; the server would refuse to return it anyway |
 | The push service fails | The message is stored and delivered in the app; only the notification is missing |
 | Realtime is disconnected | The 60-second reload delivers the messages |
-| The receiver's account is deleted while a message is on its way | The send finds no friendship and returns `not_buddies` |
+| The receiver's account is deleted while a message is on its way | The profile lock orders the two. If the send is first, the deletion waits and then removes the new message with the rest. If the deletion is first, the send returns `not_buddies` |
+| The sender's account is deleted while their message is being reported | The report answers `message_not_found` |
 | A report is made at the moment the message expires | It succeeds while the row is still stored; after that the answer is `message_not_found` and the UI says the message is no longer available |
 
 ## 14. Scheduled jobs
@@ -330,7 +332,7 @@ Database behaviour, tested by the prepared probe (migration applied inside a tra
 2. A stranger (not a party) reads nothing from the conversation, by table read and by `get_chat_messages`.
 3. A non-buddy cannot send (`not_buddies`); a pending friendship does not count.
 4. `anon` can read nothing and call nothing.
-5. Direct INSERT, UPDATE and DELETE on `chat_messages` by `authenticated` are refused.
+5. Direct INSERT, UPDATE and DELETE on `chat_messages` by `authenticated` are refused. A load returns the newest 300 messages, oldest first.
 6. The participant trigger rejects a row whose parties do not match its friendship, for a privileged writer too, and rejects an update of the sender, the recipient, or a move to another friendship.
 7. A row older than 24 hours is invisible to both parties while it is still stored.
 8. The purge command deletes rows older than 24 hours and leaves newer ones.
@@ -341,7 +343,7 @@ Database behaviour, tested by the prepared probe (migration applied inside a tra
 13. Block: neither direction can send; the blocker stops seeing the conversation; the blocked person still sees it; no push is raised. Unblock restores sending and visibility. The blocked person cannot lift the block. The blocker can still report a message received before the block.
 14. A user cannot read another user's block rows, and cannot write `chat_blocks` directly. Blocking yourself or an id that is not an account is refused; the 201st block is refused.
 15. Bots: a send to or from an `is_bot` account is refused with the same answer as a stranger.
-16. Push: one call to `_send_push` per stored message (the 5-minute dedupe happens in `send-notification`), with type `chat_message`, the receiver as target, the sender and window as reference, the nickname as name when one exists, and no message text in any argument. Refused sends raise none. A failing push does not fail the send.
+16. Push: one call to `_send_push` per stored message (the 5-minute dedupe happens in `send-notification`), also with the real helper in place (one queued request, generic text, no message text), with type `chat_message`, the receiver as target, the sender and window as reference, the nickname as name when one exists, and no message text in any argument. Refused sends raise none. A failing push does not fail the send.
 17. Buddy removal (through `remove_friend` and through a direct delete of the friendship) hides the pair's messages from both at once and touches no other conversation; the rows stay stored and reportable; the purge removes them at 24 hours; buddies again start empty.
 18. Deleting a profile deletes that user's messages and block rows; reports stay with the id column cleared and the snapshot intact.
 19. Report: only the recipient can report; the snapshot holds the reported message, the 5 before and the 2 after, of the same two people only; it is unchanged after the message is purged and the buddy removed; a second report is a duplicate, also after the purge; a message past 24 hours that is still stored can be reported; the 6th report about one person and the 21st in all in 24 hours are refused; clients cannot read, change or delete `chat_reports`.
@@ -382,4 +384,14 @@ Not covered by the single-session probe, and to do before launch:
 | How someone becomes a buddy is stated | 1 |
 | Race tests are listed as open work | 16 |
 
-2026-11-14, review of the migration and probes: see the end of this section once that review has run.
+2026-11-14, review of the migration, rollback and probes by a second independent reviewer. It found no way to read or write another person's rows and no missing grant. Changes made as a result:
+
+| Change | Where |
+|---|---|
+| The send locks the two profile rows before the friendship row, the same order an account deletion uses | 5 step 6 |
+| A failed push is written to the database log; the probe now also runs the real push helper and checks the queued request | 5 step 11, test plan 16 |
+| A report made in the instant the sender's account is deleted answers `message_not_found` | 13 |
+| One blocker's calls run one at a time, so the 200 cap is exact | 5, 8 |
+| The rollback file tolerates objects that are not there, and the rehearsal runs it twice | prepared files |
+| Probe: tighter retry-time check, the 300-message load limit, NULL arguments, column-level privileges, a send to a deleted account | test plan |
+| The friendship index no longer carries the time column; the fixed 5-minute push windows are stated | 3.1, 6 |
