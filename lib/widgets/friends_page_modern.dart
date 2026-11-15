@@ -8,6 +8,7 @@ import '../services/friend_service.dart';
 import '../services/nudge_service.dart';
 import '../services/achievement_service.dart';
 import '../services/break_day_service.dart';
+import '../services/checkin_history_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
@@ -132,13 +133,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
       final now = DateTime.now();
       final today =
           '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      final supabase = Supabase.instance.client;
-      final rows = await supabase
-          .from('daily_team_checkins')
-          .select('user_id')
-          .eq('check_in_date', today)
-          .inFilter('user_id', friendIds);
-      return {for (final r in rows) r['user_id'] as String};
+      return await CheckInHistoryService().friendsCheckedInOn(today, friendIds);
     } catch (_) {
       return {};
     }

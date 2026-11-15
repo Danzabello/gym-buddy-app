@@ -1,6 +1,8 @@
 // lib/widgets/profile_view_dialog.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/checkin_history_service.dart';
+import '../services/friend_service.dart';
 import '../theme/app_theme.dart';
 import 'user_avatar.dart';
 
@@ -76,17 +78,8 @@ class _ProfileViewDialogState extends State<ProfileViewDialog> {
       }
 
       // Count distinct check-in dates in last 30 days
-      final rows = await Supabase.instance.client
-          .from('daily_team_checkins')
-          .select('check_in_date')
-          .eq('user_id', friendId)
-          .gte('check_in_date', thirtyDaysAgoStr);
-
-      final distinctDates = <String>{};
-      for (final r in rows) {
-        final d = r['check_in_date'] as String?;
-        if (d != null) distinctDates.add(d);
-      }
+      final distinctDates = await CheckInHistoryService()
+          .checkInDatesSince(friendId, thirtyDaysAgoStr);
 
       final windowDays = daysOnApp.clamp(1, 30);
       final weeksInWindow = windowDays / 7.0;
@@ -127,20 +120,9 @@ class _ProfileViewDialogState extends State<ProfileViewDialog> {
           Supabase.instance.client.auth.currentUser?.id;
       if (currentUserId == null) return;
 
-      final myTeams = await Supabase.instance.client
-          .from('team_members')
-          .select('team_id')
-          .eq('user_id', currentUserId);
-
-      final friendTeams = await Supabase.instance.client
-          .from('team_members')
-          .select('team_id')
-          .eq('user_id', widget.friendProfile['id']);
-
-      final myIds = myTeams.map((t) => t['team_id']).toSet();
-      final friendIds =
-          friendTeams.map((t) => t['team_id']).toSet();
-      final sharedIds = myIds.intersection(friendIds).toList();
+      final sharedIds = (await FriendService()
+              .sharedTeamIds(widget.friendProfile['id'] as String))
+          .toList();
 
       final streaks = <Map<String, dynamic>>[];
       for (final teamId in sharedIds) {

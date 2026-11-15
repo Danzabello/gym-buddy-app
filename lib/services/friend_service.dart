@@ -8,6 +8,24 @@ class FriendService {
   final SupabaseClient _supabase;
   FriendService({SupabaseClient? client}) : _supabase = client ?? Supabase.instance.client;
 
+  /// Ids of the teams the signed-in user and [friendId] both belong to.
+  /// Errors are thrown for the caller to handle.
+  Future<Set<String>> sharedTeamIds(String friendId) async {
+    final me = _supabase.auth.currentUser?.id;
+    if (me == null) return {};
+    Future<Set<String>> teamsOf(String userId) async {
+      final rows = await _supabase
+          .from('team_members')
+          .select('team_id')
+          .eq('user_id', userId)
+          .limit(kTeamMembershipsCeiling);
+      return {for (final r in rows) r['team_id'] as String};
+    }
+
+    final mine = await teamsOf(me);
+    return mine.intersection(await teamsOf(friendId));
+  }
+
   // Search for users by USERNAME (not display name)
   Future<List<Map<String, dynamic>>> searchUsers(String query) async {
     try {

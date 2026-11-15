@@ -30,6 +30,10 @@ void main() {
     expect(kDayWorkoutsCeiling, greaterThanOrEqualTo(10 * 10));
     expect(kWeekCoinRowsCeiling, greaterThanOrEqualTo(10 * 70));
     expect(kOpenWorkoutsCeiling, greaterThanOrEqualTo(10 * 30));
+    // The API's default row limit caps this one at 1000, so only 5x.
+    expect(kWeekCheckInsCeiling, greaterThanOrEqualTo(5 * 160));
+    expect(kMonthCheckInsCeiling, greaterThanOrEqualTo(10 * 62));
+    expect(kTeamMembershipsCeiling, greaterThanOrEqualTo(10 * 20));
   });
 
   group('WorkoutService.listOpenWorkoutIds', () {
