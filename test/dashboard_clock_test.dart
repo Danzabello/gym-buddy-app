@@ -210,9 +210,12 @@ void main() {
       tips.onResumed();
       minute.value++;
       await tester.pump();
+      // A redraw can land on the tip that was showing (1 in coachTips.length),
+      // so this holds for any tip count: the part rebuilds exactly when the
+      // draw differs. That the draw is a fresh one is pinned above, in
+      // 'a resume from the background draws a fresh tip, once'.
       final fresh = tipNow();
-      expect(fresh, isNot(before), reason: 'this seed and hour redraw');
-      expect(tipBuilds, 2);
+      expect(tipBuilds, fresh == before ? 1 : 2);
       expect(find.text(tipText(fresh)), findsOneWidget);
       expect(pageBuilds, 1);
     });
@@ -281,26 +284,24 @@ void main() {
   });
 
   // The page's own wiring, read from the source because the page cannot be
-  // pumped: the minute timer only fires the tick, and the tick is only ever
-  // handed to ClockParts, so nothing at page level rebuilds on it.
+  // pumped. A tripwire, not a proof: every line that names the tick must be
+  // one of these five, so the minute timer only fires it and it is only ever
+  // handed to the four ClockParts. A page-level listener on it fails here.
   test('the dashboard minute timer fires the tick and nothing else', () {
-    final source = File('lib/home/dashboard_page.dart').readAsStringSync();
-    expect(
-      source,
-      contains('Timer.periodic(const Duration(minutes: 1), (_) => _minute.value++)'),
-    );
-    final uses = RegExp(r'_minute\b[^\n]*')
-        .allMatches(source)
-        .map((m) => m[0]!.trim())
-        .toSet();
-    expect(uses, {
-      '_minute = ValueNotifier<int>(0);',
-      '_minute.value++);', // the timer
+    final lines = File('lib/home/dashboard_page.dart')
+        .readAsLinesSync()
+        .where((l) => RegExp(r'\b_minute\b').hasMatch(l))
+        .map((l) => l.trim())
+        .toList();
+    expect(lines.toSet(), {
+      'final _minute = ValueNotifier<int>(0);',
+      '_countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _minute.value++);',
       '_minute.value++;', // the resume handler
       '_minute.dispose();',
-      '_minute,', // tick: _minute, on a ClockPart
+      'tick: _minute,',
     });
-    expect('tick: _minute,'.allMatches(source).length, 4,
+    expect(lines.where((l) => l == 'tick: _minute,').length, 4,
         reason: 'tray, standalone week card, danger card, feed age');
+    expect(lines.length, 8);
   });
 }
