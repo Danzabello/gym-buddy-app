@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'package:gym_buddy_app/utils/query_ceilings.dart';
 
 /// Service to manage friend nicknames
 /// Nicknames are personal - only YOU see the nicknames YOU set
@@ -36,7 +37,8 @@ class NicknameService {
       final response = await _supabase
           .from('friend_nicknames')
           .select('friend_id, nickname')
-          .eq('user_id', currentUserId);
+          .eq('user_id', currentUserId)
+          .limit(kFriendsCeiling);
 
       final nicknames = <String, String>{};
       for (final row in response) {

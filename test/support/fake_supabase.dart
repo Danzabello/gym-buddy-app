@@ -23,6 +23,28 @@ class FakeSupabase {
     }),
   );
 
+  /// Signs [client] in as [userId] with a session that never reaches the
+  /// network: an unsigned token that expires in 2100.
+  Future<void> signIn(String userId) async {
+    String part(Map<String, dynamic> m) =>
+        base64Url.encode(utf8.encode(jsonEncode(m))).replaceAll('=', '');
+    final token =
+        '${part({'alg': 'HS256', 'typ': 'JWT'})}.${part({'sub': userId, 'exp': 4102444800, 'role': 'authenticated'})}.x';
+    await client.auth.recoverSession(jsonEncode({
+      'access_token': token,
+      'token_type': 'bearer',
+      'expires_in': 3600,
+      'refresh_token': 'r',
+      'user': {
+        'id': userId,
+        'aud': 'authenticated',
+        'app_metadata': <String, dynamic>{},
+        'user_metadata': <String, dynamic>{},
+        'created_at': '2026-01-01T00:00:00Z',
+      },
+    }));
+  }
+
   /// The last path segment of call [i]: the table or RPC name.
   String target(int i) => calls[i].url.pathSegments.last;
 

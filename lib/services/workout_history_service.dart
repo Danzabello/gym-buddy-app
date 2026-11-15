@@ -219,7 +219,11 @@ class WorkoutHistoryService {
   // GET WORKOUT HISTORY
   // ============================================
 
-  /// Get all workout logs for the current user
+  static String _dateKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  /// The newest [limit] workout logs of the current user, optionally within
+  /// a date range (both ends inclusive).
   Future<List<WorkoutLog>> getWorkoutHistory({
     int limit = 100,
     DateTime? startDate,
@@ -231,46 +235,30 @@ class WorkoutHistoryService {
 
         if (kDebugMode) debugLog('📊 Fetching workout history...');
 
-        // ✅ Fetch all workouts, we'll filter in Dart
-        final response = await _supabase
+        // The date range and the limit go to the server, so it returns at
+        // most [limit] rows however long the history is. workout_date is a
+        // date column, so both ends are inclusive.
+        var query = _supabase
             .from('workout_logs')
             .select('''
             *,
             buddy:user_profiles!workout_logs_buddy_id_fkey(display_name)
             ''')
-            .eq('user_id', userId)
+            .eq('user_id', userId);
+        if (startDate != null) query = query.gte('workout_date', _dateKey(startDate));
+        if (endDate != null) query = query.lte('workout_date', _dateKey(endDate));
+        final response = await query
             .order('workout_date', ascending: false)
-            .order('workout_time', ascending: false);
+            .order('workout_time', ascending: false)
+            .limit(limit);
 
-        final allLogs = (response as List).map((json) {
+        final limitedLogs = (response as List).map((json) {
         final buddyData = json['buddy'];
         return WorkoutLog.fromJson({
             ...json,
             'buddy_name': buddyData?['display_name'],
         });
         }).toList();
-
-        // ✅ Filter by date range in Dart
-        var filteredLogs = allLogs;
-        
-        if (startDate != null) {
-        final startDateTime = DateTime(startDate.year, startDate.month, startDate.day);
-        filteredLogs = filteredLogs.where((log) {
-            final logDate = DateTime(log.workoutDate.year, log.workoutDate.month, log.workoutDate.day);
-            return logDate.isAfter(startDateTime) || logDate.isAtSameMomentAs(startDateTime);
-        }).toList();
-        }
-        
-        if (endDate != null) {
-        final endDateTime = DateTime(endDate.year, endDate.month, endDate.day);
-        filteredLogs = filteredLogs.where((log) {
-            final logDate = DateTime(log.workoutDate.year, log.workoutDate.month, log.workoutDate.day);
-            return logDate.isBefore(endDateTime) || logDate.isAtSameMomentAs(endDateTime);
-        }).toList();
-        }
-
-        // Apply limit
-        final limitedLogs = filteredLogs.take(limit).toList();
 
         if (kDebugMode) debugLog('✅ Found ${limitedLogs.length} workout logs');
         return limitedLogs;

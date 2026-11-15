@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'economy_sync.dart';
+import 'package:gym_buddy_app/utils/query_ceilings.dart';
 
 class CoinService {
   static final CoinService _instance =
@@ -198,7 +199,8 @@ class CoinService {
           .from('coin_transactions')
           .select('amount')
           .eq('user_id', userId)
-          .gte('created_at', start.toUtc().toIso8601String());
+          .gte('created_at', start.toUtc().toIso8601String())
+          .limit(kWeekCoinRowsCeiling);
       var earned = 0, spent = 0;
       for (final r in rows) {
         final a = r['amount'] as int;

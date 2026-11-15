@@ -2,14 +2,16 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'handshake_service.dart';
+import 'package:gym_buddy_app/utils/query_ceilings.dart';
 
 class WorkoutService {
-  /// [userId] and [insert] are test seams; both default to Supabase.
-  WorkoutService({this.userId, this.insert});
+  /// [userId], [insert] and [client] are test seams; all default to Supabase.
+  WorkoutService({this.userId, this.insert, SupabaseClient? client}) : _client = client;
   final String? Function()? userId;
   final Future<void> Function(Map<String, dynamic> row)? insert;
+  final SupabaseClient? _client;
 
-  SupabaseClient get _supabase => Supabase.instance.client;
+  SupabaseClient get _supabase => _client ?? Supabase.instance.client;
 
   // ============================================================
   // CORE WORKOUT METHODS
@@ -108,7 +110,8 @@ class WorkoutService {
           ''')
           .or('user_id.eq.$currentUserId,buddy_id.eq.$currentUserId')
           .eq('workout_date', today)
-          .order('workout_time', ascending: true);
+          .order('workout_time', ascending: true)
+          .limit(kDayWorkoutsCeiling);
       if (kDebugMode) debugLog('📋 Found ${response.length} workouts for today');
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {

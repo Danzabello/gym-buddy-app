@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/services/team_sync_service.dart';
+import 'package:gym_buddy_app/utils/query_ceilings.dart';
 
 class FriendService {
   final SupabaseClient _supabase;
@@ -217,7 +218,8 @@ class FriendService {
           ''')
           .eq('friend_id', currentUserId)
           .eq('status', 'pending')
-          .order('created_at', ascending: false);
+          .order('created_at', ascending: false)
+          .limit(kPendingRequestsCeiling);
 
       if (kDebugMode) {
         debugLog('✅ Found ${response.length} pending requests');
@@ -242,7 +244,8 @@ class FriendService {
           .from('friendships')
           .select()
           .eq('status', 'accepted')
-          .or('user_id.eq.$currentUserId,friend_id.eq.$currentUserId');
+          .or('user_id.eq.$currentUserId,friend_id.eq.$currentUserId')
+          .limit(kFriendsCeiling);
 
       if (kDebugMode) debugLog('📊 Found ${response.length} accepted friendships');
 
