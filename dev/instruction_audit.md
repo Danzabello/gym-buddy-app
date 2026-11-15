@@ -216,7 +216,7 @@ Every question in section 6 is now answered. Where this section differs from sec
 | Q8 | Work in Emerald Ink; do not change the other skins' values; placeholders for new tokens | `CLAUDE.md`, commit 5f6c51a |
 | Q9 | Four clean-ups | see below |
 | Q10 | Disable claude-mem | `~/.claude/settings.json` |
-| Q11 | Add G1, G2, G3, G5, G8; skip G4, G6, G7 | `CLAUDE.md`: G1 in 98874a8, the rest in eb4dcba |
+| Q11 | Add G1, G2, G3, G5, G8; skip G6, G7 | `CLAUDE.md`: G1 in 98874a8, the rest in eb4dcba |
 | S24 | Retire the duplicate rules memory | memory `feedback_rules.md` deleted after the CLAUDE.md commits |
 
 ### Q1: the permission file

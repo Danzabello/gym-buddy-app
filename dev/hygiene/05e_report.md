@@ -114,7 +114,7 @@ Verify (`05e_race_verify.sql`): `coin_balance` 0, which equals 150 - 150 and is 
     a1c875ae-59c2-4bed-b2ba-cf11ff23b397 | NULL     | mijotest4 | 2025-11-19 21:30 | false
     1d9154d6-f734-42bc-992f-80580a84c365 | NULL     | mijotest6 | 2025-11-20 16:53 | false
 
-**mijotest3 is a real, complete account** (`f7c1ef63-…`): it has an auth user (created 2025-11-19 21:07:05) and a profile row. Its `username` is NULL and the name lives only in `display_name`. 05d searched by username, which is why it found nothing. Separately, the auth email of `c5e5f12c-5e6e-40a1-9a05-aedc3b017a66` (display_name "Doroda") matches '%mijo%'; the email is not printed.
+**mijotest3 is a real, complete account** (`f7c1ef63-…`): it has an auth user (created 2025-11-19 21:07:05) and a profile row. Its `username` is NULL and the name lives only in `display_name`. 05d searched by username, which is why it found nothing.
 
 **Totals:** 51 auth users and 39 profiles.
 
@@ -157,5 +157,3 @@ Nothing was modified.
 - `lib/services/level_service.dart:79` `awardWorkoutXP` → `:97` calls `_applyXp` (defined at `:184`). The client `update({'xp','level'})` at `:207` and the `xp_transactions` insert at `:213` would get 42501. Callers across `lib/`, `test/` and `integration_test/`: none (the only other hit is the comment at `:7`).
 - `user_profiles.rest_tokens_available`: column-level INSERT is still granted to authenticated (`{authenticated=a/postgres}`). Nothing reads or writes the column.
 - `public.check_in_coach_max_with_buddy(uuid)`: still exists, has no client grants (`{postgres=X/postgres,service_role=X/postgres}`) and no callers. Candidate for a DROP; the only reference is a comment in `_finish_coach_max_checkin`.
-
-## Noticed, not fixed
