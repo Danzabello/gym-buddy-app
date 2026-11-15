@@ -62,7 +62,8 @@ Key modal sheets/dialogs (logic-bearing):
 | `get_level_for_xp(total_xp)` | `LevelService` | `level_definitions` | — | int |
 | `get_user_streaks(p_user_id)` | `TeamStreakService.getAllUserStreaks` (viewer-tz aware) | `buddy_teams`, `team_streaks`, `team_members`, `daily_team_checkins`, `user_profiles`, `workouts`, `check_ins` | — | json (all streaks + members + today's check-ins) |
 | `get_workouts_awaiting_creator_join(creator_id)` | `WorkoutService.getWorkoutsAwaitingCreatorJoin` (`WorkoutJoinChecker`) | `workouts`, `user_profiles` | — | table (join-window rows) |
-| `is_on_break_today(p_user_id)` | `home_screen.dart:2335`, `friends_page_modern.dart:135` (break badges) | `break_day_usage` | — | boolean |
+| `are_on_break_today(p_user_ids)` (prepared 2026-11-14, not yet on live) | `BreakDayService.usersOnBreakToday`, called by `lib/home/dashboard_page.dart` and `friends_page_modern.dart` (break badges, one call per page) | `break_day_usage`, through `is_on_break_today` | — | table (`user_id`, `on_break`), 200 ids at most |
+| `is_on_break_today(p_user_id)` | no client caller on `chore/data-layer-2026-11`; called by `are_on_break_today` for each id | `break_day_usage` | — | boolean |
 | `is_user_in_active_workout(check_user_id)` | `WorkoutService` | `active_checkin_sessions`, `workouts` | — | boolean |
 | `purchase_shop_item(p_shop_item_id)` | `CoinService.purchaseItem` (`ShopPage`) | `shop_items`, `user_profiles` (balance) | `user_profiles.coin_balance`, `coin_transactions` (via `award_coins`), `user_inventory` | jsonb |
 | `recompute_team_streak(p_streak_id, p_check_in_date)` | `TeamStreakService._incrementStreak`, `TeamSyncService`, `CoachMaxService`; also `coach-max-cron` Edge Fn and `reconcile_stale_streaks` | `daily_team_checkins`, `break_day_usage`, `team_members`, `workouts` | `team_streaks` (current/best/longest, dates) | jsonb (`updated`, `new_streak`, `old_best_streak`, `new_best_streak`, `reason`) |
@@ -113,12 +114,12 @@ Key modal sheets/dialogs (logic-bearing):
 | `weekly_break_plans` | `id`, `user_id`, `week_start_date (local Monday)`, `max_break_days` | all ops: own rows | `declare_break_day` (reads cap) |
 | `break_day_usage` | `id`, `user_id`, `break_date (user-local)`, `declared_at`, `cancelled_at`; unique (user,date) | SELECT: own + streak partners; UPDATE (cancel)/DELETE: own; INSERT: **RPC only** (no client INSERT policy) | `declare_break_day`, `is_on_break_today`, `recompute_team_streak`, `reconcile_stale_streaks` |
 | `invites` | `id`, `code`, `inviter_id`, `status`, `accepted_by`, `accepted_at` | SELECT: owner-scoped only (`auth.uid() = inviter_id OR auth.uid() = accepted_by`); INSERT: own (`auth.uid() = inviter_id`); **no UPDATE and no DELETE policy** — accepting goes through the `accept_invite` RPC, which locks the row `FOR UPDATE`. Changed in `0baf96d` (Group C): the old policies allowed any authenticated user to read invites by code and UPDATE them, i.e. enumerate and hijack | `create_invite`, `accept_invite`; read by `invite-redirect` Edge Fn (service role) |
-| `coach_max_schedule` | `id`, `user_id`, `scheduled_date (user-local)`, `scheduled_time`, `has_checked_in`, `checked_in_at` | SELECT/INSERT/UPDATE: own | written by `coach-max-cron` Edge Fn (service role) |
+| `coach_max_schedule` | `id`, `user_id`, `scheduled_date (user-local)`, `scheduled_time`, `has_checked_in`, `checked_in_at` | SELECT: own. The client no longer inserts (`chore/data-layer-2026-11`); its INSERT grant goes with the second P-5 migration (prepared 2026-11-14) | written by `coach-max-cron` Edge Fn (service role) and, once the first P-5 migration is live, by `schedule_coach_max_today()` (pg_cron `coach-max-schedule-rows`, every 5 minutes); closed by `check_in_coach_max` |
 | `xp_transactions` | `id`, `user_id`, `amount`, `transaction_type`, `reference_id` | SELECT: own; INSERT: service/definer only | `award_xp`, `_apply_checkin_rewards`, `award_achievement_rewards` |
 | `coin_transactions` | `id`, `user_id`, `amount`, `transaction_type`, `reference_id` | SELECT: own | `award_coins`, `_apply_checkin_rewards`, `purchase_shop_item`, `verify_achievement_progress` |
 | `level_definitions` | `level`, `xp_required`, `title` (99 rows) | public read | `get_level_for_xp`, `award_xp` |
 | `shop_items` | `id`, `name`, `category`, `cost`, `emoji`, `asset_id`, `is_available`, `unlock_level` | SELECT: available items | `purchase_shop_item` |
-| `user_inventory` | `id`, `user_id`, `shop_item_id`, `equipped` | SELECT/UPDATE/INSERT: own | `purchase_shop_item`, `verify_achievement_progress` |
+| `user_inventory` | `id`, `user_id`, `shop_item_id`, `equipped` | SELECT: own, and partners' equipped rows; UPDATE of `equipped`: own; INSERT: RPC only | `purchase_shop_item`, `verify_achievement_progress`, `equip_shop_item` (prepared 2026-11-14, not yet on live) |
 | `cosmetic_unlock_conditions` / `user_unlocked_cosmetics` | unlock rules / granted cosmetics | public read / own rows | `award_xp` (level+milestone unlocks) |
 | `achievements` | `id (text)`, `name`, `category`, `rarity`, `xp_reward`, `coin_reward`, `target_value` (46 rows) | public read | `award_achievement_rewards`, `verify_achievement_progress` |
 | `user_achievements` | `id`, `user_id`, `achievement_id`, `unlocked_at`, `progress` | ALL: own rows | `award_achievement_rewards`, `verify_achievement_progress` |
@@ -163,14 +164,14 @@ Key modal sheets/dialogs (logic-bearing):
 | `WorkoutService` | `get_workouts_awaiting_creator_join`, `is_user_in_active_workout`, `create_buddy_workout_sessions` | `workouts`, `active_checkin_sessions` | HomeScreen (Dashboard/Schedule), `WorkoutCheckInSheet`, `QuickScheduleSheet`, `ScheduleWorkoutSheet`, `WorkoutJoinChecker`, `CompletedWorkoutsSection` |
 | `TeamStreakService` | `get_user_streaks`, `recompute_team_streak`, `award_checkin_rewards`, `checkin_team_for_user` | `team_streaks`, `team_members`, `buddy_teams`, `daily_team_checkins`, `coin_transactions` | HomeScreen, `FriendsPageModern`, `CustomStreakSelector` |
 | `TeamSyncService` | `recompute_team_streak` | `daily_team_checkins`, `team_members` | HomeScreen (Realtime streak sync) |
-| `BreakDayService` | `declare_break_day` | `weekly_break_plans`, `break_day_usage`, `user_profiles` | HomeScreen, `BreakDaySection` |
+| `BreakDayService` | `declare_break_day`, `are_on_break_today` | `weekly_break_plans`, `break_day_usage`, `user_profiles` | Dashboard, `BreakDaySection`, `FriendsPageModern` |
 | `FriendService` | `remove_friend` | `friendships`, `user_profiles`, `buddy_teams`, `team_members`, `team_streaks`, `daily_team_checkins` | HomeScreen, `FriendsPageModern`, `ScheduleWorkoutSheet`, onboarding |
 | `InviteService` | `create_invite` | `invites` | `FriendsPageModern`, onboarding, `main.dart` (deep-link stash) |
 | `WorkoutInviteService` | — | `workout_invites`, `workouts` | `WorkoutInvitesCard` |
-| `CoachMaxService` | `recompute_team_streak` | `coach_max_schedule`, `buddy_teams`, `team_members`, `team_streaks`, `daily_team_checkins` | `CoachMaxWidget`, onboarding, login, `main.dart` |
+| `CoachMaxService` | `ensure_coach_max_team`, `check_in_coach_max` | reads `coach_max_schedule` (never writes it), `buddy_teams`, `team_members`, `team_streaks`, `daily_team_checkins` | onboarding, login, `main.dart` |
 | `AchievementService` | `verify_achievement_progress`, `award_achievement_rewards` | `achievements`, `user_achievements`, `workouts`, `daily_team_checkins`, `team_streaks`, `team_members`, `friendships`, `coin_transactions`, `user_inventory` | `AchievementsPage`, `AchievementToast`, `FriendsPageModern`, `WorkoutSelectionModal`, `main.dart`, TeamStreakService (post-check-in) |
 | `LevelService` | `get_level_for_xp` | `xp_transactions`, `user_profiles`, `level_definitions`, `user_unlocked_cosmetics`, `cosmetic_unlock_conditions` | `XpProgressBar`, `AvatarPickerScreen`, `AchievementsPage`, HomeScreen |
-| `CoinService` | `purchase_shop_item` | `coin_transactions`, `shop_items`, `user_inventory`, `user_profiles` | `ShopPage` |
+| `CoinService` | `purchase_shop_item`, `equip_shop_item` | `coin_transactions`, `shop_items`, `user_inventory`, `user_profiles` | `ShopPage`, wardrobe, coin history, Dashboard |
 | `WorkoutHistoryService` | — | `workout_logs`, `workout_templates` | `WorkoutHistoryPage`, `WorkoutCalendar`, `WorkoutHistoryList`, `WorkoutSelectionModal`, HomeScreen |
 | `NotificationService` | — (Edge Fn via triggers) | `device_tokens`, `notification_settings` | `main.dart`, `LoginScreen`, `NotificationSettingsPage` |
 | `NudgeService` | — (invokes `send-notification` Edge Fn directly) | `buddy_nudges`, `user_profiles` | `FriendsPageModern` |
@@ -210,7 +211,7 @@ Key modal sheets/dialogs (logic-bearing):
 ### 7.4 Break day flow
 1. Monday / no plan → `_WeeklyPlanDialog` → `BreakDayService.setWeeklyBreakPlan` → upsert `weekly_break_plans` + `user_profiles.current_weekly_goal`
 2. `BreakDaySection` (Dashboard) "take a break" → `BreakDayService.declareBreakDay()` → RPC `declare_break_day` (advisory lock; server computes today in `safe_user_tz`; checks weekly cap against `weekly_break_plans`; upsert `break_day_usage`) — direct client INSERT blocked by RLS
-3. Buddies see badge: `is_on_break_today(p_user_id)` RPC from `home_screen`/`friends_page_modern`; partners can read `break_day_usage` via RLS partner policy
+3. Buddies see badge: one `are_on_break_today(p_user_ids)` RPC per page, through `BreakDayService.usersOnBreakToday` (Dashboard and `friends_page_modern`); it calls `is_on_break_today` for each id; partners can read `break_day_usage` via RLS partner policy
 4. Streak safety: `recompute_team_streak` / `reconcile_stale_streaks` count an uncancelled break day as participation
 5. User works out anyway → `checkInAllTeams` auto-calls `cancelBreakDay` (UPDATE `break_day_usage.cancelled_at`)
 
@@ -219,7 +220,7 @@ Key modal sheets/dialogs (logic-bearing):
 2. Part 1: for each human member of a `is_coach_max_team` — compute member's local today (`user_profiles.timezone`) → INSERT `coach_max_schedule` with random time in active window (respects `notification_settings` quiet hours)
 3. Part 2: schedules due (local date+time passed) → INSERT Coach Max row (`user_id = 00000000-…-0001`) into `daily_team_checkins` on the member's local date → mark `has_checked_in` → if human already checked in today → RPC `recompute_team_streak` → POST `send-notification` (motivational message)
 4. Part 3 (18:00 UTC only): active streaks with no human check-in today → POST `send-notification` "Streak in Danger"
-5. Client: `CoachMaxWidget` reads `coach_max_schedule`/`daily_team_checkins` via `CoachMaxService` to render Coach Max state
+5. Client: on app start and login `CoachMaxService.runDueCoachMaxCheckIn` reads today's `coach_max_schedule` row and calls `check_in_coach_max` when its time has passed. The client never inserts the row
 
 ### 7.6 Friend request flow (in-app)
 1. `FriendsPageModern` → `_SearchBuddiesPage`/`_AddBuddiesPage` → `FriendService.sendFriendRequest` → INSERT `friendships (status='pending')` → trigger `notify_friend_request` → `send-notification` → FCM
@@ -230,7 +231,7 @@ Key modal sheets/dialogs (logic-bearing):
 ### 7.7 Shop purchase flow
 1. `ShopPage` → `CoinService.purchaseItem` → RPC `purchase_shop_item` (server-authoritative: validates `shop_items.cost` vs `user_profiles.coin_balance`, level gate)
 2. → UPDATE `user_profiles.coin_balance`, INSERT `coin_transactions`, INSERT `user_inventory`
-3. Equip → UPDATE `user_inventory.equipped` → avatar/border reflected via `user_profiles` + `UserAvatar` widget
+3. Equip → `CoinService.equipItem` → RPC `equip_shop_item` (one UPDATE of `user_inventory.equipped` over the item's category). Avatars and borders are worn through `user_profiles` (`avatar_id`, `avatar_border`) + `UserAvatar` widget
 
 ### 7.8 Push notification pipeline (all paths converge)
 1. Producers: DB `notify_*` triggers (`net.http_post` + Vault service-role key) | `coach-max-cron` | `NudgeService` (client `functions.invoke`)
