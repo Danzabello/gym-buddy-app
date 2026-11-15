@@ -55,6 +55,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'theme/app_theme.dart';
 import 'theme/accent_theme_provider.dart';
 import 'data/coach_tips.dart';
+import 'home/dashboard_clock.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service.dart';
 import 'pages/notifications_page.dart';

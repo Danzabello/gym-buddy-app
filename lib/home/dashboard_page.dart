@@ -3,7 +3,11 @@ part of '../home_screen.dart';
 
 // Dashboard/Home Page with Real Streak Data
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key});
+  const DashboardPage({super.key, this.clock = DateTime.now});
+
+  /// The time the clock-dependent parts of the page are built from (the coach
+  /// tip, the week card, the danger countdown, the feed ages).
+  final Clock clock;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -159,13 +163,19 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _motion = HeaderMotion(this, onSettled: _announceHeader);
     // Resuming from the background updates the numbers silently.
     _refreshOsPermission();
-    _headerLifecycle = AppLifecycleListener(onResume: () {
-      _refreshOsPermission();
-      final level = _levelInfo;
-      if (mounted && level != null) {
-        _motion.sync(level, _coinBalance, HeaderSyncMode.snap);
-      }
-    });
+    _headerLifecycle = AppLifecycleListener(
+      onHide: CoachTipRotation.session.onHidden,
+      onResume: () {
+        _refreshOsPermission();
+        final level = _levelInfo;
+        if (mounted && level != null) {
+          _motion.sync(level, _coinBalance, HeaderSyncMode.snap);
+        }
+        // Back from the background: show the fresh coach tip.
+        CoachTipRotation.session.onResumed();
+        if (mounted) setState(() {});
+      },
+    );
     EconomySync.instance.numbers.addListener(_onEconomyChanged);
     HeaderHold.instance.addListener(_onHeaderHold);
     _updateCountdown();
@@ -940,7 +950,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   /// team-status card exactly the way the old standalone slab did.
   Widget _buildInfoTray(List<dynamic> displayItems) {
     final c = AppColors.of(context);
-    final tip = coachTips[DateTime.now().millisecondsSinceEpoch % coachTips.length];
+    final tip = coachTips[
+        CoachTipRotation.session.indexAt(widget.clock(), coachTips.length)];
     // Same condition/result the old standalone "Team Activity" slab used —
     // just relocated here as the tray's leading, unshuffled page.
     final teamStatusCard =
@@ -1429,7 +1440,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   Widget _buildWeekCard({bool inTray = false}) {
     final c = AppColors.of(context);
     final danger = context.watch<AccentThemeProvider>().palette.statusDanger;
-    final today = DateTime.now();
+    final today = widget.clock();
     final monday = today.subtract(Duration(days: today.weekday - 1));
     final week = List.generate(7, (i) => monday.add(Duration(days: i)));
     final checkedCount =
@@ -2065,12 +2076,12 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   /// Time left before the streak breaks for [buddy], or null while it isn't
   /// yet their evening — resolved entirely in the buddy's own zone.
   Duration? _dangerRemaining(TeamMember buddy) => dangerRemainingAt(
-        tz.TZDateTime.now(_zoneOf(buddy.userId)),
+        tz.TZDateTime.from(widget.clock(), _zoneOf(buddy.userId)),
         cutoffHour: _kDangerHour,
       );
 
   String _feedAge(DateTime at) {
-    final d = DateTime.now().difference(at);
+    final d = widget.clock().difference(at);
     if (d.inMinutes < 1) return 'just now';
     if (d.inMinutes < 60) return '${d.inMinutes}m ago';
     if (d.inHours < 24) return '${d.inHours}h ago';
