@@ -59,6 +59,37 @@ void main() {
     expect(server.query(i)['limit'], '$kDayWorkoutsCeiling');
   });
 
+  group('WorkoutService.completedWorkoutCount', () {
+    test('is one head request with an exact count and no rows', () async {
+      server
+        ..reply = ((_) => null)
+        ..headers = {'content-range': '0-17/18'};
+      final n = await WorkoutService(client: server.client).completedWorkoutCount(_me);
+
+      expect(n, 18);
+      expect(server.calls, hasLength(1));
+      final req = server.calls.single;
+      expect(req.method, 'HEAD');
+      expect(req.url.pathSegments.last, 'workouts');
+      expect(req.headers['Prefer'], contains('count=exact'));
+      expect(req.url.queryParameters['status'], 'eq.completed');
+      expect(req.url.queryParameters['or'], '(user_id.eq.$_me,buddy_id.eq.$_me)');
+    });
+
+    test('the number is the server total, not the rows in the reply', () async {
+      server
+        ..reply = ((_) => null)
+        ..headers = {'content-range': '*/2500'};
+      expect(await WorkoutService(client: server.client).completedWorkoutCount(_me), 2500);
+    });
+
+    test('a failure is thrown for the caller to handle', () async {
+      server.down = true;
+      await expectLater(
+          WorkoutService(client: server.client).completedWorkoutCount(_me), throwsA(anything));
+    });
+  });
+
   test('the week of coin rows is read with its ceiling', () async {
     await CoinService(client: server.client).getWeekTotals();
     final i = _callTo(server, 'coin_transactions');

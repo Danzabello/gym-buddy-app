@@ -141,24 +141,6 @@ class WorkoutHistoryService {
     }
   }
 
-  /// Get templates by category
-  Future<List<WorkoutTemplate>> getTemplatesByCategory(String category) async {
-    try {
-      final response = await _supabase
-          .from('workout_templates')
-          .select()
-          .eq('category', category)
-          .order('name');
-
-      return (response as List)
-          .map((json) => WorkoutTemplate.fromJson(json))
-          .toList();
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error fetching templates by category: $e');
-      return [];
-    }
-  }
-
   // ============================================
   // LOG WORKOUTS
   // ============================================
@@ -312,63 +294,5 @@ class WorkoutHistoryService {
     }
 
     return calendarDays;
-  }
-
-  // ============================================
-  // STATISTICS
-  // ============================================
-
-  /// Get workout statistics for a date range
-  Future<Map<String, dynamic>> getWorkoutStats({
-    DateTime? startDate,
-    DateTime? endDate,
-  }) async {
-    final workouts = await getWorkoutHistory(
-      startDate: startDate,
-      endDate: endDate,
-      limit: 1000,
-    );
-
-    if (workouts.isEmpty) {
-      return {
-        'total_workouts': 0,
-        'total_minutes': 0,
-        'avg_duration': 0,
-        'favorite_category': null,
-        'favorite_workout': null,
-      };
-    }
-
-    final totalMinutes = workouts
-        .map((w) => w.actualDurationMinutes ?? 0)
-        .reduce((a, b) => a + b);
-
-    final categoryCount = <String, int>{};
-    final workoutCount = <String, int>{};
-
-    for (var workout in workouts) {
-      categoryCount[workout.workoutCategory] = 
-          (categoryCount[workout.workoutCategory] ?? 0) + 1;
-      workoutCount[workout.workoutName] = 
-          (workoutCount[workout.workoutName] ?? 0) + 1;
-    }
-
-    final favoriteCategory = categoryCount.entries
-        .reduce((a, b) => a.value > b.value ? a : b)
-        .key;
-
-    final favoriteWorkout = workoutCount.entries
-        .reduce((a, b) => a.value > b.value ? a : b)
-        .key;
-
-    return {
-      'total_workouts': workouts.length,
-      'total_minutes': totalMinutes,
-      'avg_duration': (totalMinutes / workouts.length).round(),
-      'favorite_category': favoriteCategory,
-      'favorite_workout': favoriteWorkout,
-      'category_breakdown': categoryCount,
-      'workout_breakdown': workoutCount,
-    };
   }
 }

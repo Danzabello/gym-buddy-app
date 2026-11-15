@@ -500,50 +500,6 @@ class TeamStreakService {
     }
   }
 
-  // ============================================
-  // STREAK HISTORY
-  // ============================================
-  
-  /// Get all past streaks (ended streaks) for a user
-  Future<List<Map<String, dynamic>>> getStreakHistory({int limit = 10}) async {
-    try {
-      final currentUserId = _supabase.auth.currentUser?.id;
-      if (currentUserId == null) return [];
-
-      // Get user's teams
-      final teamsResponse = await _supabase
-          .from('team_members')
-          .select('team_id')
-          .eq('user_id', currentUserId);
-
-      final teamIds = teamsResponse.map((t) => t['team_id'] as String).toList();
-      
-      if (teamIds.isEmpty) return [];
-
-      // Get ended streaks
-      final response = await _supabase
-          .from('team_streaks')
-          .select('''
-            id,
-            team_name,
-            team_emoji,
-            current_streak,
-            best_streak,
-            total_workouts,
-            members,
-            is_coach_max_team,
-            last_interaction_at,
-            is_favorite
-          ''')
-          .order('current_streak', ascending: false);
-
-      return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error getting streak history: $e');
-      return [];
-    }
-  }
-
   Future<void> checkAndResetBrokenStreaks() async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
@@ -638,43 +594,6 @@ class TeamStreakService {
       }
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error checking streak status: $e');
-    }
-  }
-
-  /// Find the team that contains both the current user and their buddy
-  /// Returns the team ID or null if not found
-  Future<String?> findTeamWithBuddy(String userId, String buddyId) async {
-    try {
-      // Get all teams the current user is in (excluding Coach Max teams)
-      final userTeams = await _supabase
-          .from('team_members')
-          .select('team_id, buddy_teams!inner(is_coach_max_team)')
-          .eq('user_id', userId);
-
-      for (final teamData in userTeams) {
-        // Skip Coach Max teams
-        if (teamData['buddy_teams']['is_coach_max_team'] == true) continue;
-
-        final teamId = teamData['team_id'] as String;
-
-        // Check if buddy is also in this team
-        final buddyInTeam = await _supabase
-            .from('team_members')
-            .select('id')
-            .eq('team_id', teamId)
-            .eq('user_id', buddyId)
-            .maybeSingle();
-
-        if (buddyInTeam != null) {
-          if (kDebugMode) debugLog('🎯 Found shared team: $teamId');
-          return teamId;
-        }
-      }
-
-      return null;
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ Error finding team with buddy: $e');
-      return null;
     }
   }
 

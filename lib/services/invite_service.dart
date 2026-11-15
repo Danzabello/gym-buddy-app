@@ -237,25 +237,6 @@ class InviteService {
               .timeout(const Duration(seconds: 10)))
           .installReferrer;
 
-  // ─── Fetch all invites sent by the current user ────────────────────────────
-  Future<List<Map<String, dynamic>>> getSentInvites() async {
-    try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return [];
-
-      final result = await _supabase
-          .from('invites')
-          .select('*')
-          .eq('inviter_id', userId)
-          .order('created_at', ascending: false);
-
-      return List<Map<String, dynamic>>.from(result);
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ InviteService.getSentInvites: $e');
-      return [];
-    }
-  }
-
   // ─── Links and sign-out, for the whole app run ─────────────────────────────
   static final _links = AppLinks();
   static StreamSubscription<Uri>? _linkSub;

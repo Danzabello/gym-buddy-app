@@ -12,6 +12,9 @@ class FakeSupabase {
   int status = 200;
   bool down = false;
 
+  /// Extra response headers, such as `content-range` for a count.
+  Map<String, String> headers = {};
+
   late final SupabaseClient client = SupabaseClient(
     'https://example.supabase.co',
     'anon',
@@ -19,7 +22,7 @@ class FakeSupabase {
       calls.add(req);
       if (down) throw const SocketException('down');
       return http.Response(jsonEncode(reply(req)), status,
-          request: req, headers: {'content-type': 'application/json; charset=utf-8'});
+          request: req, headers: {'content-type': 'application/json; charset=utf-8', ...headers});
     }),
   );
 

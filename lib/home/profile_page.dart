@@ -73,11 +73,7 @@ class _ProfilePageState extends State<ProfilePage>
 
       final streaksFuture = TeamStreakService().getAllUserStreaks();
       final levelFuture = LevelService().getLevelInfo();
-      final workoutsFuture = Supabase.instance.client
-          .from('workouts')
-          .select('id')
-          .or('user_id.eq.$uid,buddy_id.eq.$uid')
-          .eq('status', 'completed');
+      final workoutsFuture = WorkoutService().completedWorkoutCount(uid);
       final friendsFuture = FriendService().getFriends();
       final favouriteCategoriesFuture = Supabase.instance.client
           .rpc('get_favourite_categories', params: {'p_user_id': uid});
@@ -99,7 +95,7 @@ class _ProfilePageState extends State<ProfilePage>
           orElse: () => StreakSortMode.highestCurrent,
         );
         _levelInfo     = level;
-        _totalWorkouts = (workouts as List).length;
+        _totalWorkouts = workouts;
         _buddyCount    = friends.length;
         _favouriteCategories = (favouriteCategories as List).cast<Map<String, dynamic>>();
         _isLoading     = false;
