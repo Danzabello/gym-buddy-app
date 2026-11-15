@@ -19,6 +19,21 @@ INSERT INTO acct VALUES
   ('o6', '30d543f1-bb06-41c4-8522-396ed948ba35', 'onboard_check6');
 GRANT SELECT ON acct TO PUBLIC;
 
+-- Time of day. The fixtures stamp things relative to now(): a session that started 20 minutes ago, a check-in 3 hours
+-- ago, a job run 210 minutes from now. The server puts each of them on the account's LOCAL day at that moment
+-- (finish_checkin_session credits the day the session STARTED, and needs it to be at least 15 minutes old), so in
+-- the first 20 minutes after local midnight a fixture session belonged to yesterday and G2.10, G2.18 to G2.20, G3.2,
+-- G3.3 and G6 failed, with or without a migration. No start time can be both "today" and 15 minutes old at 00:05,
+-- so the stamps cannot be clamped. Instead the fixture accounts are moved, for this transaction only, to the
+-- whole-hour zone where it is 12:xx now (now() is fixed for the transaction): every stamp from 12 hours back to
+-- 11 hours ahead is then on the same local day, whatever the real time is. Rolled back with everything else.
+-- The G2.13 group still sets its own far-east or far-west zone for one account inside its sub-block.
+UPDATE user_profiles
+SET timezone = (SELECT CASE WHEN o = 0 THEN 'Etc/GMT'
+                            ELSE 'Etc/GMT' || CASE WHEN o > 0 THEN '-' ELSE '+' END || abs(o) END  -- POSIX sign: Etc/GMT-3 is UTC+3
+                FROM (SELECT 12 - extract(hour FROM now() AT TIME ZONE 'UTC')::integer AS o) x)
+WHERE id IN (SELECT id FROM acct);
+
 CREATE TEMP TABLE push_log (ts timestamptz DEFAULT clock_timestamp(), recipient uuid, key text, ref text, sender uuid);
 GRANT ALL ON push_log TO PUBLIC;
 CREATE TEMP TABLE eq_old (k text PRIMARY KEY, v jsonb);
@@ -139,6 +154,9 @@ CREATE FUNCTION pg_temp.strip(r jsonb) RETURNS jsonb LANGUAGE sql AS $$
   SELECT CASE WHEN jsonb_typeof(r) = 'object' THEN r - 'teams' ELSE r END $$;
 
 -- Everything a credit can change for these users, written in this transaction (created_at = now()).
+-- Pushes are compared in the order each recipient gets them. The order between two recipients is not compared: it
+-- follows the order _credit_checkin's loop meets the caller's teams, which has no ORDER BY and changed between
+-- phase 1 and phase 2 of one run (G10.eq2, 2026-11-15 00:26, no migration inlined).
 CREATE FUNCTION pg_temp.snap(p_users uuid[]) RETURNS jsonb LANGUAGE sql AS $$
   WITH tms AS (SELECT DISTINCT ts.id FROM team_streaks ts JOIN team_members tm ON tm.team_id = ts.team_id WHERE tm.user_id = ANY(p_users))
   SELECT jsonb_build_object(
@@ -164,7 +182,7 @@ CREATE FUNCTION pg_temp.snap(p_users uuid[]) RETURNS jsonb LANGUAGE sql AS $$
     'sessions', (SELECT count(*) FROM active_checkin_sessions WHERE user_id = ANY(p_users)),
     'schedule', (SELECT coalesce(jsonb_agg(jsonb_build_array(pg_temp.nm(user_id), scheduled_date, has_checked_in, checked_in_at = now()) ORDER BY user_id), '[]')
                  FROM coach_max_schedule WHERE user_id = ANY(p_users) AND scheduled_date >= current_date - 1),
-    'push', (SELECT coalesce(jsonb_agg(jsonb_build_array(pg_temp.nm(recipient), key, coalesce(pg_temp.lblt(ref::uuid), pg_temp.lbl(ref::uuid)), pg_temp.nm(sender)) ORDER BY ts), '[]')
+    'push', (SELECT coalesce(jsonb_agg(jsonb_build_array(pg_temp.nm(recipient), key, coalesce(pg_temp.lblt(ref::uuid), pg_temp.lbl(ref::uuid)), pg_temp.nm(sender)) ORDER BY pg_temp.nm(recipient), ts), '[]')
              FROM pg_temp.push_log WHERE recipient = ANY(p_users))) $$;
 
 CREATE FUNCTION pg_temp.ok(p_t text, p_ok boolean, p_info text DEFAULT '') RETURNS text LANGUAGE sql AS $$
