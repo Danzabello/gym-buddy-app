@@ -132,44 +132,7 @@ Profiles with no auth user: 1, Coach Max `00000000-0000-0000-0000-000000000001` 
 
 **All non-bot users (38), the list for LAUNCH-CLEAN**, as id | username | display_name | created:
 
-    1. 01931108-299b-40c3-a306-bf526ab6e81c | ∅ | Zello | 2025-09-25
-    2. dbc1216b-11dd-4bab-8d89-16fc423a9358 | ∅ | lukibear | 2025-09-26
-    3. e77c99b9-d9fe-4a80-abf4-c8103919ace8 | ∅ | friend1 | 2025-10-01
-    4. 380d0d9b-7c26-43b4-8057-bf018fb5bf59 | ∅ | friend2 | 2025-10-01
-    5. c5e5f12c-5e6e-40a1-9a05-aedc3b017a66 | ∅ | Doroda | 2025-10-02
-    6. 9155e9ff-3a7a-48e4-af7e-a9a923ed6c1f | ∅ | max | 2025-10-15
-    7. dfaeac50-0476-45c8-b7b1-0f08df78bb6e | ∅ | max2 | 2025-10-15
-    8. 3c7f73a4-ffb1-4fca-ad87-05cfe35cc878 | ∅ | max3 | 2025-10-15
-    9. 7b469dba-545b-4753-a6e7-46a70ed612a3 | ∅ | ts4 | 2025-11-06
-    10. 0a1d1bf6-6d7f-476f-9b13-1e17d37491cf | ∅ | ManziMuscleMan | 2025-11-07
-    11. ef7c4f33-b9e1-46ee-8ae4-cfbf23858cda | ∅ | ts10 | 2025-11-10
-    12. eedf1324-b99a-483f-a864-ad6a278e873f | ∅ | ts11 | 2025-11-10
-    13. 591e569a-557b-4bd3-bdcd-1ab86cfb98d0 | ∅ | newaccount | 2025-11-14
-    14. c01a4460-e84b-4b1a-ae45-f96bc9a4898f | ∅ | newaccount2 | 2025-11-14
-    15. 5415e3be-1399-4009-918d-e764a6db199e | ∅ | newtestaccount | 2025-11-16
-    16. 07960b8c-300b-44cb-89dd-93f3f38099b8 | ∅ | newtestaccount2 | 2025-11-16
-    17. 2b61ae0f-655f-4111-b754-b18e00afe9d8 | ∅ | newtestaccount3 | 2025-11-16
-    18. 931c0905-7ad7-4585-8ce6-d3bd24722272 | ∅ | newtestaccount4 | 2025-11-16
-    19. 2a5c7f3e-85c5-4e47-b1f0-d1b5f3d40161 | ∅ | newtestaccount5 | 2025-11-16
-    20. 033a3df0-74ea-47b5-8452-7dba9d7f5784 | ∅ | testimage | 2025-11-16
-    21. dacb9893-9c7d-4564-8433-2a9abc186e3f | ∅ | testtest | 2025-11-18
-    22. 6dfac56a-74a1-4a60-b7fa-e200338350f3 | mijotest | mijotest | 2025-11-19
-    23. 8f399b74-d1e1-4236-a3d3-3bd7eea78e69 | ∅ | mijotest2 | 2025-11-19
-    24. f7c1ef63-3b93-401d-b2bb-8402ddf9a881 | ∅ | mijotest3 | 2025-11-19
-    25. a1c875ae-59c2-4bed-b2ba-cf11ff23b397 | ∅ | mijotest4 | 2025-11-19
-    26. 1d9154d6-f734-42bc-992f-80580a84c365 | ∅ | mijotest6 | 2025-11-20
-    27. 12cfd0da-bb8e-4e54-83d6-bd4735decaa8 | ∅ | newsetup | 2025-12-15
-    28. 5ead0cad-0601-4ac4-a813-016940b0ab3b | piiiipa | onboarding | 2025-12-30
-    29. 5e5c9752-7ff9-4b67-8800-915c2515d88b | sophtest | sophtest | 2026-03-14
-    30. cf4946f5-f921-4e81-bbf4-88d574e8baf5 | testtest1 | testtest1 | 2026-03-14
-    31. 068f10c8-3b6c-4a5d-8864-6f93c0149029 | testtest4 | testtest4 | 2026-03-15
-    32. 64de5abb-df2e-4d87-b80a-4dc70742df86 | testtest6 | testtest6 | 2026-03-15
-    33. 8ba545a4-caf8-4f56-941a-82bd9ddd942a | invitetest | invitetest | 2026-04-29
-    34. a216c75b-3daf-4c3f-8fa3-375de0a653ed | princemj | prince MJ | 2026-05-24
-    35. 7c8158ca-763c-410f-9378-4fe81eb201bb | test12345 | test12345 | 2026-06-28
-    36. 6c21da10-7c38-46f8-85a9-5810285b1206 | saveprofile | saveprofile | 2026-06-30
-    37. 5e67f64d-16e3-4b09-9b00-ddc49df8c3f6 | rokitest1 | rokitest | 2026-09-02
-    38. 6ef4e82e-a54d-4b91-8ce4-b5f179a65f66 | newesttest | newesttest | 2026-09-29
+Roster moved out of the repo (privacy).
 
 Nothing was modified.
 
@@ -196,5 +159,3 @@ Nothing was modified.
 - `public.check_in_coach_max_with_buddy(uuid)`: still exists, has no client grants (`{postgres=X/postgres,service_role=X/postgres}`) and no callers. Candidate for a DROP; the only reference is a comment in `_finish_coach_max_checkin`.
 
 ## Noticed, not fixed
-- 13 auth users have no profile row (listed above). Worth handling in LAUNCH-CLEAN alongside the test profiles.
-- 26 of the 38 non-bot profiles have `username` NULL. Any check or cleanup that matches on username alone will miss them, as 05d did.

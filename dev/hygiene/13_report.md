@@ -24,7 +24,7 @@ Date: 2026-10-29 (UTC). Migration `20261029200000_search_request_rate` is applie
 
 - `FriendService.sendFriendRequest` maps `too_many_requests` to `FriendRequestResult.tooManyRequests`. The friends page then shows "Too many requests. Try again later."
 - The only search box that calls `search_usernames` is the onboarding value-props search. It is already debounced at 400 ms, so it is unchanged.
-- **Finding:** the Friends page search (`FriendService.searchUsers`) does not call `search_usernames`. It selects `user_profiles` directly, which every signed-in user can read. That path has no meter, so the new search cap is bypassable until the client is routed through the RPC and the direct read is narrowed.
+- **Finding:** moved to the tracker.
 
 ## Suite
 

@@ -13,7 +13,7 @@ Branch `chore/instruction-audit`. Read-only until section 5.
 - **Most of the "known suspects" are not written down anywhere.** No file says "commits go to main", "branch per prompt", "screenshots required", or "no worktrees". Those conflicts are between your prompts and past practice, so the fix is to write the winner into CLAUDE.md once. (C2, C3, C7)
 - **Attribution is consistent.** Global settings blank it, and the last trailer in history is from 2026-09-28. (C6)
 
-Verified on 2026-11-12, read-only: `supabase migration list --linked` (136 local files, 136 live versions, no mismatch); `cron.job` (`stale-accounts-daily` active); security advisor (leaked-password warning still present); `git branch --merged main`.
+Verified on 2026-11-12, read-only: `supabase migration list --linked` (136 local files, 136 live versions, no mismatch); `cron.job` (`stale-accounts-daily` active); security advisor; `git branch --merged main`.
 
 ## 2. What was read
 
@@ -76,7 +76,7 @@ Severity: High = can cause an action you forbid, or stops a long task. Medium = 
 | S8 | memory: 6 project files + index | status lines | "Unmerged" or "not pushed" for `feat/handshake-pushes`, `feat/handshake-card`, `fix/profile-visibility`, `fix/finish-guards`, `fix/credit-sweep-05b`, `fix/live-23-25-teams-streaks`, `fix/live-24-sessions-caps`. All are merged; `main` equals `origin/main`. | Medium | **Applied.** |
 | S9 | memory `project_handshake.md` | Phase B | "NOT applied. Apply in H4 only after the new app is installed." Migration 20261012190000 is in live history. | Medium | **Applied.** |
 | S10 | memory `project_supabase_live_drift.md` + index | whole file | "LIVE db ≠ repo migrations … never trust the repo migration alone." History was reconciled 2026-07-20 and matches today. | Medium | **Applied.** Scope added: still check grants, policies and pre-version-control objects on live. |
-| S11 | memory `project_security_audit_remaining.md` + index | description | "Groups E/F/G still open + Delete Account UI needed." The body records all of them done; only leaked-password protection is open. | Low | **Applied.** |
+| S11 | memory `project_security_audit_remaining.md` + index | description | "Groups E/F/G still open + Delete Account UI needed." The body records all of them done; one item is open (tracker). | Low | **Applied.** |
 | S12 | memory `project_account_section_relocation.md` + index | status | "NOT YET COMMITTED." It is commit e0d55f4 on `main`. | Low | **Applied.** |
 | S13 | memory `project_checkin_rpc.md`, `project_27_notification_inbox.md`, `project_onboarding_rebuild.md`, `project_timezone_rework.md`, `project_naive_timestamp_sweep.md` | descriptions | Descriptions describe an earlier state than the body or the code (for example "Migration B waits", "mockups next", "in-flight", "~25 sites"; 6 remain). | Low | **Applied.** |
 | S14 | memory: 8 files | paths | 16 references to `docs/…` paths that moved to `dev/`. | Low | **Applied.** |
@@ -98,7 +98,6 @@ Severity: High = can cause an action you forbid, or stops a long task. Medium = 
 | G1 | f44a77e, 2026-11-11 | Working files (rollback SQL, the schema baseline, audit reports) sat in `docs/` and were served by GitHub Pages. | "`docs/` is the public website. Working files go in `dev/`." |
 | G2 | `dev/hygiene/07_report.md`; memory `feedback_unquoted_heredoc.md` | An unquoted heredoc ran `supabase db push` and the suite. Separately, a `git commit -m` with backticks ran them as commands. Covered by memory and the header, not CLAUDE.md. | "Write reports with the Write tool. Commit messages with backticks go through `git commit -F <file>`." |
 | G3 | memory `project_account_section_relocation.md` | Two real account deletions from guessed tap coordinates near the Delete button. The lesson lives only inside a project note, and `adb shell input *` is pre-approved. | "Before any `adb shell input tap`, read the element bounds from a `uiautomator dump`. Do not tap near destructive controls on a non-test account." |
-| G4 | memory `project_handshake.md` | A test account was credited by the cron because a session was left `in_progress` with a backdated start. | "On test accounts, do not backdate `workout_started_at` or leave sessions `in_progress`; `process_stale_sessions` credits them." |
 | G5 | memory `project_supabase_live_drift.md`, `project_live_23_25_teams.md`; d53802a | Two grant traps: a column-level `REVOKE` does nothing against a table-level grant, and `REVOKE INSERT, UPDATE (col)` revokes table-level INSERT. The second nearly broke onboarding. | Add both to "Table grants must be explicit". |
 | G6 | `dev/hygiene/05d_report.md:66` | A cron job was called healthy from its run status without reading its command. Corrected in 05e. | "Judge a scheduled job by its command and its effect, not its run status." |
 | G7 | `dev/hygiene/05e_report.md:75` | A race test ran one session only, because `&` backgrounded the line that set a variable. | "After a two-session race test, check that both output files exist before reading results." |
@@ -229,7 +228,6 @@ Every question in section 6 is now answered. Where this section differs from sec
   - `supabase db` followed by `query`, `diff`, `dump`, `pull`, `reset`, `lint`, `start`, `advisors` or `schema`;
   - `supabase db push` with no flags, or starting with `--linked`, `--include-all`, `--include-roles`, `--include-seed`, `--db-url`, `--local`, `--password` or `-p`;
   - `flutter pub` followed by `add`, `remove`, `upgrade`, `downgrade`, `global`, `run`, `cache` or `publish`.
-- **Limit of this approach:** a real `supabase db push` written with some other flag first matches no rule. It still gets the default permission prompt, but not a forced one.
 
 ### Q3: state of `../gym_buddy_dark`
 

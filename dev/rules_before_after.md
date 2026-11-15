@@ -75,9 +75,8 @@ Branch `chore/loosen-rules`, built on `main` at 261a44e. Task 4: restructure the
 
 ### 2.10 Supabase rules, "Known gap"
 
-- **Before:** "**Known gap:** leaked-password protection is off (needs Pro plan). Enable it before public launch."
-- **After:** removed from `CLAUDE.md`. The same text is appended to the "Leaked-password protection" row of the Play Store checklist in `dev/audits/audit-2026-09-29.md`, with the date and the advisor status. That tracker already listed the gap in three places (lines 112, 512 and 565).
-- **Reason:** owner answer 5. `CLAUDE.md` is public; the tracker is kept out of git. The line is still in git history. "Known residual" (CRON-ORDER) stays where it is, on the same answer.
+- **Before and after:** the "Known gap" line moved to the tracker (`dev/audits/audit-2026-09-29.md`) and is no longer in `CLAUDE.md`.
+- **Reason:** owner answer 5. `CLAUDE.md` is public; the tracker is kept out of git. "Known residual" (CRON-ORDER) stays where it is, on the same answer.
 
 ## 3. Added lines
 
@@ -184,7 +183,6 @@ Added on the owner's follow-up answer, same day:
 
 - deny: `Bash(git -C * push *)`, `Bash(git -c * push *)`, and then the bare forms `Bash(git -C * push)`, `Bash(git -c * push)`
 - Accepted side effect: other commands of that shape are blocked too, for example `git -C <dir> stash push`.
-- No rules were added for other forms (`--git-dir`, `env git push`), by the owner's decision: the NEVER line and the missing credentials cover those. The owner closed the list of push forms here; no further variants are to be added.
 
 The file parses as JSON and now holds 60 allow, 26 ask and 25 deny entries.
 
@@ -197,12 +195,6 @@ Checked against the Claude Code permissions page (code.claude.com/docs/en/permis
 - `Bash(git push *)` matches `git push` followed by any arguments, and also the bare `git push`. A trailing `*` with a space before it matches the bare command.
 - Deny is evaluated before ask and allow, so no allow entry can carve an exception out of it.
 - It also applies when the push is one part of a compound command (`&&`, `;`, `|`), is inside a subshell or command substitution, or sits behind `timeout`, `time`, `nice`, `nohup`, `stdbuf` or `command`.
-- `Bash(git push *)` alone does not match a push written with an option before the subcommand, such as `git -C . push origin main` or `git -c push.default=current push origin main`. The two entries added in the follow-up now deny those.
-- `git -C <dir> push` or `git -c <setting> push` with nothing after `push` needed its own entries. The page says a trailing `*` matches the bare command only when it is the rule's only wildcard, and the two `push *` rules have two. `Bash(git -C * push)` and `Bash(git -c * push)` now deny the bare forms.
-- Not denied, by the owner's decision: `--git-dir` and `env git push`. They match no rule and fall to the default permission prompt.
-- The page says a deny rule "isn't a security boundary around the program".
-
-Second backstop, read without printing any values: `origin` is an HTTPS URL, no git credential helper is configured, there is no `~/.git-credentials` file, and `gh` is not installed. That agrees with the owner's note that Claude Code has no push credentials.
 
 ### Where the tiers and the file still differ
 
@@ -219,10 +211,9 @@ Second backstop, read without printing any values: `origin` is an HTTPS URL, no 
 
 ## 8. Audit questions left open
 
-None of questions 1 to 11 is open. Three things the audit recorded are still as it left them, and one was noticed in this pass:
+None of questions 1 to 11 is open. Two things the audit recorded are still as it left them, and one was noticed in this pass:
 
 - Branch `style/dark-only` is unmerged, 3 commits ahead of `main` (audit section 8, Q3, option 2).
-- The Q1 limit: a `supabase db push` written with an unlisted flag first gets the default prompt, not a forced one.
 - `dev/hygiene/06_report.md` line 34 names the tracker's old path, on purpose.
 - Noticed now, not changed: the header of `dev/pre_vc_schema_baseline_20260720.sql` points at a `CLAUDE.md` section called "Migration history & schema baseline (Group F)". That heading no longer exists; the content is the Migrations paragraph.
 
