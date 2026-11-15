@@ -16,6 +16,7 @@ import 'widgets/press_scale.dart';
 import 'services/team_sync_service.dart';
 import 'package:flutter/foundation.dart';
 import 'services/break_day_service.dart';
+import 'services/checkin_history_service.dart';
 import 'widgets/friends_page_modern.dart';
 import 'pages/schedule_page.dart';
 import 'pages/workout_page.dart';

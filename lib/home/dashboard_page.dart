@@ -2979,13 +2979,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       // [2] real check-in dates for the heatmap (last 7 days, this user)
       // — fixes the bug where days were painted as "done" purely from
       // arithmetic on current_streak rather than real check-in history.
-      currentUserId == null
-          ? Future.value(<Map<String, dynamic>>[])
-          : Supabase.instance.client
-              .from('daily_team_checkins')
-              .select('check_in_date')
-              .eq('user_id', currentUserId)
-              .gte('check_in_date', sevenDaysAgoStr),
+      CheckInHistoryService().myCheckInDatesSince(sevenDaysAgoStr),
       // [3] own uncancelled break days — heatmap third state + today badge
       currentUserId == null
           ? Future.value(<Map<String, dynamic>>[])
@@ -2999,10 +2993,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   
     final hasCheckedIn     = results[0] as bool;
     final todaysWorkouts   = results[1] as List<Map<String, dynamic>>;
-    final checkInDateRows  = results[2] as List<Map<String, dynamic>>;
-    final myCheckInDates   = checkInDateRows
-        .map((r) => r['check_in_date'] as String)
-        .toSet();
+    final myCheckInDates   = results[2] as Set<String>;
     final myBreakDates     = (results[3] as List<Map<String, dynamic>>)
         .map((r) => r['break_date'] as String)
         .toSet();
