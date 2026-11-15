@@ -23,16 +23,15 @@ class CoachMaxService {
 
       // Team, both members and the streak row are created server-side
       // (LIVE-23/25: the client can no longer insert team rows).
+      // Today's schedule row is made server-side too (the
+      // coach-max-schedule-rows job, within 5 minutes): the client never
+      // inserts into coach_max_schedule.
       final result = await _supabase.rpc('ensure_coach_max_team') as Map<String, dynamic>;
-      if (result['created'] != true) {
-        if (kDebugMode) debugLog('✅ Coach Max team already exists');
-        return true;
+      if (kDebugMode) {
+        debugLog(result['created'] == true
+            ? '✅ Coach Max initialized successfully!'
+            : '✅ Coach Max team already exists');
       }
-
-      // Step 4: Schedule first Coach Max check-in
-      await scheduleCoachMaxCheckIn(userId);
-
-      if (kDebugMode) debugLog('✅ Coach Max initialized successfully!');
       return true;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error initializing Coach Max: $e');
@@ -58,19 +57,20 @@ class CoachMaxService {
   }
 
   // ============================================
-  // COACH MAX DAILY CHECK-IN SCHEDULING
+  // COACH MAX DAILY CHECK-IN
   // ============================================
 
-  /// Schedule Coach Max's check-in for today (random time between 7am–5pm in
-  /// THIS USER's local time — the device's zone IS the user's zone). This is
-  /// a best-effort early-fire; the authoritative per-user scheduler is the
-  /// coach-max-cron edge function.
-  Future<void> scheduleCoachMaxCheckIn(String userId) async {
+  /// If today's schedule row exists and Coach Max has not checked in yet,
+  /// check him in when its time has passed. A best-effort early fire for a
+  /// user who opens the app; the hourly coach-max-cron is the authority when
+  /// the app is closed. The row itself is made by the server only (the
+  /// coach-max-schedule-rows job and coach-max-cron): with no row yet, this
+  /// does nothing.
+  Future<void> runDueCoachMaxCheckIn(String userId) async {
     try {
-      // The user's own local date key — matches the cron's per-user scheduled_date.
+      // The user's own local date key — matches the server's per-user scheduled_date.
       final todayStr = localTodayString();
 
-      // Check if already scheduled for today
       final existing = await _supabase
           .from('coach_max_schedule')
           .select('id, has_checked_in')
@@ -78,62 +78,12 @@ class CoachMaxService {
           .eq('scheduled_date', todayStr)
           .maybeSingle();
 
-      if (existing != null) {
-        if (kDebugMode) debugLog('✅ Coach Max already scheduled for today');
-        
-        // If scheduled but hasn't checked in, execute check-in if time has passed
-        if (existing['has_checked_in'] == false) {
-          await _executeScheduledCheckIn(userId, existing['id']);
-        }
-        return;
-      }
-
-      // Generate random check-in time in the 7am–5pm local window
-      final randomTime = _generateRandomCheckInTime();
-
-      // Schedule the check-in
-      await _supabase.from('coach_max_schedule').insert({
-        'user_id': userId,
-        'scheduled_date': todayStr,
-        'scheduled_time': randomTime,
-        'has_checked_in': false,
-      });
-
-      if (kDebugMode) {
-        debugLog('✅ Scheduled Coach Max check-in for $randomTime');
-      }
-
-      // If the scheduled wall-clock time has already passed today, check in
-      // immediately. scheduled_time is the user's local wall-clock, and
-      // DateTime.now() is the same device-local frame, so the comparison is
-      // DST-correct. The cron is the authority when the app isn't open.
-      final nowLocal = DateTime.now();
-      final scheduledDateTime = DateTime(
-        nowLocal.year,
-        nowLocal.month,
-        nowLocal.day,
-        int.parse(randomTime.split(':')[0]),
-        int.parse(randomTime.split(':')[1]),
-      );
-
-      if (nowLocal.isAfter(scheduledDateTime)) {
-        await checkInCoachMax(userId);
+      if (existing != null && existing['has_checked_in'] == false) {
+        await _executeScheduledCheckIn(userId, existing['id']);
       }
     } catch (e) {
-      if (kDebugMode) debugLog('❌ Error scheduling Coach Max: $e');
+      if (kDebugMode) debugLog('❌ Error running Coach Max check-in: $e');
     }
-  }
-
-  /// Generate a random check-in time between 07:00 and 17:00 in the user's
-  /// own local time. Matches the coach-max-cron per-user window; the stored
-  /// value is interpreted as the user's wall-clock by client and cron alike.
-  String _generateRandomCheckInTime() {
-    final random = Random();
-    // 07:00–16:59 → any minute in the 10-hour [07:00, 17:00) local window.
-    final minutesIntoWindow = random.nextInt(10 * 60);
-    final hour = 7 + (minutesIntoWindow ~/ 60);
-    final minute = minutesIntoWindow % 60;
-    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}:00';
   }
 
   /// Execute a scheduled check-in if time has passed

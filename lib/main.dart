@@ -130,7 +130,7 @@ class AuthWrapperDeps {
         // swap devices) — feeds per-user "today" resolution server-side.
         unawaited(syncDeviceTimezone());
         await _startupRead('coach max schedule',
-            CoachMaxService().scheduleCoachMaxCheckIn(id), 15);
+            CoachMaxService().runDueCoachMaxCheckIn(id), 15);
         unawaited(AchievementService().checkLoyaltyAchievements());
       },
       home: (_) => const HomeScreen(),
