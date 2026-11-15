@@ -62,7 +62,7 @@ Key modal sheets/dialogs (logic-bearing):
 | `get_level_for_xp(total_xp)` | `LevelService` | `level_definitions` | — | int |
 | `get_user_streaks(p_user_id)` | `TeamStreakService.getAllUserStreaks` (viewer-tz aware) | `buddy_teams`, `team_streaks`, `team_members`, `daily_team_checkins`, `user_profiles`, `workouts`, `check_ins` | — | json (all streaks + members + today's check-ins) |
 | `get_workouts_awaiting_creator_join(creator_id)` | `WorkoutService.getWorkoutsAwaitingCreatorJoin` (`WorkoutJoinChecker`) | `workouts`, `user_profiles` | — | table (join-window rows) |
-| `are_on_break_today(p_user_ids)` (prepared 2026-11-14, not yet on live) | `BreakDayService.usersOnBreakToday`, called by `lib/home/dashboard_page.dart` and `friends_page_modern.dart` (break badges, one call per page) | `break_day_usage`, through `is_on_break_today` | — | table (`user_id`, `on_break`), 200 ids at most |
+| `are_on_break_today(p_user_ids)` (live since 2026-11-15, migration `20261115140911`) | `BreakDayService.usersOnBreakToday`, called by `lib/home/dashboard_page.dart` and `friends_page_modern.dart` (break badges, one call per page) | `break_day_usage`, through `is_on_break_today` | — | table (`user_id`, `on_break`), 200 ids at most |
 | `is_on_break_today(p_user_id)` | no client caller on `chore/data-layer-2026-11`; called by `are_on_break_today` for each id | `break_day_usage` | — | boolean |
 | `is_user_in_active_workout(check_user_id)` | `WorkoutService` | `active_checkin_sessions`, `workouts` | — | boolean |
 | `purchase_shop_item(p_shop_item_id)` | `CoinService.purchaseItem` (`ShopPage`) | `shop_items`, `user_profiles` (balance) | `user_profiles.coin_balance`, `coin_transactions` (via `award_coins`), `user_inventory` | jsonb |
@@ -119,7 +119,7 @@ Key modal sheets/dialogs (logic-bearing):
 | `coin_transactions` | `id`, `user_id`, `amount`, `transaction_type`, `reference_id` | SELECT: own | `award_coins`, `_apply_checkin_rewards`, `purchase_shop_item`, `verify_achievement_progress` |
 | `level_definitions` | `level`, `xp_required`, `title` (99 rows) | public read | `get_level_for_xp`, `award_xp` |
 | `shop_items` | `id`, `name`, `category`, `cost`, `emoji`, `asset_id`, `is_available`, `unlock_level` | SELECT: available items | `purchase_shop_item` |
-| `user_inventory` | `id`, `user_id`, `shop_item_id`, `equipped` | SELECT: own, and partners' equipped rows; UPDATE of `equipped`: own; INSERT: RPC only | `purchase_shop_item`, `verify_achievement_progress`, `equip_shop_item` (prepared 2026-11-14, not yet on live) |
+| `user_inventory` | `id`, `user_id`, `shop_item_id`, `equipped` | SELECT: own, and partners' equipped rows; UPDATE of `equipped`: own; INSERT: RPC only | `purchase_shop_item`, `verify_achievement_progress`, `equip_shop_item` (live since 2026-11-15, migration `20261115141046`) |
 | `cosmetic_unlock_conditions` / `user_unlocked_cosmetics` | unlock rules / granted cosmetics | public read / own rows | `award_xp` (level+milestone unlocks) |
 | `achievements` | `id (text)`, `name`, `category`, `rarity`, `xp_reward`, `coin_reward`, `target_value` (46 rows) | public read | `award_achievement_rewards`, `verify_achievement_progress` |
 | `user_achievements` | `id`, `user_id`, `achievement_id`, `unlocked_at`, `progress` | ALL: own rows | `award_achievement_rewards`, `verify_achievement_progress` |
