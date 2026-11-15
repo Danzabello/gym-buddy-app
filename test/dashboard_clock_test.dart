@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_buddy_app/data/coach_tips.dart';
 import 'package:gym_buddy_app/home/dashboard_clock.dart';
@@ -97,5 +100,207 @@ void main() {
       tips.onResumed();
       expect(tips.indexAt(two.add(const Duration(hours: 1)), _many), isNot(before));
     });
+  });
+
+  // The dashboard itself cannot be pumped in a test (its State reads
+  // Supabase.instance and opens a realtime channel), so these pump a stand-in
+  // page built from the same ClockPart the dashboard uses: one part with no
+  // `select`, like the danger countdown and the feed ages, and one with a
+  // `select`, like the tray (coach tip, week day, status slot).
+  group('clock parts', () {
+    late DateTime now;
+    late ValueNotifier<int> minute;
+    late CoachTipRotation tips;
+    late int pageBuilds, ageBuilds, tipBuilds;
+    final checkedInAt = DateTime(2026, 11, 15, 14);
+
+    int tipNow() => tips.indexAt(now, coachTips.length);
+    String tipText(int i) => coachTips[i]['tip'] as String;
+
+    void tick([Duration step = const Duration(minutes: 1)]) {
+      now = now.add(step);
+      minute.value++;
+    }
+
+    Widget page() => Directionality(
+          textDirection: TextDirection.ltr,
+          child: Builder(builder: (context) {
+            pageBuilds++;
+            return Column(children: [
+              ClockPart(
+                tick: minute,
+                clock: () => now,
+                builder: (_, now) {
+                  ageBuilds++;
+                  return Text('${now.difference(checkedInAt).inMinutes}m ago');
+                },
+              ),
+              ClockPart(
+                tick: minute,
+                clock: () => now,
+                select: (now) => tips.indexAt(now, coachTips.length),
+                builder: (_, now) {
+                  tipBuilds++;
+                  return Text(tipText(tips.indexAt(now, coachTips.length)));
+                },
+              ),
+            ]);
+          }),
+        );
+
+    setUp(() {
+      now = DateTime(2026, 11, 15, 14, 5);
+      minute = ValueNotifier<int>(0);
+      tips = CoachTipRotation();
+      pageBuilds = ageBuilds = tipBuilds = 0;
+    });
+
+    testWidgets('a minute tick rebuilds the time value and not the page',
+        (tester) async {
+      await tester.pumpWidget(page());
+      final tip = tipText(tipNow());
+      expect(find.text('5m ago'), findsOneWidget);
+      expect(find.text(tip), findsOneWidget);
+
+      for (var i = 0; i < 30; i++) {
+        tick();
+        await tester.pump();
+      }
+
+      expect(pageBuilds, 1, reason: 'the page never rebuilds on a tick');
+      expect(ageBuilds, 31, reason: 'the time value rebuilds on every tick');
+      expect(find.text('35m ago'), findsOneWidget);
+      expect(tipBuilds, 1, reason: 'the tip is not rebuilt inside its hour');
+      expect(find.text(tip), findsOneWidget);
+    });
+
+    testWidgets('the tip part rebuilds only on a tick where the tip changed',
+        (tester) async {
+      await tester.pumpWidget(page());
+      var shown = tipNow();
+      var changes = 0;
+
+      for (var hour = 0; hour < 24; hour++) {
+        tick(const Duration(hours: 1));
+        await tester.pump();
+        if (tipNow() != shown) {
+          shown = tipNow();
+          changes++;
+        }
+        expect(tipBuilds, 1 + changes);
+        expect(find.text(tipText(shown)), findsOneWidget);
+      }
+
+      expect(changes, greaterThan(12));
+      expect(pageBuilds, 1);
+    });
+
+    testWidgets('only a resume from the background redraws the tip',
+        (tester) async {
+      await tester.pumpWidget(page());
+      final before = tipNow();
+
+      // The dashboard's resume handler: tell the rotation, then tick.
+      tips.onResumed();
+      minute.value++;
+      await tester.pump();
+      expect(tipBuilds, 1, reason: 'the app never left the screen');
+
+      tips.onHidden();
+      tips.onResumed();
+      minute.value++;
+      await tester.pump();
+      final fresh = tipNow();
+      expect(fresh, isNot(before), reason: 'this seed and hour redraw');
+      expect(tipBuilds, 2);
+      expect(find.text(tipText(fresh)), findsOneWidget);
+      expect(pageBuilds, 1);
+    });
+
+    testWidgets('a rebuild from above reads the clock, and never moves the tip',
+        (tester) async {
+      await tester.pumpWidget(page());
+      final tip = tipText(tipNow());
+
+      for (var i = 1; i <= 20; i++) {
+        now = now.add(const Duration(minutes: 1)); // no tick
+        await tester.pumpWidget(page());
+      }
+
+      expect(pageBuilds, 21);
+      expect(find.text('25m ago'), findsOneWidget);
+      expect(find.text(tip), findsOneWidget);
+    });
+
+    testWidgets('a tick compares with what the part was built from',
+        (tester) async {
+      // Like the status slot: the selected value depends on the clock and on
+      // which buddy is focused. A is in its danger window from the start, B
+      // enters it at 14:07.
+      bool inDanger(String buddy, DateTime now) =>
+          buddy == 'A' || now.minute >= 7;
+      var builds = 0;
+      Widget slot(String buddy) => Directionality(
+            textDirection: TextDirection.ltr,
+            child: ClockPart(
+              tick: minute,
+              clock: () => now,
+              select: (now) => inDanger(buddy, now),
+              builder: (_, now) {
+                builds++;
+                return Text(inDanger(buddy, now) ? 'danger' : 'feed');
+              },
+            ),
+          );
+
+      await tester.pumpWidget(slot('A'));
+      expect(find.text('danger'), findsOneWidget);
+
+      await tester.pumpWidget(slot('B')); // the wheel moved to B, no tick
+      expect(find.text('feed'), findsOneWidget);
+      expect(builds, 2);
+
+      tick(); // 14:06, B still outside
+      await tester.pump();
+      expect(builds, 2);
+
+      tick(); // 14:07, B enters: same value A had at the last tick
+      await tester.pump();
+      expect(find.text('danger'), findsOneWidget);
+      expect(builds, 3);
+    });
+
+    testWidgets('a removed part stops listening', (tester) async {
+      await tester.pumpWidget(page());
+      await tester.pumpWidget(const SizedBox());
+      tick();
+      await tester.pump();
+      expect(ageBuilds, 1);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  // The page's own wiring, read from the source because the page cannot be
+  // pumped: the minute timer only fires the tick, and the tick is only ever
+  // handed to ClockParts, so nothing at page level rebuilds on it.
+  test('the dashboard minute timer fires the tick and nothing else', () {
+    final source = File('lib/home/dashboard_page.dart').readAsStringSync();
+    expect(
+      source,
+      contains('Timer.periodic(const Duration(minutes: 1), (_) => _minute.value++)'),
+    );
+    final uses = RegExp(r'_minute\b[^\n]*')
+        .allMatches(source)
+        .map((m) => m[0]!.trim())
+        .toSet();
+    expect(uses, {
+      '_minute = ValueNotifier<int>(0);',
+      '_minute.value++);', // the timer
+      '_minute.value++;', // the resume handler
+      '_minute.dispose();',
+      '_minute,', // tick: _minute, on a ClockPart
+    });
+    expect('tick: _minute,'.allMatches(source).length, 4,
+        reason: 'tray, standalone week card, danger card, feed age');
   });
 }

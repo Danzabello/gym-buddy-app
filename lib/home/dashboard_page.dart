@@ -43,8 +43,8 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   /// falls back the way safe_user_tz does.
   Map<String, String> _buddyTimezones = {};
 
-  /// Activity-feed futures per team_streak_id, memoised so the per-minute
-  /// countdown tick and every carousel swipe don't refire the query. Dropped
+  /// Activity-feed futures per team_streak_id, memoised so a page rebuild
+  /// (every carousel swipe) doesn't refire the query. Dropped
   /// on refresh and whenever a live check-in lands for that team — which is
   /// all the realtime wiring the feed needs.
   final Map<String, Future<List<_FeedEvent>>> _teamFeeds = {};
@@ -111,6 +111,10 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   late PageController _trayController;
   Timer? _countdownTimer;
 
+  /// The minute tick. Nothing at page level listens to it: only the
+  /// ClockParts do, so a tick rebuilds the time values and not the page.
+  final _minute = ValueNotifier<int>(0);
+
   // Live check-in feed for the streak rings. RLS on
   // daily_team_checkins already scopes each subscriber to their own teams
   // and accepted friends, so no extra client-side filter is needed here.
@@ -171,15 +175,15 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
         if (mounted && level != null) {
           _motion.sync(level, _coinBalance, HeaderSyncMode.snap);
         }
-        // Back from the background: show the fresh coach tip.
+        // Back from the background: a fresh coach tip, and time values that
+        // do not wait for the next minute.
         CoachTipRotation.session.onResumed();
-        if (mounted) setState(() {});
+        _minute.value++;
       },
     );
     EconomySync.instance.numbers.addListener(_onEconomyChanged);
     HeaderHold.instance.addListener(_onHeaderHold);
-    _updateCountdown();
-    _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _updateCountdown());
+    _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _minute.value++);
     _confettiController = ConfettiController(duration: const Duration(seconds: 3));
     _confettiControllerRight = ConfettiController(duration: const Duration(seconds: 3));
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -347,6 +351,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _appLifecycleListener?.dispose();
     _trayController.dispose();
     _countdownTimer?.cancel();
+    _minute.dispose();
     if (_checkinChannel != null) {
       _supabase.removeChannel(_checkinChannel!);
     }
@@ -564,10 +569,23 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
           _buildMilestoneCard(displayItems),
         ],
         const SizedBox(height: 8),
-        _buildInfoTray(displayItems),
+        // The tip, the folded week card and the status slot take their value
+        // from the clock but change rarely: a tick rebuilds the tray only when
+        // one of them has changed.
+        ClockPart(
+          tick: _minute,
+          clock: widget.clock,
+          select: (now) => _trayClockValues(displayItems, now),
+          builder: (_, now) => _buildInfoTray(displayItems, now),
+        ),
         if (!compact) ...[
           const SizedBox(height: 8),
-          _buildWeekCard(),
+          ClockPart(
+            tick: _minute,
+            clock: widget.clock,
+            select: _dayOf,
+            builder: (_, now) => _buildWeekCard(now),
+          ),
         ],
         const SizedBox(height: 2),
       ],
@@ -946,23 +964,41 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     return buddy != null && _buddyOnBreakToday[buddy.userId] == true;
   }
 
+  static DateTime _dayOf(DateTime now) => DateTime(now.year, now.month, now.day);
+
+  /// What the info tray takes from the clock: the day (folded week card), the
+  /// coach tip, and whether the focused buddy is inside the danger window
+  /// (which card the status slot shows, and so the tray's page count).
+  Object _trayClockValues(List<dynamic> displayItems, DateTime now) {
+    final focused = _focusedOf(displayItems);
+    final buddy =
+        _hasCheckedInToday && focused is TeamStreak && !focused.isCoachMaxTeam
+            ? _buddyOf(focused)
+            : null;
+    return (
+      _dayOf(now),
+      CoachTipRotation.session.indexAt(now, coachTips.length),
+      buddy != null && _dangerRemaining(buddy, now) != null,
+    );
+  }
+
   /// [displayItems] is the wheel's items, needed to resolve the leading
   /// team-status card exactly the way the old standalone slab did.
-  Widget _buildInfoTray(List<dynamic> displayItems) {
+  Widget _buildInfoTray(List<dynamic> displayItems, DateTime now) {
     final c = AppColors.of(context);
-    final tip = coachTips[
-        CoachTipRotation.session.indexAt(widget.clock(), coachTips.length)];
+    final tip =
+        coachTips[CoachTipRotation.session.indexAt(now, coachTips.length)];
     // Same condition/result the old standalone "Team Activity" slab used —
     // just relocated here as the tray's leading, unshuffled page.
     final teamStatusCard =
-        _hasCheckedInToday ? _buildTeamStatusCard(displayItems) : null;
+        _hasCheckedInToday ? _buildTeamStatusCard(displayItems, now) : null;
     final rotating = [_buildTrayWorkout(), _buildTrayCoachTip(tip)];
     final orderedRotating = _trayOrder.map((i) => rotating[i]).toList();
 
     final cards = <Widget>[
       // Compact-height phones fold the persistent week card into the tray
       // itself instead of also rendering it below — see _buildDashboardBody.
-      if (_isCompactHeight(context)) _buildWeekCard(inTray: true),
+      if (_isCompactHeight(context)) _buildWeekCard(now, inTray: true),
       if (teamStatusCard != null) teamStatusCard,
       ...orderedRotating,
     ];
@@ -1437,10 +1473,9 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   /// [inTray] is true only for the latter: it centers the content and
   /// reserves room for the dots overlay in that fixed 128px box; the
   /// standalone persistent placement sizes to its own content as before.
-  Widget _buildWeekCard({bool inTray = false}) {
+  Widget _buildWeekCard(DateTime today, {bool inTray = false}) {
     final c = AppColors.of(context);
     final danger = context.watch<AccentThemeProvider>().palette.statusDanger;
-    final today = widget.clock();
     final monday = today.subtract(Duration(days: today.weekday - 1));
     final week = List.generate(7, (i) => monday.add(Duration(days: i)));
     final checkedCount =
@@ -2075,13 +2110,14 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   /// Time left before the streak breaks for [buddy], or null while it isn't
   /// yet their evening — resolved entirely in the buddy's own zone.
-  Duration? _dangerRemaining(TeamMember buddy) => dangerRemainingAt(
-        tz.TZDateTime.from(widget.clock(), _zoneOf(buddy.userId)),
+  Duration? _dangerRemaining(TeamMember buddy, DateTime now) =>
+      dangerRemainingAt(
+        tz.TZDateTime.from(now, _zoneOf(buddy.userId)),
         cutoffHour: _kDangerHour,
       );
 
-  String _feedAge(DateTime at) {
-    final d = widget.clock().difference(at);
+  String _feedAge(DateTime now, DateTime at) {
+    final d = now.difference(at);
     if (d.inMinutes < 1) return 'just now';
     if (d.inMinutes < 60) return '${d.inMinutes}m ago';
     if (d.inHours < 24) return '${d.inHours}h ago';
@@ -2097,7 +2133,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   ///
   /// The danger window owns the slot: inside it the card reports where the
   /// team's streak stands, and outside it the feed has the slot to itself.
-  Widget? _buildTeamStatusCard(List<dynamic> displayItems) {
+  Widget? _buildTeamStatusCard(List<dynamic> displayItems, DateTime now) {
     final focused = _focusedOf(displayItems);
     if (focused is! TeamStreak) return const SizedBox.shrink();
 
@@ -2105,7 +2141,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     // whose check-in the streak is waiting on. His team falls through to the
     // feed, which still has his daily check-ins and yours to show.
     final buddy = focused.isCoachMaxTeam ? null : _buddyOf(focused);
-    final remaining = buddy == null ? null : _dangerRemaining(buddy);
+    final remaining = buddy == null ? null : _dangerRemaining(buddy, now);
     switch (resolveStatusSlot(
       hasBuddy: buddy != null,
       buddyCheckedIn: buddy != null &&
@@ -2113,7 +2149,17 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       inDangerWindow: remaining != null,
     )) {
       case StatusSlot.danger:
-        return _buildStreakDangerCard(buddy!, remaining!);
+        // The countdown text and the bar move every minute. The window closing
+        // is the tray's business (_trayClockValues), so a tick that lands on
+        // the deadline shows zero until the tray swaps the card.
+        return ClockPart(
+          tick: _minute,
+          clock: widget.clock,
+          builder: (_, now) => _buildStreakDangerCard(
+            buddy!,
+            _dangerRemaining(buddy, now) ?? Duration.zero,
+          ),
+        );
       case StatusSlot.secured:
         return null;
       case StatusSlot.feed:
@@ -2133,7 +2179,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     final surface = c.tint(danger, surface: c.claySurface);
     // Fills up (and deepens in colour) toward the deadline — the inverse of
     // `remaining`, off the same window/value the "Xh Ym" text reads, so it
-    // recomputes on that text's existing 1-minute _countdownTimer cadence
+    // recomputes on that text's 1-minute tick (the card sits in a ClockPart)
     // with no rebuild trigger of its own.
     final totalWindowMinutes =
         const Duration(hours: 24 - _kDangerHour).inMinutes;
@@ -2289,9 +2335,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            _feedAge(e.at),
-            style: TextStyle(fontSize: 11, color: c.inkMuted),
+          ClockPart(
+            tick: _minute,
+            clock: widget.clock,
+            builder: (_, now) => Text(
+              _feedAge(now, e.at),
+              style: TextStyle(fontSize: 11, color: c.inkMuted),
+            ),
           ),
         ],
       ),
@@ -2730,13 +2780,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
       _loadStreakData();
     }
-  }
-
-  void _updateCountdown() {
-    if (!mounted) return;
-    
-    // Rebuild only: the danger countdown text/fill recompute on this tick.
-    setState(() {});
   }
 
   void _showCustomModeSelector() async {
