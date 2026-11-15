@@ -29,6 +29,34 @@ void main() {
     expect(kPendingRequestsCeiling, greaterThanOrEqualTo(10 * 20));
     expect(kDayWorkoutsCeiling, greaterThanOrEqualTo(10 * 10));
     expect(kWeekCoinRowsCeiling, greaterThanOrEqualTo(10 * 70));
+    expect(kOpenWorkoutsCeiling, greaterThanOrEqualTo(10 * 30));
+  });
+
+  group('WorkoutService.listOpenWorkoutIds', () {
+    test('sends the ceiling, the order and the filters', () async {
+      await WorkoutService(client: server.client).listOpenWorkoutIds();
+      final q = server.query(_callTo(server, 'workouts'));
+      expect(q['limit'], '300');
+      expect(q['order'], startsWith('planned_at'));
+      expect(q['status'], 'in.("scheduled","in_progress")');
+      expect(q['or'], '(user_id.eq.$_me,buddy_id.eq.$_me)');
+      expect(q['planned_at'], startsWith('gte.'));
+    });
+
+    test('drops received invites that are not accepted', () async {
+      server.reply = (_) => [
+            {'id': 'own', 'buddy_id': null, 'buddy_status': null},
+            {'id': 'pending', 'buddy_id': _me, 'buddy_status': 'pending'},
+            {'id': 'accepted', 'buddy_id': _me, 'buddy_status': 'accepted'},
+          ];
+      expect(await WorkoutService(client: server.client).listOpenWorkoutIds(), ['own', 'accepted']);
+    });
+
+    test('a failure is thrown for the caller to handle', () async {
+      server.down = true;
+      await expectLater(
+          WorkoutService(client: server.client).listOpenWorkoutIds(), throwsA(anything));
+    });
   });
 
   test('accepted friendships are read with the friends ceiling', () async {

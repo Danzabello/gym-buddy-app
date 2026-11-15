@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/coin_service.dart';
 import '../services/handshake_service.dart';
 import '../services/team_streak_service.dart';
+import '../services/workout_service.dart';
 import '../widgets/completed_workouts_section.dart';
 import 'finish_flow.dart';
 import '../widgets/workout_schedule_card.dart';
@@ -86,22 +87,7 @@ class ScheduleDeps {
       },
       loadStreak: () async => (await TeamStreakService().getAllUserStreaks())
           .fold<int>(0, (m, s) => s.currentStreak > m ? s.currentStreak : m),
-      listIds: () async {
-        final uid = client.auth.currentUser!.id;
-        final since = DateTime.now().toUtc().subtract(const Duration(days: 1)).toIso8601String();
-        final rows = await client
-            .from('workouts')
-            .select('id, buddy_id, buddy_status')
-            .or('user_id.eq.$uid,buddy_id.eq.$uid')
-            .inFilter('status', ['scheduled', 'in_progress'])
-            .gte('planned_at', since)
-            .order('planned_at');
-        // invites I received and have not accepted live in Invitations, not here
-        return [
-          for (final r in rows)
-            if (r['buddy_id'] != uid || r['buddy_status'] == 'accepted') r['id'] as String
-        ];
-      },
+      listIds: () => WorkoutService().listOpenWorkoutIds(),
     );
   }
 }

@@ -120,6 +120,26 @@ class WorkoutService {
     }
   }
 
+  /// Ids of the signed-in user's scheduled or in-progress workouts from one
+  /// day ago on, soonest first. Invites received and not yet accepted live in
+  /// Invitations, so they are left out. Errors are thrown for the caller.
+  Future<List<String>> listOpenWorkoutIds({DateTime? now}) async {
+    final uid = _supabase.auth.currentUser!.id;
+    final since = (now ?? DateTime.now()).toUtc().subtract(const Duration(days: 1)).toIso8601String();
+    final rows = await _supabase
+        .from('workouts')
+        .select('id, buddy_id, buddy_status')
+        .or('user_id.eq.$uid,buddy_id.eq.$uid')
+        .inFilter('status', ['scheduled', 'in_progress'])
+        .gte('planned_at', since)
+        .order('planned_at')
+        .limit(kOpenWorkoutsCeiling);
+    return [
+      for (final r in rows)
+        if (r['buddy_id'] != uid || r['buddy_status'] == 'accepted') r['id'] as String
+    ];
+  }
+
   /// How many completed workouts [uid] took part in, as owner or buddy. One
   /// head request with an exact count: no rows come back, so the number is
   /// right however long the history gets. Throws on failure, like the read

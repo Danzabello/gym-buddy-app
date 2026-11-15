@@ -17,3 +17,7 @@ const int kDayWorkoutsCeiling = 100;
 /// One user's coin rows in seven days. Realistic maximum 70; largest on
 /// live 3. Also PostgREST's own default row cap.
 const int kWeekCoinRowsCeiling = 1000;
+
+/// One user's open (scheduled or in-progress) workouts on the Schedule tab.
+/// Realistic maximum 30; largest on live 2 (2026-11-14).
+const int kOpenWorkoutsCeiling = 300;
