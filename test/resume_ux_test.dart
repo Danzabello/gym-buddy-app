@@ -34,16 +34,19 @@ class _Fake {
   int stateReads = 0;
   int signOuts = 0;
   Completer<void>? signOutGate;
+  Future<void> Function() signedIn = () async {};
+  String? storedTz = 'Europe/Dublin';
+  final completedWith = <String?>[];
 
   AuthWrapperDeps deps() => AuthWrapperDeps(
         userId: () => uid,
-        onSignedIn: (_) async {},
-        onboardingState: (_) {
+        onSignedIn: (_) => signedIn(),
+        onboardingStatus: (_) async {
           stateReads++;
-          return state();
+          return (await state(), storedTz);
         },
         loadResume: (_) async => resume,
-        onCompleted: (_) async {},
+        onCompleted: (_, tz) async => completedWith.add(tz),
         home: (_) => const Scaffold(body: Text('HOME')),
         signOut: () async {
           signOuts++;
@@ -142,6 +145,57 @@ void main() {
       expect(find.text('HOME'), findsOneWidget);
       expect(find.byType(SplashScreen), findsNothing);
       expect(find.byType(OnboardingHost), findsNothing);
+    });
+
+    testWidgets('a notification init that never finishes does not hold the app',
+        (t) async {
+      final f = _Fake()
+        ..signedIn = (() => Completer<void>().future)
+        ..state = (() async => OnboardingState.complete);
+      await _open(t, f);
+      expect(find.text('HOME'), findsOneWidget);
+      await t.pump(const Duration(seconds: 11)); // let its 10s cap fire
+    });
+
+    testWidgets('a notification init that throws does not hold the app',
+        (t) async {
+      final f = _Fake()
+        ..signedIn = (() async => throw StateError('fcm'))
+        ..state = (() async => OnboardingState.complete);
+      await _open(t, f);
+      expect(find.text('HOME'), findsOneWidget);
+    });
+
+    testWidgets('the status read starts without waiting for notification init',
+        (t) async {
+      final gate = Completer<void>();
+      final f = _Fake()
+        ..signedIn = (() => gate.future)
+        ..state = (() async => OnboardingState.complete);
+      await _open(t, f);
+      expect(f.stateReads, 1);
+      gate.complete();
+    });
+
+    testWidgets('launch work for a finished account gets the stored timezone',
+        (t) async {
+      final f = _Fake()
+        ..storedTz = 'America/New_York'
+        ..state = (() async => OnboardingState.complete);
+      await _open(t, f);
+      expect(f.completedWith, ['America/New_York']);
+    });
+
+    testWidgets('launch work runs only for a finished account', (t) async {
+      for (final s in [
+        OnboardingState.noProfile,
+        OnboardingState.unknown,
+        OnboardingState.incomplete
+      ]) {
+        final f = _Fake()..state = (() async => s);
+        await _open(t, f);
+        expect(f.completedWith, isEmpty, reason: '$s');
+      }
     });
 
     testWidgets('signed out shows the splash and reads nothing', (t) async {

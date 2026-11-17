@@ -192,6 +192,15 @@ class AuthService {
 
 enum OnboardingState { complete, incomplete, noProfile, unknown }
 
+/// Start-up read: the state plus the stored timezone from the same
+/// `get_my_profile` row (null when unknown or no row), so launch can skip a
+/// timezone write that would change nothing.
+Future<(OnboardingState, String?)> startupProfileStatus() => readOnboardingStatus(
+  () => Supabase.instance.client
+      .rpc('get_my_profile')
+      .select('onboarding_completed,timezone'),
+);
+
 /// Classifies one `get_my_profile` read. The read is taken as a list on
 /// purpose: `single()` / `maybeSingle()` make PostgREST answer 406 for zero
 /// rows, and the client only recognises that by its message text, so an
@@ -200,15 +209,24 @@ enum OnboardingState { complete, incomplete, noProfile, unknown }
 /// and must never be treated as "no profile" or "orphaned".
 Future<OnboardingState> readOnboardingState(
   Future<List<Map<String, dynamic>>> Function() read,
+) async => (await readOnboardingStatus(read)).$1;
+
+/// [readOnboardingState] plus the row's `timezone` when it was selected.
+Future<(OnboardingState, String?)> readOnboardingStatus(
+  Future<List<Map<String, dynamic>>> Function() read,
 ) async {
   try {
     final rows = await read();
-    if (rows.isEmpty) return OnboardingState.noProfile;
-    return rows.first['onboarding_completed'] == true
-        ? OnboardingState.complete
-        : OnboardingState.incomplete;
+    if (rows.isEmpty) return (OnboardingState.noProfile, null);
+    final row = rows.first;
+    return (
+      row['onboarding_completed'] == true
+          ? OnboardingState.complete
+          : OnboardingState.incomplete,
+      row['timezone'] as String?,
+    );
   } catch (e) {
     debugLog('AuthService.onboardingState failed: $e');
-    return OnboardingState.unknown;
+    return (OnboardingState.unknown, null);
   }
 }
