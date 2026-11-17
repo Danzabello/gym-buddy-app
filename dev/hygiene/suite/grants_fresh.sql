@@ -196,6 +196,19 @@ BEGIN
   FROM unnest(ARRAY['anon', 'authenticated']) ro, unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) pr
   WHERE has_table_privilege(ro, 'public.auto_checkin_counts', pr);
   r := r || (CASE WHEN n IS NULL THEN 'PASS ' ELSE 'FAIL ' END || 'G9.18 anon and authenticated hold no privilege on auto_checkin_counts -> ' || coalesce(n, 'none'));
+  -- G9.25 (20261116221000): tz_names is server-only and validate_user_timezone stays off the RPC surface. Passes as "not applied" until that migration is live.
+  IF to_regclass('public.tz_names') IS NULL THEN
+    r := r || 'PASS G9.25 tz_names not created yet (20261116221000 not applied)'::text;
+  ELSE
+    SELECT string_agg(ro || ' ' || pr, ', ' ORDER BY ro, pr) INTO n
+    FROM unnest(ARRAY['anon', 'authenticated', 'public']) ro, unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) pr
+    WHERE has_table_privilege(ro, 'public.tz_names', pr);
+    r := r || (CASE WHEN n IS NULL AND (SELECT relrowsecurity FROM pg_class WHERE oid = to_regclass('public.tz_names'))
+                         AND (SELECT prosecdef AND proconfig = '{search_path=public}' FROM pg_proc WHERE oid = 'public.validate_user_timezone()'::regprocedure)
+                         AND NOT has_function_privilege('anon', 'public.validate_user_timezone()', 'EXECUTE')
+                         AND NOT has_function_privilege('authenticated', 'public.validate_user_timezone()', 'EXECUTE')
+                    THEN 'PASS ' ELSE 'FAIL ' END || 'G9.25 tz_names: RLS on, no privilege for anon, authenticated or PUBLIC; validate_user_timezone SECURITY DEFINER, search_path pinned, not executable by anon or authenticated -> ' || coalesce(n, 'none'));
+  END IF;
   SELECT string_agg(ro || ' ' || pr, ', ' ORDER BY ro, pr) INTO n
   FROM unnest(ARRAY['anon', 'authenticated', 'public', 'service_role']) ro, unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) pr
   WHERE has_table_privilege(ro, 'public.notification_inbox', pr);
