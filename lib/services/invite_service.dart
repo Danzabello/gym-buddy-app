@@ -142,7 +142,9 @@ class InviteService {
               }),
           delay: retryDelay);
       if (!made) await rememberTeamRetry(me, result.inviterId!);
-      markStale({AppTab.dashboard, AppTab.friends, AppTab.profile});
+      // The friendship and team come from create_invite_team: nothing shown
+      // changed unless it was made.
+      if (made) markStale({AppTab.dashboard, AppTab.friends, AppTab.profile});
     } else if (result.status == InviteRedeemStatus.invalid &&
         await pendingInviteCode() == code) {
       // It will never work: don't offer it again.

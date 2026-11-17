@@ -153,10 +153,19 @@ class HandshakeService {
   Future<Map<String, dynamic>> _call(String fn, Map<String, dynamic> p) async {
     try {
       final r = await _rpc(fn, p);
+      final m = r is Map ? Map<String, dynamic>.from(r) : <String, dynamic>{};
       // Every action can change the dashboard's today tray and the Schedule
-      // list; the card read cannot.
-      if (fn != 'get_workout_card') markStale({AppTab.dashboard, AppTab.schedule});
-      return r is Map ? Map<String, dynamic>.from(r) : <String, dynamic>{};
+      // list; the card read and the results the server returns without
+      // writing (an overlap to confirm, a finish with nothing to credit)
+      // cannot.
+      final noop = switch (fn) {
+        'get_workout_card' => true,
+        'accept_workout_invite' => m['state'] == 'overlap',
+        'finish_checkin_session' => m['result'] == 'nothing_to_finish' || m['result'] == 'too_early',
+        _ => false,
+      };
+      if (!noop) markStale({AppTab.dashboard, AppTab.schedule});
+      return m;
     } catch (e) {
       throw HandshakeError.from(e);
     }
