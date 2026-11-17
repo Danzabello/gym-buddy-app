@@ -24,7 +24,13 @@ class _FeedEvent {
   const _FeedEvent(this.kind, this.text, this.at);
 }
 
-class _DashboardPageState extends State<DashboardPage> with TickerProviderStateMixin {
+class _DashboardPageState extends State<DashboardPage>
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  /// Kept alive across tab switches: the dashboard loads once and refreshes
+  /// only on the triggers in [_onTabShown] and its callers.
+  @override
+  bool get wantKeepAlive => true;
+
   final SupabaseClient _supabase = Supabase.instance.client;
   final TeamStreakService _teamStreakService = TeamStreakService();
   final WorkoutService _workoutService = WorkoutService();
@@ -79,12 +85,13 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   String? _myAvatarId;
 
   // Count-up motion for the header numbers. What it last showed lives in
-  // HeaderMotion.session, because the tab PageView disposes this state when
-  // another tab is open.
+  // HeaderMotion.session, so a new HomeScreen (after sign-in) starts from
+  // the last shown numbers.
   late final HeaderMotion _motion;
   final _coverGate = HeaderCoverGate();
   late final AppLifecycleListener _headerLifecycle;
-  final DateTime _builtAt = DateTime.now();
+  /// When the tab was last shown; the header waits [_tabSettle] after it.
+  DateTime _shownAt = DateTime.now();
   Timer? _headerGate;
   bool _reduceMotion = false;
   ModalRoute<dynamic>? _route;
@@ -125,7 +132,6 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
   TeamMember? _bannerBuddy;
   int _bannerRequestId = 0;
   bool _bannerViewerCheckedIn = false;
-  bool _liveCheckinBannerEnabled = true;
 
 
   @override
@@ -273,7 +279,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       overlay: overlay,
       now: DateTime.now(),
     );
-    final slidIn = DateTime.now().difference(_builtAt) >= _tabSettle;
+    final slidIn = DateTime.now().difference(_shownAt) >= _tabSettle;
     final mode = headerSyncMode(
       foreground: life == null || life == AppLifecycleState.resumed,
       reduceMotion: _reduceMotion,
@@ -281,14 +287,24 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       tabReady: LiveEventToast.dashboardTabActive && slidIn,
     );
     _motion.sync(level, _coinBalance, mode);
+    // A hidden tab does not poll: _onTabShown retries when it comes back.
     if (mode == HeaderSyncMode.hold &&
         !pageCovered &&
+        LiveEventToast.dashboardTabActive &&
         !_motion.matches(level, _coinBalance)) {
       _headerGate = Timer(_tabSettle, _syncHeader); // the route listener covers the rest
     }
   }
 
   static const _tabSettle = Duration(milliseconds: 350);
+
+  /// The shell switched to this tab (a tap, a swipe, or a tap that crosses
+  /// it on the way to another tab). Restarts the slide-in gate so the header
+  /// waits for the slide as it did when the tab was rebuilt on every visit.
+  void _onTabShown() {
+    _shownAt = DateTime.now();
+    _syncHeader();
+  }
 
   void _onRouteCover(AnimationStatus status) {
     if (status == AnimationStatus.dismissed) _syncHeader();
@@ -399,18 +415,16 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
     _checkinChannel = channel.subscribe();
   }
 
-  /// Cached once on load per the settings toggle (notification_settings_page
-  /// .dart) — _handleRealtimeCheckIn reads the cached flag, no refetch per
-  /// event.
+  /// Read once on load into LiveEventToast.dashboardCheckInBannerEnabled,
+  /// which the settings page also writes on save, so the kept-alive dashboard
+  /// sees a toggle without a refetch per event.
   Future<void> _loadLiveCheckinBannerSetting() async {
     final settings = await NotificationService().getSettings();
     if (mounted) {
-      setState(() {
-        _liveCheckinBannerEnabled = settings['live_checkin_banner'] ?? true;
-      });
       // With the banner off the dashboard shows nothing for a check-in, so the
       // generic push toast should take over rather than also staying silent.
-      LiveEventToast.dashboardCheckInBannerEnabled = _liveCheckinBannerEnabled;
+      LiveEventToast.dashboardCheckInBannerEnabled =
+          settings['live_checkin_banner'] ?? true;
     }
   }
 
@@ -488,10 +502,11 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
       _teamFeeds.remove(teamStreakId);  // feed reloads with the new check-in
       // Banner is only ever for a buddy's check-in, never the viewer's own
       // (that path already has its own on-screen feedback), and only when
-      // the live_checkin_banner setting allows it. The ring update above
-      // always applies regardless of that toggle.
+      // the live_checkin_banner setting allows it and this tab is showing
+      // (off the tab the push toast shows it). The ring update above
+      // always applies.
       if (userId != _supabase.auth.currentUser?.id &&
-          _liveCheckinBannerEnabled) {
+          LiveEventToast.dashboardOwnsCheckIns) {
         _bannerBuddy = member;
         _bannerRequestId++;
         _bannerViewerCheckedIn = viewerCheckedIn;
@@ -3295,6 +3310,7 @@ class _DashboardPageState extends State<DashboardPage> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin
     final displayItems = _allStreaks.isEmpty ? null : _wheelItems();
     return Stack(
       children: [

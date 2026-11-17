@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import 'package:provider/provider.dart';
 import '../utils/run_once.dart';
+import '../widgets/live_event_toast.dart';
 
 /// "All notifications" master over the four push kinds. `count` is how many
 /// of them are on. Drawn on only when the OS permission is granted.
@@ -143,6 +144,8 @@ class _NotificationSettingsPageState extends State<NotificationSettingsPage>
       'quiet_hours_start': _quietHoursStart,
       'quiet_hours_end': _quietHoursEnd,
     });
+    // The kept-alive dashboard reads this flag for its live check-in banner.
+    LiveEventToast.dashboardCheckInBannerEnabled = _liveCheckinBanner;
     if (mounted) {
       setState(() => _isSaving = false);
       ScaffoldMessenger.of(context).showSnackBar(
