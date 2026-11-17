@@ -95,6 +95,12 @@ class _DashboardPageState extends State<DashboardPage>
   // HeaderMotion.session, so a new HomeScreen (after sign-in) starts from
   // the last shown numbers.
   late final HeaderMotion _motion;
+  /// The header was seeded from the saved copy and no server answer has
+  /// reached it yet (seededSyncMode, seedSettled).
+  bool _seeded = false;
+  /// _levelInfo and _coinBalance hold numbers the server answered (a load
+  /// that answered both, or an EconomySync change), not only kept ones.
+  bool _headerAnswered = false;
   final _coverGate = HeaderCoverGate();
   late final AppLifecycleListener _headerLifecycle;
   /// When the tab was last shown; the header waits [_tabSettle] after it.
@@ -186,6 +192,10 @@ class _DashboardPageState extends State<DashboardPage>
     );
     
     _initializeHomePage();
+    // The saved header (seeded before Home built), only for its own user.
+    final seed = claimHeaderSeed(_supabase.auth.currentUser?.id);
+    _myAvatarId = seed?.avatar;
+    _seeded = seed?.numbers ?? false;
     _loadHeaderData();
     _motion = HeaderMotion(this, onSettled: _announceHeader);
     // Resuming from the background updates the numbers silently.
@@ -247,31 +257,51 @@ class _DashboardPageState extends State<DashboardPage>
   /// Avatar, level and coin balance for the new header row — kept off
   /// _initializeHomePage's await chain so a slow query here can't delay the
   /// streak wheel.
+  ///
+  /// Each read stands alone: one that failed keeps what the header shows
+  /// (the saved copy or an earlier load) and saves nothing; a real 0 is
+  /// shown and saved as 0.
   Future<void> _loadHeaderData() async {
     final uid = _supabase.auth.currentUser?.id;
     if (uid == null) return;
+    final (avatar, level, coins) = await (
+      _readAvatar(uid),
+      LevelService().getLevelInfo(),
+      CoinService().getBalanceOrNull(),
+    ).wait;
+    if (!mounted) return;
+    final shown = headerAfterLoad(
+      level: level,
+      coins: coins,
+      shownLevel: _levelInfo ?? _motion.target,
+      shownCoins: _levelInfo != null ? _coinBalance : (_motion.ready ? _motion.coinTarget : null),
+    );
+    setState(() {
+      if (avatar != null) _myAvatarId = avatar.id;
+      if (shown != null) {
+        _levelInfo = shown.level;
+        _coinBalance = shown.coins;
+      }
+      if (level != null && coins != null) _headerAnswered = true;
+    });
+    _syncHeader();
+    // Only what the server answered in this load, never what is shown.
+    unawaited(saveHeaderAnswers(uid, level: level, coins: coins, avatar: avatar));
+  }
+
+  /// The avatar id, or null when the read failed (an id of null is an
+  /// account that never picked one).
+  Future<({String? id})?> _readAvatar(String uid) async {
     try {
-      final profileFuture = _supabase
+      final row = await _supabase
           .from('user_profiles')
           .select('avatar_id')
           .eq('id', uid)
           .single();
-      final levelFuture = LevelService().getLevelInfo();
-      final coinFuture = CoinService().getBalance();
-
-      final profile = await profileFuture;
-      final level = await levelFuture;
-      final coins = await coinFuture;
-
-      if (!mounted) return;
-      setState(() {
-        _myAvatarId = profile['avatar_id'] as String?;
-        _levelInfo = level;
-        _coinBalance = coins;
-      });
-      _syncHeader();
+      return (id: row['avatar_id'] as String?);
     } catch (e) {
-      if (kDebugMode) debugLog('❌ _loadHeaderData: $e');
+      if (kDebugMode) debugLog('❌ _loadHeaderData avatar: $e');
+      return null;
     }
   }
 
@@ -281,10 +311,14 @@ class _DashboardPageState extends State<DashboardPage>
     // A coin row (Realtime) or a finished check-in anywhere lands here.
     _dirty = true;
     final n = EconomySync.instance.numbers.value;
-    if (n == null || !mounted) return;
+    if (n == null) return;
+    // A server answer: saved as the header's confirmed numbers.
+    unawaited(saveHeaderAnswers(_supabase.auth.currentUser?.id, level: n.level, coins: n.coins));
+    if (!mounted) return;
     setState(() {
       _levelInfo = n.level;
       _coinBalance = n.coins;
+      _headerAnswered = true;
     });
     _syncHeader();
   }
@@ -316,12 +350,21 @@ class _DashboardPageState extends State<DashboardPage>
       now: DateTime.now(),
     );
     final slidIn = DateTime.now().difference(_shownAt) >= _tabSettle;
-    final mode = headerSyncMode(
+    var mode = headerSyncMode(
       foreground: life == null || life == AppLifecycleState.resumed,
       reduceMotion: _reduceMotion,
       covered: covered,
       tabReady: LiveEventToast.dashboardTabActive && slidIn,
     );
+    // Seeded from the saved copy: lower snaps rather than counting down from
+    // the saved numbers, until a server answer is applied or found equal.
+    final seededFrom = _motion.target;
+    if (_seeded && seededFrom != null) {
+      mode = seededSyncMode(mode,
+          shown: seededFrom, shownCoins: _motion.coinTarget, level: level, coins: _coinBalance);
+      _seeded = !seedSettled(
+          answered: _headerAnswered, mode: mode, matches: _motion.matches(level, _coinBalance));
+    }
     _motion.sync(level, _coinBalance, mode);
     // A hidden tab does not poll: _onTabShown retries when it comes back.
     if (mode == HeaderSyncMode.hold &&

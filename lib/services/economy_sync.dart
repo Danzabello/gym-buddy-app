@@ -55,10 +55,13 @@ class EconomySync {
     }
   }
 
-  // A failed level read returns null; keep what is on screen rather than zero it.
+  // A failed level or coin read returns null; keep what is on screen rather
+  // than zero it.
   static Future<EconomyNumbers?> _live() async {
     final level = await LevelService().getLevelInfo();
     if (level == null) return null;
-    return EconomyNumbers(level, await CoinService().getBalance());
+    final coins = await CoinService().getBalanceOrNull();
+    if (coins == null) return null;
+    return EconomyNumbers(level, coins);
   }
 }

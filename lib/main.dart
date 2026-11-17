@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_screen.dart';
+import 'home/header_seed.dart';
 import 'services/auth_service.dart';
 import 'services/coach_max_service.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -159,7 +160,11 @@ class AuthWrapperDeps {
       },
       home: (_) => const HomeScreen(),
       signOut: auth.signOut,
-      loadSaved: (id) async => (await SavedCopy.owner(), await SavedCopy.onboarded(id)),
+      loadSaved: (id) async {
+        // The header's saved numbers and avatar, read before Home builds.
+        await seedHeader(id);
+        return (await SavedCopy.owner(), await SavedCopy.onboarded(id));
+      },
       saveOnboarded: (id, onboarded) =>
           onboarded ? SavedCopy.saveOnboarded(id) : SavedCopy.drop(id, 'onboarded'),
       signedOutEvents: () => Supabase.instance.client.auth.onAuthStateChange
