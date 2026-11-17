@@ -6,6 +6,7 @@ import 'package:play_install_referrer/play_install_referrer.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'dashboard_refresh.dart';
 
 enum InviteRedeemStatus { paired, invalid, rateLimited, offline, malformed }
 
@@ -141,6 +142,7 @@ class InviteService {
               }),
           delay: retryDelay);
       if (!made) await rememberTeamRetry(me, result.inviterId!);
+      dashboardStale = true;
     } else if (result.status == InviteRedeemStatus.invalid &&
         await pendingInviteCode() == code) {
       // It will never work: don't offer it again.
@@ -189,6 +191,7 @@ class InviteService {
     await prefs.remove(_pendingTeamKey);
     try {
       await (create ?? (inviterId) => _createTeam(inviterId, userId))(parts[1]);
+      dashboardStale = true;
     } catch (e) {
       if (kDebugMode) debugLog('⚠️ create_invite_team launch retry: $e');
     }

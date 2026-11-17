@@ -83,14 +83,9 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    // The kept-alive dashboard decides for itself whether to refetch.
     if (index == 2 && previousIndex != 2) {
       _dashboardKey.currentState?._onTabShown();
-    }
-
-    // Refresh dashboard when returning from friends page
-    if (index == 2 && previousIndex == 1) {
-      _dashboardKey.currentState?._syncTeamCheckIns();
-      _dashboardKey.currentState?._loadStreakData();
     }
   }
 
@@ -107,10 +102,6 @@ class _HomeScreenState extends State<HomeScreen> {
             setState(() => _selectedIndex = index);
             LiveEventToast.dashboardTabActive = index == 2;
             if (index == 2) _dashboardKey.currentState?._onTabShown();
-            if (index == 2 && _selectedIndex == 1) {
-              _dashboardKey.currentState?._syncTeamCheckIns();
-              _dashboardKey.currentState?._loadStreakData();
-            }
             if (index == 0) {
               setState(() {
                 _pages[0] = SchedulePage(

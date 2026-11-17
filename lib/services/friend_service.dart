@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/services/team_sync_service.dart';
 import 'package:gym_buddy_app/utils/query_ceilings.dart';
+import 'dashboard_refresh.dart';
 
 class FriendService {
   final SupabaseClient _supabase;
@@ -180,6 +181,7 @@ class FriendService {
       final teamId = result['team_id'] as String;
       final streakId = result['streak_id'] as String?;
       if (kDebugMode) debugLog('✅ Team ready: $teamId (created: ${result['created']})');
+      dashboardStale = true;
       if (streakId == null) return null;
 
       return {
@@ -343,6 +345,7 @@ class FriendService {
     try {
       await _supabase.rpc('remove_friend', params: {'p_friend_id': friendId});
       if (kDebugMode) debugLog('✅ Friendship removed successfully');
+      dashboardStale = true;
       return true;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error removing friend: $e');

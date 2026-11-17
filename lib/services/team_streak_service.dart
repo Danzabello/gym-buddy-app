@@ -8,6 +8,7 @@ import 'dart:async' show unawaited;
 import 'achievement_service.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
+import 'dashboard_refresh.dart';
 
 
 
@@ -368,6 +369,7 @@ class TeamStreakService {
     if (noop != null) return {'success': false, 'noop': true, 'message': noop};
     // The credit is committed: show the new coins and xp now.
     unawaited(EconomySync.instance.refresh());
+    dashboardStale = true;
     final today = localTodayString();
       final creditDate = res['credit_date'] as String;
       final successCount = res['checked_in'] as int? ?? 0;

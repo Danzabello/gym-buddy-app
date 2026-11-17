@@ -92,6 +92,13 @@ class _DashboardPageState extends State<DashboardPage>
   late final AppLifecycleListener _headerLifecycle;
   /// When the tab was last shown; the header waits [_tabSettle] after it.
   DateTime _shownAt = DateTime.now();
+
+  // Refresh state for shouldRefresh: when the last load started, whether a
+  // Realtime event or a finished check-in came in since, and when the app
+  // last went to the background.
+  DateTime? _lastLoaded;
+  bool _dirty = false;
+  DateTime? _hiddenAt;
   Timer? _headerGate;
   bool _reduceMotion = false;
   ModalRoute<dynamic>? _route;
@@ -174,8 +181,24 @@ class _DashboardPageState extends State<DashboardPage>
     // Resuming from the background updates the numbers silently.
     _refreshOsPermission();
     _headerLifecycle = AppLifecycleListener(
-      onHide: CoachTipRotation.session.onHidden,
+      onHide: () {
+        _hiddenAt = DateTime.now();
+        CoachTipRotation.session.onHidden();
+      },
       onResume: () {
+        // More than 5 minutes away: stale, refetched now if the tab is
+        // showing, else on its next show.
+        final hiddenAt = _hiddenAt;
+        _hiddenAt = null;
+        if (hiddenAt != null &&
+            shouldRefresh(
+                lastLoaded: _lastLoaded,
+                now: DateTime.now(),
+                dirty: _dirty,
+                resumed: hiddenAt)) {
+          _lastLoaded = null;
+        }
+        _refreshIfStale();
         _refreshOsPermission();
         final level = _levelInfo;
         if (mounted && level != null) {
@@ -244,6 +267,8 @@ class _DashboardPageState extends State<DashboardPage>
   /// The server's coins, xp and level changed (EconomySync). Same path as
   /// the header reload: write the numbers, then compare and animate.
   void _onEconomyChanged() {
+    // A coin row (Realtime) or a finished check-in anywhere lands here.
+    _dirty = true;
     final n = EconomySync.instance.numbers.value;
     if (n == null || !mounted) return;
     setState(() {
@@ -304,6 +329,27 @@ class _DashboardPageState extends State<DashboardPage>
   void _onTabShown() {
     _shownAt = DateTime.now();
     _syncHeader();
+    // After the slide, so a tap that only passes this tab (0 to 4) fetches
+    // nothing: by then the shell has moved dashboardTabActive on.
+    Future.delayed(_tabSettle, () {
+      if (mounted) _refreshIfStale();
+    });
+  }
+
+  /// Refetches when shouldRefresh says so, and only while the tab is
+  /// showing: a hidden dashboard waits for its next show, so a load's
+  /// snackbar never lands on another tab. The dashboard's own actions call
+  /// _loadStreakData directly.
+  void _refreshIfStale() {
+    if (!LiveEventToast.dashboardTabActive) return;
+    // A write made elsewhere, or a wheel left empty by a failed load (every
+    // account has Coach Max's team), means the data is stale.
+    if (dashboardStale || (_allStreaks.isEmpty && !_isLoading)) _lastLoaded = null;
+    if (!shouldRefresh(lastLoaded: _lastLoaded, now: DateTime.now(), dirty: _dirty)) {
+      return;
+    }
+    _loadStreakData(showLoading: false);
+    _loadHeaderData(); // the avatar can change on the Profile tab
   }
 
   void _onRouteCover(AnimationStatus status) {
@@ -429,6 +475,7 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   void _handleRealtimeCheckIn(Map<String, dynamic> row) {
+    _dirty = true;
     final teamStreakId = row['team_streak_id'] as String?;
     final userId = row['user_id'] as String?;
     final checkInDateRaw = row['check_in_date'] as String?;
@@ -2887,8 +2934,15 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _loadStreakData({bool showLoading = true}) async {
+    // Any load answers every refresh trigger raised before it started.
+    _lastLoaded = DateTime.now();
+    _dirty = false;
+    dashboardStale = false;
+
     // ── STEP 1: Show cached data instantly ──────────────────
-    final cached = await _loadCachedDashboard();
+    // A background refresh (showLoading false) skips it and keeps the
+    // current wheel on screen until the new data lands.
+    final cached = showLoading ? await _loadCachedDashboard() : null;
     if (cached != null && mounted) {
       setState(() {
         _allStreaks           = [];

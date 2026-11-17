@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dashboard_refresh.dart';
 
 /// Client side of the server-driven workout handshake. The server decides the
 /// state (get_workout_card); every action is one RPC and the answer is the
@@ -152,6 +153,8 @@ class HandshakeService {
   Future<Map<String, dynamic>> _call(String fn, Map<String, dynamic> p) async {
     try {
       final r = await _rpc(fn, p);
+      // Every action can change the dashboard's today tray; the card read cannot.
+      if (fn != 'get_workout_card') dashboardStale = true;
       return r is Map ? Map<String, dynamic>.from(r) : <String, dynamic>{};
     } catch (e) {
       throw HandshakeError.from(e);

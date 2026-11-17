@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
 import 'handshake_service.dart';
 import 'package:gym_buddy_app/utils/query_ceilings.dart';
+import 'dashboard_refresh.dart';
 
 class WorkoutService {
   /// [userId], [insert] and [client] are test seams; all default to Supabase.
@@ -41,6 +42,7 @@ class WorkoutService {
       };
       await (insert ?? (r) => _supabase.from('workouts').insert(r).select().single())(row);
       if (kDebugMode) debugLog('✅ Workout created');
+      dashboardStale = true;
       return null;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error creating workout: $e');
@@ -53,6 +55,7 @@ class WorkoutService {
     try {
       await _supabase.from('workouts').delete().eq('id', workoutId);
       if (kDebugMode) debugLog('✅ Workout deleted');
+      dashboardStale = true;
       return true;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error deleting workout: $e');

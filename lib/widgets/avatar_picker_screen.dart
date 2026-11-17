@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../utils/debug_logger.dart';
 import '../utils/run_once.dart';
 import 'avatars/avatar_art.dart';
+import '../services/dashboard_refresh.dart';
 
 
 enum AvatarBorderStyle { simple, bold, arc }
@@ -206,7 +207,8 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
         'avatar_border': _selectedBorder.name,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', userId);
-      
+      dashboardStale = true; // the dashboard header shows the avatar
+
       widget.onComplete!();
     } catch (e) {
       debugLog('❌ Avatar save failed: $e');
@@ -658,6 +660,7 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
         'avatar_id': avatarId,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', userId);
+      dashboardStale = true; // the dashboard header shows the avatar
       widget.onComplete?.call();
     } catch (e) {
       if (mounted) {
