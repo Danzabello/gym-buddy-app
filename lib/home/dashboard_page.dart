@@ -3625,7 +3625,7 @@ class _DashboardPageState extends State<DashboardPage>
               if (userId != null) {
                 Supabase.instance.client.from('user_profiles').update({
                   'preferred_streak_sort': 'highestCurrent',
-                }).eq('id', userId).then((_) => markStale({AppTab.profile}));
+                }).eq('id', userId);
               }
             }),
           ],
