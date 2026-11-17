@@ -429,14 +429,14 @@ class _AchievementsPageState extends State<AchievementsPage>
             const SizedBox(height: 10),
             _SheetStatRow(
                 label: 'Daily check-in',
-                value: '+10 XP',
+                value: '+20 XP',
                 color: accentPalette.statusSuccess,
                 appColors: appColors,
                 cs: cs),
             const SizedBox(height: 8),
             _SheetStatRow(
                 label: 'Partner also checked in',
-                value: '+5 XP',
+                value: '+10 XP',
                 color: accentPalette.statusSuccess,
                 appColors: appColors,
                 cs: cs),
