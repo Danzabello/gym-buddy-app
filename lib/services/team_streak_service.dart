@@ -199,7 +199,7 @@ String? finishNoopMessage(Map<String, dynamic> res) => switch (res['result']) {
 class TeamStreakService {
   final SupabaseClient _supabase;
   TeamStreakService({SupabaseClient? client}) : _supabase = client ?? Supabase.instance.client;
-  final BreakDayService _breakDayService = BreakDayService();
+  late final BreakDayService _breakDayService = BreakDayService(client: _supabase);
   
   static const String coachMaxId = CoachMaxService.coachMaxId;
 
@@ -556,7 +556,9 @@ class TeamStreakService {
   // ============================================
   
   /// Check if user has checked in to ANY team today
-  Future<bool> hasCheckedInToday() async {
+  /// [strict] rethrows a failed read instead of returning false, so the
+  /// dashboard refresh can tell a failure from a real answer.
+  Future<bool> hasCheckedInToday({bool strict = false}) async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return false;
@@ -574,6 +576,7 @@ class TeamStreakService {
       return response.isNotEmpty;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error checking today status: $e');
+      if (strict) rethrow;
       return false;
     }
   }

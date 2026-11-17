@@ -99,7 +99,9 @@ class WorkoutService {
   // QUERIES
   // ============================================================
 
-  Future<List<Map<String, dynamic>>> getTodaysWorkouts() async {
+  /// [strict] rethrows a failed read instead of returning [], so the
+  /// dashboard refresh can tell a failure from a real answer.
+  Future<List<Map<String, dynamic>>> getTodaysWorkouts({bool strict = false}) async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return [];
@@ -119,6 +121,7 @@ class WorkoutService {
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error getting today\'s workouts: $e');
+      if (strict) rethrow;
       return [];
     }
   }

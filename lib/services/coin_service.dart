@@ -114,9 +114,12 @@ class CoinService {
   // GET EQUIPPED ITEM COLOR for multiple users in one query
   // (e.g. every visible team member's equipped ring_color)
   // ============================================================
+  /// [strict] rethrows a failed read instead of returning {}, so the
+  /// dashboard refresh can tell a failure from a real answer.
   Future<Map<String, String>> getEquippedColorHexForUsers(
     List<String> userIds, {
     String category = 'ring_color',
+    bool strict = false,
   }) async {
     if (userIds.isEmpty) return {};
     try {
@@ -135,6 +138,7 @@ class CoinService {
       return result;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error getting equipped colors for users: $e');
+      if (strict) rethrow;
       return {};
     }
   }

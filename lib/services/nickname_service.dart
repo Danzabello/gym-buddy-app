@@ -15,7 +15,9 @@ class NicknameService {
   String? _cacheUserId;  // ✅ ADD THIS FIELD
   static const Duration _cacheDuration = Duration(minutes: 5);
 
-  Future<Map<String, String>> getAllNicknames({bool forceRefresh = false}) async {
+  /// [strict] rethrows a failed read instead of returning the cache or {}, so the
+  /// dashboard refresh can tell a failure from a real answer.
+  Future<Map<String, String>> getAllNicknames({bool forceRefresh = false, bool strict = false}) async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;  // ← only ONCE
       if (currentUserId == null) return {};
@@ -57,6 +59,7 @@ class NicknameService {
       return nicknames;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error loading nicknames: $e');
+      if (strict) rethrow;
       return _nicknameCache ?? {};
     }
   }

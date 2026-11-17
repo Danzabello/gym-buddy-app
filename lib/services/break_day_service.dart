@@ -150,7 +150,9 @@ class BreakDayService {
   /// call (are_on_break_today: the server resolves each user's day in their
   /// own zone, and RLS hides non-partners). A failed call gives nobody: the
   /// badge is decoration only.
-  Future<Set<String>> usersOnBreakToday(Iterable<String> userIds) async {
+  /// [strict] rethrows a failed read instead of returning nobody, so the
+  /// dashboard refresh can tell a failure from a real answer.
+  Future<Set<String>> usersOnBreakToday(Iterable<String> userIds, {bool strict = false}) async {
     final ids = userIds.toSet().toList();
     if (ids.isEmpty) return {};
     try {
@@ -161,6 +163,7 @@ class BreakDayService {
           if (r['on_break'] == true) r['user_id'] as String,
       };
     } catch (_) {
+      if (strict) rethrow;
       return {};
     }
   }

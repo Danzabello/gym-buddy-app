@@ -1,5 +1,94 @@
 part of '../home_screen.dart';
 
+/// The dashboard's saved copy as [dashboardFromSaved] reads it back. A null
+/// part was never answered by the server and stays as the page starts it.
+typedef SavedDashboard = ({
+  List<TeamStreak> streaks,
+  String? sort,
+  List<String>? customOrder,
+  String? zone,
+  Map<String, String>? nicknames,
+  Set<String>? checkIns,
+  Set<String>? breakDates,
+  Map<String, bool>? buddyOnBreak,
+  Map<String, String>? buddyZones,
+  Map<String, String>? ringHex,
+  bool? hasCheckedIn,
+  List<Map<String, dynamic>>? workouts,
+});
+
+/// What the dashboard saves after a load, or null when its streak read
+/// failed (every account has Coach Max's team, so no streaks is a failed
+/// read). Every other part is saved only when its own read answered; null
+/// is a failed read, which keeps that part's value from [saved] (the
+/// same-day entry already stored) or leaves it out. An empty answer is saved
+/// as empty.
+@visibleForTesting
+Map<String, dynamic>? dashboardSavedPayload({
+  required Map<String, dynamic>? saved,
+  required List<TeamStreak> streaks,
+  ({String sort, List<String> customOrder, String? zone})? prefs,
+  Map<String, String>? nicknames,
+  Set<String>? checkIns,
+  Set<String>? breakDates,
+  Map<String, bool>? buddyOnBreak,
+  Map<String, String>? buddyZones,
+  Map<String, String>? ringHex,
+  bool? hasCheckedIn,
+  List<Map<String, dynamic>>? workouts,
+}) {
+  if (streaks.isEmpty) return null;
+  return {
+    ...?saved,
+    'streaks': [for (final s in streaks) s.toSaved()],
+    if (prefs != null) ...{
+      'sort': prefs.sort,
+      'customOrder': prefs.customOrder,
+      'zone': prefs.zone,
+    },
+    if (nicknames != null) 'nicknames': nicknames,
+    if (checkIns != null) 'checkIns': checkIns.toList(),
+    if (breakDates != null) 'breakDates': breakDates.toList(),
+    if (buddyOnBreak != null) 'buddyOnBreak': buddyOnBreak,
+    if (buddyZones != null) 'buddyZones': buddyZones,
+    if (ringHex != null) 'ringHex': ringHex,
+    if (hasCheckedIn != null) 'hasCheckedIn': hasCheckedIn,
+    if (workouts != null) 'workouts': workouts,
+  };
+}
+
+/// Reads [dashboardSavedPayload]'s output back; a missing part reads as
+/// null. No streaks, or a part of the wrong shape, throws (corrupt).
+@visibleForTesting
+SavedDashboard dashboardFromSaved(Object d) {
+  final m = d as Map<String, dynamic>;
+  Map<String, T>? strings<T>(String k) =>
+      m[k] == null ? null : Map<String, T>.from(m[k] as Map);
+  Set<String>? dates(String k) =>
+      m[k] == null ? null : Set<String>.from(m[k] as List);
+  final streaks = [
+    for (final s in m['streaks'] as List)
+      TeamStreak.fromSaved(Map<String, dynamic>.from(s as Map)),
+  ];
+  if (streaks.isEmpty) throw const FormatException('no streaks saved');
+  return (
+    streaks: streaks,
+    sort: m['sort'] as String?,
+    customOrder: m['customOrder'] == null ? null : List<String>.from(m['customOrder'] as List),
+    zone: m['zone'] as String?,
+    nicknames: strings<String>('nicknames'),
+    checkIns: dates('checkIns'),
+    breakDates: dates('breakDates'),
+    buddyOnBreak: strings<bool>('buddyOnBreak'),
+    buddyZones: strings<String>('buddyZones'),
+    ringHex: strings<String>('ringHex'),
+    hasCheckedIn: m['hasCheckedIn'] as bool?,
+    workouts: m['workouts'] == null
+        ? null
+        : [for (final w in m['workouts'] as List) Map<String, dynamic>.from(w as Map)],
+  );
+}
+
 
 // Dashboard/Home Page with Real Streak Data
 class DashboardPage extends StatefulWidget {
@@ -3050,8 +3139,19 @@ class _DashboardPageState extends State<DashboardPage>
       if (mounted) setState(() => _isLoading = true);
     }
 
+    // Each read below that fails answers null: the screen keeps that part
+    // (dropping a "today" part kept from an earlier day) and the save writes
+    // nothing for it. Offline, the next show retries.
+    var offline = false;
+    Future<T?> known<T>(Future<T> read) => read.then<T?>((v) => v, onError: (Object e) {
+          if (isNetworkError(e)) offline = true;
+          debugLog('⚠️ Dashboard read failed, kept as shown: $e');
+          return null;
+        });
+
     // ── STEP 2: Load preferences (fast, single query) ───────
     final userId = Supabase.instance.client.auth.currentUser?.id;
+    ({String sort, List<String> customOrder, String? zone})? prefsAnswer;
     if (userId != null) {
       try {
         final prefs = await Supabase.instance.client
@@ -3079,16 +3179,22 @@ class _DashboardPageState extends State<DashboardPage>
           _customStreakOrder = [];
         }
         debugLog('📥 Loaded sort mode: ${_streakSortMode.displayName}');
+        prefsAnswer = (
+          sort: _streakSortMode.name,
+          customOrder: _customStreakOrder,
+          zone: _myZone?.name,
+        );
       } catch (e) {
+        // Unknown: the sort, order and zone on screen stay.
+        if (isNetworkError(e)) offline = true;
         debugLog('⚠️ Could not load preferences: $e');
-        _customStreakOrder = [];
       }
     }
 
     // ── STEP 3: Sync + fetch streaks ────────────────────────
     _syncTeamCheckIns(); // fire and forget - don't await
     final allStreaks = await _teamStreakService.getAllUserStreaks();
-    final nicknames  = await nicknameService.getAllNicknames();
+    final nicknames  = await known(nicknameService.getAllNicknames(strict: true));
 
     // Every account has Coach Max's team, so no streaks at all is a failed
     // read. A wheel already on screen (the saved copy, or the last load)
@@ -3138,32 +3244,27 @@ class _DashboardPageState extends State<DashboardPage>
         .toIso8601String()
         .split('T')[0];
 
-    final results = await Future.wait([
-      // [0] has checked in today
-      _teamStreakService.hasCheckedInToday(),
-      // [1] today's workouts
-      _workoutService.getTodaysWorkouts(),
-      // [2] real check-in dates for the heatmap (last 7 days, this user)
+    final (hasCheckedIn, todaysWorkouts, myCheckInDates, breakRows) = await (
+      // has checked in today
+      known(_teamStreakService.hasCheckedInToday(strict: true)),
+      // today's workouts
+      known(_workoutService.getTodaysWorkouts(strict: true)),
+      // real check-in dates for the heatmap (last 7 days, this user)
       // — fixes the bug where days were painted as "done" purely from
       // arithmetic on current_streak rather than real check-in history.
-      CheckInHistoryService().myCheckInDatesSince(sevenDaysAgoStr),
-      // [3] own uncancelled break days — heatmap third state + today badge
+      known(CheckInHistoryService().myCheckInDatesSince(sevenDaysAgoStr)),
+      // own uncancelled break days — heatmap third state + today badge
       currentUserId == null
-          ? Future.value(<Map<String, dynamic>>[])
-          : Supabase.instance.client
+          ? Future<List<Map<String, dynamic>>?>.value(<Map<String, dynamic>>[])
+          : known<List<Map<String, dynamic>>>(Supabase.instance.client
               .from('break_day_usage')
               .select('break_date')
               .eq('user_id', currentUserId)
               .gte('break_date', sevenDaysAgoStr)
-              .isFilter('cancelled_at', null),
-    ]);
-  
-    final hasCheckedIn     = results[0] as bool;
-    final todaysWorkouts   = results[1] as List<Map<String, dynamic>>;
-    final myCheckInDates   = results[2] as Set<String>;
-    final myBreakDates     = (results[3] as List<Map<String, dynamic>>)
-        .map((r) => r['break_date'] as String)
-        .toSet();
+              .isFilter('cancelled_at', null)),
+    ).wait;
+    final myBreakDates =
+        breakRows?.map((r) => r['break_date'] as String).toSet();
 
     // Buddy break badges: a buddy's break is dated in THEIR own local today
     // (per-user tz), so resolution happens server-side via are_on_break_today
@@ -3175,27 +3276,31 @@ class _DashboardPageState extends State<DashboardPage>
         .map((m) => m.userId)
         .where((id) => id != currentUserId)
         .toSet();
-    final onBreakIds = await _breakDayService.usersOnBreakToday(buddyIds);
-    final buddyOnBreak = <String, bool>{
-      for (final id in buddyIds) id: onBreakIds.contains(id),
-    };
+    final onBreakIds =
+        await known(_breakDayService.usersOnBreakToday(buddyIds, strict: true));
+    final buddyOnBreak = onBreakIds == null
+        ? null
+        : <String, bool>{for (final id in buddyIds) id: onBreakIds.contains(id)};
 
     // Buddy zones for the danger countdown: the deadline is the BUDDY's local
     // midnight — theirs is the miss that breaks the streak (reconcile_stale_
     // streaks judges each member in their own tz). Same column safe_user_tz
     // reads, same fallback, so client and server frame the day identically.
-    final buddyZones = <String, String>{};
+    Map<String, String>? buddyZones = {};
     if (buddyIds.isNotEmpty) {
       try {
         final rows = await Supabase.instance.client.rpc(
             'get_teammate_timezones',
             params: {'p_user_ids': buddyIds.toList()});
-        for (final row in rows as List) {
-          buddyZones[row['user_id'] as String] =
-              (row['timezone'] as String?) ?? _kFallbackTz;
-        }
-      } catch (_) {
-        // Left empty: each lookup falls back to _kFallbackTz on its own.
+        buddyZones = {
+          for (final row in rows as List)
+            row['user_id'] as String: (row['timezone'] as String?) ?? _kFallbackTz,
+        };
+      } catch (e) {
+        // Unknown: the zones on screen stay (each lookup still falls back to
+        // _kFallbackTz on its own) and none are saved.
+        if (isNetworkError(e)) offline = true;
+        buddyZones = null;
       }
     }
 
@@ -3208,12 +3313,8 @@ class _DashboardPageState extends State<DashboardPage>
         .expand((s) => s.members)
         .map((m) => m.userId)
         .toSet();
-    final ringColorHexById =
-        await CoinService().getEquippedColorHexForUsers(allMemberIds.toList());
-    final memberRingColors = <String, Color>{
-      for (final entry in ringColorHexById.entries)
-        entry.key: hexToColor(entry.value),
-    };
+    final ringColorHexById = await known(
+        CoinService().getEquippedColorHexForUsers(allMemberIds.toList(), strict: true));
 
     // Highest streak (already sorted, just pick first)
     final highestStreak = uniqueStreaks.isEmpty
@@ -3221,23 +3322,36 @@ class _DashboardPageState extends State<DashboardPage>
         : uniqueStreaks.reduce((a, b) =>
             a.currentStreak > b.currentStreak ? a : b);
   
+    if (offline) _lastLoaded = null; // the next show asks again
     if (!mounted) return;
-  
+
+    // A failed "today" part keeps what is shown only while that is still
+    // today's; across midnight it falls back to empty, as before.
+    final now = DateTime.now();
+    final shownAt = _todayShownAt;
+    final keepToday = shownAt != null && !dayChanged(shownAt, now, zone: _myZone);
+    T today<T>(T? answer, T shown, T empty) => answer ?? (keepToday ? shown : empty);
+
     setState(() {
       _allStreaks            = uniqueStreaks;
-      _nicknames             = nicknames;
+      _nicknames             = nicknames ?? _nicknames;
       _highestStreak         = highestStreak;
-      _myCheckInDates        = myCheckInDates;
-      _myBreakDates          = myBreakDates;
-      _isOnBreakToday        = myBreakDates.contains(localTodayString());
-      _buddyOnBreakToday     = buddyOnBreak;
-      _buddyTimezones        = buddyZones;
-      _memberRingColors       = memberRingColors;
-      _hasCheckedInToday     = hasCheckedIn;
+      _myCheckInDates        = today(myCheckInDates, _myCheckInDates, <String>{});
+      _myBreakDates          = today(myBreakDates, _myBreakDates, <String>{});
+      _isOnBreakToday        = _myBreakDates.contains(localTodayString());
+      _buddyOnBreakToday     = today(buddyOnBreak, _buddyOnBreakToday, <String, bool>{});
+      _buddyTimezones        = buddyZones ?? _buddyTimezones;
+      if (ringColorHexById != null) {
+        _memberRingColors = {
+          for (final e in ringColorHexById.entries) e.key: hexToColor(e.value),
+        };
+      }
+      _hasCheckedInToday     = today(hasCheckedIn, _hasCheckedInToday, false);
       _teamFeeds.clear();
-      _todaysWorkouts        = todaysWorkouts;
+      _todaysWorkouts        = today(todaysWorkouts, _todaysWorkouts, <Map<String, dynamic>>[]);
       _isLoading             = false;
       _loadedFresh           = true;
+      _todayShownAt          = now;
     });
   
     if (_allStreaks.isNotEmpty && mounted) {
@@ -3254,23 +3368,30 @@ class _DashboardPageState extends State<DashboardPage>
     }
   
     // ── STEP 5: Save what the server answered ───────────────
-    // Not an empty wheel: that is a failed read (see above).
-    if (uniqueStreaks.isNotEmpty) {
-      unawaited(SavedCopy.write(SavedCopy.uid, 'dashboard', {
-        'streaks': [for (final s in uniqueStreaks) s.toSaved()],
-        'nicknames': nicknames,
-        'checkIns': myCheckInDates.toList(),
-        'breakDates': myBreakDates.toList(),
-        'buddyOnBreak': buddyOnBreak,
-        'buddyZones': buddyZones,
-        'ringHex': ringColorHexById,
-        'hasCheckedIn': hasCheckedIn,
-        'workouts': todaysWorkouts,
-        'sort': _streakSortMode.name,
-        'customOrder': _customStreakOrder,
-        'zone': _myZone?.name,
-      }, zone: _myZone));
-    }
+    // Over the same-day entry already saved, so a failed part keeps its
+    // saved value. Off the load's await chain.
+    final zone = _myZone;
+    unawaited(() async {
+      final uid = SavedCopy.uid;
+      final saved = await SavedCopy.read<Map<String, dynamic>>(uid, 'dashboard',
+          maxAge: kSavedMaxAgeDashboard,
+          sameDay: true,
+          parse: (d) => Map<String, dynamic>.from(d as Map));
+      final payload = dashboardSavedPayload(
+        saved: saved,
+        streaks: uniqueStreaks,
+        prefs: prefsAnswer,
+        nicknames: nicknames,
+        checkIns: myCheckInDates,
+        breakDates: myBreakDates,
+        buddyOnBreak: buddyOnBreak,
+        buddyZones: buddyZones,
+        ringHex: ringColorHexById,
+        hasCheckedIn: hasCheckedIn,
+        workouts: todaysWorkouts,
+      );
+      if (payload != null) await SavedCopy.write(uid, 'dashboard', payload, zone: zone);
+    }());
   }
 
   /// Whether the first load already tried the saved copy, and whether fresh
@@ -3278,66 +3399,50 @@ class _DashboardPageState extends State<DashboardPage>
   bool _restoreTried = false;
   bool _loadedFresh = false;
 
+  /// When the "today" parts on screen (check-ins, breaks, workouts) were
+  /// last set from the server or a same-day saved copy.
+  DateTime? _todayShownAt;
+
   /// First paint from the saved copy (same local day only: it carries streak
   /// numbers and today's check-in state), in place of the skeleton.
   Future<void> _restoreSaved() async {
-    final saved = await SavedCopy.read<Map<String, dynamic>>(
+    final saved = await SavedCopy.read<SavedDashboard>(
       SavedCopy.uid,
       'dashboard',
       maxAge: kSavedMaxAgeDashboard,
       sameDay: true,
-      parse: (d) {
-        final m = d as Map<String, dynamic>;
-        Map<String, T> strings<T>(String k) =>
-            Map<String, T>.from(m[k] as Map);
-        final streaks = [
-          for (final s in m['streaks'] as List)
-            TeamStreak.fromSaved(Map<String, dynamic>.from(s as Map)),
-        ];
-        if (streaks.isEmpty) throw const FormatException('no streaks saved');
-        return {
-          'streaks': streaks,
-          'nicknames': strings<String>('nicknames'),
-          'checkIns': Set<String>.from(m['checkIns'] as List),
-          'breakDates': Set<String>.from(m['breakDates'] as List),
-          'buddyOnBreak': strings<bool>('buddyOnBreak'),
-          'buddyZones': strings<String>('buddyZones'),
-          'ringHex': strings<String>('ringHex'),
-          'hasCheckedIn': m['hasCheckedIn'] as bool,
-          'workouts': [
-            for (final w in m['workouts'] as List) Map<String, dynamic>.from(w as Map),
-          ],
-          'sort': m['sort'] as String,
-          'customOrder': List<String>.from(m['customOrder'] as List),
-          'zone': m['zone'] as String?,
-        };
-      },
+      parse: dashboardFromSaved,
     );
     if (saved == null || !mounted || !_isLoading || _loadedFresh) return;
-    final streaks = saved['streaks'] as List<TeamStreak>;
-    final breakDates = saved['breakDates'] as Set<String>;
+    // A part missing from the saved copy (its read had never answered) stays
+    // as it starts out, as the load would leave it.
+    final streaks = saved.streaks;
     setState(() {
-      _myZone = _profileZone(saved['zone'] as String?);
+      _myZone = _profileZone(saved.zone);
       profileZone = _myZone;
       _allStreaks = streaks;
-      _nicknames = saved['nicknames'] as Map<String, String>;
+      _nicknames = saved.nicknames ?? _nicknames;
       _highestStreak = streaks.reduce((a, b) => a.currentStreak > b.currentStreak ? a : b);
-      _myCheckInDates = saved['checkIns'] as Set<String>;
-      _myBreakDates = breakDates;
-      _isOnBreakToday = breakDates.contains(localTodayString());
-      _buddyOnBreakToday = saved['buddyOnBreak'] as Map<String, bool>;
-      _buddyTimezones = saved['buddyZones'] as Map<String, String>;
-      _memberRingColors = {
-        for (final e in (saved['ringHex'] as Map<String, String>).entries)
-          e.key: hexToColor(e.value),
-      };
-      _hasCheckedInToday = saved['hasCheckedIn'] as bool;
-      _todaysWorkouts = saved['workouts'] as List<Map<String, dynamic>>;
-      _streakSortMode = StreakSortMode.values.firstWhere(
-        (e) => e.name == saved['sort'],
-        orElse: () => StreakSortMode.highestCurrent,
-      );
-      _customStreakOrder = saved['customOrder'] as List<String>;
+      _myCheckInDates = saved.checkIns ?? _myCheckInDates;
+      _myBreakDates = saved.breakDates ?? _myBreakDates;
+      _isOnBreakToday = _myBreakDates.contains(localTodayString());
+      _buddyOnBreakToday = saved.buddyOnBreak ?? _buddyOnBreakToday;
+      _buddyTimezones = saved.buddyZones ?? _buddyTimezones;
+      final ringHex = saved.ringHex;
+      if (ringHex != null) {
+        _memberRingColors = {for (final e in ringHex.entries) e.key: hexToColor(e.value)};
+      }
+      _hasCheckedInToday = saved.hasCheckedIn ?? _hasCheckedInToday;
+      _todaysWorkouts = saved.workouts ?? _todaysWorkouts;
+      final sort = saved.sort;
+      if (sort != null) {
+        _streakSortMode = StreakSortMode.values.firstWhere(
+          (e) => e.name == sort,
+          orElse: () => StreakSortMode.highestCurrent,
+        );
+      }
+      _customStreakOrder = saved.customOrder ?? _customStreakOrder;
+      _todayShownAt = DateTime.now(); // read with sameDay: today's
       _isLoading = false;
     });
     _currentCarouselIndex = 0;
