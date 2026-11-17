@@ -3,6 +3,8 @@ import 'package:gym_buddy_app/services/coin_service.dart';
 
 import 'support/fake_supabase.dart';
 
+const _me = '11111111-1111-4111-8111-111111111111';
+
 void main() {
   group('CoinService.equipItem', () {
     test('sends one equip_shop_item call and no table write', () async {
@@ -30,6 +32,28 @@ void main() {
 
       final offline = FakeSupabase()..down = true;
       expect(await CoinService(client: offline.client).equipItem(itemId: 'x'), isFalse);
+    });
+  });
+
+  group('CoinService.getBalanceOrNull', () {
+    test('a real balance of 0 is 0, not null', () async {
+      final server = FakeSupabase()..reply = (_) => {'coin_balance': 0};
+      await server.signIn(_me);
+      expect(await CoinService(client: server.client).getBalanceOrNull(), 0);
+    });
+
+    test('a failed read is null, while getBalance keeps answering 0', () async {
+      final server = FakeSupabase()..status = 400;
+      await server.signIn(_me);
+      final svc = CoinService(client: server.client);
+      expect(await svc.getBalanceOrNull(), isNull);
+      expect(await svc.getBalance(), 0);
+    });
+
+    test('nobody signed in is null', () async {
+      final server = FakeSupabase();
+      expect(await CoinService(client: server.client).getBalanceOrNull(), isNull);
+      expect(server.calls, isEmpty);
     });
   });
 }

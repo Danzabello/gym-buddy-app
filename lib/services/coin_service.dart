@@ -18,10 +18,14 @@ class CoinService {
   // ============================================================
   // GET BALANCE
   // ============================================================
-  Future<int> getBalance() async {
+  Future<int> getBalance() async => await getBalanceOrNull() ?? 0;
+
+  /// The balance, or null when the read failed (or nobody is signed in), so
+  /// a caller that saves it can tell a failed read from a real 0.
+  Future<int?> getBalanceOrNull() async {
     try {
       final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return 0;
+      if (userId == null) return null;
       final result = await _supabase
           .rpc('get_my_profile')
           .select('coin_balance')
@@ -29,7 +33,7 @@ class CoinService {
       return result['coin_balance'] as int? ?? 0;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error getting coin balance: $e');
-      return 0;
+      return null;
     }
   }
 

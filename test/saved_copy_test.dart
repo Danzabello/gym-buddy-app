@@ -7,6 +7,7 @@ import 'package:gym_buddy_app/services/friend_service.dart';
 import 'package:gym_buddy_app/services/handshake_service.dart';
 import 'package:gym_buddy_app/services/level_service.dart';
 import 'package:gym_buddy_app/services/team_streak_service.dart';
+import 'package:gym_buddy_app/pages/shop_page.dart';
 import 'package:gym_buddy_app/services/saved_copy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -358,6 +359,39 @@ void main() {
       final back = WorkoutCardData.fromJson(viaJson(c.toSaved()));
       expect(back.toSaved(), c.toSaved());
       expect(back.serverNow, c.serverNow);
+    });
+  });
+
+  group('Shop save', () {
+    ShopItem item() => ShopItem(
+          id: 'i',
+          name: 'n',
+          description: '',
+          category: 'badge',
+          cost: 5,
+          emoji: '⭐',
+          assetId: '',
+          isOwned: false,
+          isEquipped: false,
+          unlockLevel: 1,
+        );
+
+    test('a failed balance read is not saved as 0, and the saved balance stays', () async {
+      await SavedCopy.write(_a, 'shop', shopSavedPayload(items: [item()], balance: 120, level: 4)!, now: t0);
+      // The refresh whose balance read failed: no payload, so nothing is written.
+      expect(shopSavedPayload(items: [item()], balance: null, level: 4), isNull);
+      final back = await SavedCopy.read<Map<String, dynamic>>(_a, 'shop',
+          maxAge: const Duration(days: 7), parse: (d) => d as Map<String, dynamic>, now: t0);
+      expect(back!['coins'], 120);
+    });
+
+    test('a real balance of 0 is saved', () {
+      expect(shopSavedPayload(items: [item()], balance: 0, level: 1)!['coins'], 0);
+    });
+
+    test('an empty shop or a missing level is not saved either', () {
+      expect(shopSavedPayload(items: [], balance: 5, level: 1), isNull);
+      expect(shopSavedPayload(items: [item()], balance: 5, level: null), isNull);
     });
   });
 }

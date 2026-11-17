@@ -14,6 +14,23 @@ import '../utils/run_once.dart';
 import '../widgets/coin_glyph.dart';
 import '../widgets/tab_keep_alive.dart';
 
+/// What the Shop saves after a load, or null when any of its three reads
+/// failed: a failed balance read must never be saved as 0 (the saved balance
+/// stays), nor an empty shop or a missing level.
+@visibleForTesting
+Map<String, dynamic>? shopSavedPayload({
+  required List<ShopItem> items,
+  required int? balance,
+  required int? level,
+}) {
+  if (items.isEmpty || balance == null || level == null) return null;
+  return {
+    'items': [for (final i in items) i.toSaved()],
+    'coins': balance,
+    'level': level,
+  };
+}
+
 class ShopPage extends StatefulWidget {
   const ShopPage({super.key});
 
@@ -108,7 +125,7 @@ class _ShopPageState extends State<ShopPage>
     try {
       if (showLoading) setState(() => _isLoading = true);
       final (balance, items, levelInfo) = await (
-        _coinService.getBalance(),
+        _coinService.getBalanceOrNull(),
         _coinService.getShopItems(),
         LevelService().getLevelInfo(),
       ).wait;
@@ -118,7 +135,9 @@ class _ShopPageState extends State<ShopPage>
       final keepSaved = failed && _allItems.isNotEmpty;
       if (mounted && !keepSaved) {
         setState(() {
-          _coinBalance = balance;
+          // A failed balance read keeps what is shown (the saved balance),
+          // as it never says 0.
+          _coinBalance = balance ?? _coinBalance;
           _allItems = items;
           _userLevel = levelInfo?.level ?? 1;
           _isLoading = false;
@@ -127,12 +146,9 @@ class _ShopPageState extends State<ShopPage>
         setState(() => _isLoading = false);
       }
       if (items.isEmpty) refreshState.failed();
-      if (!failed) {
-        unawaited(SavedCopy.write(SavedCopy.uid, 'shop', {
-          'items': [for (final i in items) i.toSaved()],
-          'coins': balance,
-          'level': levelInfo.level,
-        }, zone: profileZone));
+      final payload = shopSavedPayload(items: items, balance: balance, level: levelInfo?.level);
+      if (payload != null) {
+        unawaited(SavedCopy.write(SavedCopy.uid, 'shop', payload, zone: profileZone));
       }
     } finally {
       if (!_firstRefresh.isCompleted) _firstRefresh.complete();
