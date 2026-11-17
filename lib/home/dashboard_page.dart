@@ -186,7 +186,7 @@ class _DashboardPageState extends State<DashboardPage>
       },
       onResume: () {
         // More than 5 minutes away: stale, refetched now if the tab is
-        // showing, else on its next show.
+        // showing, else on its next show. A shorter trip refetches nothing.
         final hiddenAt = _hiddenAt;
         _hiddenAt = null;
         if (hiddenAt != null &&
@@ -196,8 +196,8 @@ class _DashboardPageState extends State<DashboardPage>
                 dirty: _dirty,
                 resumed: hiddenAt)) {
           _lastLoaded = null;
+          _refreshIfStale();
         }
-        _refreshIfStale();
         _refreshOsPermission();
         final level = _levelInfo;
         if (mounted && level != null) {
@@ -2929,7 +2929,15 @@ class _DashboardPageState extends State<DashboardPage>
     _lastLoaded = DateTime.now();
     _dirty = false;
     dashboardStale = false;
+    try {
+      await _fetchStreakData(showLoading);
+    } catch (_) {
+      _lastLoaded = null; // a load that threw (offline) is retried on the next show
+      rethrow;
+    }
+  }
 
+  Future<void> _fetchStreakData(bool showLoading) async {
     // ── STEP 1: Show cached data instantly ──────────────────
     // A background refresh (showLoading false) skips it and keeps the
     // current wheel on screen until the new data lands.
