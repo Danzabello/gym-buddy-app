@@ -226,11 +226,11 @@ BEGIN
   RETURN jsonb_build_object('ret', jsonb_build_array(b1, b2), 'snap', pg_temp.snap(ARRAY[pg_temp.uc()]));
 END $f$;
 
--- EQ4 caps (CAP-2): onboard_check2 has 95 coins / 995 xp (295 under the 300 XP cap) of payouts suffixed yesterday. Rewards today, then yesterday.
+-- EQ4 caps (CAP-2): onboard_check2 has 95 coins / 995 xp (295, under the 300 XP cap) of payouts suffixed yesterday. Rewards today, then yesterday.
 CREATE FUNCTION pg_temp.fx_eq4() RETURNS jsonb LANGUAGE plpgsql AS $f$
 DECLARE s uuid := pg_temp.cms(pg_temp.o2()); t date := pg_temp.day(pg_temp.o2()); r1 jsonb; r2 jsonb;
 BEGIN
-  PERFORM pg_temp.capfx(pg_temp.o2(), 'fx:' || (t - 1), 95, CASE WHEN pg_temp.rw() THEN 295 ELSE 995 END);  -- 5 XP of room under the cap, both bodies
+  PERFORM pg_temp.capfx(pg_temp.o2(), 'fx:' || (t - 1), 95, 295);  -- 5 XP of room under the 300 XP cap
   r1 := public._apply_checkin_rewards(pg_temp.o2(), s, t);
   r2 := public._apply_checkin_rewards(pg_temp.o2(), s, t - 1);
   RETURN jsonb_build_object('today', r1, 'yesterday', r2, 'snap', pg_temp.snap(ARRAY[pg_temp.o2()]));
@@ -357,39 +357,6 @@ BEGIN
 END $f$;
 
 -- ═════════ phase 1 ═════════
--- State of _apply_checkin_rewards: true once the 20261117110000 body is installed (Prompt 53: check-in XP 20/10, XP cap 300,
--- milestones outside the caps). The live body (47185fcbc9c873ef46ebdce0bdde70f6) is the other state. Anything else fails G0.2.
--- The pins that depend on it (G0.2, G1.6, G5.1 to G5.13, G10, G15) read the state; none is edited on top of the other.
-CREATE FUNCTION pg_temp.rw() RETURNS boolean LANGUAGE sql AS $$
-  SELECT md5(pg_get_functiondef('public._apply_checkin_rewards(uuid,uuid,date)'::regprocedure)) = '0dc2d55695f6e98cc0fa7f9026f9dd30' $$;
-
--- G10 under the new body: the capture from the live body, changed by the intended rules only. Check-in XP doubles
--- (10 -> 20 base, 5 -> 10 partner; coins untouched), profile XP moves by the same rows, and nothing else may move. The cap
--- fixture rows (ref 'fx:...') are not check-in XP. eq4 is explicit: its XP cap is 300, so the fixture seeds 295 (not 995),
--- the caller's own day pays 20 XP (the new base), and the capped yesterday still pays the 5 XP of room that is left.
-CREATE FUNCTION pg_temp.xpx(o jsonb, fk text) RETURNS jsonb LANGUAGE plpgsql AS $f$
-DECLARE yref text := '%:' || (pg_temp.day(pg_temp.o2()) - 1)::text; j jsonb := o;
-BEGIN
-  IF o #> '{snap,xp}' IS NULL THEN RETURN o; END IF;
-  j := jsonb_set(j, '{snap,xp}', (
-    SELECT coalesce(jsonb_agg(x ORDER BY x::text), '[]') FROM (
-      SELECT CASE WHEN e->>3 IN ('daily_checkin', 'partner_bonus') AND e->>4 NOT LIKE 'fx:%' AND NOT (fk = 'eq4' AND e->>4 LIKE yref)
-                  THEN jsonb_set(e, '{1}', to_jsonb((e->>1)::int * 2))
-                  WHEN fk = 'eq4' AND e->>3 = 'daily_checkin' AND e->>4 LIKE 'fx:%' THEN jsonb_set(e, '{1}', '295')
-                  ELSE e END x
-      FROM jsonb_array_elements(o #> '{snap,xp}') e) q));
-  IF o #> '{snap,profiles}' IS NOT NULL THEN
-    j := jsonb_set(j, '{snap,profiles}', (
-      SELECT jsonb_agg(jsonb_set(p, '{1}', to_jsonb((p->>1)::int + coalesce((
-               SELECT sum((e->>1)::int) FROM jsonb_array_elements(o #> '{snap,xp}') e
-               WHERE e->>0 = p->>0 AND e->>3 IN ('daily_checkin', 'partner_bonus') AND e->>4 NOT LIKE 'fx:%'
-                 AND NOT (fk = 'eq4' AND e->>4 LIKE yref)), 0))) ORDER BY p->>0)
-      FROM jsonb_array_elements(o #> '{snap,profiles}') p));
-  END IF;
-  IF fk = 'eq4' THEN j := jsonb_set(j, '{today,xp_awarded}', '20'); END IF;
-  RETURN j;
-END $f$;
-
 DO $p1$
 DECLARE fk text; v jsonb; d text;
 BEGIN
@@ -431,9 +398,8 @@ DECLARE
   r text[] := ARRAY[]::text[];
   fk text; v jsonb; o jsonb; j jsonb; j2 jsonb; n text; ok boolean; body text;
   a uuid; b uuid; c uuid; e uuid; f uuid; s uuid; s1 uuid; s2 uuid; t date; tz text; tm timestamptz; w uuid;
-  i1 uuid; i2 uuid; i3 uuid; np integer; ca integer; cb integer; xa integer; xb integer; k integer; rw boolean;
+  i1 uuid; i2 uuid; i3 uuid; np integer; ca integer; cb integer; xa integer; xb integer; k integer;
 BEGIN
-  rw := pg_temp.rw();
   -- ── G0 catalog: ACL, SECURITY DEFINER, search_path, pinned bodies, lock order in the bodies ──
   SELECT string_agg(p.oid::regprocedure::text || ' ' || p.proacl::text || ' ' || coalesce(p.proconfig::text, '-') || ' secdef=' || p.prosecdef, '; ' ORDER BY p.oid::regprocedure::text),
          bool_and(p.proconfig = '{search_path=public}' AND p.proacl::text = CASE
@@ -448,10 +414,10 @@ BEGIN
     '_auto_credit', 'process_stale_sessions', 'check_in_coach_max', 'reconcile_stale_streaks', '_apply_checkin_rewards',
     'submit_checkin', 'create_invite_team', '_fulfil_invite_reward', 'purchase_shop_item', 'verify_achievement_progress');
   r := r || pg_temp.ok('G0.1 ACL, SECURITY DEFINER and search_path of every credit-path function', ok AND n LIKE '%_lock_credit%', n);
-  r := r || pg_temp.is('G0.2 bodies pinned: _apply_checkin_rewards (live body, or 20261117110000 once applied: now ' || CASE WHEN rw THEN '20261117110000' ELSE 'live' END || '), process_stale_sessions (re-pinned by 20261105120000), submit_checkin, purchase_shop_item',
+  r := r || pg_temp.is('G0.2 bodies pinned: _apply_checkin_rewards (20261117110000), process_stale_sessions (re-pinned by 20261105120000), submit_checkin, purchase_shop_item',
                        md5(pg_temp.def('public._apply_checkin_rewards(uuid,uuid,date)')) || ' ' || md5(pg_temp.def('public.process_stale_sessions(timestamptz)'))
                        || ' ' || md5(pg_temp.def('public.submit_checkin()')) || ' ' || md5(pg_temp.def('public.purchase_shop_item(uuid)')),
-                       CASE WHEN rw THEN '0dc2d55695f6e98cc0fa7f9026f9dd30' ELSE '47185fcbc9c873ef46ebdce0bdde70f6' END || ' 8471f6ae8be34f5232c9f64eb7ef9f7f acc63cafafd56afa8a0ebd7503510739 0f67d03bef591fd4c107bb2bb8d05ef2');
+                       '0dc2d55695f6e98cc0fa7f9026f9dd30 8471f6ae8be34f5232c9f64eb7ef9f7f acc63cafafd56afa8a0ebd7503510739 0f67d03bef591fd4c107bb2bb8d05ef2');
   r := r || pg_temp.ok('G0.3 process_stale_sessions COMMENT points at _credit_day',
                        obj_description('public.process_stale_sessions(timestamptz)'::regprocedure, 'pg_proc') LIKE '%_credit_day%');
   body := pg_temp.def('public._lock_credit(uuid[],boolean,uuid)');
@@ -511,7 +477,7 @@ BEGIN
     r := r || pg_temp.ok('G1.5 return shape credit_date/teams/xp/coins, day incomplete (partner missing), paid 0',
                          j ?& ARRAY['credit_date', 'teams', 'xp', 'coins'] AND j#>>'{teams,0,updated}' = 'false' AND j->>'coins' = '0', j::text);
     j := public._credit_checkin(pg_temp.o2(), now(), true, now(), s);
-    r := r || pg_temp.is('G1.6 teammate completes the day (20+10 XP under 20261117110000, 10+5 before): updated/new_streak/xp/coins', (j#>>'{teams,0,updated}') || '/' || (j#>>'{teams,0,new_streak}') || '/' || (j->>'xp') || '/' || (j->>'coins'), CASE WHEN rw THEN 'true/1/30/15' ELSE 'true/1/15/15' END);
+    r := r || pg_temp.is('G1.6 teammate completes the day (20+10 XP, 10+5 coins): updated/new_streak/xp/coins', (j#>>'{teams,0,updated}') || '/' || (j#>>'{teams,0,new_streak}') || '/' || (j->>'xp') || '/' || (j->>'coins'), 'true/1/30/15');
     k := (SELECT count(*) FROM daily_team_checkins WHERE team_streak_id = s);
     j := public._credit_checkin(pg_temp.o2(), now(), true, now(), s);
     r := r || pg_temp.is('G1.7 second call: no new row, teams [] , paid 0', ((SELECT count(*) FROM daily_team_checkins WHERE team_streak_id = s) - k) || '/' || (j->'teams')::text || '/' || (j->>'coins'), '0/[]/0');
@@ -531,14 +497,9 @@ BEGIN
       v := n::jsonb;
     END;
     SELECT x.v INTO o FROM eq_old x WHERE x.k = fk;
-    IF rw THEN
-      r := r || pg_temp.ok(format('G10.%s new = old with check-in XP rebased (20/10, cap 300; see pg_temp.xpx)', fk), v = pg_temp.xpx(o, fk),
-                           format('md5 expected %s new %s', md5(pg_temp.xpx(o, fk)::text), md5(v::text)));
-    ELSE
-      r := r || pg_temp.ok(format('G10.%s new = old', fk), v = o, format('md5 old %s new %s', md5(o::text), md5(v::text)));
-    END IF;
+    r := r || pg_temp.ok(format('G10.%s new = old', fk), v = o, format('md5 old %s new %s', md5(o::text), md5(v::text)));
     r := r || ('     ' || fk || ': ' || v::text);
-    IF v IS DISTINCT FROM (CASE WHEN rw THEN pg_temp.xpx(o, fk) ELSE o END) THEN r := r || ('     ' || fk || ' old: ' || coalesce(o::text, 'NULL')); END IF;
+    IF v IS DISTINCT FROM o THEN r := r || ('     ' || fk || ' old: ' || coalesce(o::text, 'NULL')); END IF;
   END LOOP;
 
   -- ── G2 submit_checkin (copy condition, local day, copy time, no push, no pay, idempotency) + G3 Finish after a copy ──
@@ -659,12 +620,12 @@ BEGIN
   BEGIN
     j := public._apply_checkin_rewards(b, s, t);
     j2 := public._apply_checkin_rewards(b, s, t);
-    r := r || pg_temp.is('G5.1 base payout 10 coins / 10 XP (20 XP under 20261117110000), then CAP-1 dedup on the same streak:day', (j->>'coins_awarded') || '/' || (j->>'xp_awarded') || '/' || (j2->>'already_awarded'), CASE WHEN rw THEN '10/20/true' ELSE '10/10/true' END);
+    r := r || pg_temp.is('G5.1 base payout 10 coins / 20 XP, then CAP-1 dedup on the same streak:day', (j->>'coins_awarded') || '/' || (j->>'xp_awarded') || '/' || (j2->>'already_awarded'), '10/20/true');
     RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
   EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL; WHEN OTHERS THEN r := r || ('FAIL G5.1 crashed: ' || SQLERRM);
   END;
   BEGIN
-    PERFORM pg_temp.capfx(b, 'fx:' || (t - 1), 95, CASE WHEN rw THEN 295 ELSE 995 END);  -- 5 XP of room under either cap
+    PERFORM pg_temp.capfx(b, 'fx:' || (t - 1), 95, 295);  -- 5 XP of room under the 300 XP cap
     j := public._apply_checkin_rewards(b, s, t - 1);
     r := r || pg_temp.is('G5.2 yesterday''s cap counts yesterday-suffixed payouts: coins/xp/capped',
                          (j->>'coins_awarded') || '/' || (j->>'xp_awarded') || '/' || (j->>'daily_cap_reached'), '5/5/true');
@@ -672,7 +633,7 @@ BEGIN
   EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL; WHEN OTHERS THEN r := r || ('FAIL G5.2 crashed: ' || SQLERRM);
   END;
   BEGIN
-    PERFORM pg_temp.capfx(b, 'fx:' || t, 95, CASE WHEN rw THEN 295 ELSE 995 END);
+    PERFORM pg_temp.capfx(b, 'fx:' || t, 95, 295);
     j := public._apply_checkin_rewards(b, s, t);
     r := r || pg_temp.is('G5.3 today''s cap counts today-suffixed payouts: coins/xp/capped',
                          (j->>'coins_awarded') || '/' || (j->>'xp_awarded') || '/' || (j->>'daily_cap_reached'), '5/5/true');
@@ -685,7 +646,7 @@ BEGIN
     PERFORM pg_temp.capfx(b, 'fx:' || t || 'x', 95, 995);
     j := public._apply_checkin_rewards(b, s, t);
     r := r || pg_temp.is('G5.4 legacy reference (no suffix, NULL, near-miss suffix) is not counted: coins/xp/capped',
-                         (j->>'coins_awarded') || '/' || (j->>'xp_awarded') || '/' || (j->>'daily_cap_reached'), CASE WHEN rw THEN '10/20/false' ELSE '10/10/false' END);
+                         (j->>'coins_awarded') || '/' || (j->>'xp_awarded') || '/' || (j->>'daily_cap_reached'), '10/20/false');
     RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
   EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL; WHEN OTHERS THEN r := r || ('FAIL G5.4 crashed: ' || SQLERRM);
   END;
@@ -714,9 +675,6 @@ BEGIN
   END LOOP;
 
   -- ── G5.7 to G5.13 (Prompt 53, 20261117110000): check-in XP 20/10, XP cap 300, milestones outside both caps ──
-  IF NOT rw THEN
-    r := r || 'PASS G5.7-G5.13 not applied yet (20261117110000): partner XP, the 300 XP cap and the streak_milestone rows are checked once it is live'::text;
-  ELSE
     BEGIN
       f := pg_temp.o4(); s1 := pg_temp.team(b, f);
       INSERT INTO daily_team_checkins (team_streak_id, user_id, check_in_date, check_in_time) VALUES (s1, b, t, now()), (s1, f, t, now());
@@ -792,7 +750,6 @@ BEGIN
       RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
     EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL; WHEN OTHERS THEN r := r || ('FAIL G5.13 crashed: ' || SQLERRM);
     END;
-  END IF;
 
   -- ── G4 _auto_credit / process_stale_sessions (body pinned in G0.2) ──
   BEGIN
@@ -1369,15 +1326,14 @@ session_reminder2|1|Final reminder|This is the final reminder. Open the app and 
             WHEN OTHERS THEN r := r || ('FAIL G14.1-3 crashed: ' || SQLERRM);
   END;
 
-  -- ── G15 reward catalogue (Prompt 53, 20261117100000): R1, R4, R5, R7. Two states, like G0.2; a mix of them fails. ──
+  -- ── G15 reward catalogue (Prompt 53, 20261117100000): R1, R4, R5, R7 ──
   BEGIN
-    ok := (SELECT coin_reward FROM achievements WHERE id = 'personal_best') = 25;
     n := (SELECT coin_reward || '/' || xp_reward FROM achievements WHERE id = 'personal_best')
          || ' | ' || (SELECT description FROM achievements WHERE id = 'connector')
          || ' | ' || (SELECT coin_reward || '/' || xp_reward FROM achievements WHERE id = 'year_of_the_beast')
          || ' | ' || (SELECT count(*) FROM shop_items WHERE name IN ('Wolf', 'Lion') AND category = 'avatar' AND is_available);
-    r := r || pg_temp.is('G15.1 catalogue rows (' || CASE WHEN ok THEN '20261117100000' ELSE 'live' END || '): personal_best coins/xp | connector text | year_of_the_beast coins/xp | Wolf and Lion still available',
-                         n, CASE WHEN ok THEN '25/50 | Have 5 buddies | 2000/5000 | 0' ELSE '100/200 | Send 5 buddy requests | 5000/5000 | 2' END);
+    r := r || pg_temp.is('G15.1 catalogue rows: personal_best coins/xp | connector text | year_of_the_beast coins/xp | Wolf and Lion still available',
+                         n, '25/50 | Have 5 buddies | 2000/5000 | 0');
   EXCEPTION WHEN OTHERS THEN r := r || ('FAIL G15.1 crashed: ' || SQLERRM);
   END;
   BEGIN
@@ -1385,8 +1341,8 @@ session_reminder2|1|Final reminder|This is the final reminder. Open the app and 
     UPDATE team_streaks SET best_streak = 2 WHERE id = s;
     ca := pg_temp.coins(b); xa := pg_temp.xp(b);
     j := pg_temp.js(pg_temp.u(b, 'SELECT public.verify_achievement_progress(''personal_best'')::text'));
-    r := r || pg_temp.is('G15.2 personal_best at best_streak 2 pays coins/xp (' || CASE WHEN ok THEN '25/50' ELSE '100/200' END || ')',
-                         (pg_temp.coins(b) - ca) || '/' || (pg_temp.xp(b) - xa), CASE WHEN ok THEN '25/50' ELSE '100/200' END);
+    r := r || pg_temp.is('G15.2 personal_best at best_streak 2 pays coins/xp (25/50)',
+                         (pg_temp.coins(b) - ca) || '/' || (pg_temp.xp(b) - xa), '25/50');
     RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
   EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL; WHEN OTHERS THEN r := r || ('FAIL G15.2 crashed: ' || SQLERRM);
   END;
