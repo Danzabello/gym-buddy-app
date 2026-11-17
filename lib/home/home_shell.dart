@@ -13,7 +13,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late PageController _tabPageController;
   final GlobalKey<_DashboardPageState> _dashboardKey = GlobalKey<_DashboardPageState>();
 
-  late List<Widget> _pages;
+  late final List<Widget> _pages;
 
   @override
   void initState() {
@@ -106,13 +106,6 @@ class _HomeScreenState extends State<HomeScreen> {
             LiveEventToast.dashboardTabActive = index == 2;
             shownTab.value = AppTab.values[index];
             if (index == 2) _dashboardKey.currentState?._onTabShown();
-            if (index == 0) {
-              setState(() {
-                _pages[0] = SchedulePage(
-                    key: ValueKey(
-                        'schedule_${DateTime.now().millisecondsSinceEpoch}'));
-              });
-            }
           }
         },
         // A hidden tab's animations stop (a spinner left by a load that was

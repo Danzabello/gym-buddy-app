@@ -8,6 +8,7 @@ import 'package:gym_buddy_app/pages/schedule_page.dart';
 import 'package:gym_buddy_app/pages/workout_page.dart';
 import 'package:gym_buddy_app/services/handshake_service.dart';
 import 'package:gym_buddy_app/services/notification_service.dart';
+import 'package:gym_buddy_app/services/tab_refresh.dart';
 import 'package:gym_buddy_app/theme/app_theme.dart';
 import 'package:gym_buddy_app/widgets/schedule_rows.dart';
 import 'package:gym_buddy_app/widgets/workout_schedule_card.dart';
@@ -103,6 +104,51 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('list page', () {
+    testWidgets('kept alive and hidden: no poll, no tick, an event only marks it stale', (t) async {
+      addTearDown(() => shownTab.value = null);
+      final f = Fake([wk('r', 'running', startedAgoMin: 12, startsIn: const Duration(minutes: -12))]);
+      final d = f.deps();
+      VoidCallback? feed;
+      final deps = ScheduleDeps(
+          svc: d.svc, loadMe: d.loadMe, loadStreak: d.loadStreak, listIds: d.listIds, completed: d.completed,
+          listen: (cb) {
+            feed = cb;
+            return () {};
+          });
+      var skew = Duration.zero;
+      final clock = ServerClock(() => DateTime.now().add(skew));
+      int cards() => f.calls.where((c) => c == 'get_workout_card').length;
+
+      shownTab.value = AppTab.schedule;
+      await t.pumpWidget(app(SchedulePage(deps: deps, clock: clock)));
+      await settle(t);
+      final loaded = cards();
+      expect(loaded, 2); // the list card and the one workout
+      expect(find.textContaining('Running 12:0'), findsOneWidget);
+
+      shownTab.value = AppTab.dashboard;
+      skew = const Duration(seconds: 60);
+      await t.pump(const Duration(seconds: 61)); // two poll periods
+      expect(cards(), loaded);
+      expect(find.textContaining('Running 12:0'), findsOneWidget); // the tick is stopped
+      feed!();
+      await t.pump();
+      expect(cards(), loaded);
+      expect(tabRefresh[AppTab.schedule]!.stale, isTrue);
+
+      shownTab.value = AppTab.schedule;
+      await t.pump(const Duration(milliseconds: 400)); // the shell's settle
+      await settle(t);
+      expect(cards(), loaded + 2); // refetched once, for the stale mark
+      expect(tabRefresh[AppTab.schedule]!.stale, isFalse);
+      skew = const Duration(seconds: 120); // the refetch re-synced the clock: a minute on from it
+      await t.pump(const Duration(seconds: 1));
+      expect(find.textContaining('Running 13:0'), findsOneWidget); // the tick runs again
+      await t.pump(const Duration(seconds: 30));
+      await settle(t);
+      expect(cards(), loaded + 4); // and so does the poll
+    });
+
     testWidgets('empty: the existing empty layout', (t) async {
       final f = Fake([]);
       await t.pumpWidget(app(SchedulePage(deps: f.deps())));
@@ -595,11 +641,45 @@ void main() {
   });
 
   group('nothing opens a workout page by itself', () {
+    testWidgets('a cut-short finish is redone when the tab shows, never while it is hidden', (t) async {
+      addTearDown(() => shownTab.value = null);
+      await PendingFinish.save('w', 50);
+      final f = Fake([]);
+      final hooks = FinishHooks(
+        apply: (_) async => {},
+        achievements: (_, __) {},
+        celebrate: (_, __, ___, ____) async {},
+        streakSheet: (_) async {},
+      );
+      int finishes() => f.calls.where((c) => c == 'finish_checkin_session').length;
+
+      shownTab.value = AppTab.dashboard; // built while a nav tap crosses it
+      await t.pumpWidget(app(SchedulePage(deps: f.deps(hooks: hooks))));
+      await settle(t);
+      for (final s in [
+        AppLifecycleState.inactive, AppLifecycleState.hidden,
+        AppLifecycleState.inactive, AppLifecycleState.resumed,
+      ]) {
+        t.binding.handleAppLifecycleStateChanged(s);
+      }
+      await settle(t);
+      expect(finishes(), 0); // hidden: its dialogs would land on another tab
+
+      shownTab.value = AppTab.schedule;
+      await t.pump(const Duration(milliseconds: 400));
+      await go(t);
+      expect(finishes(), 1);
+    });
+
     testWidgets('resume, poll and realtime-style refetches never push the page', (t) async {
       final f = Fake([wk('r', 'running', startedAgoMin: 5, startsIn: const Duration(minutes: -5))]);
       await t.pumpWidget(app(SchedulePage(deps: f.deps())));
       await settle(t);
-      for (final s in [AppLifecycleState.inactive, AppLifecycleState.paused, AppLifecycleState.resumed]) {
+      // The order a real device reports (AppLifecycleListener asserts it).
+      for (final s in [
+        AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused,
+        AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed,
+      ]) {
         t.binding.handleAppLifecycleStateChanged(s);
         await t.pump(const Duration(seconds: 1));
       }

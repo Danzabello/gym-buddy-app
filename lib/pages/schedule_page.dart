@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/handshake_service.dart';
+import '../services/tab_refresh.dart';
 import '../theme/app_theme.dart';
 import '../widgets/schedule_rows.dart';
 import '../widgets/schedule_workout_sheet.dart';
+import '../widgets/tab_keep_alive.dart';
 import '../widgets/workout_invites_list.dart';
 import '../widgets/workout_menu.dart';
 import '../widgets/workout_schedule_card.dart';
@@ -26,7 +28,10 @@ class SchedulePage extends StatefulWidget {
   State<SchedulePage> createState() => _SchedulePageState();
 }
 
-class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver {
+class _SchedulePageState extends State<SchedulePage>
+    with AutomaticKeepAliveClientMixin, TabKeepAlive {
+  @override
+  AppTab get tab => AppTab.schedule;
   late final ScheduleDeps _deps = widget.deps ?? ScheduleDeps.live();
   late final ServerClock _clock = widget.clock ?? ServerClock();
   WorkoutCardData? _head; // get_workout_card(): invites + counts + server time
@@ -45,27 +50,24 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
   // Ticks once a second; only the rows listen, so the page itself is not rebuilt.
   final ValueNotifier<int> _secondTick = ValueNotifier(0);
 
+  static const _pollEvery = Duration(seconds: 30);
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _refresh();
-    _deps.loadMe().then((p) => mounted ? setState(() => _me = p) : null).catchError((_) {});
-    _resumePending();
-    _unlisten = _deps.listen(_refresh);
-    _poll = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted && TickerMode.valuesOf(context).enabled) _refresh();
-    });
-    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _rows.isNotEmpty) _secondTick.value++;
-    });
+    _loadMe();
+    _unlisten = _deps.listen(_onWorkoutsChanged);
+    // A tab built while a nav tap crosses it stays quiet until it is shown.
+    if (tabShown) {
+      _resumePending();
+      _startClocks();
+    }
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _poll?.cancel();
-    _tick?.cancel();
+    _stopClocks();
     _secondTick.dispose();
     _unlisten();
     _once.dispose();
@@ -73,15 +75,57 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
     super.dispose();
   }
 
+  void _loadMe() =>
+      _deps.loadMe().then((p) => mounted ? setState(() => _me = p) : null).catchError((_) {});
+
+  /// The 30 s poll and the 1 s tick run only while the tab shows.
+  void _startClocks() {
+    _poll ??= Timer.periodic(_pollEvery, (_) {
+      if (mounted && TickerMode.valuesOf(context).enabled) _refresh();
+    });
+    _tick ??= Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && _rows.isNotEmpty) _secondTick.value++;
+    });
+  }
+
+  void _stopClocks() {
+    _poll?.cancel();
+    _tick?.cancel();
+    _poll = _tick = null;
+  }
+
+  /// A workouts Realtime event: refetch now when shown, else on the next show.
+  void _onWorkoutsChanged() => tabShown ? _refresh() : markStale({AppTab.schedule});
+
   @override
-  void didChangeAppLifecycleState(AppLifecycleState s) {
-    if (s == AppLifecycleState.resumed) {
+  void onTabShown() => _startClocks();
+
+  @override
+  void onTabHidden() => _stopClocks();
+
+  /// Settled on screen, or the app resumed while it shows: redo a finish
+  /// that was cut short, and run the poll tick missed while hidden (a
+  /// workout's state moves with time, not only with row changes). A stale
+  /// tab skips it: refreshInBackground runs right after.
+  @override
+  void onTabSettled() {
+    _resumePending();
+    final last = refreshState.lastLoaded;
+    if (!refreshState.stale && last != null && DateTime.now().difference(last) >= _pollEvery) {
       _refresh();
-      _resumePending();
     }
   }
 
-  Future<void> _refresh() async {
+  /// A write made elsewhere (a finish, a workout action, an equip or avatar
+  /// change), an event while hidden, a long trip away or a new day.
+  @override
+  void refreshInBackground() {
+    _refresh();
+    _loadMe();
+    setState(() => _completedTrigger++);
+  }
+
+  Future<void> _refresh() => refreshState.track(() async {
     if (_fetching) {
       _again = true;
       return;
@@ -107,7 +151,9 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
         });
       }
     } catch (_) {
-      // keep what is on screen; the next event or the 30 s poll retries
+      // keep what is on screen; the next event, the 30 s poll or the next
+      // show retries
+      refreshState.failed();
     } finally {
       _fetching = false;
       if (_again && mounted) {
@@ -115,9 +161,9 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
         _refresh();
       }
     }
-  }
+  });
 
-  void _toast(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  void _toast(String text) => showTabSnackBar(SnackBar(content: Text(text)));
 
   /// A finish that was cut short (credit failed, or the app closed): redo only
   /// finish_checkin_session.
@@ -179,6 +225,7 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // keep-alive
     final head = _head;
     final received = [
       for (final i in head?.invites ?? const <Map<String, dynamic>>[])
