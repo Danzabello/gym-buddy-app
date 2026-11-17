@@ -75,7 +75,14 @@ class _DashboardPageState extends State<DashboardPage>
   bool _isLoading = true;
   bool _isCheckingIn = false;
   bool _isBreakDialogOpen = false;
+  /// Set once the weekly-plan read has answered (not when it was unknown),
+  /// and held while one read is out.
   static bool _weeklyPlanCheckedThisSession = false;
+  static bool _weeklyPlanChecking = false;
+
+  /// Whether the check-in banner setting has been read; false until a read
+  /// answers, and then retried on a show.
+  bool _bannerSettingKnown = false;
 
 
   // Header data (avatar, level, coins) — loaded separately from the streak
@@ -346,6 +353,9 @@ class _DashboardPageState extends State<DashboardPage>
   /// _loadStreakData directly.
   void _refreshIfStale() {
     if (!LiveEventToast.dashboardTabActive) return;
+    // Reads that were unknown at start-up (offline) are asked again.
+    if (!_weeklyPlanCheckedThisSession) unawaited(_checkWeeklyPlan());
+    if (!_bannerSettingKnown) unawaited(_loadLiveCheckinBannerSetting());
     // A write made elsewhere, or a wheel left empty by a failed load (every
     // account has Coach Max's team), means the data is stale.
     if (dashboardStale || (_allStreaks.isEmpty && !_isLoading)) _lastLoaded = null;
@@ -475,7 +485,9 @@ class _DashboardPageState extends State<DashboardPage>
   /// which the settings page also writes on save, so the kept-alive dashboard
   /// sees a toggle without a refetch per event.
   Future<void> _loadLiveCheckinBannerSetting() async {
-    final settings = await NotificationService().getSettings();
+    final settings = await NotificationService().getSettingsOrNull();
+    if (settings == null) return; // unknown: the value stays, retried on a show
+    _bannerSettingKnown = true;
     if (mounted) {
       // With the banner off the dashboard shows nothing for a check-in, so the
       // generic push toast should take over rather than also staying silent.
@@ -2971,9 +2983,14 @@ class _DashboardPageState extends State<DashboardPage>
     dashboardStale = false;
     try {
       await _fetchStreakData(showLoading);
-    } catch (_) {
+    } catch (e) {
       _lastLoaded = null; // a load that threw (offline) is retried on the next show
-      rethrow;
+      if (!isNetworkError(e)) rethrow;
+      // The network was unavailable: unknown, not an error. What is on
+      // screen stays (a skeleton over a wheel is lifted).
+      if (mounted && _isLoading && _allStreaks.isNotEmpty) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -3292,12 +3309,19 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _checkWeeklyPlan() async {
-    if (_weeklyPlanCheckedThisSession) return; // once per app open
-    _weeklyPlanCheckedThisSession = true;       // set before await → no re-fire
-    final needsPlan = await _breakDayService.needsToSetWeeklyPlan();
-    if (!mounted) return;
-    if (needsPlan) {
-      _showWeeklyPlanDialog();
+    // Once per app open, one read at a time (no second dialog).
+    if (_weeklyPlanCheckedThisSession || _weeklyPlanChecking) return;
+    _weeklyPlanChecking = true;
+    try {
+      final needsPlan = await orUnknown(_breakDayService.needsToSetWeeklyPlan);
+      if (needsPlan == null) return; // offline: unknown, asked again on a show
+      _weeklyPlanCheckedThisSession = true;
+      if (!mounted) return;
+      if (needsPlan) {
+        _showWeeklyPlanDialog();
+      }
+    } finally {
+      _weeklyPlanChecking = false;
     }
   }
 

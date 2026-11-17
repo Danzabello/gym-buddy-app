@@ -651,7 +651,13 @@ class NotificationService {
     routeTap(message.data);
   }
 
-  Future<Map<String, dynamic>> getSettings() async {
+  Future<Map<String, dynamic>> getSettings() async =>
+      await getSettingsOrNull() ?? _defaultSettings();
+
+  /// The saved settings (the defaults when no row exists), or null when the
+  /// read failed, so a caller that applies them once can tell "the defaults"
+  /// from "unknown" and ask again.
+  Future<Map<String, dynamic>?> getSettingsOrNull() async {
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return _defaultSettings();
@@ -664,7 +670,7 @@ class NotificationService {
 
       return result ?? _defaultSettings();
     } catch (e) {
-      return _defaultSettings();
+      return null;
     }
   }
 
