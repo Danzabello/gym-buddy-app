@@ -114,7 +114,6 @@ class _DashboardPageState extends State<DashboardPage>
   late Animation<double> _carouselEntranceAnimation;
   bool _hasAnimatedEntrance = false;
 
-  AppLifecycleListener? _appLifecycleListener;
   List<String> _customStreakOrder = [];
   List<TeamStreak> _customSelection = [];
   StreakSortMode _streakSortMode = StreakSortMode.highestCurrent;
@@ -215,20 +214,17 @@ class _DashboardPageState extends State<DashboardPage>
     _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _minute.value++);
     _confettiController = ConfettiController(duration: const Duration(seconds: 3));
     _confettiControllerRight = ConfettiController(duration: const Duration(seconds: 3));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _setupAppLifecycleListener();
-    });
   }
 
-  // Add this new method
+  /// The one first load. It starts at once, beside the cleanup (it reads
+  /// workouts, never active_checkin_sessions) and the weekly-plan check.
   Future<void> _initializeHomePage() async {
     await Future.wait([
+      _loadStreakData(),
       _workoutService.cleanupOrphanedSessions(),
       _checkWeeklyPlan(),
     ]);
-  
-    await _loadStreakData();
-  
+
     // Reset broken streaks in background AFTER UI is shown
     _teamStreakService.checkAndResetBrokenStreaks();
   }
@@ -391,10 +387,6 @@ class _DashboardPageState extends State<DashboardPage>
         MaterialPageRoute(builder: (_) => const NotificationsPage()),
       );
 
-  void _setupAppLifecycleListener() {
-    _loadStreakData();
-  }
-
   @override
   void dispose() {
     _once.dispose();
@@ -410,7 +402,6 @@ class _DashboardPageState extends State<DashboardPage>
     _route?.secondaryAnimation?.removeStatusListener(_onRouteCover);
     _headerLifecycle.dispose();
     _motion.dispose();
-    _appLifecycleListener?.dispose();
     _trayController.dispose();
     _countdownTimer?.cancel();
     _minute.dispose();
