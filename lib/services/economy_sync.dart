@@ -7,6 +7,14 @@ class EconomyNumbers {
   const EconomyNumbers(this.level, this.coins);
   final LevelInfo? level;
   final int coins;
+
+  // Equal numbers must not notify listeners, or the dashboard rebuilds for nothing.
+  @override
+  bool operator ==(Object other) =>
+      other is EconomyNumbers && other.level == level && other.coins == coins;
+
+  @override
+  int get hashCode => Object.hash(level, coins);
 }
 
 /// Keeps the dashboard header equal to the server after a credit lands.

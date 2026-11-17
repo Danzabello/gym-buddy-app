@@ -26,6 +26,24 @@ class LevelInfo {
     required this.xpNeededForNext,
     required this.progressPercent,
   });
+
+  List<Object> get _fields => [
+        level, title, currentXp, xpForThisLevel, xpForNextLevel,
+        xpIntoCurrentLevel, xpNeededForNext, progressPercent,
+      ];
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! LevelInfo) return false;
+    final a = _fields, b = other._fields;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hashAll(_fields);
 }
 
 // ============================================================
