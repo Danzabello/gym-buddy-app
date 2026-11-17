@@ -155,6 +155,18 @@ void main() {
       expect(find.textContaining('Running 12:0'), findsOneWidget);
     });
 
+    testWidgets('the one-second tick reaches the rows', (t) async {
+      final f = Fake([wk('r', 'running', startedAgoMin: 12, startsIn: const Duration(minutes: -12))]);
+      var skew = Duration.zero;
+      final clock = ServerClock(() => DateTime.now().add(skew));
+      await t.pumpWidget(app(SchedulePage(deps: f.deps(), clock: clock)));
+      await settle(t);
+      expect(find.textContaining('Running 12:0'), findsOneWidget);
+      skew = const Duration(seconds: 60); // a minute passes; nothing else rebuilds the page
+      await t.pump(const Duration(seconds: 1));
+      expect(find.textContaining('Running 13:0'), findsOneWidget);
+    });
+
     test('Now status lines', () {
       final n = DateTime.utc(2026, 10, 10, 12);
       String st(String s, {int? ago}) => nowStatus(
