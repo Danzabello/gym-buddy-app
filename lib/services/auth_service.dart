@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'nickname_service.dart';
 import 'notification_service.dart';
 import 'package:gym_buddy_app/utils/debug_logger.dart';
+import 'saved_copy.dart';
 
 /// The Web OAuth client, passed to google_sign_in as serverClientId so the ID
 /// token's audience is the one Supabase's Google provider accepts. A client ID
@@ -153,6 +154,7 @@ class AuthService {
     nicknameService.clearCache();
     // Must precede signOut(): removeToken() deletes by auth.uid().
     await NotificationService().removeToken();
+    await SavedCopy.wipe();
     await runSignOut(
       supabaseSignOut: _supabase.auth.signOut,
       googleSignOut: signOutGoogle,

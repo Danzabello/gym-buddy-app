@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../utils/run_once.dart';
 import '../services/friend_service.dart';
@@ -21,6 +22,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/invite_service.dart';
 import '../services/team_streak_service.dart';
 import '../services/tab_refresh.dart';
+import '../services/saved_copy.dart';
 import 'tab_keep_alive.dart';
 
 /// Messaging isn't built yet; flip to bring back the chat entry points.
@@ -89,16 +91,60 @@ class _FriendsPageModernState extends State<FriendsPageModern>
   @override
   void initState() {
     super.initState();
+    _restoreSaved();
     _load();
   }
 
+  /// First paint from the saved copy (same local day only: the page groups
+  /// friends by today's check-in). A load that finished first wins.
+  Future<void> _restoreSaved() async {
+    final saved = await SavedCopy.read<Map<String, dynamic>>(
+      SavedCopy.uid,
+      'friends',
+      maxAge: kSavedMaxAgeFriends,
+      sameDay: true,
+      parse: (d) {
+        final m = d as Map<String, dynamic>;
+        final friends = [
+          for (final f in m['friends'] as List) Map<String, dynamic>.from(f as Map),
+        ];
+        if (friends.isEmpty) throw const FormatException('no friends saved');
+        return {
+          'friends': friends,
+          'checkedIn': Set<String>.from(m['checkedIn'] as List),
+          'onBreak': Set<String>.from(m['onBreak'] as List),
+          'nudged': Set<String>.from(m['nudged'] as List),
+        };
+      },
+    );
+    if (saved == null || !mounted || !_isLoading) return;
+    setState(() {
+      _friends = saved['friends'] as List<Map<String, dynamic>>;
+      _checkedInToday = saved['checkedIn'] as Set<String>;
+      _onBreakToday = saved['onBreak'] as Set<String>;
+      _nudgedToday = saved['nudged'] as Set<String>;
+      _isLoading = false;
+    });
+  }
+
   /// [showLoading] false (keep-alive refreshes) keeps the list on screen.
-  Future<void> _load({bool showLoading = true}) => refreshState.track(() async {
+  /// A failed read (offline) keeps what is shown, saved copy included, and
+  /// the next show retries.
+  Future<void> _load({bool showLoading = true}) async {
+    try {
+      await _fetch(showLoading);
+    } catch (e) {
+      if (kDebugMode) debugPrint('FriendsPage._load: $e');
+      if (mounted && _isLoading) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetch(bool showLoading) => refreshState.track(() async {
     if (showLoading) setState(() => _isLoading = true);
 
     // Two stages: the per-friend reads need the friend ids from the first.
     final (friends, pending, buddyStreaks) = await (
-      _friendService.getFriends(),
+      _friendService.getFriends(strict: true),
       _friendService.getPendingRequests(),
       _loadBuddyStreaks(),
     ).wait;
@@ -120,9 +166,18 @@ class _FriendsPageModernState extends State<FriendsPageModern>
       _buddyStreaks = buddyStreaks;
       _isLoading = false;
     });
-    // getFriends returns [] on an error too, so an empty list is retried on
-    // the next show (as every visit did before keep-alive).
-    if (friends.isEmpty) refreshState.failed();
+    // An empty list is retried on the next show (as every visit did before
+    // keep-alive); it is not saved.
+    if (friends.isEmpty) {
+      refreshState.failed();
+    } else {
+      unawaited(SavedCopy.write(SavedCopy.uid, 'friends', {
+        'friends': friends,
+        'checkedIn': checkedIn.toList(),
+        'onBreak': onBreak.toList(),
+        'nudged': nudged.toList(),
+      }, zone: profileZone));
+    }
   });
 
   // Map each buddy's userId → our shared team streak (skips Coach Max).

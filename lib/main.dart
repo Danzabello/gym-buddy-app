@@ -16,6 +16,7 @@ import 'services/achievement_service.dart';
 import 'dart:async';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'services/invite_service.dart';
+import 'services/saved_copy.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'theme/accent_theme_provider.dart';
@@ -40,6 +41,7 @@ void main() async {
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
   InviteService.startListening();
+  SavedCopy.start();
   if (Platform.isAndroid) {
     unawaited(InviteService().readInstallReferrerOnce(InviteService.playReferrer));
   }

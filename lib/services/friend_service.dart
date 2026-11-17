@@ -253,7 +253,9 @@ class FriendService {
   }
 
   // Get accepted friends
-  Future<List<Map<String, dynamic>>> getFriends() async {
+  /// [strict] rethrows a failed read instead of returning [], so a refresh
+  /// can tell "offline" from "no friends" and keep the saved list.
+  Future<List<Map<String, dynamic>>> getFriends({bool strict = false}) async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) return [];
@@ -293,6 +295,7 @@ class FriendService {
       return List<Map<String, dynamic>>.from(profiles);
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error getting friends: $e');
+      if (strict) rethrow;
       return [];
     }
   }

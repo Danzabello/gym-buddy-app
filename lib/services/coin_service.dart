@@ -272,6 +272,39 @@ class ShopItem {
     this.unlockAchievementName,
   });
 
+  /// The saved copy's form (SavedCopy, class 'shop'), read back by [fromSaved].
+  Map<String, dynamic> toSaved() => {
+        'id': id,
+        'name': name,
+        'description': description,
+        'category': category,
+        'cost': cost,
+        'emoji': emoji,
+        'asset_id': assetId,
+        'owned': isOwned,
+        'equipped': isEquipped,
+        'unlock_level': unlockLevel,
+        'color_hex': colorHex,
+        'unlock_achievement_id': unlockAchievementId,
+        'unlock_achievement_name': unlockAchievementName,
+      };
+
+  factory ShopItem.fromSaved(Map<String, dynamic> m) => ShopItem(
+        id: m['id'] as String,
+        name: m['name'] as String,
+        description: m['description'] as String,
+        category: m['category'] as String,
+        cost: m['cost'] as int,
+        emoji: m['emoji'] as String,
+        assetId: m['asset_id'] as String,
+        isOwned: m['owned'] as bool,
+        isEquipped: m['equipped'] as bool,
+        unlockLevel: m['unlock_level'] as int,
+        colorHex: m['color_hex'] as String?,
+        unlockAchievementId: m['unlock_achievement_id'] as String?,
+        unlockAchievementName: m['unlock_achievement_name'] as String?,
+      );
+
   factory ShopItem.fromMap(Map<String, dynamic> map, bool isOwned, {bool isEquipped = false}) {
     return ShopItem(
       id: map['id'] as String,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
@@ -5,6 +7,7 @@ import '../theme/accent_theme_provider.dart';
 import '../services/coin_service.dart';
 import '../services/economy_sync.dart';
 import '../services/tab_refresh.dart';
+import '../services/saved_copy.dart';
 import '../services/level_service.dart';
 import '../utils/hex_color.dart';
 import '../utils/run_once.dart';
@@ -45,10 +48,15 @@ class _ShopPageState extends State<ShopPage>
 
   int _userLevel = 1;
 
+  /// Ends when the first refresh does (loaded or failed). While the page
+  /// shows the saved copy, a tap on an item waits for it, at most about 3 s.
+  final _firstRefresh = Completer<void>();
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: _categories.length, vsync: this);
+    _restoreSaved();
     _loadData();
     EconomySync.instance.numbers.addListener(_onEconomyChanged);
   }
@@ -69,24 +77,66 @@ class _ShopPageState extends State<ShopPage>
     super.dispose();
   }
 
+  /// First paint from the saved copy: catalogue, owned items, balance and
+  /// level. A load that finished first wins.
+  Future<void> _restoreSaved() async {
+    final saved = await SavedCopy.read<({List<ShopItem> items, int coins, int level})>(
+      SavedCopy.uid,
+      'shop',
+      maxAge: kSavedMaxAgeShop,
+      parse: (d) {
+        final m = d as Map<String, dynamic>;
+        final items = [
+          for (final i in m['items'] as List)
+            ShopItem.fromSaved(Map<String, dynamic>.from(i as Map)),
+        ];
+        if (items.isEmpty) throw const FormatException('no items saved');
+        return (items: items, coins: m['coins'] as int, level: m['level'] as int);
+      },
+    );
+    if (saved == null || !mounted || !_isLoading || _firstRefresh.isCompleted) return;
+    setState(() {
+      _allItems = saved.items;
+      _coinBalance = saved.coins;
+      _userLevel = saved.level;
+      _isLoading = false;
+    });
+  }
+
   /// [showLoading] false (keep-alive refreshes) keeps the grid on screen.
   Future<void> _loadData({bool showLoading = true}) => refreshState.track(() async {
-    if (showLoading) setState(() => _isLoading = true);
-    final (balance, items, levelInfo) = await (
-      _coinService.getBalance(),
-      _coinService.getShopItems(),
-      LevelService().getLevelInfo(),
-    ).wait;
-    if (mounted) {
-      setState(() {
-        _coinBalance = balance;
-        _allItems = items;
-        _userLevel = levelInfo?.level ?? 1;
-        _isLoading = false;
-      });
+    try {
+      if (showLoading) setState(() => _isLoading = true);
+      final (balance, items, levelInfo) = await (
+        _coinService.getBalance(),
+        _coinService.getShopItems(),
+        LevelService().getLevelInfo(),
+      ).wait;
+      // The shop is never empty and a level read fails as null, so either
+      // means the read failed: a saved copy on screen stays as it is.
+      final failed = items.isEmpty || levelInfo == null;
+      final keepSaved = failed && _allItems.isNotEmpty;
+      if (mounted && !keepSaved) {
+        setState(() {
+          _coinBalance = balance;
+          _allItems = items;
+          _userLevel = levelInfo?.level ?? 1;
+          _isLoading = false;
+        });
+      } else if (mounted) {
+        setState(() => _isLoading = false);
+      }
+      if (items.isEmpty) refreshState.failed();
+      if (!failed) {
+        unawaited(SavedCopy.write(SavedCopy.uid, 'shop', {
+          'items': [for (final i in items) i.toSaved()],
+          'coins': balance,
+          'level': levelInfo.level,
+        }, zone: profileZone));
+      }
+    } finally {
+      if (!_firstRefresh.isCompleted) _firstRefresh.complete();
     }
-    // getShopItems returns [] on an error, and the shop is never empty.
-    if (items.isEmpty) refreshState.failed();
   });
 
   List<ShopItem> _getItemsForCategory(String category) {
@@ -117,7 +167,12 @@ class _ShopPageState extends State<ShopPage>
       item.unlockAchievementId == null &&
       _userLevel < item.unlockLevel;
 
-  Future<void> _purchaseItem(ShopItem item) async {
+  Future<void> _purchaseItem(ShopItem tapped) async {
+    // Still showing the saved copy: wait for the first refresh (at most
+    // about 3 s), then act on what it brought. The server decides either way.
+    await awaitConfirmed(_firstRefresh.future);
+    if (!mounted) return;
+    final item = _allItems.firstWhere((i) => i.id == tapped.id, orElse: () => tapped);
     // Achievement-gated items are auto-granted by a DB trigger, never bought,
     // and level-locked items aren't actionable until the user levels up.
     if (!item.isOwned &&

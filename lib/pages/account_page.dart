@@ -11,6 +11,7 @@ import '../utils/debug_logger.dart';
 import '../utils/input_validators.dart';
 import '../utils/run_once.dart';
 import '../widgets/menu_card.dart';
+import '../services/saved_copy.dart';
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -155,6 +156,7 @@ class _AccountPageState extends State<AccountPage> {
     // After the delete, so a failed delete keeps this device's pushes. The
     // server row is already gone with the account; this drops the FCM token.
     await NotificationService().removeToken();
+    await SavedCopy.wipe();
     await runSignOut(
       supabaseSignOut: Supabase.instance.client.auth.signOut,
       googleSignOut: AuthService.signOutGoogle,
