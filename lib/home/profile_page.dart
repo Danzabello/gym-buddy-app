@@ -53,6 +53,7 @@ class _ProfilePageState extends State<ProfilePage>
     _ringAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _fadeController, curve: const Interval(0.2, 1.0, curve: Curves.easeOut)),
     );
+    _restoreSaved();
     _loadAll();
     EconomySync.instance.numbers.addListener(_onEconomyChanged);
   }
@@ -73,6 +74,49 @@ class _ProfilePageState extends State<ProfilePage>
   }
  
   // ── data loading ──────────────────────────────────────────────
+
+  /// First paint from the saved copy (same local day only: it carries streak
+  /// numbers). A load that finished first wins.
+  Future<void> _restoreSaved() async {
+    final saved = await SavedCopy.read<Map<String, dynamic>>(
+      SavedCopy.uid,
+      'profile',
+      maxAge: kSavedMaxAgeProfile,
+      sameDay: true,
+      parse: (d) {
+        final m = d as Map<String, dynamic>;
+        return {
+          'profile': Map<String, dynamic>.from(m['profile'] as Map),
+          'streaks': [
+            for (final s in m['streaks'] as List)
+              TeamStreak.fromSaved(Map<String, dynamic>.from(s as Map)),
+          ],
+          'level': LevelInfo.fromSaved(Map<String, dynamic>.from(m['level'] as Map)),
+          'workouts': m['workouts'] as int,
+          'buddies': m['buddies'] as int,
+          'favs': [
+            for (final f in m['favs'] as List) Map<String, dynamic>.from(f as Map),
+          ],
+        };
+      },
+    );
+    if (saved == null || !mounted || !_isLoading) return;
+    final profile = saved['profile'] as Map<String, dynamic>;
+    setState(() {
+      _profile = profile;
+      _allStreaks = saved['streaks'] as List<TeamStreak>;
+      _streakSortMode = StreakSortMode.values.firstWhere(
+        (e) => e.name == profile['preferred_streak_sort'],
+        orElse: () => StreakSortMode.highestCurrent,
+      );
+      _levelInfo = saved['level'] as LevelInfo;
+      _totalWorkouts = saved['workouts'] as int;
+      _buddyCount = saved['buddies'] as int;
+      _favouriteCategories = saved['favs'] as List<Map<String, dynamic>>;
+      _isLoading = false;
+    });
+    _fadeController.forward();
+  }
   Future<void> _loadAll() => refreshState.track(() async {
     try {
       final uid = Supabase.instance.client.auth.currentUser?.id;
@@ -86,7 +130,11 @@ class _ProfilePageState extends State<ProfilePage>
       final streaksFuture = TeamStreakService().getAllUserStreaks();
       final levelFuture = LevelService().getLevelInfo();
       final workoutsFuture = WorkoutService().completedWorkoutCount(uid);
-      final friendsFuture = FriendService().getFriends();
+      // Null when the read failed, so "no buddies" and "offline" differ.
+      final friendsFuture = FriendService()
+          .getFriends(strict: true)
+          .then<List<Map<String, dynamic>>?>((f) => f)
+          .catchError((_) => null);
       final favouriteCategoriesFuture = Supabase.instance.client
           .rpc('get_favourite_categories', params: {'p_user_id': uid});
 
@@ -99,6 +147,16 @@ class _ProfilePageState extends State<ProfilePage>
 
       if (!mounted) return;
 
+      // Coach Max's team means a real account never has no streaks, and a
+      // level read fails as null: either means a read failed. What is on
+      // screen (the saved copy, or the last load) stays and the next show
+      // retries.
+      final partial = streaks.isEmpty || level == null || friends == null;
+      if (partial && _levelInfo != null) {
+        refreshState.failed();
+        return;
+      }
+
       setState(() {
         _profile       = profile;
         _allStreaks     = streaks;
@@ -108,10 +166,21 @@ class _ProfilePageState extends State<ProfilePage>
         );
         _levelInfo     = level;
         _totalWorkouts = workouts;
-        _buddyCount    = friends.length;
+        _buddyCount    = friends?.length ?? _buddyCount;
         _favouriteCategories = (favouriteCategories as List).cast<Map<String, dynamic>>();
         _isLoading     = false;
       });
+
+      if (!partial) {
+        unawaited(SavedCopy.write(SavedCopy.uid, 'profile', {
+          'profile': profile,
+          'streaks': [for (final s in streaks) s.toSaved()],
+          'level': level.toSaved(),
+          'workouts': workouts,
+          'buddies': friends.length,
+          'favs': _favouriteCategories,
+        }, zone: profileZone));
+      }
 
       await Future.delayed(const Duration(milliseconds: 50));
       if (mounted) _fadeController.forward();

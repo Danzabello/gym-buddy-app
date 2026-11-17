@@ -27,6 +27,29 @@ class LevelInfo {
     required this.progressPercent,
   });
 
+  /// The saved copy's form (SavedCopy), read back by [fromSaved].
+  Map<String, dynamic> toSaved() => {
+        'level': level,
+        'title': title,
+        'current_xp': currentXp,
+        'xp_for_this_level': xpForThisLevel,
+        'xp_for_next_level': xpForNextLevel,
+        'xp_into_current_level': xpIntoCurrentLevel,
+        'xp_needed_for_next': xpNeededForNext,
+        'progress_percent': progressPercent,
+      };
+
+  factory LevelInfo.fromSaved(Map<String, dynamic> m) => LevelInfo(
+        level: m['level'] as int,
+        title: m['title'] as String,
+        currentXp: m['current_xp'] as int,
+        xpForThisLevel: m['xp_for_this_level'] as int,
+        xpForNextLevel: m['xp_for_next_level'] as int,
+        xpIntoCurrentLevel: m['xp_into_current_level'] as int,
+        xpNeededForNext: m['xp_needed_for_next'] as int,
+        progressPercent: (m['progress_percent'] as num).toDouble(),
+      );
+
   List<Object> get _fields => [
         level, title, currentXp, xpForThisLevel, xpForNextLevel,
         xpIntoCurrentLevel, xpNeededForNext, progressPercent,

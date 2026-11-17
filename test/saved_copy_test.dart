@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_buddy_app/services/coin_service.dart';
 import 'package:gym_buddy_app/services/friend_service.dart';
+import 'package:gym_buddy_app/services/handshake_service.dart';
+import 'package:gym_buddy_app/services/level_service.dart';
+import 'package:gym_buddy_app/services/team_streak_service.dart';
 import 'package:gym_buddy_app/services/saved_copy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -245,6 +248,14 @@ void main() {
       await f;
     });
 
+    test('the real timer ends the wait at the limit, and is cancelled when the refresh ends first', () async {
+      final sw = Stopwatch()..start();
+      await awaitConfirmed(Completer<void>().future, limit: const Duration(milliseconds: 60));
+      expect(sw.elapsedMilliseconds, greaterThanOrEqualTo(55));
+      final done = Completer<void>()..complete();
+      await awaitConfirmed(done.future); // returns at once; a leftover 3 s timer would fail the widget tests
+    });
+
     test('nothing to wait for returns at once', () async {
       await awaitConfirmed(null);
     });
@@ -269,6 +280,84 @@ void main() {
       );
       final back = ShopItem.fromSaved(jsonDecode(jsonEncode(item.toSaved())) as Map<String, dynamic>);
       expect(back.toSaved(), item.toSaved());
+    });
+  });
+
+  group('saved forms of the other models', () {
+    Map<String, dynamic> viaJson(Map<String, dynamic> m) =>
+        jsonDecode(jsonEncode(m)) as Map<String, dynamic>;
+
+    test('TeamStreak with members and check-ins round trips', () {
+      final s = TeamStreak(
+        id: 's1',
+        teamId: 't1',
+        teamName: 'Us',
+        teamEmoji: '🔥',
+        currentStreak: 4,
+        longestStreak: 9,
+        totalWorkouts: 20,
+        bestStreak: 9,
+        lastWorkoutDate: DateTime.utc(2026, 11, 16),
+        lastInteractionAt: DateTime.utc(2026, 11, 17, 8, 30),
+        isCoachMaxTeam: false,
+        members: [
+          TeamMember(userId: _a, displayName: 'A', username: 'a', isCoachMax: false, avatarId: 'x'),
+          TeamMember(userId: _b, displayName: 'B', isCoachMax: false),
+        ],
+        todayCheckIns: [
+          CheckInStatus(userId: _a, displayName: 'A', checkInTime: DateTime.utc(2026, 11, 17, 7), order: 1),
+        ],
+        isFavorite: true,
+      );
+      final back = TeamStreak.fromSaved(viaJson(s.toSaved()));
+      expect(back.toSaved(), s.toSaved());
+      expect(back.isAtRisk, isFalse);
+      expect(back.lastWorkoutDate, s.lastWorkoutDate);
+    });
+
+    test('TeamStreak with no dates round trips', () {
+      final s = TeamStreak(
+        id: 's',
+        teamId: 't',
+        teamName: 'N',
+        teamEmoji: '🔥',
+        currentStreak: 0,
+        longestStreak: 0,
+        lastWorkoutDate: null,
+        isCoachMaxTeam: true,
+        members: const [],
+        todayCheckIns: const [],
+      );
+      expect(TeamStreak.fromSaved(viaJson(s.toSaved())).toSaved(), s.toSaved());
+    });
+
+    test('LevelInfo round trips and compares equal', () {
+      final l = LevelInfo(
+        level: 7,
+        title: 'Rookie',
+        currentXp: 700,
+        xpForThisLevel: 600,
+        xpForNextLevel: 800,
+        xpIntoCurrentLevel: 100,
+        xpNeededForNext: 100,
+        progressPercent: 0.5,
+      );
+      expect(LevelInfo.fromSaved(viaJson(l.toSaved())), l);
+    });
+
+    test('WorkoutCardData round trips through its own reader', () {
+      final c = WorkoutCardData(
+        state: 'scheduled',
+        workout: {'workout_id': 'w', 'planned_at': '2026-11-17T10:00:00Z'},
+        invites: [
+          {'workout_id': 'i', 'direction': 'received'}
+        ],
+        openInviteCount: 2,
+        serverNow: DateTime.utc(2026, 11, 17, 9),
+      );
+      final back = WorkoutCardData.fromJson(viaJson(c.toSaved()));
+      expect(back.toSaved(), c.toSaved());
+      expect(back.serverNow, c.serverNow);
     });
   });
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/handshake_service.dart';
+import '../services/saved_copy.dart';
 import '../services/tab_refresh.dart';
 import '../theme/app_theme.dart';
 import '../widgets/schedule_rows.dart';
@@ -52,9 +53,15 @@ class _SchedulePageState extends State<SchedulePage>
 
   static const _pollEvery = Duration(seconds: 30);
 
+  /// Ends when the first refresh does (loaded or failed). While the page
+  /// shows the saved copy, a tap on a row or an invite waits for it, at most
+  /// about 3 s, then acts: the server decides either way.
+  final _firstRefresh = Completer<void>();
+
   @override
   void initState() {
     super.initState();
+    _restoreSaved();
     _refresh();
     _loadMe();
     _unlisten = _deps.listen(_onWorkoutsChanged);
@@ -73,6 +80,31 @@ class _SchedulePageState extends State<SchedulePage>
     _once.dispose();
     _answerOnce.dispose();
     super.dispose();
+  }
+
+  /// First paint from the saved copy (same local day, at most 12 h old): the
+  /// list and the invites, without syncing the clock from its old server
+  /// time. A load that finished first wins.
+  Future<void> _restoreSaved() async {
+    final saved = await SavedCopy.read<(WorkoutCardData, List<Map<String, dynamic>>)>(
+      SavedCopy.uid,
+      'schedule',
+      maxAge: kSavedMaxAgeSchedule,
+      sameDay: true,
+      parse: (d) {
+        final m = d as Map<String, dynamic>;
+        return (
+          WorkoutCardData.fromJson(Map<String, dynamic>.from(m['head'] as Map)),
+          [for (final r in m['rows'] as List) Map<String, dynamic>.from(r as Map)],
+        );
+      },
+    );
+    if (saved == null || !mounted || _loaded || _firstRefresh.isCompleted) return;
+    setState(() {
+      _head = saved.$1;
+      _rows = saved.$2;
+      _loaded = true;
+    });
   }
 
   void _loadMe() =>
@@ -139,6 +171,8 @@ class _SchedulePageState extends State<SchedulePage>
       ]);
       final head = results.first!;
       _clock.sync(head.serverNow);
+      // A row whose card failed is missing here: such a list is not saved.
+      final whole = results.every((d) => d != null);
       final rows = [
         for (final d in results.skip(1))
           if (d != null && d.workout != null && d.state != 'closed') d.workout!
@@ -150,12 +184,19 @@ class _SchedulePageState extends State<SchedulePage>
           _loaded = true;
         });
       }
+      if (whole) {
+        unawaited(SavedCopy.write(SavedCopy.uid, 'schedule', {
+          'head': head.toSaved(),
+          'rows': rows,
+        }, zone: profileZone));
+      }
     } catch (_) {
       // keep what is on screen; the next event, the 30 s poll or the next
       // show retries
       refreshState.failed();
     } finally {
       _fetching = false;
+      if (!_firstRefresh.isCompleted) _firstRefresh.complete();
       if (_again && mounted) {
         _again = false;
         _refresh();
@@ -186,6 +227,8 @@ class _SchedulePageState extends State<SchedulePage>
   }
 
   Future<void> _open(String id) async {
+    await awaitConfirmed(_firstRefresh.future); // saved copy: wait for the refresh
+    if (!mounted) return;
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => WorkoutPage(workoutId: id, deps: widget.deps)));
     if (mounted) {
       _refresh();
@@ -193,7 +236,10 @@ class _SchedulePageState extends State<SchedulePage>
     }
   }
 
-  Future<void> _rowMenu(Map<String, dynamic> w) async {
+  Future<void> _rowMenu(Map<String, dynamic> tapped) async {
+    await awaitConfirmed(_firstRefresh.future); // saved copy: wait for the refresh
+    if (!mounted) return;
+    final w = _rows.firstWhere((r) => r['workout_id'] == tapped['workout_id'], orElse: () => tapped);
     final name = (w['other_person'] as Map?)?['display_name'] as String?;
     final a = await pickWorkoutAction(context,
         title: name == null ? w['workout_type'] as String : '${w['workout_type']} with $name',
@@ -213,6 +259,8 @@ class _SchedulePageState extends State<SchedulePage>
   }
 
   Future<void> _answer(String id, {required bool accept, bool force = false}) async {
+    await awaitConfirmed(_firstRefresh.future); // saved copy: wait for the refresh
+    if (!mounted) return;
     try {
       final r = accept ? await _deps.svc.accept(id, force: force) : await _deps.svc.decline(id);
       if (!mounted) return;

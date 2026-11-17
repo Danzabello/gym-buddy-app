@@ -108,6 +108,15 @@ class WorkoutCardData {
     required this.serverNow,
   });
 
+  /// The saved copy's form (SavedCopy): the keys [fromJson] reads.
+  Map<String, dynamic> toSaved() => {
+        'state': state,
+        'workout': workout,
+        'invites': invites,
+        'open_invite_count': openInviteCount,
+        'server_now': serverNow.toUtc().toIso8601String(),
+      };
+
   /// Keys are read by name; jsonb key order is not stable.
   factory WorkoutCardData.fromJson(Map<String, dynamic> j) => WorkoutCardData(
         state: j['state'] as String? ?? 'none',

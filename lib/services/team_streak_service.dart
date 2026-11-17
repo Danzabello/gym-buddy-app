@@ -31,6 +31,23 @@ class TeamMember {
     required this.isCoachMax,
     this.avatarId,
   });
+
+  /// The saved copy's form (SavedCopy), read back by [fromSaved].
+  Map<String, dynamic> toSaved() => {
+        'user_id': userId,
+        'display_name': displayName,
+        'username': username,
+        'is_coach_max': isCoachMax,
+        'avatar_id': avatarId,
+      };
+
+  factory TeamMember.fromSaved(Map<String, dynamic> m) => TeamMember(
+        userId: m['user_id'] as String,
+        displayName: m['display_name'] as String,
+        username: m['username'] as String?,
+        isCoachMax: m['is_coach_max'] as bool,
+        avatarId: m['avatar_id'] as String?,
+      );
 }
 
 /// Represents a check-in status
@@ -46,6 +63,20 @@ class CheckInStatus {
     required this.checkInTime,
     required this.order,
   });
+
+  Map<String, dynamic> toSaved() => {
+        'user_id': userId,
+        'display_name': displayName,
+        'check_in_time': checkInTime.toIso8601String(),
+        'order': order,
+      };
+
+  factory CheckInStatus.fromSaved(Map<String, dynamic> m) => CheckInStatus(
+        userId: m['user_id'] as String,
+        displayName: m['display_name'] as String,
+        checkInTime: DateTime.parse(m['check_in_time'] as String),
+        order: m['order'] as int,
+      );
 }
 
 /// Represents a team's streak data
@@ -82,6 +113,51 @@ class TeamStreak {
     this.isFavorite = false, 
   });
   
+  /// The saved copy's form (SavedCopy), read back by [fromSaved].
+  Map<String, dynamic> toSaved() => {
+        'id': id,
+        'team_id': teamId,
+        'team_name': teamName,
+        'team_emoji': teamEmoji,
+        'current_streak': currentStreak,
+        'longest_streak': longestStreak,
+        'total_workouts': totalWorkouts,
+        'best_streak': bestStreak,
+        'last_workout_date': lastWorkoutDate?.toIso8601String(),
+        'last_interaction_at': lastInteractionAt?.toIso8601String(),
+        'is_coach_max_team': isCoachMaxTeam,
+        'members': [for (final m in members) m.toSaved()],
+        'today_check_ins': [for (final c in todayCheckIns) c.toSaved()],
+        'is_favorite': isFavorite,
+      };
+
+  factory TeamStreak.fromSaved(Map<String, dynamic> m) => TeamStreak(
+        id: m['id'] as String,
+        teamId: m['team_id'] as String,
+        teamName: m['team_name'] as String,
+        teamEmoji: m['team_emoji'] as String,
+        currentStreak: m['current_streak'] as int,
+        longestStreak: m['longest_streak'] as int,
+        totalWorkouts: m['total_workouts'] as int,
+        bestStreak: m['best_streak'] as int,
+        lastWorkoutDate: m['last_workout_date'] == null
+            ? null
+            : DateTime.parse(m['last_workout_date'] as String),
+        lastInteractionAt: m['last_interaction_at'] == null
+            ? null
+            : DateTime.parse(m['last_interaction_at'] as String),
+        isCoachMaxTeam: m['is_coach_max_team'] as bool,
+        members: [
+          for (final x in m['members'] as List)
+            TeamMember.fromSaved(Map<String, dynamic>.from(x as Map))
+        ],
+        todayCheckIns: [
+          for (final x in m['today_check_ins'] as List)
+            CheckInStatus.fromSaved(Map<String, dynamic>.from(x as Map))
+        ],
+        isFavorite: m['is_favorite'] as bool,
+      );
+
   // ✅ PRESERVE ALL EXISTING HELPER METHODS
   
   /// Calculate completion percentage for today

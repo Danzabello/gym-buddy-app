@@ -52,9 +52,17 @@ Future<void> awaitConfirmed(
   Future<void> Function(Duration)? delay,
 }) async {
   if (pending == null) return;
-  try {
-    await Future.any([pending, (delay ?? (d) => Future<void>.delayed(d))(limit)]);
-  } catch (_) {}
+  final done = Completer<void>();
+  void finish() {
+    if (!done.isCompleted) done.complete();
+  }
+
+  // The timer is cancelled when the refresh ends first, so none is left over.
+  final timer = delay == null ? Timer(limit, finish) : null;
+  delay?.call(limit).then((_) => finish(), onError: (_) => finish());
+  pending.then((_) => finish(), onError: (_) => finish());
+  await done.future;
+  timer?.cancel();
 }
 
 class SavedCopy {
@@ -66,8 +74,13 @@ class SavedCopy {
 
   static String _key(String uid, String cls) => '$prefix$uid:$cls';
 
+  /// A test's stand-in for the signed-in user.
+  @visibleForTesting
+  static String? Function()? uidOverride;
+
   /// The signed-in user's id, read when called; null when signed out.
   static String? get uid {
+    if (uidOverride != null) return uidOverride!();
     try {
       return Supabase.instance.client.auth.currentUser?.id;
     } catch (_) {
