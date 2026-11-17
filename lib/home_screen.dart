@@ -43,8 +43,6 @@ import 'pages/wardrobe/wardrobe_page.dart';
 import 'pages/help_support_page.dart';
 import 'services/coin_service.dart';
 import 'widgets/menu_card.dart';
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'services/level_service.dart';
 import 'services/saved_copy.dart';
 import 'services/economy_sync.dart';

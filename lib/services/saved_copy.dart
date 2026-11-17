@@ -92,6 +92,7 @@ class SavedCopy {
   /// events. Call after Supabase.initialize.
   static void start() {
     unawaited(_wipeIfOtherUser(uid));
+    unawaited(_removeLegacy());
     Supabase.instance.client.auth.onAuthStateChange.listen((state) async {
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -100,6 +101,13 @@ class SavedCopy {
         }
       } catch (_) {}
     }, onError: (_) {}); // a failed refresh arrives as an error: it wipes nothing
+  }
+
+  /// The dashboard's old cache key, shared by every account: gone for good.
+  static Future<void> _removeLegacy() async {
+    try {
+      await (await SharedPreferences.getInstance()).remove('dashboard_cache');
+    } catch (_) {}
   }
 
   static Future<void> _wipeIfOtherUser(String? currentUid) async {

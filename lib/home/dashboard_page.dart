@@ -2978,30 +2978,18 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _fetchStreakData(bool showLoading) async {
-    // ── STEP 1: Show cached data instantly ──────────────────
-    // A background refresh (showLoading false) skips it and keeps the
-    // current wheel on screen until the new data lands.
-    final cached = showLoading ? await _loadCachedDashboard() : null;
-    if (cached != null && mounted) {
-      setState(() {
-        _allStreaks           = [];
-        _hasCheckedInToday   = cached['hasCheckedIn']   ?? false;
-        _isLoading           = _allStreaks.isEmpty;
-      });
-      // Trigger entrance animation on first cached load
-      if (!_hasAnimatedEntrance && _allStreaks.isNotEmpty) {
-        _currentCarouselIndex = 0;
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted) {
-            _carouselEntranceController.forward();
-            _hasAnimatedEntrance = true;
-          }
-        });
+    // ── STEP 1: First paint from the saved copy ─────────────
+    // Only the first load. It runs beside the requests below: a read of
+    // local storage ends long before the first answer. A background refresh
+    // (showLoading false) keeps the current wheel on screen.
+    if (showLoading) {
+      if (!_restoreTried) {
+        _restoreTried = true;
+        unawaited(_restoreSaved());
       }
-    } else if (showLoading && mounted) {
-      setState(() => _isLoading = true);
+      if (mounted) setState(() => _isLoading = true);
     }
-  
+
     // ── STEP 2: Load preferences (fast, single query) ───────
     final userId = Supabase.instance.client.auth.currentUser?.id;
     if (userId != null) {
@@ -3041,6 +3029,15 @@ class _DashboardPageState extends State<DashboardPage>
     _syncTeamCheckIns(); // fire and forget - don't await
     final allStreaks = await _teamStreakService.getAllUserStreaks();
     final nicknames  = await nicknameService.getAllNicknames();
+
+    // Every account has Coach Max's team, so no streaks at all is a failed
+    // read. A wheel already on screen (the saved copy, or the last load)
+    // stays, and the next show retries.
+    if (allStreaks.isEmpty && _allStreaks.isNotEmpty) {
+      _lastLoaded = null;
+      if (mounted && _isLoading) setState(() => _isLoading = false);
+      return;
+    }
   
     debugLog('🔥 Raw streaks count: ${allStreaks.length}');
     for (var s in allStreaks) {
@@ -3180,6 +3177,7 @@ class _DashboardPageState extends State<DashboardPage>
       _teamFeeds.clear();
       _todaysWorkouts        = todaysWorkouts;
       _isLoading             = false;
+      _loadedFresh           = true;
     });
   
     if (_allStreaks.isNotEmpty && mounted) {
@@ -3195,14 +3193,103 @@ class _DashboardPageState extends State<DashboardPage>
       });
     }
   
-    // ── STEP 5: Save fresh data to cache ────────────────────
-    await _saveCachedDashboard(
-      streaks:         uniqueStreaks,
-      hasCheckedIn:    hasCheckedIn,
-    );
-
+    // ── STEP 5: Save what the server answered ───────────────
+    // Not an empty wheel: that is a failed read (see above).
+    if (uniqueStreaks.isNotEmpty) {
+      unawaited(SavedCopy.write(SavedCopy.uid, 'dashboard', {
+        'streaks': [for (final s in uniqueStreaks) s.toSaved()],
+        'nicknames': nicknames,
+        'checkIns': myCheckInDates.toList(),
+        'breakDates': myBreakDates.toList(),
+        'buddyOnBreak': buddyOnBreak,
+        'buddyZones': buddyZones,
+        'ringHex': ringColorHexById,
+        'hasCheckedIn': hasCheckedIn,
+        'workouts': todaysWorkouts,
+        'sort': _streakSortMode.name,
+        'customOrder': _customStreakOrder,
+        'zone': _myZone?.name,
+      }, zone: _myZone));
+    }
   }
 
+  /// Whether the first load already tried the saved copy, and whether fresh
+  /// data landed (which a saved copy that is still being read must not undo).
+  bool _restoreTried = false;
+  bool _loadedFresh = false;
+
+  /// First paint from the saved copy (same local day only: it carries streak
+  /// numbers and today's check-in state), in place of the skeleton.
+  Future<void> _restoreSaved() async {
+    final saved = await SavedCopy.read<Map<String, dynamic>>(
+      SavedCopy.uid,
+      'dashboard',
+      maxAge: kSavedMaxAgeDashboard,
+      sameDay: true,
+      parse: (d) {
+        final m = d as Map<String, dynamic>;
+        Map<String, T> strings<T>(String k) =>
+            Map<String, T>.from(m[k] as Map);
+        final streaks = [
+          for (final s in m['streaks'] as List)
+            TeamStreak.fromSaved(Map<String, dynamic>.from(s as Map)),
+        ];
+        if (streaks.isEmpty) throw const FormatException('no streaks saved');
+        return {
+          'streaks': streaks,
+          'nicknames': strings<String>('nicknames'),
+          'checkIns': Set<String>.from(m['checkIns'] as List),
+          'breakDates': Set<String>.from(m['breakDates'] as List),
+          'buddyOnBreak': strings<bool>('buddyOnBreak'),
+          'buddyZones': strings<String>('buddyZones'),
+          'ringHex': strings<String>('ringHex'),
+          'hasCheckedIn': m['hasCheckedIn'] as bool,
+          'workouts': [
+            for (final w in m['workouts'] as List) Map<String, dynamic>.from(w as Map),
+          ],
+          'sort': m['sort'] as String,
+          'customOrder': List<String>.from(m['customOrder'] as List),
+          'zone': m['zone'] as String?,
+        };
+      },
+    );
+    if (saved == null || !mounted || !_isLoading || _loadedFresh) return;
+    final streaks = saved['streaks'] as List<TeamStreak>;
+    final breakDates = saved['breakDates'] as Set<String>;
+    setState(() {
+      _myZone = _profileZone(saved['zone'] as String?);
+      profileZone = _myZone;
+      _allStreaks = streaks;
+      _nicknames = saved['nicknames'] as Map<String, String>;
+      _highestStreak = streaks.reduce((a, b) => a.currentStreak > b.currentStreak ? a : b);
+      _myCheckInDates = saved['checkIns'] as Set<String>;
+      _myBreakDates = breakDates;
+      _isOnBreakToday = breakDates.contains(localTodayString());
+      _buddyOnBreakToday = saved['buddyOnBreak'] as Map<String, bool>;
+      _buddyTimezones = saved['buddyZones'] as Map<String, String>;
+      _memberRingColors = {
+        for (final e in (saved['ringHex'] as Map<String, String>).entries)
+          e.key: hexToColor(e.value),
+      };
+      _hasCheckedInToday = saved['hasCheckedIn'] as bool;
+      _todaysWorkouts = saved['workouts'] as List<Map<String, dynamic>>;
+      _streakSortMode = StreakSortMode.values.firstWhere(
+        (e) => e.name == saved['sort'],
+        orElse: () => StreakSortMode.highestCurrent,
+      );
+      _customStreakOrder = saved['customOrder'] as List<String>;
+      _isLoading = false;
+    });
+    _currentCarouselIndex = 0;
+    if (!_hasAnimatedEntrance) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          _carouselEntranceController.forward();
+          _hasAnimatedEntrance = true;
+        }
+      });
+    }
+  }
 
   Future<void> _checkWeeklyPlan() async {
     if (_weeklyPlanCheckedThisSession) return; // once per app open
@@ -3239,33 +3326,6 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
-  
-
-  Future<Map<String, dynamic>?> _loadCachedDashboard() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final json = prefs.getString('dashboard_cache');
-      if (json == null) return null;
-      return Map<String, dynamic>.from(jsonDecode(json) as Map);
-    } catch (_) {
-      return null;
-    }
-  }
-  
-  Future<void> _saveCachedDashboard({
-    required List<TeamStreak> streaks,
-    required bool hasCheckedIn,
-  }) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      // We only cache simple stats, not full streak objects
-      // (streak objects are rebuilt fresh each load)
-      await prefs.setString('dashboard_cache', jsonEncode({
-        'hasCheckedIn':    hasCheckedIn,
-        // Don't cache streaks — they're complex objects, just skip spinner
-      }));
-    } catch (_) {}
-  }
   
 
   Future<void> _checkIn() async {
