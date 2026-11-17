@@ -14,12 +14,17 @@
 /// every-launch sync guarantees up to the accepted travel-staleness window.
 library;
 
+import 'package:timezone/timezone.dart' as tz;
+
 /// Today's date on this device as `YYYY-MM-DD` — the signed-in user's own
 /// local "today", matching the server's
 /// `(now() AT TIME ZONE safe_user_tz(user))::date` for this user.
-String localTodayString() {
-  final now = DateTime.now();
-  return DateTime(now.year, now.month, now.day)
-      .toIso8601String()
-      .split('T')[0];
+String localTodayString() => localDateString(DateTime.now());
+
+/// [instant]'s calendar date as `YYYY-MM-DD` in [zone] (an IANA zone such as
+/// the user's `user_profiles.timezone`), or on this device when [zone] is
+/// null. The time-zone database must be loaded before a [zone] is looked up.
+String localDateString(DateTime instant, {tz.Location? zone}) {
+  final d = zone == null ? instant.toLocal() : tz.TZDateTime.from(instant, zone);
+  return DateTime(d.year, d.month, d.day).toIso8601String().split('T')[0];
 }

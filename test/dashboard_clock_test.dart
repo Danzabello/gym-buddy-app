@@ -285,23 +285,35 @@ void main() {
 
   // The page's own wiring, read from the source because the page cannot be
   // pumped. A tripwire, not a proof: every line that names the tick must be
-  // one of these five, so the minute timer only fires it and it is only ever
+  // one of these four, so the minute timer only fires it and it is only ever
   // handed to the four ClockParts. A page-level listener on it fails here.
-  test('the dashboard minute timer fires the tick and nothing else', () {
-    final lines = File('lib/home/dashboard_page.dart')
-        .readAsLinesSync()
+  // The timer also runs the midnight check, which never calls setState: it
+  // only starts a load once the date has changed.
+  test('the dashboard minute timer fires the tick and the midnight check only', () {
+    final source = File('lib/home/dashboard_page.dart').readAsStringSync();
+    final lines = source
+        .split('\n')
         .where((l) => RegExp(r'\b_minute\b').hasMatch(l))
         .map((l) => l.trim())
         .toList();
     expect(lines.toSet(), {
       'final _minute = ValueNotifier<int>(0);',
-      '_countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _minute.value++);',
-      '_minute.value++;', // the resume handler
+      '_minute.value++;', // the minute timer and the resume handler
       '_minute.dispose();',
       'tick: _minute,',
     });
     expect(lines.where((l) => l == 'tick: _minute,').length, 4,
         reason: 'tray, standalone week card, danger card, feed age');
+    expect(lines.where((l) => l == '_minute.value++;').length, 2);
     expect(lines.length, 8);
+
+    final timer = RegExp(
+        r'_countdownTimer = Timer\.periodic\(const Duration\(minutes: 1\), \(_\) \{\s*'
+        r'_minute\.value\+\+;\s*_refreshIfNewDay\(\);\s*\}\);');
+    expect(timer.hasMatch(source), isTrue);
+    final start = source.indexOf('void _refreshIfNewDay() {');
+    final body = source.substring(start, source.indexOf('\n  }', start));
+    expect(body, isNot(contains('setState')));
+    expect(body, contains('dayChanged('));
   });
 }

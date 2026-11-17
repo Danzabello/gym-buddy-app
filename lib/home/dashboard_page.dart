@@ -99,6 +99,10 @@ class _DashboardPageState extends State<DashboardPage>
   DateTime? _lastLoaded;
   bool _dirty = false;
   DateTime? _hiddenAt;
+  /// The user's profile timezone (user_profiles.timezone, read with the sort
+  /// preferences), which decides when a new day starts; null until read or
+  /// when unset, and then the device's calendar is used.
+  tz.Location? _myZone;
   Timer? _headerGate;
   bool _reduceMotion = false;
   ModalRoute<dynamic>? _route;
@@ -194,7 +198,8 @@ class _DashboardPageState extends State<DashboardPage>
                 lastLoaded: _lastLoaded,
                 now: DateTime.now(),
                 dirty: _dirty,
-                resumed: hiddenAt)) {
+                resumed: hiddenAt,
+                zone: _myZone)) {
           _lastLoaded = null;
           _refreshIfStale();
         }
@@ -211,7 +216,10 @@ class _DashboardPageState extends State<DashboardPage>
     );
     EconomySync.instance.numbers.addListener(_onEconomyChanged);
     HeaderHold.instance.addListener(_onHeaderHold);
-    _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) => _minute.value++);
+    _countdownTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      _minute.value++;
+      _refreshIfNewDay();
+    });
     _confettiController = ConfettiController(duration: const Duration(seconds: 3));
     _confettiControllerRight = ConfettiController(duration: const Duration(seconds: 3));
   }
@@ -341,11 +349,22 @@ class _DashboardPageState extends State<DashboardPage>
     // A write made elsewhere, or a wheel left empty by a failed load (every
     // account has Coach Max's team), means the data is stale.
     if (dashboardStale || (_allStreaks.isEmpty && !_isLoading)) _lastLoaded = null;
-    if (!shouldRefresh(lastLoaded: _lastLoaded, now: DateTime.now(), dirty: _dirty)) {
+    if (!shouldRefresh(
+        lastLoaded: _lastLoaded, now: DateTime.now(), dirty: _dirty, zone: _myZone)) {
       return;
     }
     _loadStreakData(showLoading: false);
     _loadHeaderData(); // the avatar can change on the Profile tab
+  }
+
+  /// Local midnight (profile timezone) passed since the last load, so the
+  /// "today" state is out of date. Run by the minute tick; it loads nothing
+  /// on the same day, and a hidden tab waits for its next show.
+  void _refreshIfNewDay() {
+    final loaded = _lastLoaded;
+    if (loaded != null && dayChanged(loaded, DateTime.now(), zone: _myZone)) {
+      _refreshIfStale();
+    }
   }
 
   void _onRouteCover(AnimationStatus status) {
@@ -2147,14 +2166,31 @@ class _DashboardPageState extends State<DashboardPage>
   /// name, else the shared fallback. An unrecognised name falls back too
   /// rather than throwing mid-build.
   tz.Location _zoneOf(String userId) {
-    if (!_timeZonesLoaded) {
-      tzdata.initializeTimeZones();
-      _timeZonesLoaded = true;
-    }
+    _loadTimeZones();
     try {
       return tz.getLocation(_buddyTimezones[userId] ?? _kFallbackTz);
     } catch (_) {
       return tz.getLocation(_kFallbackTz);
+    }
+  }
+
+  static void _loadTimeZones() {
+    if (!_timeZonesLoaded) {
+      tzdata.initializeTimeZones();
+      _timeZonesLoaded = true;
+    }
+  }
+
+  /// The signed-in user's own zone, as the server's safe_user_tz reads it.
+  /// Unset or unrecognised: null, so the day follows the device calendar
+  /// (the localTodayString frame) rather than the server's fallback zone.
+  tz.Location? _profileZone(String? name) {
+    if (name == null) return null;
+    _loadTimeZones();
+    try {
+      return tz.getLocation(name);
+    } catch (_) {
+      return null;
     }
   }
 
@@ -2968,9 +3004,10 @@ class _DashboardPageState extends State<DashboardPage>
       try {
         final prefs = await Supabase.instance.client
             .rpc('get_my_profile')
-            .select('preferred_streak_sort, custom_streak_order')
+            .select('preferred_streak_sort, custom_streak_order, timezone')
             .single();
   
+        _myZone = _profileZone(prefs['timezone'] as String?);
         final savedMode = prefs['preferred_streak_sort'];
         if (savedMode != null && savedMode.toString().isNotEmpty) {
           _streakSortMode = StreakSortMode.values.firstWhere(
