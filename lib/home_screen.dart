@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/dashboard_refresh.dart';
+import 'widgets/tab_keep_alive.dart';
 import 'services/friend_service.dart';
 import 'services/workout_service.dart';
 import 'services/team_streak_service.dart';

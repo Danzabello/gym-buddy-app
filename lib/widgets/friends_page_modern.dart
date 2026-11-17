@@ -20,6 +20,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/invite_service.dart';
 import '../services/team_streak_service.dart';
+import '../services/tab_refresh.dart';
+import 'tab_keep_alive.dart';
 
 /// Messaging isn't built yet; flip to bring back the chat entry points.
 const kShowChatEntryPoints = false;
@@ -31,7 +33,14 @@ class FriendsPageModern extends StatefulWidget {
   State<FriendsPageModern> createState() => _FriendsPageModernState();
 }
 
-class _FriendsPageModernState extends State<FriendsPageModern> {
+class _FriendsPageModernState extends State<FriendsPageModern>
+    with AutomaticKeepAliveClientMixin, TabKeepAlive {
+  @override
+  AppTab get tab => AppTab.friends;
+
+  @override
+  void refreshInBackground() => _load(showLoading: false);
+
   final FriendService _friendService = FriendService();
   final NudgeService _nudgeService = NudgeService();
   final _once = RunOnce();
@@ -83,8 +92,9 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() => _isLoading = true);
+  /// [showLoading] false (keep-alive refreshes) keeps the list on screen.
+  Future<void> _load({bool showLoading = true}) => refreshState.track(() async {
+    if (showLoading) setState(() => _isLoading = true);
 
     // Two stages: the per-friend reads need the friend ids from the first.
     final (friends, pending, buddyStreaks) = await (
@@ -110,7 +120,10 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
       _buddyStreaks = buddyStreaks;
       _isLoading = false;
     });
-  }
+    // getFriends returns [] on an error too, so an empty list is retried on
+    // the next show (as every visit did before keep-alive).
+    if (friends.isEmpty) refreshState.failed();
+  });
 
   // Map each buddy's userId → our shared team streak (skips Coach Max).
   // Reuses the dashboard's service — no new query or FriendService change.
@@ -175,7 +188,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
       if (result == NudgeResult.sent) _nudgedToday.add(id);
     });
 
-    if (!mounted) return;
+    if (!mounted || !tabShown) return; // no snackbar over another tab
 
     final appColors = AppColors.of(context);
     final palette = context.read<AccentThemeProvider>().palette;
@@ -336,7 +349,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
     await _friendService.removeFriend(friendId);
     setState(() => _removingFriendId = null);
     await _load();
-    if (mounted) {
+    if (mounted && tabShown) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Removed $friendName'),
         backgroundColor: appColors.successGreen,
@@ -374,7 +387,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
       behavior: SnackBarBehavior.floating,
     ));
     final link = await InviteService().createInviteLink();
-    if (!mounted) return;
+    if (!mounted || !tabShown) return; // no snackbar or share sheet over another tab
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     if (link == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -613,6 +626,7 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   // ══════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
+    super.build(context); // keep-alive
     final palette = context.watch<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
 

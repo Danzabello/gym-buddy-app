@@ -9,7 +9,14 @@ class ProfilePage extends StatefulWidget {
 }
  
 class _ProfilePageState extends State<ProfilePage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin, TabKeepAlive {
+  @override
+  AppTab get tab => AppTab.profile;
+
+  /// _loadAll never shows the skeleton again, and the fade has already run.
+  @override
+  void refreshInBackground() => _loadAll();
+
   Map<String, dynamic>? _profile;
   List<TeamStreak> _allStreaks = [];
   StreakSortMode _streakSortMode = StreakSortMode.highestCurrent;
@@ -47,17 +54,26 @@ class _ProfilePageState extends State<ProfilePage>
       CurvedAnimation(parent: _fadeController, curve: const Interval(0.2, 1.0, curve: Curves.easeOut)),
     );
     _loadAll();
+    EconomySync.instance.numbers.addListener(_onEconomyChanged);
+  }
+
+  /// xp or level changed. Shown, the tab keeps what it has, as before;
+  /// hidden, it is refetched on a show once the data is more than 2 minutes
+  /// old. A finished check-in marks it stale outright (applyFinishResult).
+  void _onEconomyChanged() {
+    if (!tabShown) markDirty({AppTab.profile});
   }
 
   @override
   void dispose() {
+    EconomySync.instance.numbers.removeListener(_onEconomyChanged);
     _once.dispose();
     _fadeController.dispose();
     super.dispose();
   }
  
   // ── data loading ──────────────────────────────────────────────
-  Future<void> _loadAll() async {
+  Future<void> _loadAll() => refreshState.track(() async {
     try {
       final uid = Supabase.instance.client.auth.currentUser?.id;
       if (uid == null) return;
@@ -101,9 +117,10 @@ class _ProfilePageState extends State<ProfilePage>
       if (mounted) _fadeController.forward();
     } catch (e) {
       if (kDebugMode) debugLog('❌ ProfilePage._loadAll: $e');
+      refreshState.failed(); // retried on the next show
       if (mounted) setState(() => _isLoading = false);
     }
-  }
+  });
 
   int get _bestStreak => _allStreaks.isEmpty
       ? 0
@@ -115,6 +132,7 @@ class _ProfilePageState extends State<ProfilePage>
   // ══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
+    super.build(context); // keep-alive
     if (_isLoading) return _buildSkeleton();
 
     final appColors = AppColors.of(context);

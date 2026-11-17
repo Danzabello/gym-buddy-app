@@ -3,10 +3,13 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import '../services/coin_service.dart';
+import '../services/economy_sync.dart';
+import '../services/tab_refresh.dart';
 import '../services/level_service.dart';
 import '../utils/hex_color.dart';
 import '../utils/run_once.dart';
 import '../widgets/coin_glyph.dart';
+import '../widgets/tab_keep_alive.dart';
 
 class ShopPage extends StatefulWidget {
   const ShopPage({super.key});
@@ -15,7 +18,14 @@ class ShopPage extends StatefulWidget {
   State<ShopPage> createState() => _ShopPageState();
 }
 
-class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin {
+class _ShopPageState extends State<ShopPage>
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin, TabKeepAlive {
+  @override
+  AppTab get tab => AppTab.shop;
+
+  @override
+  void refreshInBackground() => _loadData(showLoading: false);
+
   final CoinService _coinService = CoinService();
   late TabController _tabController;
 
@@ -40,17 +50,28 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
     super.initState();
     _tabController = TabController(length: _categories.length, vsync: this);
     _loadData();
+    EconomySync.instance.numbers.addListener(_onEconomyChanged);
+  }
+
+  /// Coins or level changed (a check-in, an achievement, a coin row). Shown,
+  /// the tab keeps what it has, as before; hidden, it is refetched on a show
+  /// once the data is more than 2 minutes old. A finished check-in marks it
+  /// stale outright (applyFinishResult).
+  void _onEconomyChanged() {
+    if (!tabShown) markDirty({AppTab.shop});
   }
 
   @override
   void dispose() {
+    EconomySync.instance.numbers.removeListener(_onEconomyChanged);
     _once.dispose();
     _tabController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  /// [showLoading] false (keep-alive refreshes) keeps the grid on screen.
+  Future<void> _loadData({bool showLoading = true}) => refreshState.track(() async {
+    if (showLoading) setState(() => _isLoading = true);
     final (balance, items, levelInfo) = await (
       _coinService.getBalance(),
       _coinService.getShopItems(),
@@ -64,7 +85,9 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
         _isLoading = false;
       });
     }
-  }
+    // getShopItems returns [] on an error, and the shop is never empty.
+    if (items.isEmpty) refreshState.failed();
+  });
 
   List<ShopItem> _getItemsForCategory(String category) {
     if (category == 'all') return _allItems;
@@ -105,7 +128,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
     if (item.isOwned) {
       await _coinService.equipItem(itemId: item.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showTabSnackBar(
           SnackBar(
             content: Text(
                 '${item.category == 'ring_color' ? '⭕' : item.emoji} ${item.name} equipped!'),
@@ -134,7 +157,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
 
     if (mounted) {
       if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showTabSnackBar(
           SnackBar(
             content: Row(
               children: [
@@ -150,7 +173,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
         );
         _loadData();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
+        showTabSnackBar(
           SnackBar(
               content: const Text('Purchase failed. Try again.'),
               backgroundColor:
@@ -318,6 +341,7 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // keep-alive
     final cs = Theme.of(context).colorScheme;
     final colors = AppColors.of(context);
     return Scaffold(

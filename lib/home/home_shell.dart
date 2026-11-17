@@ -23,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // buddy_checked_in push knows whether the dashboard's own realtime banner
     // is already visibly handling that event.
     LiveEventToast.dashboardTabActive = true;
+    shownTab.value = AppTab.dashboard; // the other tabs pause and refresh by it
     _pages = [
       const SchedulePage(),
       const FriendsPageModern(),
@@ -61,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
     NotificationService.tabRequest.removeListener(_openRequestedTab);
     _tabPageController.dispose();
     LiveEventToast.dashboardTabActive = false;
+    shownTab.value = null;
     HeaderMotion.session = null; // next sign-in sweeps again
     super.dispose();
   }
@@ -72,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _selectedIndex = index;
     });
     LiveEventToast.dashboardTabActive = index == 2;
+    shownTab.value = AppTab.values[index];
 
     // Animate tab PageView if not already on the right page
     if (_tabPageController.hasClients &&
@@ -101,6 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
           if (index != _selectedIndex) {
             setState(() => _selectedIndex = index);
             LiveEventToast.dashboardTabActive = index == 2;
+            shownTab.value = AppTab.values[index];
             if (index == 2) _dashboardKey.currentState?._onTabShown();
             if (index == 0) {
               setState(() {
@@ -111,7 +115,12 @@ class _HomeScreenState extends State<HomeScreen> {
             }
           }
         },
-        children: _pages,
+        // A hidden tab's animations stop (a spinner left by a load that was
+        // in flight when it hid). The dashboard keeps its own rules (D9).
+        children: [
+          for (var i = 0; i < _pages.length; i++)
+            i == 2 ? _pages[i] : TickerMode(enabled: i == _selectedIndex, child: _pages[i]),
+        ],
       ),
       bottomNavigationBar: _GymBuddyNavBar(
         selectedIndex: _selectedIndex,
