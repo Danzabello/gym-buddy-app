@@ -17,6 +17,7 @@ import 'dart:async';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'services/invite_service.dart';
 import 'services/saved_copy.dart';
+import 'services/startup_gate.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'theme/accent_theme_provider.dart';
@@ -112,6 +113,18 @@ class AuthWrapperDeps {
   final Future<void> Function() signOut;
   final BuddyDeps? buddyDeps;
 
+  /// The saved owner id and whether [userId] was saved as onboarded. Null:
+  /// nothing is saved, which is the behaviour before the saved copy.
+  final Future<(String?, bool)> Function(String userId)? loadSaved;
+
+  /// Saves (true) after a definite complete, or drops (false) after a
+  /// definite not-onboarded. Never called for an unknown read.
+  final Future<void> Function(String userId, bool onboarded)? saveOnboarded;
+
+  /// Fires on a sign-out. Listened to only while Home stands in front of an
+  /// unanswered read.
+  final Stream<void> Function()? signedOutEvents;
+
   const AuthWrapperDeps({
     required this.userId,
     required this.onSignedIn,
@@ -121,6 +134,9 @@ class AuthWrapperDeps {
     required this.home,
     required this.signOut,
     this.buddyDeps,
+    this.loadSaved,
+    this.saveOnboarded,
+    this.signedOutEvents,
   });
 
   factory AuthWrapperDeps.live() {
@@ -143,6 +159,12 @@ class AuthWrapperDeps {
       },
       home: (_) => const HomeScreen(),
       signOut: auth.signOut,
+      loadSaved: (id) async => (await SavedCopy.owner(), await SavedCopy.onboarded(id)),
+      saveOnboarded: (id, onboarded) =>
+          onboarded ? SavedCopy.saveOnboarded(id) : SavedCopy.drop(id, 'onboarded'),
+      signedOutEvents: () => Supabase.instance.client.auth.onAuthStateChange
+          .where((s) => s.event == AuthChangeEvent.signedOut)
+          .map((_) {}),
     );
   }
 }
@@ -158,7 +180,13 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   late final AuthWrapperDeps _deps = widget.deps ?? AuthWrapperDeps.live();
 
-  bool _isInitializing = true;
+  /// The saved copy has been read (local storage, milliseconds), so the
+  /// first decision can be made.
+  bool _localLoaded = false;
+  String? _savedOwner;
+  bool _savedOnboarded = false;
+  StartupReadResult _read = StartupReadResult.pending;
+  StreamSubscription<void>? _signedOutSub;
 
   /// Signed out, or signed in with the status unknown (read failed or timed
   /// out): the splash.
@@ -173,15 +201,35 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   // ─── App initialisation ────────────────────────────────────────────────────
 
+  @override
+  void dispose() {
+    _signedOutSub?.cancel();
+    super.dispose();
+  }
+
   Future<void> _initializeApp() async {
     final userId = _deps.userId();
     if (userId == null) {
-      setState(() => _isInitializing = false);
+      setState(() => _localLoaded = true);
       return;
     }
     // Started together: the notification setup (permission check, token write)
     // no longer holds the status read.
     unawaited(_startupRead('notification init', _deps.onSignedIn(userId), 10));
+    final saved = await _deps.loadSaved?.call(userId) ?? (null, false);
+    if (!mounted) return;
+    setState(() {
+      _savedOwner = saved.$1;
+      _savedOnboarded = saved.$2;
+      _localLoaded = true;
+    });
+    // Home stands in front of the unanswered read (saved flag): a sign-out
+    // meanwhile must still end on the normal auth flow.
+    if (_screen() == StartupScreen.home) {
+      _signedOutSub = _deps.signedOutEvents?.call().listen((_) {
+        if (mounted) setState(() {});
+      }, onError: (_) {});
+    }
     final (state, storedTimezone) = await _startupRead(
             'onboarding status', _deps.onboardingStatus(userId), 15) ??
         (OnboardingState.unknown, null);
@@ -189,50 +237,73 @@ class _AuthWrapperState extends State<AuthWrapper> {
         .discardPendingIfOnboarded(state == OnboardingState.complete ? true : null));
     OnboardingResume? resume;
     if (state == OnboardingState.complete) {
+      // Only a definite complete is saved, never an unknown.
+      unawaited(_deps.saveOnboarded?.call(userId, true) ?? Future<void>.value());
+      // Behind Home when the saved flag put it up first; before it otherwise.
       await _deps.onCompleted(userId, storedTimezone);
-    } else if (state == OnboardingState.incomplete) {
-      // A failed read leaves null, which falls back to the splash below.
-      resume = await _startupRead<OnboardingResume?>('onboarding resume', _deps.loadResume(userId), 15);
+    } else if (state == OnboardingState.incomplete || state == OnboardingState.noProfile) {
+      unawaited(_deps.saveOnboarded?.call(userId, false) ?? Future<void>.value());
+      if (state == OnboardingState.incomplete) {
+        // A failed read leaves null, which falls back to the splash below.
+        resume = await _startupRead<OnboardingResume?>('onboarding resume', _deps.loadResume(userId), 15);
+      }
     } else if (kDebugMode && state == OnboardingState.unknown) {
       // DI-7: a failed read is never treated as orphaned or unfinished.
       debugLog('⚠️ Could not verify onboarding status; leaving account untouched');
     }
     if (!mounted) return;
+    unawaited(_signedOutSub?.cancel());
+    _signedOutSub = null;
     setState(() {
       _state = state;
       _resume = resume;
-      _isInitializing = false;
+      _read = switch (state) {
+        OnboardingState.complete => StartupReadResult.complete,
+        OnboardingState.noProfile ||
+        OnboardingState.incomplete =>
+          StartupReadResult.notOnboarded,
+        OnboardingState.unknown => StartupReadResult.unknown,
+      };
     });
   }
+
+  StartupScreen _screen() => decideStartupScreen(
+        sessionUserId: _deps.userId(),
+        savedOwnerId: _savedOwner,
+        savedOnboarded: _savedOnboarded,
+        read: _read,
+      );
 
   // ─── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    if (_isInitializing) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
+    const spinner = Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
+    if (!_localLoaded) return spinner;
 
     final splash = SplashScreen(signedIn: () => _deps.userId() != null);
-    if (_deps.userId() == null) return splash;
-    return switch (_state) {
-      OnboardingState.complete => _deps.home(context),
+    return switch (_screen()) {
+      StartupScreen.spinner => spinner,
+      StartupScreen.splash => splash,
+      StartupScreen.home => _deps.home(context),
       // Never finished: straight back into the flow. An unfinished row is
       // never deleted (a Join on the buddy step writes one early, possibly
       // already paired).
-      OnboardingState.noProfile => OnboardingHost(
-          resume: true, signOut: _deps.signOut, buddyDeps: _deps.buddyDeps),
-      OnboardingState.incomplete when _resume != null => OnboardingHost(
-          resume: true,
-          resumeData: _resume,
-          signOut: _deps.signOut,
-          buddyDeps: _deps.buddyDeps),
-      // Status unknown (or the row could not be read): the splash, whose Get
-      // started resumes the flow. A network blip never pushes anyone into
-      // onboarding.
-      _ => splash,
+      StartupScreen.onboarding => switch (_state) {
+          OnboardingState.noProfile => OnboardingHost(
+              resume: true, signOut: _deps.signOut, buddyDeps: _deps.buddyDeps),
+          OnboardingState.incomplete when _resume != null => OnboardingHost(
+              resume: true,
+              resumeData: _resume,
+              signOut: _deps.signOut,
+              buddyDeps: _deps.buddyDeps),
+          // Status unknown (or the row could not be read): the splash, whose
+          // Get started resumes the flow. A network blip never pushes anyone
+          // into onboarding.
+          _ => splash,
+        },
     };
   }
 }

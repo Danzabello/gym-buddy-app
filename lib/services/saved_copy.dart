@@ -219,6 +219,26 @@ class SavedCopy {
     } catch (_) {}
   }
 
+  /// The user id the saved copy belongs to, or null when nothing is saved.
+  static Future<String?> owner() async {
+    try {
+      return (await SharedPreferences.getInstance()).getString(ownerKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Whether [uid] was saved as having finished onboarding (written only
+  /// after a definite complete answer). It is rewritten on every such launch,
+  /// so the 90 days only lapse for an account that is not used.
+  static Future<bool> onboarded(String? uid) async =>
+      await read<bool>(uid, 'onboarded',
+          maxAge: const Duration(days: 90), parse: (d) => (d as Map)['onboarded'] == true) ??
+      false;
+
+  static Future<void> saveOnboarded(String? uid) =>
+      write(uid, 'onboarded', {'onboarded': true});
+
   /// Deletes one class (for example after a list-changing write).
   static Future<void> drop(String? uid, String cls) async {
     if (uid == null) return;
