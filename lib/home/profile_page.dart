@@ -40,10 +40,6 @@ class _ProfilePageState extends State<ProfilePage>
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
-    _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 500),
-      vsync: this,
-    );
     _xpAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _fadeController, curve: const Interval(0.3, 1.0, curve: Curves.easeOut)),
     );
