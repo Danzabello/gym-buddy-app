@@ -12,8 +12,9 @@ import 'dashboard_refresh.dart';
 /// The home tabs, in page order: the index is the shell's PageView page.
 enum AppTab { schedule, friends, dashboard, shop, profile }
 
-/// The tab on screen, written by the home shell. Null outside the shell (a
-/// widget test that pumps one page), and then every tab counts as shown.
+/// The tab on screen, written by the home shell. Null before any shell has
+/// run (a widget test that pumps one page), and then every tab counts as
+/// shown.
 final ValueNotifier<AppTab?> shownTab = ValueNotifier(null);
 
 bool isShown(AppTab tab) => shownTab.value == null || shownTab.value == tab;

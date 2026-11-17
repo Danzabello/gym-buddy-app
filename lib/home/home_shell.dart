@@ -62,7 +62,8 @@ class _HomeScreenState extends State<HomeScreen> {
     NotificationService.tabRequest.removeListener(_openRequestedTab);
     _tabPageController.dispose();
     LiveEventToast.dashboardTabActive = false;
-    shownTab.value = null;
+    // shownTab is left as it is: a new shell sets it in initState, and
+    // clearing it here could undo that if the new one is built first.
     HeaderMotion.session = null; // next sign-in sweeps again
     super.dispose();
   }
