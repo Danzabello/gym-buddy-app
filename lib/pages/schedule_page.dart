@@ -19,7 +19,8 @@ import '../utils/run_once.dart';
 /// completed. Each workout opens on its own page.
 class SchedulePage extends StatefulWidget {
   final ScheduleDeps? deps;
-  const SchedulePage({super.key, this.deps});
+  final ServerClock? clock; // tests move time with it
+  const SchedulePage({super.key, this.deps, this.clock});
 
   @override
   State<SchedulePage> createState() => _SchedulePageState();
@@ -27,7 +28,7 @@ class SchedulePage extends StatefulWidget {
 
 class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver {
   late final ScheduleDeps _deps = widget.deps ?? ScheduleDeps.live();
-  final ServerClock _clock = ServerClock();
+  late final ServerClock _clock = widget.clock ?? ServerClock();
   WorkoutCardData? _head; // get_workout_card(): invites + counts + server time
   List<Map<String, dynamic>> _rows = []; // one card per open workout
   Person _me = const Person();
@@ -41,6 +42,8 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
   final Map<String, Map<String, dynamic>> _overlaps = {};
   late final Unsubscribe _unlisten;
   Timer? _poll, _tick;
+  // Ticks once a second; only the rows listen, so the page itself is not rebuilt.
+  final ValueNotifier<int> _secondTick = ValueNotifier(0);
 
   @override
   void initState() {
@@ -54,7 +57,7 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
       if (mounted && TickerMode.valuesOf(context).enabled) _refresh();
     });
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _rows.isNotEmpty) setState(() {});
+      if (mounted && _rows.isNotEmpty) _secondTick.value++;
     });
   }
 
@@ -63,6 +66,7 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
     WidgetsBinding.instance.removeObserver(this);
     _poll?.cancel();
     _tick?.cancel();
+    _secondTick.dispose();
     _unlisten();
     _once.dispose();
     _answerOnce.dispose();
@@ -180,7 +184,6 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
       for (final i in head?.invites ?? const <Map<String, dynamic>>[])
         if (i['direction'] == 'received') i
     ];
-    final now = _clock.now();
     // Now: the first workout that is happening (running first, else earliest).
     final happening = [for (final w in _rows) if (nowStates.contains(w['state'])) w]
       ..sort((a, b) {
@@ -212,9 +215,11 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
                 else if (_pending != null)
                   _creditRetry(),
                 if (nowRow != null) ...[
-                  NowRow(
-                    workout: nowRow, me: _me, now: now,
-                    onTap: () => _once.run(() => _open(nowRow['workout_id'] as String))),
+                  ValueListenableBuilder<int>(
+                    valueListenable: _secondTick,
+                    builder: (_, _, _) => NowRow(
+                      workout: nowRow, me: _me, now: _clock.now(),
+                      onTap: () => _once.run(() => _open(nowRow['workout_id'] as String)))),
                   const SizedBox(height: 16),
                 ],
                 if (upcoming.isNotEmpty) ...[
@@ -223,10 +228,12 @@ class _SchedulePageState extends State<SchedulePage> with WidgetsBindingObserver
                     child: Text('Upcoming', style: TextStyle(fontWeight: FontWeight.bold, color: c.subtleText)),
                   ),
                   for (final w in upcoming)
-                    UpcomingRow(
-                      workout: w, me: _me, now: now,
-                      onTap: () => _once.run(() => _open(w['workout_id'] as String)),
-                      onMenu: () => _once.run(() => _rowMenu(w))),
+                    ValueListenableBuilder<int>(
+                      valueListenable: _secondTick,
+                      builder: (_, _, _) => UpcomingRow(
+                        workout: w, me: _me, now: _clock.now(),
+                        onTap: () => _once.run(() => _open(w['workout_id'] as String)),
+                        onMenu: () => _once.run(() => _rowMenu(w)))),
                   const SizedBox(height: 8),
                 ],
                 if (outCount >= 3) _quiet('You have $outCount of 5 invites out'),

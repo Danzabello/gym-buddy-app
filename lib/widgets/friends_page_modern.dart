@@ -86,15 +86,19 @@ class _FriendsPageModernState extends State<FriendsPageModern> {
   Future<void> _load() async {
     setState(() => _isLoading = true);
 
-    final friends = await _friendService.getFriends();
-    final pending = await _friendService.getPendingRequests();
+    // Two stages: the per-friend reads need the friend ids from the first.
+    final (friends, pending, buddyStreaks) = await (
+      _friendService.getFriends(),
+      _friendService.getPendingRequests(),
+      _loadBuddyStreaks(),
+    ).wait;
 
-    // Load today's check-ins for all friends in parallel
     final friendIds = friends.map((f) => f['id'] as String).toList();
-    final checkedIn = await _getCheckedInToday(friendIds);
-    final nudged = await _nudgeService.getNudgedTodaySet(friendIds);
-    final buddyStreaks = await _loadBuddyStreaks();
-    final onBreak = await _getOnBreakToday(friendIds);
+    final (checkedIn, nudged, onBreak) = await (
+      _getCheckedInToday(friendIds),
+      _nudgeService.getNudgedTodaySet(friendIds),
+      _getOnBreakToday(friendIds),
+    ).wait;
 
     if (!mounted) return;
     setState(() {

@@ -51,9 +51,11 @@ class _ShopPageState extends State<ShopPage> with SingleTickerProviderStateMixin
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final balance = await _coinService.getBalance();
-    final items = await _coinService.getShopItems();
-    final levelInfo = await LevelService().getLevelInfo();
+    final (balance, items, levelInfo) = await (
+      _coinService.getBalance(),
+      _coinService.getShopItems(),
+      LevelService().getLevelInfo(),
+    ).wait;
     if (mounted) {
       setState(() {
         _coinBalance = balance;
