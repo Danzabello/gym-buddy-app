@@ -142,7 +142,7 @@ class InviteService {
               }),
           delay: retryDelay);
       if (!made) await rememberTeamRetry(me, result.inviterId!);
-      dashboardStale = true;
+      markStale({AppTab.dashboard, AppTab.friends, AppTab.profile});
     } else if (result.status == InviteRedeemStatus.invalid &&
         await pendingInviteCode() == code) {
       // It will never work: don't offer it again.
@@ -191,7 +191,7 @@ class InviteService {
     await prefs.remove(_pendingTeamKey);
     try {
       await (create ?? (inviterId) => _createTeam(inviterId, userId))(parts[1]);
-      dashboardStale = true;
+      markStale({AppTab.dashboard, AppTab.friends, AppTab.profile});
     } catch (e) {
       if (kDebugMode) debugLog('⚠️ create_invite_team launch retry: $e');
     }

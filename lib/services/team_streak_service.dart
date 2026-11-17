@@ -369,7 +369,7 @@ class TeamStreakService {
     if (noop != null) return {'success': false, 'noop': true, 'message': noop};
     // The credit is committed: show the new coins and xp now.
     unawaited(EconomySync.instance.refresh());
-    dashboardStale = true;
+    markStale(AppTab.values.toSet()); // every tab shows part of a finished check-in
     final today = localTodayString();
       final creditDate = res['credit_date'] as String;
       final successCount = res['checked_in'] as int? ?? 0;

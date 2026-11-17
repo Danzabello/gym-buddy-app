@@ -153,8 +153,9 @@ class HandshakeService {
   Future<Map<String, dynamic>> _call(String fn, Map<String, dynamic> p) async {
     try {
       final r = await _rpc(fn, p);
-      // Every action can change the dashboard's today tray; the card read cannot.
-      if (fn != 'get_workout_card') dashboardStale = true;
+      // Every action can change the dashboard's today tray and the Schedule
+      // list; the card read cannot.
+      if (fn != 'get_workout_card') markStale({AppTab.dashboard, AppTab.schedule});
       return r is Map ? Map<String, dynamic>.from(r) : <String, dynamic>{};
     } catch (e) {
       throw HandshakeError.from(e);

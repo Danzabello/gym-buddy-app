@@ -486,6 +486,9 @@ class _DashboardPageState extends State<DashboardPage>
 
   void _handleRealtimeCheckIn(Map<String, dynamic> row) {
     _dirty = true;
+    // Friends lists who checked in today; Profile's streak numbers may move.
+    markStale({AppTab.friends});
+    markDirty({AppTab.profile});
     final teamStreakId = row['team_streak_id'] as String?;
     final userId = row['user_id'] as String?;
     final checkInDateRaw = row['check_in_date'] as String?;
@@ -2915,6 +2918,7 @@ class _DashboardPageState extends State<DashboardPage>
             'preferred_streak_sort': 'custom',
             'custom_streak_order': result.map((s) => s.teamId).toList(),
           }).eq('id', userId);
+          markStale({AppTab.profile}); // Profile's All Streaks follows the sort
           
           debugLog('💾 Saved custom mode with order: ${result.map((s) => s.teamId).join(", ")}');
           
@@ -3008,6 +3012,7 @@ class _DashboardPageState extends State<DashboardPage>
             .single();
   
         _myZone = _profileZone(prefs['timezone'] as String?);
+        profileZone = _myZone; // the other kept-alive tabs judge the day by it
         final savedMode = prefs['preferred_streak_sort'];
         if (savedMode != null && savedMode.toString().isNotEmpty) {
           _streakSortMode = StreakSortMode.values.firstWhere(
@@ -3620,7 +3625,7 @@ class _DashboardPageState extends State<DashboardPage>
               if (userId != null) {
                 Supabase.instance.client.from('user_profiles').update({
                   'preferred_streak_sort': 'highestCurrent',
-                }).eq('id', userId);
+                }).eq('id', userId).then((_) => markStale({AppTab.profile}));
               }
             }),
           ],
@@ -4048,6 +4053,7 @@ class _DashboardPageState extends State<DashboardPage>
                         await Supabase.instance.client.from('user_profiles').update({
                           'preferred_streak_sort': mode.name,
                         }).eq('id', userId);
+                        markStale({AppTab.profile}); // Profile's All Streaks follows the sort
                       }
                       
                       WidgetsBinding.instance.addPostFrameCallback((_) {

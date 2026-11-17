@@ -181,7 +181,7 @@ class FriendService {
       final teamId = result['team_id'] as String;
       final streakId = result['streak_id'] as String?;
       if (kDebugMode) debugLog('✅ Team ready: $teamId (created: ${result['created']})');
-      dashboardStale = true;
+      markStale({AppTab.dashboard, AppTab.friends, AppTab.profile});
       if (streakId == null) return null;
 
       return {
@@ -345,7 +345,7 @@ class FriendService {
     try {
       await _supabase.rpc('remove_friend', params: {'p_friend_id': friendId});
       if (kDebugMode) debugLog('✅ Friendship removed successfully');
-      dashboardStale = true;
+      markStale({AppTab.dashboard, AppTab.friends, AppTab.profile});
       return true;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error removing friend: $e');

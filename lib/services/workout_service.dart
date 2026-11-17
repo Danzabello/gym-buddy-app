@@ -42,7 +42,7 @@ class WorkoutService {
       };
       await (insert ?? (r) => _supabase.from('workouts').insert(r).select().single())(row);
       if (kDebugMode) debugLog('✅ Workout created');
-      dashboardStale = true;
+      markStale({AppTab.dashboard, AppTab.schedule});
       return null;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error creating workout: $e');
@@ -55,7 +55,7 @@ class WorkoutService {
     try {
       await _supabase.from('workouts').delete().eq('id', workoutId);
       if (kDebugMode) debugLog('✅ Workout deleted');
-      dashboardStale = true;
+      markStale({AppTab.dashboard, AppTab.schedule});
       return true;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error deleting workout: $e');

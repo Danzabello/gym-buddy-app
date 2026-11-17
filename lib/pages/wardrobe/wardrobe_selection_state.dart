@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/coin_service.dart';
 import '../../services/level_service.dart';
+import '../../services/tab_refresh.dart';
 import '../../widgets/avatar_picker_screen.dart' show AvatarBorderStyle;
 
 /// In-memory selection shared by the Wardrobe hub + its three sub-screens.
@@ -117,6 +118,8 @@ class WardrobeSelectionState extends ChangeNotifier {
           .from('user_profiles')
           .update(profileUpdates)
           .eq('id', userId);
+      // The dashboard header, the Schedule rows and Profile show the avatar.
+      markStale({AppTab.dashboard, AppTab.schedule, AppTab.profile});
     }
 
     if (_ringItem != null && _ringItem!.id != _seedRingItemId) {

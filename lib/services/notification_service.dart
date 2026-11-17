@@ -12,6 +12,7 @@ import 'package:gym_buddy_app/utils/debug_logger.dart';
 import '../data/avatar_catalog.dart';
 import '../widgets/avatars/animated_bear.dart';
 import '../widgets/live_event_toast.dart';
+import 'tab_refresh.dart';
 
 // ── Push payload (data-only pushes from send-notification) ──────────────────
 
@@ -623,6 +624,13 @@ class NotificationService {
     if (title == null || title.isEmpty) return;
 
     final type = message.data['type'] as String?;
+
+    // A workout or buddy-request push means the kept-alive Schedule or
+    // Friends tab is out of date (a buddy request has no other signal).
+    final tab = tabForType(type);
+    if (tab == AppTab.schedule.index || tab == AppTab.friends.index) {
+      markStale({AppTab.values[tab!]});
+    }
 
     // A buddy check-in fires this push AND the dashboard's realtime banner off
     // the same row insert. When that banner is visibly handling it, stand down

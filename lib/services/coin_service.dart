@@ -228,7 +228,7 @@ class CoinService {
       if (kDebugMode) {
         debugLog(ok == true ? '✅ Equipped item $itemId' : '❌ Item $itemId not equipped');
       }
-      if (ok == true) dashboardStale = true; // ring colours
+      if (ok == true) markStale({AppTab.dashboard, AppTab.schedule}); // ring colours
       return ok == true;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error equipping item: $e');

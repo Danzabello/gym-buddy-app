@@ -207,7 +207,8 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
         'avatar_border': _selectedBorder.name,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', userId);
-      dashboardStale = true; // the dashboard header shows the avatar
+      // The dashboard header, the Schedule rows and Profile show the avatar.
+      markStale({AppTab.dashboard, AppTab.schedule, AppTab.profile});
 
       widget.onComplete!();
     } catch (e) {
@@ -660,7 +661,8 @@ class _AvatarPickerScreenState extends State<AvatarPickerScreen>
         'avatar_id': avatarId,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', userId);
-      dashboardStale = true; // the dashboard header shows the avatar
+      // The dashboard header, the Schedule rows and Profile show the avatar.
+      markStale({AppTab.dashboard, AppTab.schedule, AppTab.profile});
       widget.onComplete?.call();
     } catch (e) {
       if (mounted) {

@@ -7,6 +7,8 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../utils/app_dates.dart';
 
+export 'tab_refresh.dart';
+
 /// Whether the dashboard should refetch now.
 ///
 /// [lastLoaded] is when the last load started, or null when it never loaded
@@ -32,9 +34,3 @@ bool shouldRefresh({
 /// [lastLoaded] and [now]: the dashboard's "today" state is then out of date.
 bool dayChanged(DateTime lastLoaded, DateTime now, {tz.Location? zone}) =>
     localDateString(lastLoaded, zone: zone) != localDateString(now, zone: zone);
-
-/// Set by a write made off the dashboard that changes what it shows: a
-/// finished check-in or workout, a workout action, a buddy team made or
-/// removed, an item equipped, an avatar or a nickname changed. The dashboard
-/// refetches the next time it is shown; any dashboard load clears it.
-bool dashboardStale = false;
