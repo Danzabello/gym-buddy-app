@@ -48,14 +48,17 @@ void main() async {
 
 /// A startup read must not hold the splash forever. On timeout this reports a
 /// non-fatal (the name only, no user data) and returns null, which every
-/// caller already treats as "read failed".
+/// caller already treats as "read failed". Any other error does the same, so
+/// an unawaited caller never leaks an unhandled exception.
 Future<T?> _startupRead<T>(String name, Future<T> read, int seconds) async {
   try {
     return await read.timeout(Duration(seconds: seconds));
-  } on TimeoutException catch (e, st) {
+  } catch (e, st) {
     if (Platform.isAndroid || Platform.isIOS) {
-      unawaited(FirebaseCrashlytics.instance
-          .recordError(e, st, reason: 'startup read timed out: $name'));
+      unawaited(FirebaseCrashlytics.instance.recordError(e, st,
+          reason: e is TimeoutException
+              ? 'startup read timed out: $name'
+              : 'startup read failed: $name'));
     }
     return null;
   }
@@ -89,15 +92,18 @@ class GymBuddyApp extends StatelessWidget {
 class AuthWrapperDeps {
   final String? Function() userId;
 
-  /// Work every signed-in launch does before the status read.
+  /// Work every signed-in launch does beside the status read. Not awaited:
+  /// nothing the first screen shows depends on it.
   final Future<void> Function(String userId) onSignedIn;
-  final Future<OnboardingState> Function(String userId) onboardingState;
+
+  /// The state, plus the stored timezone from the same row (null if unknown).
+  final Future<(OnboardingState, String?)> Function(String userId) onboardingStatus;
 
   /// The unfinished account's own row; null when it could not be read.
   final Future<OnboardingResume?> Function(String userId) loadResume;
 
   /// Launch work for a finished account.
-  final Future<void> Function(String userId) onCompleted;
+  final Future<void> Function(String userId, String? storedTimezone) onCompleted;
   final WidgetBuilder home;
 
   /// Passed to the onboarding host: its "Not you?" sign-out and buddy step.
@@ -107,7 +113,7 @@ class AuthWrapperDeps {
   const AuthWrapperDeps({
     required this.userId,
     required this.onSignedIn,
-    required this.onboardingState,
+    required this.onboardingStatus,
     required this.loadResume,
     required this.onCompleted,
     required this.home,
@@ -121,14 +127,14 @@ class AuthWrapperDeps {
       userId: () => Supabase.instance.client.auth.currentUser?.id,
       onSignedIn: (id) async {
         unawaited(InviteService().retryPendingTeam(id));
-        await _startupRead('notification init', NotificationService().initialize(), 10);
+        await NotificationService().initialize();
       },
-      onboardingState: auth.onboardingState,
+      onboardingStatus: (_) => startupProfileStatus(),
       loadResume: (id) => loadOnboardingResume(ResumeReads.live(id)),
-      onCompleted: (id) async {
-        // Refresh the stored device timezone every launch (people travel /
-        // swap devices) — feeds per-user "today" resolution server-side.
-        unawaited(syncDeviceTimezone());
+      onCompleted: (id, storedTimezone) async {
+        // Refresh the stored device timezone (people travel / swap devices),
+        // written only when it differs: feeds per-user "today" server-side.
+        unawaited(syncDeviceTimezone(stored: storedTimezone));
         await _startupRead('coach max schedule',
             CoachMaxService().runDueCoachMaxCheckIn(id), 15);
         unawaited(AchievementService().checkLoyaltyAchievements());
@@ -171,15 +177,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
       setState(() => _isInitializing = false);
       return;
     }
-    await _deps.onSignedIn(userId);
-    final state = await _startupRead(
-            'onboarding status', _deps.onboardingState(userId), 15) ??
-        OnboardingState.unknown;
+    // Started together: the notification setup (permission check, token write)
+    // no longer holds the status read.
+    unawaited(_startupRead('notification init', _deps.onSignedIn(userId), 10));
+    final (state, storedTimezone) = await _startupRead(
+            'onboarding status', _deps.onboardingStatus(userId), 15) ??
+        (OnboardingState.unknown, null);
     unawaited(InviteService()
         .discardPendingIfOnboarded(state == OnboardingState.complete ? true : null));
     OnboardingResume? resume;
     if (state == OnboardingState.complete) {
-      await _deps.onCompleted(userId);
+      await _deps.onCompleted(userId, storedTimezone);
     } else if (state == OnboardingState.incomplete) {
       // A failed read leaves null, which falls back to the splash below.
       resume = await _startupRead<OnboardingResume?>('onboarding resume', _deps.loadResume(userId), 15);

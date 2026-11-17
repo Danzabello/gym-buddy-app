@@ -95,6 +95,25 @@ void main() {
     });
   });
 
+  group('readOnboardingStatus', () {
+    test('returns the state with the stored timezone from the same row',
+        () async {
+      expect(
+        await readOnboardingStatus(() async => [
+              {'onboarding_completed': true, 'timezone': 'Asia/Tokyo'},
+            ]),
+        (OnboardingState.complete, 'Asia/Tokyo'),
+      );
+    });
+
+    test('no row and a failed read carry no timezone', () async {
+      expect(await readOnboardingStatus(() async => []),
+          (OnboardingState.noProfile, null));
+      expect(await readOnboardingStatus(() async => throw Exception('x')),
+          (OnboardingState.unknown, null));
+    });
+  });
+
   group('step 1 sign-up when the email already exists', () {
     test(
       'same credentials and no profile row continue to the avatar step',

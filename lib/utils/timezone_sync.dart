@@ -14,16 +14,27 @@ import 'package:gym_buddy_app/utils/debug_logger.dart';
 /// coerces an unexpected value to the 'Europe/Dublin' fallback. Call it on
 /// every launch and on login (people travel / swap devices), and once at the
 /// end of onboarding for brand-new profiles.
-Future<void> syncDeviceTimezone() async {
+///
+/// [stored] is the zone already on the profile (from the launch read); when it
+/// equals the device zone the write is skipped, since the update would fire
+/// the validation trigger for nothing. Null (unknown) always writes.
+/// [deviceZone] and [write] exist so tests can drive it.
+Future<void> syncDeviceTimezone({
+  String? stored,
+  Future<String> Function()? deviceZone,
+  Future<void> Function(String userId, String iana)? write,
+  String? userId,
+}) async {
   try {
-    final userId = Supabase.instance.client.auth.currentUser?.id;
+    userId ??= Supabase.instance.client.auth.currentUser?.id;
     if (userId == null) return;
 
     final String iana;
     try {
       // flutter_timezone v5: getLocalTimezone() -> TimezoneInfo(.identifier)
-      final info = await FlutterTimezone.getLocalTimezone();
-      iana = info.identifier;
+      iana = deviceZone != null
+          ? await deviceZone()
+          : (await FlutterTimezone.getLocalTimezone()).identifier;
     } catch (e) {
       // Couldn't read the device zone — leave the last-known/stored value be
       // rather than clobbering it with a fallback.
@@ -31,13 +42,17 @@ Future<void> syncDeviceTimezone() async {
       return;
     }
 
-    await Supabase.instance.client
-        .from('user_profiles')
-        .update({'timezone': iana})
-        .eq('id', userId);
+    if (stored == iana) return;
+
+    await (write ?? _writeTimezone)(userId, iana);
 
     if (kDebugMode) debugLog('🕒 Synced device timezone: $iana');
   } catch (e) {
     if (kDebugMode) debugLog('⚠️ Timezone sync failed: $e');
   }
 }
+
+Future<void> _writeTimezone(String userId, String iana) => Supabase.instance.client
+    .from('user_profiles')
+    .update({'timezone': iana})
+    .eq('id', userId);
