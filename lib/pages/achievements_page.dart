@@ -1,13 +1,63 @@
 // lib/pages/achievements_page.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../services/achievement_service.dart';
 import '../services/level_service.dart';
+import '../services/saved_copy.dart';
+import '../services/tab_refresh.dart' show profileZone;
+import '../utils/crash_report.dart';
 import '../theme/app_theme.dart';
 import '../theme/accent_theme_provider.dart';
 import '../widgets/coin_glyph.dart';
 import '../widgets/skeleton_box.dart';
 import 'package:provider/provider.dart';
 import '../utils/run_once.dart';
+
+/// What the Achievements page knows, part by part. A null part was never
+/// answered by the server or the saved copy, and is never painted as a default.
+typedef AchievementParts = ({List<Achievement>? all, LevelInfo? level});
+
+const AchievementParts noAchievementParts = (all: null, level: null);
+
+/// What the page knows after a load: each part the server answered, else the
+/// one known now (the saved copy or an earlier load). A null in [answered] is
+/// a failed read, so a failing part never blocks the other.
+@visibleForTesting
+AchievementParts achievementsAfterLoad(AchievementParts shown, AchievementParts answered) => (
+      all: answered.all ?? shown.all,
+      level: answered.level ?? shown.level,
+    );
+
+/// Whether both parts are known. Until then the page stays on the skeleton, so
+/// no default is painted. Also the rule for saving: only a load whose own
+/// answers are both in is written, so the saved copy never holds a default or
+/// a partial list.
+@visibleForTesting
+bool achievementsReady(AchievementParts p) => p.all != null && p.level != null;
+
+/// What one load saves, or null unless both of its own reads answered: a
+/// failed read, a default or a partial list is never written.
+@visibleForTesting
+Map<String, dynamic>? achievementsSavedPayload(AchievementParts answered) =>
+    achievementsReady(answered)
+        ? {
+            'all': [for (final a in answered.all!) a.toSaved()],
+            'level': answered.level!.toSaved(),
+          }
+        : null;
+
+/// Reads [achievementsSavedPayload]'s output back. No achievements, or a part
+/// of the wrong shape, throws (corrupt).
+@visibleForTesting
+AchievementParts achievementsFromSaved(Object d) {
+  final m = d as Map<String, dynamic>;
+  final all = [
+    for (final a in m['all'] as List) Achievement.fromSaved(Map<String, dynamic>.from(a as Map)),
+  ];
+  if (all.isEmpty) throw const FormatException('no achievements saved');
+  return (all: all, level: LevelInfo.fromSaved(Map<String, dynamic>.from(m['level'] as Map)));
+}
 
 class AchievementsPage extends StatefulWidget {
   const AchievementsPage({super.key});
@@ -21,8 +71,10 @@ class _AchievementsPageState extends State<AchievementsPage>
   final AchievementService _achievementService = AchievementService();
   final LevelService _levelService = LevelService();
 
-  List<Achievement> _all = [];
-  LevelInfo? _levelInfo;
+  AchievementParts _parts = noAchievementParts;
+  // The page builds only once [achievementsReady], so the fallback is never painted.
+  List<Achievement> get _all => _parts.all ?? const [];
+  LevelInfo? get _levelInfo => _parts.level;
   bool _isLoading = true;
   final _once = RunOnce();
 
@@ -51,6 +103,7 @@ class _AchievementsPageState extends State<AchievementsPage>
       parent: _fadeController,
       curve: Curves.easeOut,
     );
+    _restoreSaved();
     _load();
   }
 
@@ -61,19 +114,63 @@ class _AchievementsPageState extends State<AchievementsPage>
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() => _isLoading = true);
-    final results = await Future.wait([
-      _achievementService.getAll(),
-      _levelService.getLevelInfo(),
-    ]);
-    if (!mounted) return;
+  /// First paint from the saved copy. A load that already answered both parts
+  /// wins; one that answered only some leaves the rest to the saved copy.
+  Future<void> _restoreSaved() async {
+    final saved = await SavedCopy.read<AchievementParts>(
+      SavedCopy.uid,
+      'achievements',
+      maxAge: kSavedMaxAgeAchievements,
+      parse: achievementsFromSaved,
+    );
+    if (saved == null || !mounted || achievementsReady(_parts)) return;
     setState(() {
-      _all = results[0] as List<Achievement>;
-      _levelInfo = results[1] as LevelInfo?;
+      _parts = achievementsAfterLoad(saved, _parts);
       _isLoading = false;
     });
     _fadeController.forward(from: 0);
+  }
+
+  void _retry() {
+    setState(() => _isLoading = true);
+    _load();
+  }
+
+  Future<void> _load() async {
+    // Each read answers null when it fails: one failing part never blocks the
+    // other, and no error is left unobserved. Offline is expected; anything
+    // else is sent to Crashlytics as a non-fatal.
+    Future<T?> part<T>(String label, Future<T> read) =>
+        read.then<T?>((v) => v, onError: (Object e, StackTrace st) {
+          reportNonFatal(e, st, label);
+          return null;
+        });
+
+    try {
+      final (all, level) = await (
+        part('achievements_list', _achievementService.getAll(strict: true)),
+        part('achievements_level', _levelService.getLevelInfo()),
+      ).wait;
+      if (!mounted) return;
+
+      // A real account always has a catalogue, so an empty list is a failed read too.
+      final answered = (all: all == null || all.isEmpty ? null : all, level: level);
+      final wasReady = achievementsReady(_parts);
+      setState(() {
+        _parts = achievementsAfterLoad(_parts, answered);
+        _isLoading = false;
+      });
+
+      final payload = achievementsSavedPayload(answered);
+      if (payload != null) {
+        unawaited(SavedCopy.write(SavedCopy.uid, 'achievements', payload, zone: profileZone));
+      }
+      // Only when the page just appeared: a refresh over shown data must not blink it.
+      if (!wasReady) _fadeController.forward(from: 0);
+    } catch (e, st) {
+      reportNonFatal(e, st, 'achievements_load');
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   // ── Buckets ────────────────────────────────────────────────
@@ -565,6 +662,9 @@ class _AchievementsPageState extends State<AchievementsPage>
       body: SafeArea(
         child: _isLoading
             ? _buildSkeleton(context)
+            // Nothing known yet and the load failed: the skeleton with a retry, never defaults.
+            : !achievementsReady(_parts)
+            ? _buildSkeleton(context, failed: true)
             : FadeTransition(
                 opacity: _fadeAnimation,
                 child: RefreshIndicator(
@@ -619,7 +719,7 @@ class _AchievementsPageState extends State<AchievementsPage>
     final accentPalette = context.watch<AccentThemeProvider>().palette;
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final level = _levelInfo?.level ?? 1;
+    final level = _levelInfo!.level;
     final pctDisplay = '${(_overallPct * 100).round()}%';
 
     return SliverToBoxAdapter(
@@ -1312,12 +1412,34 @@ class _AchievementsPageState extends State<AchievementsPage>
   // ══════════════════════════════════════════════════════════════
   // SKELETON
   // ══════════════════════════════════════════════════════════════
-  Widget _buildSkeleton(BuildContext context) {
+  Widget _buildSkeleton(BuildContext context, {bool failed = false}) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (failed) ...[
+            Center(
+              child: Column(
+                children: [
+                  Text(
+                    'Could not load your achievements',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface, fontSize: 16),
+                  ),
+                  TextButton(
+                    onPressed: _retry,
+                    child: const Text(
+                      'Try again',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
           const SkeletonBox(width: double.infinity, height: 120, radius: 12),
           const SizedBox(height: 10),
           const Row(children: [

@@ -38,6 +38,37 @@ class Achievement {
     this.unlockedAt,
   });
 
+  /// The saved copy's form (SavedCopy), read back by [fromSaved].
+  Map<String, dynamic> toSaved() => {
+        'id': id,
+        'name': name,
+        'description': description,
+        'category': category,
+        'icon': icon,
+        'rarity': rarity,
+        'xp_reward': xpReward,
+        'coin_reward': coinReward,
+        'target_value': targetValue,
+        'sort_order': sortOrder,
+        'progress': progress,
+        'unlocked_at': unlockedAt?.toUtc().toIso8601String(),
+      };
+
+  factory Achievement.fromSaved(Map<String, dynamic> m) => Achievement(
+        id: m['id'] as String,
+        name: m['name'] as String,
+        description: m['description'] as String,
+        category: m['category'] as String,
+        icon: m['icon'] as String,
+        rarity: m['rarity'] as String,
+        xpReward: m['xp_reward'] as int,
+        coinReward: m['coin_reward'] as int,
+        targetValue: m['target_value'] as int,
+        sortOrder: m['sort_order'] as int,
+        progress: m['progress'] as int?,
+        unlockedAt: m['unlocked_at'] != null ? DateTime.parse(m['unlocked_at'] as String) : null,
+      );
+
   bool get isUnlocked => unlockedAt != null;
   bool get hasProgress => progress != null && progress! > 0;
   double get progressPercent =>
@@ -80,16 +111,21 @@ class AchievementUnlockResult {
 // ══════════════════════════════════════════════════════════════
 
 class AchievementService {
-  static final AchievementService _instance = AchievementService._internal();
-  factory AchievementService() => _instance;
-  AchievementService._internal();
+  static final AchievementService _instance =
+      AchievementService._internal(Supabase.instance.client);
+  // A test passes its own client; everyone else gets the one shared instance.
+  factory AchievementService({SupabaseClient? client}) =>
+      client == null ? _instance : AchievementService._internal(client);
+  AchievementService._internal(this._supabase);
 
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
 
   String? get _userId => _supabase.auth.currentUser?.id;
 
   // ── FETCH ALL ────────────────────────────────────────────────
-  Future<List<Achievement>> getAll() async {
+  /// [strict] rethrows a failed read, and a row that fails to parse, instead of
+  /// returning [], so the page can tell a failure from a real answer.
+  Future<List<Achievement>> getAll({bool strict = false}) async {
     try {
       final uid = _userId;
       if (uid == null) return [];
@@ -115,6 +151,7 @@ class AchievementService {
           .toList();
     } catch (e) {
       if (kDebugMode) debugLog('❌ AchievementService.getAll: $e');
+      if (strict) rethrow;
       return [];
     }
   }
