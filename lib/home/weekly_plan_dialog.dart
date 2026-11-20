@@ -105,7 +105,9 @@ enum _PlanSave { idle, saving, failed, saved }
 /// Shows the dialog. [save] gets the break-day count (7 - workout days) and is
 /// called from inside the dialog; the result is that count, only after [save]
 /// succeeded. The scrim is drawn by the dialog (it follows the tier), so the
-/// route's own barrier is transparent.
+/// route's own barrier is transparent and the route's safe area is off: the
+/// scrim must reach under the status bar and the nav bar. The card avoids
+/// them itself.
 @visibleForTesting
 Future<int?> showWeeklyPlanDialog(
   BuildContext context, {
@@ -116,6 +118,7 @@ Future<int?> showWeeklyPlanDialog(
       context: context,
       barrierDismissible: false,
       barrierColor: Colors.transparent,
+      useSafeArea: false,
       builder: (_) => WeeklyPlanDialog(initialWorkoutDays: initialWorkoutDays, save: save),
     );
 
@@ -142,6 +145,22 @@ Future<bool?> weeklyPlanNeeded(
     return null;
   }
 }
+
+/// What to do with an answered plan check: nothing (a plan exists), open the
+/// dialog, or leave it for later because the screen is busy. Later is not
+/// remembered, so the next time Home is shown the check asks again.
+enum WeeklyPlanStep { skip, show, later }
+
+@visibleForTesting
+WeeklyPlanStep weeklyPlanStep({required bool needsPlan, required bool screenFree}) =>
+    !needsPlan ? WeeklyPlanStep.skip : (screenFree ? WeeklyPlanStep.show : WeeklyPlanStep.later);
+
+/// Whether nothing else is on screen: Home is the current route (no pushed
+/// page, bottom sheet or dialog above it) and the Dashboard is the shown tab.
+/// The dialog cannot be left, so it must not land over anything else.
+@visibleForTesting
+bool weeklyPlanScreenIsFree(BuildContext context) =>
+    ModalRoute.of(context)?.isCurrent == true && LiveEventToast.dashboardTabActive;
 
 @visibleForTesting
 class WeeklyPlanDialog extends StatefulWidget {
@@ -310,18 +329,29 @@ class _WeeklyPlanDialogState extends State<WeeklyPlanDialog> with TickerProvider
     final appColors = AppColors.of(context);
     final cs = Theme.of(context).colorScheme;
     final look = _currentLook();
+    final bars = MediaQuery.paddingOf(context); // status bar, nav bar: the scrim covers them, the card keeps off them
     final breakDays = 7 - _workoutDays;
     final chipPop = _chipScale.transform((_pop.value / (420 / 650)).clamp(0.0, 1.0));
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Scrim with a soft glow in the tier colour.
+        // Scrim: a dark layer (about 60% black), then a soft glow in the tier
+        // colour on top. They are two layers because a BoxDecoration with both
+        // a color and a gradient paints only the gradient.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: ColoredBox(
+              key: const ValueKey('weekly_plan_scrim'),
+              color: Colors.black.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
         Positioned.fill(
           child: IgnorePointer(
             child: DecoratedBox(
+              key: const ValueKey('weekly_plan_glow'),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.6),
                 gradient: RadialGradient(
                   center: const Alignment(0, -0.1),
                   radius: 0.85,
@@ -337,8 +367,9 @@ class _WeeklyPlanDialogState extends State<WeeklyPlanDialog> with TickerProvider
         Dialog(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          insetPadding: EdgeInsets.fromLTRB(24, 24 + bars.top, 24, 24 + bars.bottom),
           child: Container(
+            key: const ValueKey('weekly_plan_card'),
             decoration: BoxDecoration(
               color: appColors.cardBackground,
               borderRadius: BorderRadius.circular(20),

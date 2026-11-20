@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_buddy_app/home_screen.dart';
 import 'package:gym_buddy_app/theme/app_theme.dart';
+import 'package:gym_buddy_app/widgets/live_event_toast.dart';
 
 const _number = ValueKey('weekly_plan_number');
 const _breakDays = ValueKey('weekly_plan_break_days');
@@ -13,6 +15,7 @@ const _plus = ValueKey('weekly_plan_plus');
 const _minus = ValueKey('weekly_plan_minus');
 const _submit = ValueKey('weekly_plan_submit');
 const _error = "Couldn't save your plan. Check your connection and try again.";
+final _boundary = GlobalKey();
 
 void main() {
   /// The page the dialog opens from, standing in for the dashboard: it shows
@@ -23,7 +26,9 @@ void main() {
     bool reduce = false,
     void Function(int?)? onResult,
   }) =>
-      MaterialApp(
+      RepaintBoundary(
+        key: _boundary,
+        child: MaterialApp(
         theme: ThemeData(extensions: const [AppColors.dark]),
         builder: reduce
             ? (c, child) => MediaQuery(
@@ -33,6 +38,7 @@ void main() {
             : null,
         home: Builder(
           builder: (context) => Scaffold(
+            backgroundColor: Colors.white, // a known colour behind the scrim
             body: Center(
               child: ElevatedButton(
                 onPressed: () async {
@@ -47,6 +53,7 @@ void main() {
               ),
             ),
           ),
+        ),
         ),
       );
 
@@ -142,6 +149,52 @@ void main() {
       }
       expect(t.takeException(), isNull); // an overflow would be reported here
       expect(find.text('Set my plan'), findsOneWidget);
+    });
+  });
+
+  group('scrim and system bars', () {
+    // A phone with a tall status bar and a gesture area.
+    Future<void> openOnPhone(WidgetTester t) async {
+      t.view.physicalSize = const Size(320, 568);
+      t.view.devicePixelRatio = 1;
+      t.view.padding = const FakeViewPadding(top: 40, bottom: 30);
+      t.view.viewPadding = const FakeViewPadding(top: 40, bottom: 30);
+      addTearDown(t.view.reset);
+      await t.pumpWidget(harness(save: (_) async {}));
+      await t.tap(find.text('open'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 700));
+    }
+
+    /// The painted colour (r, g, b) at a pixel of the whole screen.
+    Future<List<int>> pixel(WidgetTester t, int x, int y) async {
+      final box = t.renderObject<RenderRepaintBoundary>(find.byKey(_boundary));
+      final image = await t.runAsync(() => box.toImage());
+      final data = (await t.runAsync(() => image!.toByteData()))!;
+      final i = (y * image!.width + x) * 4;
+      return [data.getUint8(i), data.getUint8(i + 1), data.getUint8(i + 2)];
+    }
+
+    testWidgets('the backdrop is dimmed to about 60% black, status bar and nav bar strips included', (t) async {
+      await openOnPhone(t);
+      // White behind, 60% black over it: 255 * 0.4 = 102. The corners are far
+      // from the glow, so what shows is the dark layer alone. The top ones are
+      // in the status bar strip, the bottom ones in the gesture strip.
+      for (final p in [(2, 2), (317, 565), (317, 2), (2, 565)]) {
+        final rgb = await pixel(t, p.$1, p.$2);
+        for (final c in rgb) {
+          expect(c, inInclusiveRange(96, 108), reason: 'pixel $p is $rgb, not dimmed');
+        }
+      }
+    });
+
+    testWidgets('the card stays inside the status bar and gesture areas', (t) async {
+      await openOnPhone(t);
+      final card = t.getRect(find.byKey(const ValueKey('weekly_plan_card')));
+      expect(card.top, greaterThanOrEqualTo(40));
+      expect(card.bottom, lessThanOrEqualTo(568 - 30));
+      expect(card.left, greaterThanOrEqualTo(0));
+      expect(card.right, lessThanOrEqualTo(320));
     });
   });
 
@@ -294,6 +347,82 @@ void main() {
           report: (e, st, label) => reports.add(label));
       expect(r, isNull);
       expect(reports, isEmpty);
+    });
+  });
+
+  group('the check waits for a free screen', () {
+    test('a plan that exists is skipped, one that is missing opens only on a free screen, else later', () {
+      expect(weeklyPlanStep(needsPlan: false, screenFree: true), WeeklyPlanStep.skip);
+      expect(weeklyPlanStep(needsPlan: false, screenFree: false), WeeklyPlanStep.skip);
+      expect(weeklyPlanStep(needsPlan: true, screenFree: true), WeeklyPlanStep.show);
+      expect(weeklyPlanStep(needsPlan: true, screenFree: false), WeeklyPlanStep.later);
+    });
+
+    Widget app(void Function(BuildContext) grab) => MaterialApp(
+          home: Builder(builder: (context) {
+            grab(context);
+            return Scaffold(
+              body: Center(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => const Scaffold(body: Text('a pushed page')))),
+                    child: const Text('push'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => showModalBottomSheet<void>(
+                        context: context, builder: (_) => const SizedBox(height: 100)),
+                    child: const Text('sheet'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => showDialog<void>(
+                        context: context, builder: (_) => const AlertDialog(title: Text('d'))),
+                    child: const Text('dialog'),
+                  ),
+                ]),
+              ),
+            );
+          }),
+        );
+
+    testWidgets('Home is free only while it is the current route on the Dashboard tab; the check then says later', (t) async {
+      final wasActive = LiveEventToast.dashboardTabActive;
+      addTearDown(() => LiveEventToast.dashboardTabActive = wasActive);
+      LiveEventToast.dashboardTabActive = true;
+      late BuildContext home;
+      await t.pumpWidget(app((c) => home = c));
+      expect(weeklyPlanScreenIsFree(home), isTrue);
+      expect(weeklyPlanStep(needsPlan: true, screenFree: weeklyPlanScreenIsFree(home)),
+          WeeklyPlanStep.show);
+
+      // A pushed page above Home: not free, so no dialog and the flag stays unset.
+      await t.tap(find.text('push'));
+      await t.pumpAndSettle();
+      expect(weeklyPlanScreenIsFree(home), isFalse);
+      expect(weeklyPlanStep(needsPlan: true, screenFree: weeklyPlanScreenIsFree(home)),
+          WeeklyPlanStep.later);
+      Navigator.of(home).pop();
+      await t.pumpAndSettle();
+      expect(weeklyPlanScreenIsFree(home), isTrue);
+
+      // A bottom sheet above Home.
+      await t.tap(find.text('sheet'));
+      await t.pumpAndSettle();
+      expect(weeklyPlanScreenIsFree(home), isFalse);
+      Navigator.of(home).pop();
+      await t.pumpAndSettle();
+
+      // Another dialog above Home (the pending-notice dialog is one).
+      await t.tap(find.text('dialog'));
+      await t.pumpAndSettle();
+      expect(weeklyPlanScreenIsFree(home), isFalse);
+      Navigator.of(home).pop();
+      await t.pumpAndSettle();
+      expect(weeklyPlanScreenIsFree(home), isTrue);
+
+      // Another tab shown.
+      LiveEventToast.dashboardTabActive = false;
+      expect(weeklyPlanScreenIsFree(home), isFalse);
     });
   });
 

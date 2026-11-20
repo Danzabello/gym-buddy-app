@@ -3469,11 +3469,13 @@ class _DashboardPageState extends State<DashboardPage>
       // Unknown (offline or a failed read): no dialog, not remembered, so the
       // next open or show asks again. Never a dialog the user cannot leave.
       if (needsPlan == null) return;
-      _weeklyPlanCheckedThisSession = true;
       if (!mounted) return;
-      if (needsPlan) {
-        _showWeeklyPlanDialog();
-      }
+      // Not over a pushed page, a sheet, another dialog or another tab: the
+      // dialog cannot be left. Not remembered, so the next show asks again.
+      final step = weeklyPlanStep(needsPlan: needsPlan, screenFree: weeklyPlanScreenIsFree(context));
+      if (step == WeeklyPlanStep.later) return;
+      _weeklyPlanCheckedThisSession = true;
+      if (step == WeeklyPlanStep.show) _showWeeklyPlanDialog();
     } finally {
       _weeklyPlanChecking = false;
     }

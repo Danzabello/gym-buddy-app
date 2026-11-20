@@ -217,9 +217,9 @@ class _NoticeHomeCardState extends State<NoticeHomeCard>
 }
 
 
-// ── Dialog (same shell as the Monday _WeeklyPlanDialog) ───────────────────
+// ── Dialog ────────────────────────────────────────────────────────────────
 
-/// Same orange as _WeeklyPlanDialog's label and button.
+/// Orange for the notice dialog's label and button.
 const _kOrange = Color(0xFFF97316);
 
 Future<void> _markSeen(List<String> ids) =>
