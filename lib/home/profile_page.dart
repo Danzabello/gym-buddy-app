@@ -1,5 +1,48 @@
 part of '../home_screen.dart';
 
+/// What Profile knows, part by part. A null part was never answered by the
+/// server or the saved copy, and is never painted as a default.
+typedef ProfileParts = ({
+  Map<String, dynamic>? profile,
+  List<TeamStreak>? streaks,
+  LevelInfo? level,
+  int? workouts,
+  int? buddies,
+  List<Map<String, dynamic>>? favs,
+});
+
+const ProfileParts noProfileParts =
+    (profile: null, streaks: null, level: null, workouts: null, buddies: null, favs: null);
+
+/// What the page knows after a load: each part the server answered, else the
+/// one known now (the saved copy or an earlier load). A null in [answered] is
+/// a failed read, so a failing part never blocks the others.
+@visibleForTesting
+ProfileParts profileAfterLoad(ProfileParts shown, ProfileParts answered) => (
+      profile: answered.profile ?? shown.profile,
+      streaks: answered.streaks ?? shown.streaks,
+      level: answered.level ?? shown.level,
+      workouts: answered.workouts ?? shown.workouts,
+      buddies: answered.buddies ?? shown.buddies,
+      favs: answered.favs ?? shown.favs,
+    );
+
+/// Whether every part the page prints a name or a number from is known. Until
+/// then it stays on the skeleton, so no default is painted. Favourites are not
+/// needed: that card hides itself when it has nothing to show.
+@visibleForTesting
+bool profileReady(ProfileParts p) =>
+    p.profile != null &&
+    p.streaks != null &&
+    p.level != null &&
+    p.workouts != null &&
+    p.buddies != null;
+
+/// Whether one load answered every part. Only then is the saved copy written,
+/// so it never holds a default or an incomplete list.
+@visibleForTesting
+bool profileComplete(ProfileParts answered) => profileReady(answered) && answered.favs != null;
+
 // Profile Page
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -17,22 +60,28 @@ class _ProfilePageState extends State<ProfilePage>
   @override
   void refreshInBackground() => _loadAll();
 
-  Map<String, dynamic>? _profile;
-  List<TeamStreak> _allStreaks = [];
-  StreakSortMode _streakSortMode = StreakSortMode.highestCurrent;
+  ProfileParts _parts = noProfileParts;
+  // The page builds only once [profileReady], so the fallbacks below are never
+  // painted, except favourites, whose card hides when empty.
+  Map<String, dynamic>? get _profile => _parts.profile;
+  List<TeamStreak> get _allStreaks => _parts.streaks ?? const [];
+  StreakSortMode get _streakSortMode => StreakSortMode.values.firstWhere(
+        (e) => e.name == _parts.profile?['preferred_streak_sort'],
+        orElse: () => StreakSortMode.highestCurrent,
+      );
   /// Mirrors the dashboard's list so both entry points agree.
   List<TeamStreak> get _listStreaks => sortStreaks(_allStreaks, _streakSortMode);
   /// Total sortable streaks (friends only), independent of sort/filter mode.
   int get _streakCount => _allStreaks.where((s) => !s.isCoachMaxTeam).length;
-  LevelInfo? _levelInfo;
-  int _totalWorkouts = 0;
-  int _buddyCount = 0;
+  LevelInfo? get _levelInfo => _parts.level;
+  int get _totalWorkouts => _parts.workouts ?? 0;
+  int get _buddyCount => _parts.buddies ?? 0;
   /// Top 3 workout_category values for the CURRENT CALENDAR MONTH in the
   /// user's own local timezone, from get_favourite_categories (the RPC does
   /// the month + tz resolution server-side). Each row:
   /// {workout_category, category_count}. Empty is a normal state — the card
   /// is hidden rather than showing a zero.
-  List<Map<String, dynamic>> _favouriteCategories = [];
+  List<Map<String, dynamic>> get _favouriteCategories => _parts.favs ?? const [];
   bool _isLoading = true;
   final _once = RunOnce();
 
@@ -100,94 +149,100 @@ class _ProfilePageState extends State<ProfilePage>
         };
       },
     );
-    if (saved == null || !mounted || !_isLoading) return;
-    final profile = saved['profile'] as Map<String, dynamic>;
+    // A load that already answered everything wins; one that answered only
+    // some parts (or failed) leaves the rest to the saved copy.
+    if (saved == null || !mounted || profileReady(_parts)) return;
     setState(() {
-      _profile = profile;
-      _allStreaks = saved['streaks'] as List<TeamStreak>;
-      _streakSortMode = StreakSortMode.values.firstWhere(
-        (e) => e.name == profile['preferred_streak_sort'],
-        orElse: () => StreakSortMode.highestCurrent,
-      );
-      _levelInfo = saved['level'] as LevelInfo;
-      _totalWorkouts = saved['workouts'] as int;
-      _buddyCount = saved['buddies'] as int;
-      _favouriteCategories = saved['favs'] as List<Map<String, dynamic>>;
+      _parts = profileAfterLoad((
+        profile: saved['profile'] as Map<String, dynamic>,
+        streaks: saved['streaks'] as List<TeamStreak>,
+        level: saved['level'] as LevelInfo,
+        workouts: saved['workouts'] as int,
+        buddies: saved['buddies'] as int,
+        favs: saved['favs'] as List<Map<String, dynamic>>,
+      ), _parts);
       _isLoading = false;
     });
     _fadeController.forward();
   }
+
+  void _retry() {
+    setState(() => _isLoading = true);
+    _loadAll();
+  }
+
   Future<void> _loadAll() => refreshState.track(() async {
     try {
       final uid = Supabase.instance.client.auth.currentUser?.id;
       if (uid == null) return;
 
-      final profileFuture = Supabase.instance.client
-          .rpc('get_my_profile')
-          .select('avatar_id, display_name, created_at, xp, level, preferred_streak_sort')
-          .single();
+      // Each read answers null when it fails: one failing part never blocks
+      // the others, and no error is left unobserved. Offline is expected;
+      // anything else is sent to Crashlytics as a non-fatal.
+      Future<T?> part<T>(String label, Future<T> read) =>
+          read.then<T?>((v) => v, onError: (Object e, StackTrace st) {
+            if (kDebugMode) debugLog('⚠️ Profile read failed, kept as shown: $e');
+            reportNonFatal(e, st, label);
+            return null;
+          });
 
-      final streaksFuture = TeamStreakService().getAllUserStreaks();
-      final levelFuture = LevelService().getLevelInfo();
-      final workoutsFuture = WorkoutService().completedWorkoutCount(uid);
-      // Null when the read failed, so "no buddies" and "offline" differ.
-      final friendsFuture = FriendService()
-          .getFriends(strict: true)
-          .then<List<Map<String, dynamic>>?>((f) => f)
-          .catchError((_) => null);
-      final favouriteCategoriesFuture = Supabase.instance.client
-          .rpc('get_favourite_categories', params: {'p_user_id': uid});
-
-      final profile  = await profileFuture;
-      final streaks  = await streaksFuture;
-      final level    = await levelFuture;
-      final workouts = await workoutsFuture;
-      final friends  = await friendsFuture;
-      final favouriteCategories = await favouriteCategoriesFuture;
+      final (profile, streaks, level, workouts, friends, favs) = await (
+        part<Map<String, dynamic>>(
+            'profile_row',
+            Supabase.instance.client
+                .rpc('get_my_profile')
+                .select('avatar_id, display_name, created_at, xp, level, preferred_streak_sort')
+                .single()),
+        part('profile_streaks', TeamStreakService().getAllUserStreaks(strict: true)),
+        part('profile_level', LevelService().getLevelInfo()),
+        part('profile_workouts', WorkoutService().completedWorkoutCount(uid)),
+        part('profile_buddies', FriendService().getFriends(strict: true)),
+        part<List<Map<String, dynamic>>>(
+            'profile_favs',
+            Supabase.instance.client
+                .rpc('get_favourite_categories', params: {'p_user_id': uid}).then((r) =>
+                    [for (final f in r as List) Map<String, dynamic>.from(f as Map)])),
+      ).wait;
 
       if (!mounted) return;
 
-      // Coach Max's team means a real account never has no streaks, and a
-      // level read fails as null: either means a read failed. What is on
-      // screen (the saved copy, or the last load) stays and the next show
-      // retries.
-      final partial = streaks.isEmpty || level == null || friends == null;
-      if (partial && _levelInfo != null) {
-        refreshState.failed();
-        return;
-      }
-
+      // Coach Max's team means a real account never has no streaks, so an
+      // empty list is a failed read too.
+      final answered = (
+        profile: profile,
+        streaks: streaks == null || streaks.isEmpty ? null : streaks,
+        level: level,
+        workouts: workouts,
+        buddies: friends?.length,
+        favs: favs,
+      );
       setState(() {
-        _profile       = profile;
-        _allStreaks     = streaks;
-        _streakSortMode = StreakSortMode.values.firstWhere(
-          (e) => e.name == profile['preferred_streak_sort'],
-          orElse: () => StreakSortMode.highestCurrent,
-        );
-        _levelInfo     = level;
-        _totalWorkouts = workouts;
-        _buddyCount    = friends?.length ?? _buddyCount;
-        _favouriteCategories = (favouriteCategories as List).cast<Map<String, dynamic>>();
-        _isLoading     = false;
+        _parts = profileAfterLoad(_parts, answered);
+        _isLoading = false;
       });
 
-      if (!partial) {
+      if (profileComplete(answered)) {
         unawaited(SavedCopy.write(SavedCopy.uid, 'profile', {
-          'profile': profile,
-          'streaks': [for (final s in streaks) s.toSaved()],
-          'level': level.toSaved(),
-          'workouts': workouts,
-          'buddies': friends.length,
-          'favs': _favouriteCategories,
+          'profile': answered.profile,
+          'streaks': [for (final s in answered.streaks!) s.toSaved()],
+          'level': answered.level!.toSaved(),
+          'workouts': answered.workouts,
+          'buddies': answered.buddies,
+          'favs': answered.favs,
         }, zone: profileZone));
+      } else {
+        refreshState.failed(); // retried on the next show
       }
-
-      await Future.delayed(const Duration(milliseconds: 50));
-      if (mounted) _fadeController.forward();
-    } catch (e) {
+    } catch (e, st) {
       if (kDebugMode) debugLog('❌ ProfilePage._loadAll: $e');
+      reportNonFatal(e, st, 'profile_load');
       refreshState.failed(); // retried on the next show
       if (mounted) setState(() => _isLoading = false);
+    } finally {
+      // Every exit runs the fade, so a pull-to-refresh that reset it never
+      // leaves the XP ring and bar at 0%.
+      await Future.delayed(const Duration(milliseconds: 50));
+      if (mounted) _fadeController.forward();
     }
   });
 
@@ -203,11 +258,13 @@ class _ProfilePageState extends State<ProfilePage>
   Widget build(BuildContext context) {
     super.build(context); // keep-alive
     if (_isLoading) return _buildSkeleton();
+    // Nothing known yet and the load failed: the skeleton with a retry, never defaults.
+    if (!profileReady(_parts)) return _buildSkeleton(failed: true);
 
     final appColors = AppColors.of(context);
-    final profile  = _profile ?? {};
-    final level    = _levelInfo?.level ?? 1;
-    final title    = _levelInfo?.title ?? 'Newcomer';
+    final profile  = _profile!;
+    final level    = _levelInfo!.level;
+    final title    = _levelInfo!.title;
     final avatarId = profile['avatar_id'] as String? ?? 'lion';
     final name     = profile['display_name'] as String? ?? 'User';
     final year     = formatYear(profile['created_at'] as String?);
@@ -1025,7 +1082,7 @@ class _ProfilePageState extends State<ProfilePage>
   // SKELETON — shown while data loads
   // Shows a realistic shimmer layout matching the real page
   // ══════════════════════════════════════════════════════════════
-   Widget _buildSkeleton() {
+   Widget _buildSkeleton({bool failed = false}) {
     final appColors = AppColors.of(context);
     return Scaffold(
       backgroundColor: appColors.sectionBackground,
@@ -1079,6 +1136,28 @@ class _ProfilePageState extends State<ProfilePage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (failed) ...[
+                    Center(
+                      child: Column(
+                        children: [
+                          Text(
+                            'Could not load your profile',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurface, fontSize: 16),
+                          ),
+                          TextButton(
+                            onPressed: _retry,
+                            child: const Text(
+                              'Try again',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
                   const SkeletonBox(width: double.infinity, height: 110, radius: 18),
                   const SizedBox(height: 14),
                   const Row(

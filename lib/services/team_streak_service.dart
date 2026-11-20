@@ -207,8 +207,11 @@ class TeamStreakService {
   // GET ALL USER'S ACTIVE STREAKS
   // ============================================
   
-  /// Get all active streaks for the current user
-  Future<List<TeamStreak>> getAllUserStreaks() async {
+  /// Get all active streaks for the current user.
+  /// [strict] rethrows a failed read, and a team (or check-in) that fails to
+  /// parse, instead of returning [] or a list without it, so a caller that
+  /// saves the list can tell a failure from a real answer.
+  Future<List<TeamStreak>> getAllUserStreaks({bool strict = false}) async {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) {
@@ -265,7 +268,9 @@ class TeamStreakService {
                 order: orderIndex + 1,
               ));
               orderIndex++;
-            } catch (_) {}
+            } catch (_) {
+              if (strict) rethrow;
+            }
           }
 
           // Sort check-ins by time
@@ -304,6 +309,7 @@ class TeamStreakService {
           if (kDebugMode) debugLog('✅ Added streak: ${streak.teamName}');
         } catch (e) {
           if (kDebugMode) debugLog('❌ Error parsing team data: $e');
+          if (strict) rethrow;
         }
       }
 
@@ -324,6 +330,7 @@ class TeamStreakService {
       return streaks;
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error getting user streaks: $e');
+      if (strict) rethrow;
       return [];
     }
   }
