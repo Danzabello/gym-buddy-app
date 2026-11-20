@@ -162,6 +162,61 @@ WeeklyPlanStep weeklyPlanStep({required bool needsPlan, required bool screenFree
 bool weeklyPlanScreenIsFree(BuildContext context) =>
     ModalRoute.of(context)?.isCurrent == true && LiveEventToast.dashboardTabActive;
 
+/// Waits, with no network call, for the screen to be free, then shows the plan
+/// dialog once. Started when an answered check says the plan is needed but the
+/// screen is busy (a pushed page, the notice dialog, another tab): nothing
+/// else would ask again until a tab switch or a long resume.
+@visibleForTesting
+class WeeklyPlanWaiter {
+  WeeklyPlanWaiter({
+    required this.isMounted,
+    required this.alreadyHandled,
+    required this.screenFree,
+    required this.show,
+    this.every = const Duration(seconds: 2),
+  });
+
+  final bool Function() isMounted;
+  final bool Function() alreadyHandled; // the "checked this session" flag
+  final bool Function() screenFree;
+  final void Function() show; // sets the flag, synchronously, and opens the dialog
+  final Duration every;
+  Timer? _timer;
+
+  bool get waiting => _timer != null;
+
+  /// One timer at most, however many checks come back "later".
+  void start() => _timer ??= Timer.periodic(every, (_) => _tick());
+
+  void cancel() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  void _tick() {
+    if (!isMounted() || alreadyHandled()) return cancel();
+    if (!screenFree()) return;
+    cancel();
+    show();
+  }
+}
+
+/// Applies an answered plan check. A plan that exists cancels a waiting
+/// waiter, a free screen cancels it and shows the dialog now, a busy screen
+/// starts (or keeps) the waiter.
+@visibleForTesting
+void applyWeeklyPlanStep(WeeklyPlanStep step, WeeklyPlanWaiter waiter) {
+  switch (step) {
+    case WeeklyPlanStep.skip:
+      waiter.cancel();
+    case WeeklyPlanStep.show:
+      waiter.cancel();
+      waiter.show();
+    case WeeklyPlanStep.later:
+      waiter.start();
+  }
+}
+
 @visibleForTesting
 class WeeklyPlanDialog extends StatefulWidget {
   const WeeklyPlanDialog({

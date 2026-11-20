@@ -169,6 +169,17 @@ class _DashboardPageState extends State<DashboardPage>
   static bool _weeklyPlanCheckedThisSession = false;
   static bool _weeklyPlanChecking = false;
 
+  /// Polls (no network) for a free screen after a check said "later".
+  late final WeeklyPlanWaiter _planWaiter = WeeklyPlanWaiter(
+    isMounted: () => mounted,
+    alreadyHandled: () => _weeklyPlanCheckedThisSession,
+    screenFree: () => weeklyPlanScreenIsFree(context),
+    show: () {
+      _weeklyPlanCheckedThisSession = true;
+      _showWeeklyPlanDialog();
+    },
+  );
+
   /// Whether the check-in banner setting has been read; false until a read
   /// answers, and then retried on a show.
   bool _bannerSettingKnown = false;
@@ -565,6 +576,7 @@ class _DashboardPageState extends State<DashboardPage>
     _motion.dispose();
     _trayController.dispose();
     _countdownTimer?.cancel();
+    _planWaiter.cancel();
     _minute.dispose();
     if (_checkinChannel != null) {
       _supabase.removeChannel(_checkinChannel!);
@@ -3473,9 +3485,8 @@ class _DashboardPageState extends State<DashboardPage>
       // Not over a pushed page, a sheet, another dialog or another tab: the
       // dialog cannot be left. Not remembered, so the next show asks again.
       final step = weeklyPlanStep(needsPlan: needsPlan, screenFree: weeklyPlanScreenIsFree(context));
-      if (step == WeeklyPlanStep.later) return;
-      _weeklyPlanCheckedThisSession = true;
-      if (step == WeeklyPlanStep.show) _showWeeklyPlanDialog();
+      if (step != WeeklyPlanStep.later) _weeklyPlanCheckedThisSession = true;
+      applyWeeklyPlanStep(step, _planWaiter); // later: keeps polling for a free screen
     } finally {
       _weeklyPlanChecking = false;
     }
