@@ -33,6 +33,7 @@ const kSavedMaxAgeProfile = Duration(days: 7);
 const kSavedMaxAgeSchedule = Duration(hours: 12);
 const kSavedMaxAgeDashboard = Duration(days: 3);
 const kSavedMaxAgeAchievements = Duration(days: 7);
+const kSavedMaxAgeWardrobe = Duration(days: 7);
 
 /// Whether an auth event must wipe the saved copy: an explicit sign-out, or a
 /// sign-in as someone other than the saved owner. Never a token refresh, the

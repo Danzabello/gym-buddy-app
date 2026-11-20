@@ -73,7 +73,9 @@ class CoinService {
   // ============================================================
   // GET SHOP ITEMS
   // ============================================================
-  Future<List<ShopItem>> getShopItems() async {
+  /// [strict] rethrows a failed read instead of returning [], so a caller that
+  /// saves the list can tell a failure from a real answer.
+  Future<List<ShopItem>> getShopItems({bool strict = false}) async {
     try {
       final userId = _supabase.auth.currentUser?.id;
       final items = await _supabase
@@ -106,6 +108,7 @@ class CoinService {
           .toList();
     } catch (e) {
       if (kDebugMode) debugLog('❌ Error getting shop items: $e');
+      if (strict) rethrow;
       return [];
     }
   }

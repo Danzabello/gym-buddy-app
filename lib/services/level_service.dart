@@ -73,13 +73,17 @@ class LevelInfo {
 // LEVEL SERVICE
 // ============================================================
 class LevelService {
-  static final LevelService _instance = LevelService._internal();
-  factory LevelService() => _instance;
-  LevelService._internal();
+  static final LevelService _instance = LevelService._internal(Supabase.instance.client);
+  // A test passes its own client; everyone else gets the one shared instance.
+  factory LevelService({SupabaseClient? client}) =>
+      client == null ? _instance : LevelService._internal(client);
+  LevelService._internal(this._supabase);
 
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
 
-  Future<List<Map<String, dynamic>>> getUnlockedCosmetics() async {
+  /// [strict] rethrows a failed read instead of returning [], so a caller that
+  /// saves the list can tell a failure from a real (empty) answer.
+  Future<List<Map<String, dynamic>>> getUnlockedCosmetics({bool strict = false}) async {
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return [];
@@ -92,6 +96,7 @@ class LevelService {
       return List<Map<String, dynamic>>.from(rows);
     } catch (e) {
       if (kDebugMode) debugLog('❌ LevelService.getUnlockedCosmetics: $e');
+      if (strict) rethrow;
       return [];
     }
   }
