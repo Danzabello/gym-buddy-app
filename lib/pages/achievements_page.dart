@@ -442,13 +442,6 @@ class _AchievementsPageState extends State<AchievementsPage>
                 cs: cs),
             const SizedBox(height: 8),
             _SheetStatRow(
-                label: 'Workout logged',
-                value: '+15 XP',
-                color: accentPalette.statusInfo,
-                appColors: appColors,
-                cs: cs),
-            const SizedBox(height: 8),
-            _SheetStatRow(
                 label: '7-day streak milestone',
                 value: '+50 XP',
                 color: accentPalette.action,
