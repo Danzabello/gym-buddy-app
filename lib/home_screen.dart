@@ -70,6 +70,7 @@ import 'package:gym_buddy_app/utils/hex_color.dart';
 import 'package:gym_buddy_app/utils/app_dates.dart';
 import 'package:gym_buddy_app/utils/run_once.dart';
 import 'package:gym_buddy_app/utils/network_error.dart';
+import 'package:gym_buddy_app/utils/crash_report.dart';
 
 part 'home/all_streaks_dialog.dart';
 part 'home/capped_count.dart';

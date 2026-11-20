@@ -3143,9 +3143,11 @@ class _DashboardPageState extends State<DashboardPage>
     // (dropping a "today" part kept from an earlier day) and the save writes
     // nothing for it. Offline, the next show retries.
     var offline = false;
-    Future<T?> known<T>(Future<T> read) => read.then<T?>((v) => v, onError: (Object e) {
+    Future<T?> known<T>(String label, Future<T> read) =>
+        read.then<T?>((v) => v, onError: (Object e, StackTrace st) {
           if (isNetworkError(e)) offline = true;
           debugLog('⚠️ Dashboard read failed, kept as shown: $e');
+          reportNonFatal(e, st, label);
           return null;
         });
 
@@ -3184,17 +3186,18 @@ class _DashboardPageState extends State<DashboardPage>
           customOrder: _customStreakOrder,
           zone: _myZone?.name,
         );
-      } catch (e) {
+      } catch (e, st) {
         // Unknown: the sort, order and zone on screen stay.
         if (isNetworkError(e)) offline = true;
         debugLog('⚠️ Could not load preferences: $e');
+        reportNonFatal(e, st, 'dashboard_prefs');
       }
     }
 
     // ── STEP 3: Sync + fetch streaks ────────────────────────
     _syncTeamCheckIns(); // fire and forget - don't await
     final allStreaks = await _teamStreakService.getAllUserStreaks();
-    final nicknames  = await known(nicknameService.getAllNicknames(strict: true));
+    final nicknames  = await known('dashboard_nicknames', nicknameService.getAllNicknames(strict: true));
 
     // Every account has Coach Max's team, so no streaks at all is a failed
     // read. A wheel already on screen (the saved copy, or the last load)
@@ -3246,17 +3249,17 @@ class _DashboardPageState extends State<DashboardPage>
 
     final (hasCheckedIn, todaysWorkouts, myCheckInDates, breakRows) = await (
       // has checked in today
-      known(_teamStreakService.hasCheckedInToday(strict: true)),
+      known('dashboard_has_checked_in', _teamStreakService.hasCheckedInToday(strict: true)),
       // today's workouts
-      known(_workoutService.getTodaysWorkouts(strict: true)),
+      known('dashboard_todays_workouts', _workoutService.getTodaysWorkouts(strict: true)),
       // real check-in dates for the heatmap (last 7 days, this user)
       // — fixes the bug where days were painted as "done" purely from
       // arithmetic on current_streak rather than real check-in history.
-      known(CheckInHistoryService().myCheckInDatesSince(sevenDaysAgoStr)),
+      known('dashboard_checkin_dates', CheckInHistoryService().myCheckInDatesSince(sevenDaysAgoStr)),
       // own uncancelled break days — heatmap third state + today badge
       currentUserId == null
           ? Future<List<Map<String, dynamic>>?>.value(<Map<String, dynamic>>[])
-          : known<List<Map<String, dynamic>>>(Supabase.instance.client
+          : known<List<Map<String, dynamic>>>('dashboard_break_days', Supabase.instance.client
               .from('break_day_usage')
               .select('break_date')
               .eq('user_id', currentUserId)
@@ -3277,7 +3280,7 @@ class _DashboardPageState extends State<DashboardPage>
         .where((id) => id != currentUserId)
         .toSet();
     final onBreakIds =
-        await known(_breakDayService.usersOnBreakToday(buddyIds, strict: true));
+        await known('dashboard_buddy_on_break', _breakDayService.usersOnBreakToday(buddyIds, strict: true));
     final buddyOnBreak = onBreakIds == null
         ? null
         : <String, bool>{for (final id in buddyIds) id: onBreakIds.contains(id)};
@@ -3296,10 +3299,11 @@ class _DashboardPageState extends State<DashboardPage>
           for (final row in rows as List)
             row['user_id'] as String: (row['timezone'] as String?) ?? _kFallbackTz,
         };
-      } catch (e) {
+      } catch (e, st) {
         // Unknown: the zones on screen stay (each lookup still falls back to
         // _kFallbackTz on its own) and none are saved.
         if (isNetworkError(e)) offline = true;
+        reportNonFatal(e, st, 'dashboard_buddy_zones');
         buddyZones = null;
       }
     }
@@ -3313,7 +3317,7 @@ class _DashboardPageState extends State<DashboardPage>
         .expand((s) => s.members)
         .map((m) => m.userId)
         .toSet();
-    final ringColorHexById = await known(
+    final ringColorHexById = await known('dashboard_ring_colors',
         CoinService().getEquippedColorHexForUsers(allMemberIds.toList(), strict: true));
 
     // Highest streak (already sorted, just pick first)

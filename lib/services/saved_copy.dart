@@ -22,6 +22,7 @@ import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../utils/app_dates.dart';
+import '../utils/crash_report.dart';
 import 'dashboard_refresh.dart' show dayChanged;
 
 /// Longest a class may be shown from the saved copy (owner decision
@@ -173,7 +174,8 @@ class SavedCopy {
         return null;
       }
       return parse(m['data'] as Object);
-    } catch (_) {
+    } catch (e, st) {
+      reportNonFatal(e, st, 'saved_copy_corrupt');
       try {
         await prefs?.remove(key);
       } catch (_) {}
