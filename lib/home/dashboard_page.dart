@@ -3465,8 +3465,10 @@ class _DashboardPageState extends State<DashboardPage>
     if (_weeklyPlanCheckedThisSession || _weeklyPlanChecking) return;
     _weeklyPlanChecking = true;
     try {
-      final needsPlan = await orUnknown(_breakDayService.needsToSetWeeklyPlan);
-      if (needsPlan == null) return; // offline: unknown, asked again on a show
+      final needsPlan = await weeklyPlanNeeded(_breakDayService.needsToSetWeeklyPlan);
+      // Unknown (offline or a failed read): no dialog, not remembered, so the
+      // next open or show asks again. Never a dialog the user cannot leave.
+      if (needsPlan == null) return;
       _weeklyPlanCheckedThisSession = true;
       if (!mounted) return;
       if (needsPlan) {
@@ -3478,25 +3480,14 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Future<void> _showWeeklyPlanDialog() async {
-    int selectedWorkoutDays = 5;
-
-    final result = await showDialog<int>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => _WeeklyPlanDialog(
-        initialWorkoutDays: selectedWorkoutDays,
-      ),
-    );
+    // The dialog saves the plan itself and returns the saved break days only
+    // after the save worked; it cannot be closed any other way.
+    final result =
+        await showWeeklyPlanDialog(context, save: _breakDayService.setWeeklyBreakPlan);
 
     if (result != null) {
-      await _breakDayService.setWeeklyBreakPlan(result);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Set $result break day${result == 1 ? '' : 's'} for this week.'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(weeklyPlanSnackBar(result));
       setState(() {}); // Refresh UI
       await _loadStreakData();
     }
