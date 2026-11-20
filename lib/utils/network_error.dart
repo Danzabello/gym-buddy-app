@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Whether [e] is the network being unavailable rather than a bug or a
@@ -13,9 +14,8 @@ bool isNetworkError(Object e) =>
     e is TimeoutException ||
     e is AuthRetryableFetchException ||
     // package:http's ClientException, which wraps a SocketException on a real
-    // device. Matched by name: http is a dev dependency only, and adding it
-    // to dependencies is a manifest change.
-    e.runtimeType.toString() == 'ClientException';
+    // device.
+    e is http.ClientException;
 
 /// Runs a read and answers null when the network was unavailable: "unknown,
 /// ask again on the next show". Any other error still propagates, and a read

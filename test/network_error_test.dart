@@ -12,6 +12,9 @@ import 'support/fake_supabase.dart';
 
 const _me = '11111111-1111-4111-8111-111111111111';
 
+// Not package:http's: only its name is the same. By-name matching would have counted it.
+class ClientException implements Exception {}
+
 void main() {
   group('isNetworkError', () {
     test('a dropped socket, a timeout, the http wrapper and a retryable auth failure are network errors', () {
@@ -19,6 +22,14 @@ void main() {
       expect(isNetworkError(TimeoutException('slow')), isTrue);
       expect(isNetworkError(http.ClientException('Connection failed')), isTrue);
       expect(isNetworkError(AuthRetryableFetchException(message: 'offline')), isTrue);
+    });
+
+    test('the http ClientException is matched by its type', () {
+      expect(isNetworkError(http.ClientException('Connection closed before full header was received')), isTrue);
+    });
+
+    test('an unrelated class that merely has the same name is not a network error', () {
+      expect(isNetworkError(ClientException()), isFalse);
     });
 
     test('a refusal or a bug is not', () {

@@ -59,12 +59,13 @@ dependencies:
   firebase_crashlytics: ^4.3.0
   play_install_referrer: 0.5.0
   google_sign_in: ^7.2.0
+  # Already in the lock as a transitive dependency; isNetworkError matches its
+  # ClientException by type, and tests use its MockClient.
+  http: ^1.5.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  # Already in the lock as a transitive dependency; tests use its MockClient.
-  http: 1.5.0
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
