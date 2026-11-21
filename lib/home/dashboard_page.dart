@@ -759,7 +759,7 @@ class _DashboardPageState extends State<DashboardPage>
 
     // Top 4 earn a wheel slot — the rest live in the full streak list
     final displayItems = <dynamic>[
-      ...friendStreaks.take(4),
+      ...friendStreaks.take(kWheelFriendSlots),
       coachMaxStreak,
     ];
 

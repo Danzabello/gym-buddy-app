@@ -570,25 +570,26 @@ void main() {
       expect(t.widget<SnackBar>(find.byType(SnackBar)).backgroundColor, Colors.green[600]);
     });
 
-    testWidgets('not saved: amber, no check, and it says so', (t) async {
+    testWidgets('not saved: coral, no check, and it says so', (t) async {
       await show(t, false);
       expect(find.text("Couldn't save your Custom order."), findsOneWidget);
       expect(find.descendant(of: find.byType(SnackBar), matching: find.byType(Icon)), findsNothing);
-      expect(t.widget<SnackBar>(find.byType(SnackBar)).backgroundColor, kStreakSortWarnColor);
+      expect(t.widget<SnackBar>(find.byType(SnackBar)).backgroundColor, kStreakSortFailColor);
     });
 
-    testWidgets('the failure text is readable on the amber', (t) async {
+    testWidgets('the failure text is readable on the coral (above 4.5:1)', (t) async {
       await show(t, false);
       final style = t.widget<Text>(find.text("Couldn't save your Custom order.")).style!;
-      final contrast = (style.color!.computeLuminance() + 0.05) /
-          (kStreakSortWarnColor.computeLuminance() + 0.05);
-      expect(1 / contrast, greaterThan(4.5)); // dark text on the lighter amber
+      final a = style.color!.computeLuminance();
+      final b = kStreakSortFailColor.computeLuminance();
+      final ratio = (a > b ? a + 0.05 : b + 0.05) / (a > b ? b + 0.05 : a + 0.05);
+      expect(ratio, greaterThan(4.5));
     });
   });
 
   // ── 1. A save in flight is never read as a failure ──────────────────────
   group('the line while a save is out', () {
-    const warn = kStreakSortWarnColor;
+    const warn = kStreakSortFailColor;
     const hint = 'Remembered. The app will open on Highest Streak next time.';
     const failedKnown =
         "Couldn't save. Showing Most Workouts for now. The app will open on Highest Streak next time.";
@@ -635,8 +636,7 @@ void main() {
       await t.pump(const Duration(milliseconds: 150)); // 650 ms
       expect(line(t), 'Saving...');
       await t.pump(const Duration(milliseconds: 200));
-      // The selected sort's colour, no failure tint. (Best All-Time, not Most Workouts:
-      // that one is the same amber as the failure line, so a colour check could not tell.)
+      // The selected sort's colour, no failure tint.
       expect(border(t), StreakSortMode.bestAllTime.color);
       expect(border(t), isNot(warn));
 
@@ -854,16 +854,71 @@ void main() {
       expect(streakSortChangesOrder(list, wo, hi), isTrue);
     });
 
-    test('a swap deep in the list still counts', () {
+    // Six friends; the sorts agree on the first four and disagree on e and f.
+    List<TeamStreak> six() => [
+          streak('a', current: 9, workouts: 90, best: 9),
+          streak('b', current: 8, workouts: 80, best: 8),
+          streak('c', current: 7, workouts: 70, best: 7),
+          streak('d', current: 6, workouts: 60, best: 6),
+          streak('e', current: 5, workouts: 40, best: 5),
+          streak('f', current: 4, workouts: 45, best: 4), // f ahead of e on workouts only
+        ];
+
+    test('a swap only below slot four is not a change: the wheel draws the same four', () {
+      expect(streakSortChangesOrder(six(), hi, wo), isFalse);
+      expect(streakSortChangesOrder(six(), wo, hi), isFalse);
+    });
+
+    test('a swap inside the top four is a change', () {
       final list = [
-        streak('a', current: 9, workouts: 90, best: 9),
-        streak('b', current: 8, workouts: 80, best: 8),
+        streak('a', current: 9, workouts: 70, best: 9),
+        streak('b', current: 8, workouts: 80, best: 8), // b ahead of a on workouts
         streak('c', current: 7, workouts: 60, best: 7),
         streak('d', current: 6, workouts: 50, best: 6),
         streak('e', current: 5, workouts: 40, best: 5),
-        streak('f', current: 4, workouts: 45, best: 4), // f and e swap on workouts
       ];
       expect(streakSortChangesOrder(list, hi, wo), isTrue);
+    });
+
+    test('who takes the fourth slot counts: the fourth and the fifth swapping is a change', () {
+      final list = [
+        streak('a', current: 9, workouts: 90, best: 9),
+        streak('b', current: 8, workouts: 80, best: 8),
+        streak('c', current: 7, workouts: 70, best: 7),
+        streak('d', current: 6, workouts: 40, best: 6),
+        streak('e', current: 5, workouts: 50, best: 5), // e takes d's slot on workouts
+      ];
+      expect(streakSortChangesOrder(list, hi, wo), isTrue);
+    });
+
+    test('a streak entering the top four from below is a change', () {
+      final list = [
+        streak('a', current: 9, workouts: 90, best: 9),
+        streak('b', current: 8, workouts: 80, best: 8),
+        streak('c', current: 7, workouts: 70, best: 7),
+        streak('d', current: 6, workouts: 60, best: 6),
+        streak('e', current: 5, workouts: 99, best: 5), // fifth on streak, first on workouts
+      ];
+      expect(streakSortChangesOrder(list, hi, wo), isTrue);
+    });
+
+    test('fewer than four friends: every position is drawn, so a swap counts', () {
+      final two = [
+        streak('a', current: 9, workouts: 10, best: 9),
+        streak('b', current: 5, workouts: 30, best: 5),
+      ];
+      expect(streakSortChangesOrder(two, hi, wo), isTrue);
+      final three = [
+        streak('a', current: 9, workouts: 90, best: 9),
+        streak('b', current: 8, workouts: 70, best: 8),
+        streak('c', current: 7, workouts: 80, best: 7), // c ahead of b on workouts
+      ];
+      expect(streakSortChangesOrder(three, hi, wo), isTrue);
+      expect(streakSortChangesOrder(three, hi, hi), isFalse);
+    });
+
+    test('the wheel and the comparison read the same number of slots', () {
+      expect(kWheelFriendSlots, 4);
     });
 
     test('ties: equal keys keep the input order, so tied sorts agree; a tie broken by the other key does not', () {
@@ -927,6 +982,18 @@ void main() {
         streak('b', current: 5, workouts: 30, best: 12),
       ];
       expect(streakSortChangesOrder(matching, cu, hi), isFalse);
+    });
+  });
+
+  group('the failure colour', () {
+    test('is the muted coral', () {
+      expect(kStreakSortFailColor, const Color(0xFFE5837A));
+    });
+
+    test('differs from every sort colour, so a failure never looks like a selection', () {
+      for (final mode in StreakSortMode.values) {
+        expect(kStreakSortFailColor, isNot(mode.color), reason: mode.displayName);
+      }
     });
   });
 }

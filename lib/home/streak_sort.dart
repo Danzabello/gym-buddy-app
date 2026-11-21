@@ -22,8 +22,14 @@ extension StreakSortColor on StreakSortMode {
   }
 }
 
-/// The failure line's colour: the same soft amber as Most Workouts.
-const Color kStreakSortWarnColor = Color(0xFFE8A56A);
+/// The one failure colour: a muted coral (owner spec, 2026-11-21), for the
+/// sheet's failure line and the Custom save failure toast. Raw hex on purpose,
+/// like the four sort colours, and not one of them.
+const Color kStreakSortFailColor = Color(0xFFE5837A);
+
+/// How many friends the dashboard's wheel draws (Coach Max has his own slot
+/// besides). The wheel and [streakSortChangesOrder] both read this.
+const int kWheelFriendSlots = 4;
 
 /// The real text of the long-press info dialog, per sort.
 extension StreakSortInfo on StreakSortMode {
@@ -65,16 +71,18 @@ StreakSortMode parseStreakSort(Object? raw) => StreakSortMode.values.firstWhere(
       orElse: () => StreakSortMode.highestCurrent,
     );
 
-/// Whether switching the sort from [from] to [to] changes the order of the
-/// friend streaks the wheel draws. Coach Max is not in that list: [sortStreaks]
-/// leaves him out, and so does the Custom branch of the dashboard's wheel.
-/// When the order is the same there is nothing on the dashboard to redraw.
+/// Whether switching the sort from [from] to [to] changes what the wheel
+/// draws: the first [kWheelFriendSlots] friend streaks, in order. A difference
+/// only below those slots is not a change. Coach Max is not in that list:
+/// [sortStreaks] leaves him out, and so does the Custom branch of the wheel.
+/// When what is drawn is the same there is nothing on the dashboard to redraw.
 @visibleForTesting
 bool streakSortChangesOrder(List<TeamStreak> streaks, StreakSortMode from, StreakSortMode to) {
   if (from == to) return false;
   List<String> order(StreakSortMode mode) => (mode == StreakSortMode.custom
           ? streaks.where((s) => !s.isCoachMaxTeam).toList() // custom keeps the stored order
           : sortStreaks(streaks, mode))
+      .take(kWheelFriendSlots)
       .map((s) => s.teamId)
       .toList();
   return !listEquals(order(from), order(to));
@@ -154,7 +162,7 @@ class StreakSortController extends ChangeNotifier {
     return streakSortStatus(shown: _shown, saved: _saved, failed: _failed);
   }
 
-  /// Whether [statusLine] is a failure (amber). "Saving..." never is.
+  /// Whether [statusLine] is a failure (coral). "Saving..." never is.
   bool get statusIsFailure {
     if (_saving) {
       if (_slow) return false;
@@ -247,7 +255,7 @@ class StreakSortController extends ChangeNotifier {
 }
 
 /// The toast after the Custom picker's Save. The same look either way: green
-/// with a check when it was saved, amber and no check when it was not, for
+/// with a check when it was saved, coral and no check when it was not, for
 /// whatever reason (the network being down included: the user needs to know).
 @visibleForTesting
 SnackBar customOrderSnackBar({required bool saved, required AppColors colors}) {
@@ -264,12 +272,12 @@ SnackBar customOrderSnackBar({required bool saved, required AppColors colors}) {
             overflow: TextOverflow.ellipsis,
             style: saved
                 ? null
-                : TextStyle(color: colors.readableForeground(kStreakSortWarnColor)),
+                : TextStyle(color: colors.readableForeground(kStreakSortFailColor)),
           ),
         ),
       ],
     ),
-    backgroundColor: saved ? Colors.green[600] : kStreakSortWarnColor,
+    backgroundColor: saved ? Colors.green[600] : kStreakSortFailColor,
     duration: const Duration(seconds: 3),
   );
 }
@@ -302,7 +310,7 @@ class StreakSortSheet extends StatelessWidget {
         final shown = controller.shown;
         final status = controller.statusLine;
         final failed = controller.statusIsFailure;
-        final tint = failed ? kStreakSortWarnColor : shown.color;
+        final tint = failed ? kStreakSortFailColor : shown.color;
 
         Widget row(StreakSortMode a, StreakSortMode b) => IntrinsicHeight(
               child: Row(
