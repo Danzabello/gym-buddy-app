@@ -39,8 +39,7 @@ extension StreakSortInfo on StreakSortMode {
         return 'Displays buddies based on your all-time best streak together. '
             'Shows legendary partnerships even if the streak has broken.';
       case StreakSortMode.custom:
-        return 'Manual selection mode. Scroll to view specific buddies in any order. '
-            'Activates automatically when you browse away from preset center.';
+        return 'Pick your own buddies and the order they appear in. Tap Custom to set it up.';
     }
   }
 
@@ -53,7 +52,7 @@ extension StreakSortInfo on StreakSortMode {
       case StreakSortMode.bestAllTime:
         return 'Example: Sarah (best: 45 days) appears before Mike (best: 32 days)';
       case StreakSortMode.custom:
-        return 'Scroll freely! Swipe left/right to browse all your workout partners.';
+        return 'You choose Riley first, then Sam, then Alex, and that is the order you see.';
     }
   }
 }
@@ -66,11 +65,18 @@ StreakSortMode parseStreakSort(Object? raw) => StreakSortMode.values.firstWhere(
       orElse: () => StreakSortMode.highestCurrent,
     );
 
-/// The line under the grid, from state alone: [shown] against [saved]. Null
-/// while the saved value is not known (the read has not answered).
+/// The line under the grid, from state alone: [shown] against [saved]. While
+/// the saved value is not known (the read has not answered) there is nothing
+/// to say until a save has failed: then only that, with no "will open on" part.
 @visibleForTesting
-String? streakSortStatus({required StreakSortMode shown, required StreakSortMode? saved}) {
-  if (saved == null) return null;
+String? streakSortStatus({
+  required StreakSortMode shown,
+  required StreakSortMode? saved,
+  bool failed = false,
+}) {
+  if (saved == null) {
+    return failed ? "Couldn't save. Showing ${shown.displayName} for now." : null;
+  }
   if (shown == saved) {
     return 'Remembered. The app will open on ${shown.displayName} next time.';
   }
@@ -96,11 +102,16 @@ class StreakSortController extends ChangeNotifier {
   bool _touched = false; // the user chose a sort this session
   int _seq = 0; // the newest save; an older one's result is ignored
   int _pending = 0;
+  bool _failed = false; // the newest save failed; a later success clears it
 
   StreakSortMode get shown => _shown;
 
   /// What the app opens on next time, as far as it is known.
   StreakSortMode? get saved => _saved;
+
+  /// The newest save failed. Matters when [saved] is unknown: then there is no
+  /// saved sort to compare the shown one with.
+  bool get failed => _failed;
 
   /// The first paint from the saved copy: what is shown, not what is saved.
   void paint(Object? raw) {
@@ -129,7 +140,13 @@ class StreakSortController extends ChangeNotifier {
     }
     // The same as saved needs no write, unless a save of another sort is still
     // out: then this tap has to win over it.
-    if (mode == _saved && customOrder == null && _pending == 0) return true;
+    if (mode == _saved && customOrder == null && _pending == 0) {
+      if (_failed) {
+        _failed = false;
+        notifyListeners();
+      }
+      return true;
+    }
 
     final seq = ++_seq;
     _pending++;
@@ -138,14 +155,48 @@ class StreakSortController extends ChangeNotifier {
     } catch (e, st) {
       _pending--;
       if (isReportableError(e)) _report(e, st, 'streak_sort_save');
+      if (seq == _seq) {
+        // The newest save failed; an older one failing changes nothing.
+        _failed = true;
+        notifyListeners();
+      }
       return false;
     }
     _pending--;
     if (seq != _seq) return true; // a newer tap came after this one: its result decides
     _saved = mode;
+    _failed = false;
     notifyListeners();
     return true;
   }
+}
+
+/// The toast after the Custom picker's Save. The same look either way: green
+/// with a check when it was saved, amber and no check when it was not, for
+/// whatever reason (the network being down included: the user needs to know).
+@visibleForTesting
+SnackBar customOrderSnackBar({required bool saved, required AppColors colors}) {
+  return SnackBar(
+    content: Row(
+      children: [
+        if (saved) ...[
+          const Icon(Icons.check_circle, color: Colors.white),
+          const SizedBox(width: 12),
+        ],
+        Expanded(
+          child: Text(
+            saved ? 'Custom order saved!' : "Couldn't save your Custom order.",
+            overflow: TextOverflow.ellipsis,
+            style: saved
+                ? null
+                : TextStyle(color: colors.readableForeground(kStreakSortWarnColor)),
+          ),
+        ),
+      ],
+    ),
+    backgroundColor: saved ? Colors.green[600] : kStreakSortWarnColor,
+    duration: const Duration(seconds: 3),
+  );
 }
 
 /// The sheet: four cards, a status line, no Save button. Tap applies.
@@ -175,8 +226,8 @@ class StreakSortSheet extends StatelessWidget {
       builder: (context, _) {
         final shown = controller.shown;
         final saved = controller.saved;
-        final status = streakSortStatus(shown: shown, saved: saved);
-        final failed = saved != null && saved != shown;
+        final status = streakSortStatus(shown: shown, saved: saved, failed: controller.failed);
+        final failed = saved == null ? controller.failed : saved != shown;
         final tint = failed ? kStreakSortWarnColor : shown.color;
 
         Widget row(StreakSortMode a, StreakSortMode b) => IntrinsicHeight(

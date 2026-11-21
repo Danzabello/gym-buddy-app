@@ -770,8 +770,9 @@ class _DashboardPageState extends State<DashboardPage>
   dynamic _focusedOf(List<dynamic> items) =>
       items[_currentCarouselIndex.clamp(0, items.length - 1)];
 
-  Widget _buildDashboardBody(List<dynamic>? displayItems) {
-    if (_allStreaks.isEmpty || displayItems == null) return _buildNoStreaksCard();
+  Widget _buildDashboardBody() {
+    if (_allStreaks.isEmpty) return _buildNoStreaksCard();
+    final displayItems = _wheelItems();
 
     // ✅ Debug output
     debugLog('📊 WHEEL ITEMS (${displayItems.length}):');
@@ -3069,25 +3070,10 @@ class _DashboardPageState extends State<DashboardPage>
           customOrder: result.map((s) => s.teamId).toList());
       debugLog('💾 Custom mode with order ${saved ? 'saved' : 'not saved'}: ${result.map((s) => s.teamId).join(", ")}');
 
-      // ✅ 3. Show success message
-      if (saved && mounted) {
+      // ✅ 3. Tell the user either way
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Custom order saved!',
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.green[600],
-            duration: const Duration(seconds: 3),
-          ),
+          customOrderSnackBar(saved: saved, colors: AppColors.of(context)),
         );
       }
 
@@ -3609,7 +3595,6 @@ class _DashboardPageState extends State<DashboardPage>
   @override
   Widget build(BuildContext context) {
     super.build(context); // AutomaticKeepAliveClientMixin
-    final displayItems = _allStreaks.isEmpty ? null : _wheelItems();
     return Stack(
       children: [
         Scaffold(
@@ -3635,7 +3620,7 @@ class _DashboardPageState extends State<DashboardPage>
                           padding: EdgeInsets.only(
                             bottom: 62 + MediaQuery.paddingOf(context).bottom,
                           ),
-                          child: _buildDashboardBody(displayItems),
+                          child: _buildDashboardBody(),
                         ),
                       ),
                     ],

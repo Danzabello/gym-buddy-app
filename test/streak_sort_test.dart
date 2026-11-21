@@ -406,4 +406,182 @@ void main() {
       expect(button(), StreakSortMode.bestAllTime.color);
     });
   });
+
+  group('a save that fails while the saved value is unknown', () {
+    test('the line says only what shows now; nothing tapped says nothing', () {
+      expect(streakSortStatus(shown: StreakSortMode.custom, saved: null, failed: true),
+          "Couldn't save. Showing Custom for now.");
+      expect(streakSortStatus(shown: StreakSortMode.custom, saved: null, failed: true),
+          isNot(contains('will open on')));
+      expect(streakSortStatus(shown: StreakSortMode.highestCurrent, saved: null), isNull);
+      expect(streakSortStatus(shown: StreakSortMode.highestCurrent, saved: null, failed: false), isNull);
+    });
+
+    test('the controller tracks it: set by a failure, cleared by a later success', () async {
+      var fail = true;
+      final t = make(onWrite: (_, __) async {
+        if (fail) throw StateError('server error');
+      });
+      // The first read never answered: saved is unknown.
+      expect(t.ctl.saved, isNull);
+      expect(t.ctl.failed, isFalse);
+      expect(streakSortStatus(shown: t.ctl.shown, saved: t.ctl.saved, failed: t.ctl.failed), isNull);
+
+      await t.ctl.choose(StreakSortMode.bestAllTime);
+      expect(t.ctl.failed, isTrue);
+      expect(t.ctl.saved, isNull);
+      expect(streakSortStatus(shown: t.ctl.shown, saved: t.ctl.saved, failed: t.ctl.failed),
+          "Couldn't save. Showing Best All-Time for now.");
+
+      fail = false;
+      await t.ctl.choose(StreakSortMode.bestAllTime); // tapped again: retried, and saved
+      expect(t.ctl.failed, isFalse);
+      expect(t.ctl.saved, StreakSortMode.bestAllTime);
+      expect(streakSortStatus(shown: t.ctl.shown, saved: t.ctl.saved, failed: t.ctl.failed),
+          'Remembered. The app will open on Best All-Time next time.');
+    });
+
+    test('an older save failing after a newer one does not raise the flag', () async {
+      final older = Completer<void>();
+      final t = make(onWrite: (mode, _) =>
+          mode == StreakSortMode.mostWorkouts ? older.future : Future.value());
+      final a = t.ctl.choose(StreakSortMode.mostWorkouts);
+      await t.ctl.choose(StreakSortMode.bestAllTime); // newer, saved
+      older.completeError(StateError('late failure'));
+      await a;
+      expect(t.ctl.failed, isFalse);
+      expect(t.ctl.saved, StreakSortMode.bestAllTime);
+    });
+
+    test('with the saved value known, tapping it again after a failure clears the flag', () async {
+      var fail = true;
+      final t = make(onWrite: (_, __) async {
+        if (fail) throw StateError('server error');
+      });
+      t.ctl.loaded('highestCurrent');
+      await t.ctl.choose(StreakSortMode.mostWorkouts);
+      expect(t.ctl.failed, isTrue);
+      await t.ctl.choose(StreakSortMode.highestCurrent); // back to what is saved
+      expect(t.ctl.failed, isFalse);
+      expect(streakSortStatus(shown: t.ctl.shown, saved: t.ctl.saved, failed: t.ctl.failed),
+          'Remembered. The app will open on Highest Streak next time.');
+    });
+
+    Widget sheetApp(StreakSortController ctl) => MaterialApp(
+          theme: ThemeData(extensions: const [AppColors.dark]),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomCenter,
+              child: StreakSortSheet(
+                  controller: ctl, onPick: (m) => unawaited(ctl.choose(m)), onCustom: () {}),
+            ),
+          ),
+        );
+
+    testWidgets('the sheet shows the short failure line, then Remembered after a success', (t) async {
+      var fail = true;
+      final k = make(onWrite: (_, __) async {
+        if (fail) throw StateError('server error');
+      });
+      await t.pumpWidget(sheetApp(k.ctl));
+      expect(find.byKey(const ValueKey('streak_sort_status')), findsNothing); // nothing tapped
+
+      await t.tap(find.byKey(const ValueKey('streak_sort_card_bestAllTime')));
+      await t.pump();
+      await t.pump();
+      expect(find.text("Couldn't save. Showing Best All-Time for now."), findsOneWidget);
+      expect(find.textContaining('will open on'), findsNothing);
+
+      fail = false;
+      await t.tap(find.byKey(const ValueKey('streak_sort_card_bestAllTime')));
+      await t.pump();
+      await t.pump();
+      expect(find.text('Remembered. The app will open on Best All-Time next time.'), findsOneWidget);
+      expect(find.textContaining("Couldn't save"), findsNothing);
+    });
+  });
+
+  group('the Custom text', () {
+    test('says what Custom really does, and no longer claims it switches on by itself', () {
+      expect(StreakSortMode.custom.longDescription,
+          'Pick your own buddies and the order they appear in. Tap Custom to set it up.');
+      expect(StreakSortMode.custom.example,
+          'You choose Riley first, then Sam, then Alex, and that is the order you see.');
+      expect(StreakSortMode.custom.description, 'Your own order');
+      for (final text in [
+        StreakSortMode.custom.longDescription,
+        StreakSortMode.custom.example,
+        StreakSortMode.custom.description,
+      ]) {
+        expect(text.toLowerCase(), isNot(contains('automatically')));
+        expect(text, isNot(contains('preset center')));
+      }
+    });
+
+    testWidgets('the card and the info dialog show it', (t) async {
+      final k = make();
+      k.ctl.loaded('highestCurrent');
+      await t.pumpWidget(MaterialApp(
+        theme: ThemeData(extensions: const [AppColors.dark]),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: StreakSortSheet(controller: k.ctl, onPick: (_) {}, onCustom: () {}),
+          ),
+        ),
+      ));
+      expect(find.text('Your own order'), findsOneWidget);
+      expect(find.text('Manual selection'), findsNothing);
+
+      await t.longPress(find.byKey(const ValueKey('streak_sort_card_custom')));
+      await t.pumpAndSettle();
+      final dialog = find.byType(StreakSortInfoDialog);
+      expect(find.descendant(of: dialog, matching: find.text(StreakSortMode.custom.longDescription)),
+          findsOneWidget);
+      expect(find.descendant(of: dialog, matching: find.text(StreakSortMode.custom.example)),
+          findsOneWidget);
+    });
+  });
+
+  group('the toast after the Custom picker Save', () {
+    Future<void> show(WidgetTester t, bool saved) async {
+      await t.pumpWidget(MaterialApp(
+        theme: ThemeData(extensions: const [AppColors.dark]),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => ScaffoldMessenger.of(context)
+                  .showSnackBar(customOrderSnackBar(saved: saved, colors: AppColors.of(context))),
+              child: const Text('go'),
+            ),
+          ),
+        ),
+      ));
+      await t.tap(find.text('go'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+    }
+
+    testWidgets('saved: green, with the check and the success text', (t) async {
+      await show(t, true);
+      expect(find.text('Custom order saved!'), findsOneWidget);
+      expect(find.descendant(of: find.byType(SnackBar), matching: find.byIcon(Icons.check_circle)), findsOneWidget);
+      expect(t.widget<SnackBar>(find.byType(SnackBar)).backgroundColor, Colors.green[600]);
+    });
+
+    testWidgets('not saved: amber, no check, and it says so', (t) async {
+      await show(t, false);
+      expect(find.text("Couldn't save your Custom order."), findsOneWidget);
+      expect(find.descendant(of: find.byType(SnackBar), matching: find.byType(Icon)), findsNothing);
+      expect(t.widget<SnackBar>(find.byType(SnackBar)).backgroundColor, kStreakSortWarnColor);
+    });
+
+    testWidgets('the failure text is readable on the amber', (t) async {
+      await show(t, false);
+      final style = t.widget<Text>(find.text("Couldn't save your Custom order.")).style!;
+      final contrast = (style.color!.computeLuminance() + 0.05) /
+          (kStreakSortWarnColor.computeLuminance() + 0.05);
+      expect(1 / contrast, greaterThan(4.5)); // dark text on the lighter amber
+    });
+  });
 }

@@ -150,7 +150,7 @@ extension StreakSortModeExtension on StreakSortMode {
       case StreakSortMode.highestCurrent: return 'View by current streak';
       case StreakSortMode.mostWorkouts: return 'Most active teammates';
       case StreakSortMode.bestAllTime: return 'All-time champions';
-      case StreakSortMode.custom: return 'Manual selection';
+      case StreakSortMode.custom: return 'Your own order';
     }
   }
 }
