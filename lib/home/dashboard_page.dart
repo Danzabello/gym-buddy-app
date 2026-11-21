@@ -239,6 +239,10 @@ class _DashboardPageState extends State<DashboardPage>
   late final StreakSortController _sortCtl = StreakSortController(write: _writeSort);
   StreakSortMode get _streakSortMode => _sortCtl.shown;
 
+  /// The sort the wheel was last drawn for. A sort that gives the same order
+  /// leaves the wheel as it is, so this can differ from the sort shown.
+  StreakSortMode _wheelSort = StreakSortMode.highestCurrent;
+
 
   late List<int> _trayOrder;
   int _trayIndex = 0;
@@ -741,6 +745,7 @@ class _DashboardPageState extends State<DashboardPage>
 
   /// The wheel's slots: top 4 friends by the active sort + Coach Max.
   List<dynamic> _wheelItems() {
+    _wheelSort = _streakSortMode;
     // Coach Max always has a slot: he's the automatic buddy.
     final coachMaxStreak = _allStreaks.firstWhere(
       (s) => s.isCoachMaxTeam,
@@ -4103,15 +4108,22 @@ class _DashboardPageState extends State<DashboardPage>
     markStale({AppTab.profile}); // Profile's All Streaks follows the sort
   }
 
-  /// The sort, or its save, changed: the wheel follows the sort on screen.
+  /// The sort, or its save, changed. The wheel is redrawn only when the sort
+  /// on screen gives a different order: a saving or status change, or a sort
+  /// with the same order, leaves the dashboard behind the sheet alone.
   void _onSortChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    if (!streakSortChangesOrder(_allStreaks, _wheelSort, _sortCtl.shown)) return;
+    setState(() {});
   }
 
   /// A tap on a sort in the sheet: it shows at once, the save comes after.
+  /// The wheel goes back to the first buddy only if the order really changes.
   void _pickSort(StreakSortMode mode) {
-    setState(() => _currentCarouselIndex = 0);
-    unawaited(_sortCtl.choose(mode));
+    final changesOrder = streakSortChangesOrder(_allStreaks, _streakSortMode, mode);
+    if (changesOrder) setState(() => _currentCarouselIndex = 0);
+    unawaited(_sortCtl.choose(mode)); // shown in the sheet, the button and the line either way
+    if (!changesOrder) return;
     if (_carouselController.hasClients) {
       _carouselController.jumpToPage(10080);
     }

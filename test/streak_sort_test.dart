@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_buddy_app/home_screen.dart';
+import 'package:gym_buddy_app/services/team_streak_service.dart';
 import 'package:gym_buddy_app/theme/app_theme.dart';
 import 'package:gym_buddy_app/utils/crash_report.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -582,6 +583,350 @@ void main() {
       final contrast = (style.color!.computeLuminance() + 0.05) /
           (kStreakSortWarnColor.computeLuminance() + 0.05);
       expect(1 / contrast, greaterThan(4.5)); // dark text on the lighter amber
+    });
+  });
+
+  // ── 1. A save in flight is never read as a failure ──────────────────────
+  group('the line while a save is out', () {
+    const warn = kStreakSortWarnColor;
+    const hint = 'Remembered. The app will open on Highest Streak next time.';
+    const failedKnown =
+        "Couldn't save. Showing Most Workouts for now. The app will open on Highest Streak next time.";
+
+    Widget sheetApp(StreakSortController ctl) => MaterialApp(
+          theme: ThemeData(extensions: const [AppColors.dark]),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomCenter,
+              child: StreakSortSheet(
+                  controller: ctl, onPick: (m) => unawaited(ctl.choose(m)), onCustom: () {}),
+            ),
+          ),
+        );
+
+    final statusBox = find.byKey(const ValueKey('streak_sort_status'));
+    String? line(WidgetTester t) => statusBox.evaluate().isEmpty
+        ? null
+        : t.widget<Text>(find.descendant(of: statusBox, matching: find.byType(Text))).data;
+    Color border(WidgetTester t) =>
+        ((t.widget<AnimatedContainer>(statusBox).decoration) as BoxDecoration).border!.top.color;
+    Finder card(StreakSortMode m) => find.byKey(ValueKey('streak_sort_card_${m.name}'));
+
+    /// The failure text must not be on screen at this point.
+    void noFailure(WidgetTester t, String where) =>
+        expect(line(t) ?? '', isNot(contains("Couldn't")), reason: where);
+
+    testWidgets('a slow successful save: the old line holds, then Saving..., then Remembered; never a failure', (t) async {
+      final pending = Completer<void>();
+      final k = make(onWrite: (_, __) => pending.future);
+      k.ctl.loaded('highestCurrent');
+      await t.pumpWidget(sheetApp(k.ctl));
+      expect(line(t), hint);
+
+      await t.tap(card(StreakSortMode.bestAllTime));
+      await t.pump();
+      noFailure(t, 'right after the tap');
+      expect(line(t), hint); // the previous text, not a failure and not yet the new Remembered
+
+      await t.pump(const Duration(milliseconds: 500));
+      noFailure(t, '500 ms');
+      expect(line(t), hint);
+
+      await t.pump(const Duration(milliseconds: 150)); // 650 ms
+      expect(line(t), 'Saving...');
+      await t.pump(const Duration(milliseconds: 200));
+      // The selected sort's colour, no failure tint. (Best All-Time, not Most Workouts:
+      // that one is the same amber as the failure line, so a colour check could not tell.)
+      expect(border(t), StreakSortMode.bestAllTime.color);
+      expect(border(t), isNot(warn));
+
+      pending.complete();
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 200));
+      expect(line(t), 'Remembered. The app will open on Best All-Time next time.');
+      expect(k.ctl.saving, isFalse);
+    });
+
+    testWidgets('a save that is quicker than the delay never shows Saving...', (t) async {
+      final k = make(onWrite: (_, __) => Future<void>.delayed(const Duration(milliseconds: 300)));
+      k.ctl.loaded('highestCurrent');
+      await t.pumpWidget(sheetApp(k.ctl));
+
+      await t.tap(card(StreakSortMode.mostWorkouts));
+      for (var i = 0; i < 8; i++) {
+        await t.pump(const Duration(milliseconds: 100));
+        expect(line(t), isNot('Saving...'), reason: 'at ${(i + 1) * 100} ms');
+        noFailure(t, 'at ${(i + 1) * 100} ms');
+      }
+      expect(line(t), 'Remembered. The app will open on Most Workouts next time.');
+    });
+
+    testWidgets('a failed save ends on the failure line, after Saving... if it was slow', (t) async {
+      final k = make(onWrite: (_, __) async {
+        await Future<void>.delayed(const Duration(milliseconds: 800));
+        throw StateError('server error');
+      });
+      k.ctl.loaded('highestCurrent');
+      await t.pumpWidget(sheetApp(k.ctl));
+
+      await t.tap(card(StreakSortMode.mostWorkouts));
+      await t.pump(const Duration(milliseconds: 400));
+      noFailure(t, '400 ms');
+      await t.pump(const Duration(milliseconds: 300)); // 700 ms
+      expect(line(t), 'Saving...');
+      await t.pump(const Duration(milliseconds: 200)); // 900 ms: it failed
+      await t.pump(const Duration(milliseconds: 200));
+      expect(line(t), failedKnown);
+      expect(border(t), warn);
+      expect(k.ctl.saving, isFalse);
+    });
+
+    testWidgets('a quick failure goes straight to the failure line', (t) async {
+      final k = make(onWrite: (_, __) async => throw StateError('server error'));
+      k.ctl.loaded('highestCurrent');
+      await t.pumpWidget(sheetApp(k.ctl));
+      await t.tap(card(StreakSortMode.mostWorkouts));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 200));
+      expect(line(t), failedKnown);
+    });
+
+    testWidgets('rapid taps never flash the failure line; the newest tap owns the delay and the result', (t) async {
+      final a = Completer<void>();
+      final b = Completer<void>();
+      final k = make(onWrite: (mode, _) =>
+          mode == StreakSortMode.mostWorkouts ? a.future : b.future);
+      k.ctl.loaded('highestCurrent');
+      await t.pumpWidget(sheetApp(k.ctl));
+
+      await t.tap(card(StreakSortMode.mostWorkouts)); // t = 0
+      await t.pump(const Duration(milliseconds: 400));
+      noFailure(t, 'before the second tap');
+      await t.tap(card(StreakSortMode.bestAllTime)); // t = 400
+      await t.pump();
+      noFailure(t, 'right after the second tap');
+      expect(line(t), hint); // still the text from before either tap
+
+      await t.pump(const Duration(milliseconds: 300)); // 300 ms after the second tap
+      expect(line(t), hint); // the first tap's 600 ms has passed, but the newest one's has not
+      noFailure(t, '700 ms');
+
+      await t.pump(const Duration(milliseconds: 350)); // 650 ms after the second tap
+      expect(line(t), 'Saving...');
+
+      a.complete(); // the older save finishes late: it changes nothing
+      await t.pump();
+      expect(line(t), 'Saving...');
+      noFailure(t, 'after the older result');
+
+      b.complete();
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 200));
+      expect(line(t), 'Remembered. The app will open on Best All-Time next time.');
+    });
+
+    testWidgets('the older save failing late changes nothing while the newest is out', (t) async {
+      final a = Completer<void>();
+      final b = Completer<void>();
+      final k = make(onWrite: (mode, _) =>
+          mode == StreakSortMode.mostWorkouts ? a.future : b.future);
+      k.ctl.loaded('highestCurrent');
+      await t.pumpWidget(sheetApp(k.ctl));
+      await t.tap(card(StreakSortMode.mostWorkouts));
+      await t.tap(card(StreakSortMode.bestAllTime));
+      await t.pump();
+      a.completeError(StateError('late failure'));
+      await t.pump();
+      noFailure(t, 'after the older failure');
+      expect(k.ctl.failed, isFalse);
+      b.complete();
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 200));
+      expect(line(t), 'Remembered. The app will open on Best All-Time next time.');
+    });
+
+    testWidgets('the saved value unknown: no line while saving, Saving... after the delay, then the result', (t) async {
+      final pending = Completer<void>();
+      final k = make(onWrite: (_, __) => pending.future); // never loaded: saved is unknown
+      await t.pumpWidget(sheetApp(k.ctl));
+      expect(line(t), isNull);
+
+      await t.tap(card(StreakSortMode.bestAllTime));
+      await t.pump();
+      expect(line(t), isNull); // nothing to keep, and nothing is claimed yet
+      await t.pump(const Duration(milliseconds: 500));
+      expect(line(t), isNull);
+      await t.pump(const Duration(milliseconds: 150));
+      expect(line(t), 'Saving...');
+
+      pending.complete();
+      await t.pump();
+      expect(line(t), 'Remembered. The app will open on Best All-Time next time.');
+    });
+
+    testWidgets('the saved value unknown and the save fails: the short failure line', (t) async {
+      final pending = Completer<void>();
+      final k = make(onWrite: (_, __) => pending.future);
+      await t.pumpWidget(sheetApp(k.ctl));
+      await t.tap(card(StreakSortMode.bestAllTime));
+      await t.pump(const Duration(milliseconds: 700));
+      expect(line(t), 'Saving...');
+
+      pending.completeError(StateError('server error'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 200));
+      expect(line(t), "Couldn't save. Showing Best All-Time for now.");
+      expect(border(t), warn);
+    });
+
+    testWidgets('the delay is injectable: with a shorter one Saving... comes sooner', (t) async {
+      final pending = Completer<void>();
+      final ctl = StreakSortController(
+          write: (_, __) => pending.future,
+          report: (e, st, l) {},
+          slowAfter: const Duration(milliseconds: 100));
+      ctl.loaded('highestCurrent');
+      await t.pumpWidget(sheetApp(ctl));
+      await t.tap(card(StreakSortMode.mostWorkouts));
+      await t.pump(const Duration(milliseconds: 50));
+      expect(line(t), hint);
+      await t.pump(const Duration(milliseconds: 100));
+      expect(line(t), 'Saving...');
+      pending.complete();
+      await t.pump();
+    });
+
+    testWidgets('statusIsFailure is false while Saving... and while the previous line was not a failure', (t) async {
+      final pending = Completer<void>();
+      final k = make(onWrite: (_, __) => pending.future);
+      k.ctl.loaded('highestCurrent');
+      await t.pumpWidget(sheetApp(k.ctl));
+      await t.tap(card(StreakSortMode.mostWorkouts));
+      await t.pump();
+      expect(k.ctl.statusIsFailure, isFalse);
+      await t.pump(const Duration(milliseconds: 700));
+      expect(k.ctl.statusLine, 'Saving...');
+      expect(k.ctl.statusIsFailure, isFalse);
+      pending.complete();
+      await t.pump();
+    });
+  });
+
+  // ── 2. A sort that gives the same order leaves the wheel alone ──────────
+  group('streakSortChangesOrder', () {
+    TeamStreak streak(String id, {int current = 0, int workouts = 0, int best = 0, bool coach = false}) =>
+        TeamStreak(
+          id: 's-$id',
+          teamId: id,
+          teamName: id,
+          teamEmoji: 'x',
+          currentStreak: current,
+          longestStreak: best,
+          totalWorkouts: workouts,
+          bestStreak: best,
+          lastWorkoutDate: null,
+          isCoachMaxTeam: coach,
+          members: const [],
+          todayCheckIns: const [],
+        );
+    const hi = StreakSortMode.highestCurrent;
+    const wo = StreakSortMode.mostWorkouts;
+    const bt = StreakSortMode.bestAllTime;
+    const cu = StreakSortMode.custom;
+
+    test('the same order is false: the sorts agree on who is first', () {
+      final list = [
+        streak('a', current: 9, workouts: 50, best: 20),
+        streak('b', current: 5, workouts: 30, best: 12),
+        streak('c', current: 1, workouts: 10, best: 4),
+      ];
+      expect(streakSortChangesOrder(list, hi, wo), isFalse);
+      expect(streakSortChangesOrder(list, wo, bt), isFalse);
+      expect(streakSortChangesOrder(list, hi, bt), isFalse);
+    });
+
+    test('a different order is true', () {
+      final list = [
+        streak('a', current: 9, workouts: 10, best: 20),
+        streak('b', current: 5, workouts: 30, best: 12),
+      ];
+      expect(streakSortChangesOrder(list, hi, wo), isTrue); // a first, then b first
+      expect(streakSortChangesOrder(list, wo, hi), isTrue);
+    });
+
+    test('a swap deep in the list still counts', () {
+      final list = [
+        streak('a', current: 9, workouts: 90, best: 9),
+        streak('b', current: 8, workouts: 80, best: 8),
+        streak('c', current: 7, workouts: 60, best: 7),
+        streak('d', current: 6, workouts: 50, best: 6),
+        streak('e', current: 5, workouts: 40, best: 5),
+        streak('f', current: 4, workouts: 45, best: 4), // f and e swap on workouts
+      ];
+      expect(streakSortChangesOrder(list, hi, wo), isTrue);
+    });
+
+    test('ties: equal keys keep the input order, so tied sorts agree; a tie broken by the other key does not', () {
+      final tied = [
+        streak('a', current: 3, workouts: 7, best: 3),
+        streak('b', current: 3, workouts: 7, best: 3),
+        streak('c', current: 3, workouts: 7, best: 3),
+      ];
+      expect(streakSortChangesOrder(tied, hi, wo), isFalse);
+      expect(streakSortChangesOrder(tied, wo, bt), isFalse);
+
+      final brokenByOtherKey = [
+        streak('a', current: 3, workouts: 1, best: 3),
+        streak('b', current: 3, workouts: 9, best: 3), // tied on streak, ahead on workouts
+      ];
+      expect(streakSortChangesOrder(brokenByOtherKey, hi, wo), isTrue);
+    });
+
+    test('an empty list and a single streak never change order', () {
+      expect(streakSortChangesOrder(const [], hi, wo), isFalse);
+      expect(streakSortChangesOrder(const [], hi, cu), isFalse);
+      final one = [streak('a', current: 2, workouts: 2, best: 2)];
+      for (final from in StreakSortMode.values) {
+        for (final to in StreakSortMode.values) {
+          expect(streakSortChangesOrder(one, from, to), isFalse, reason: '${from.name} to ${to.name}');
+        }
+      }
+    });
+
+    test('the same sort is never a change', () {
+      final list = [streak('a', current: 1), streak('b', current: 2)];
+      for (final m in StreakSortMode.values) {
+        expect(streakSortChangesOrder(list, m, m), isFalse);
+      }
+    });
+
+    test('Coach Max is left out, as the wheel does: his place does not matter', () {
+      final list = [
+        streak('coach', current: 99, workouts: 99, best: 99, coach: true),
+        streak('a', current: 9, workouts: 50, best: 20),
+        streak('b', current: 5, workouts: 30, best: 12),
+      ];
+      expect(streakSortChangesOrder(list, hi, wo), isFalse);
+      // Only the friends decide: with the order flipped for them, it changes.
+      final flipped = [
+        streak('coach', current: 99, workouts: 99, best: 99, coach: true),
+        streak('a', current: 9, workouts: 10, best: 20),
+        streak('b', current: 5, workouts: 30, best: 12),
+      ];
+      expect(streakSortChangesOrder(flipped, hi, wo), isTrue);
+    });
+
+    test('Custom keeps the stored order, so it differs from a sort only when that order does', () {
+      final stored = [
+        streak('b', current: 5, workouts: 30, best: 12),
+        streak('a', current: 9, workouts: 50, best: 20),
+      ];
+      expect(streakSortChangesOrder(stored, cu, hi), isTrue); // stored b,a against sorted a,b
+      final matching = [
+        streak('a', current: 9, workouts: 50, best: 20),
+        streak('b', current: 5, workouts: 30, best: 12),
+      ];
+      expect(streakSortChangesOrder(matching, cu, hi), isFalse);
     });
   });
 }

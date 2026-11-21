@@ -65,6 +65,21 @@ StreakSortMode parseStreakSort(Object? raw) => StreakSortMode.values.firstWhere(
       orElse: () => StreakSortMode.highestCurrent,
     );
 
+/// Whether switching the sort from [from] to [to] changes the order of the
+/// friend streaks the wheel draws. Coach Max is not in that list: [sortStreaks]
+/// leaves him out, and so does the Custom branch of the dashboard's wheel.
+/// When the order is the same there is nothing on the dashboard to redraw.
+@visibleForTesting
+bool streakSortChangesOrder(List<TeamStreak> streaks, StreakSortMode from, StreakSortMode to) {
+  if (from == to) return false;
+  List<String> order(StreakSortMode mode) => (mode == StreakSortMode.custom
+          ? streaks.where((s) => !s.isCoachMaxTeam).toList() // custom keeps the stored order
+          : sortStreaks(streaks, mode))
+      .map((s) => s.teamId)
+      .toList();
+  return !listEquals(order(from), order(to));
+}
+
 /// The line under the grid, from state alone: [shown] against [saved]. While
 /// the saved value is not known (the read has not answered) there is nothing
 /// to say until a save has failed: then only that, with no "will open on" part.
@@ -91,7 +106,11 @@ class StreakSortController extends ChangeNotifier {
   StreakSortController({
     required this.write,
     void Function(Object, StackTrace?, String)? report,
+    this.slowAfter = const Duration(milliseconds: 600),
   }) : _report = report ?? reportNonFatal;
+
+  /// How long the newest save may be out before the line says "Saving...".
+  final Duration slowAfter;
 
   /// Saves the sort (and, for Custom, its order). Throws when it fails.
   final Future<void> Function(StreakSortMode mode, List<String>? customOrder) write;
@@ -103,6 +122,12 @@ class StreakSortController extends ChangeNotifier {
   int _seq = 0; // the newest save; an older one's result is ignored
   int _pending = 0;
   bool _failed = false; // the newest save failed; a later success clears it
+  bool _saving = false; // the newest save is out
+  bool _slow = false; // ... and has been out longer than [slowAfter]
+  Timer? _slowTimer;
+  // What the line said when the first save of a run started: it keeps saying
+  // that while saves are out, so a save in flight never reads as a failure.
+  ({StreakSortMode shown, StreakSortMode? saved, bool failed})? _before;
 
   StreakSortMode get shown => _shown;
 
@@ -112,6 +137,38 @@ class StreakSortController extends ChangeNotifier {
   /// The newest save failed. Matters when [saved] is unknown: then there is no
   /// saved sort to compare the shown one with.
   bool get failed => _failed;
+
+  /// The newest save is out.
+  bool get saving => _saving;
+
+  /// The line under the grid. While a save is out it keeps the text it had
+  /// before (never "Couldn't save" or the new "Remembered" yet); after
+  /// [slowAfter] it says "Saving..."; then the result. Null when there is
+  /// nothing to say.
+  String? get statusLine {
+    if (_saving) {
+      if (_slow) return 'Saving...';
+      final b = _before!;
+      return streakSortStatus(shown: b.shown, saved: b.saved, failed: b.failed);
+    }
+    return streakSortStatus(shown: _shown, saved: _saved, failed: _failed);
+  }
+
+  /// Whether [statusLine] is a failure (amber). "Saving..." never is.
+  bool get statusIsFailure {
+    if (_saving) {
+      if (_slow) return false;
+      final b = _before!;
+      return b.saved == null ? b.failed : b.saved != b.shown;
+    }
+    return _saved == null ? _failed : _saved != _shown;
+  }
+
+  @override
+  void dispose() {
+    _slowTimer?.cancel();
+    super.dispose();
+  }
 
   /// The first paint from the saved copy: what is shown, not what is saved.
   void paint(Object? raw) {
@@ -133,6 +190,7 @@ class StreakSortController extends ChangeNotifier {
   /// whether it was saved. The sort shows at once and stays on screen if the
   /// save fails; the saved value then stays as it was.
   Future<bool> choose(StreakSortMode mode, {List<String>? customOrder}) async {
+    final before = (shown: _shown, saved: _saved, failed: _failed);
     _touched = true;
     if (_shown != mode) {
       _shown = mode;
@@ -150,6 +208,19 @@ class StreakSortController extends ChangeNotifier {
 
     final seq = ++_seq;
     _pending++;
+    // This save is now the newest: it replaces the pending state, and "Saving..."
+    // waits [slowAfter] from here.
+    if (!_saving) _before = before;
+    _saving = true;
+    _slow = false;
+    _slowTimer?.cancel();
+    _slowTimer = Timer(slowAfter, () {
+      if (_saving && seq == _seq) {
+        _slow = true;
+        notifyListeners();
+      }
+    });
+    notifyListeners();
     try {
       await write(mode, customOrder);
     } catch (e, st) {
@@ -157,6 +228,8 @@ class StreakSortController extends ChangeNotifier {
       if (isReportableError(e)) _report(e, st, 'streak_sort_save');
       if (seq == _seq) {
         // The newest save failed; an older one failing changes nothing.
+        _saving = false;
+        _slowTimer?.cancel();
         _failed = true;
         notifyListeners();
       }
@@ -164,6 +237,8 @@ class StreakSortController extends ChangeNotifier {
     }
     _pending--;
     if (seq != _seq) return true; // a newer tap came after this one: its result decides
+    _saving = false;
+    _slowTimer?.cancel();
     _saved = mode;
     _failed = false;
     notifyListeners();
@@ -225,9 +300,8 @@ class StreakSortSheet extends StatelessWidget {
       listenable: controller,
       builder: (context, _) {
         final shown = controller.shown;
-        final saved = controller.saved;
-        final status = streakSortStatus(shown: shown, saved: saved, failed: controller.failed);
-        final failed = saved == null ? controller.failed : saved != shown;
+        final status = controller.statusLine;
+        final failed = controller.statusIsFailure;
         final tint = failed ? kStreakSortWarnColor : shown.color;
 
         Widget row(StreakSortMode a, StreakSortMode b) => IntrinsicHeight(
