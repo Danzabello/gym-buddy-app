@@ -148,6 +148,9 @@ BEGIN
   BEGIN n := public.submit_checkin()::text;
   EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
   r := r || (CASE WHEN n LIKE '42501%' THEN 'PASS ' ELSE 'FAIL ' END || 'G9.11 anon cannot execute submit_checkin -> ' || n);
+  BEGIN n := public.record_randomiser_use()::text;
+  EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
+  r := r || (CASE WHEN n LIKE '42501%' THEN 'PASS ' ELSE 'FAIL ' END || 'G9.26 anon cannot execute record_randomiser_use -> ' || n);
   BEGIN EXECUTE 'SELECT count(*)::text FROM public.notification_inbox' INTO n;
   EXCEPTION WHEN OTHERS THEN n := SQLSTATE || ' ' || SQLERRM; END;
   r := r || (CASE WHEN n LIKE '42501%' THEN 'PASS ' ELSE 'FAIL ' END || 'G12.9 anon SELECT notification_inbox -> ' || n);
@@ -176,8 +179,14 @@ BEGIN
   WHERE p.pronamespace = 'public'::regnamespace AND has_function_privilege('anon', p.oid, 'EXECUTE')
     AND p.proname IN ('submit_checkin', 'finish_checkin_session', 'check_in_coach_max', 'recompute_team_streak', 'purchase_shop_item',
                       'verify_achievement_progress', 'create_invite_team', 'create_buddy_team', 'accept_invite', 'award_coins', 'award_xp',
-                      '_apply_checkin_rewards', '_credit_checkin', '_lock_credit', '_recompute_team_streak');
+                      '_apply_checkin_rewards', '_credit_checkin', '_lock_credit', '_recompute_team_streak', 'record_randomiser_use');
   r := r || (CASE WHEN n IS NULL THEN 'PASS ' ELSE 'FAIL ' END || 'G9.12 anon can execute no economy function -> ' || coalesce(n, 'none'));
+  r := r || (CASE WHEN to_regprocedure('public.record_randomiser_use()') IS NULL THEN 'PASS G9.26 record_randomiser_use not applied yet'
+                  WHEN has_function_privilege('authenticated', 'public.record_randomiser_use()', 'EXECUTE')
+                   AND NOT has_function_privilege('anon', 'public.record_randomiser_use()', 'EXECUTE')
+                   AND NOT EXISTS (SELECT 1 FROM pg_proc p, aclexplode(p.proacl) x WHERE p.oid = 'public.record_randomiser_use()'::regprocedure AND x.grantee = 0)
+                  THEN 'PASS G9.26 record_randomiser_use: authenticated only (not anon, not PUBLIC)'
+                  ELSE 'FAIL G9.26 record_randomiser_use grants' END);
   SELECT string_agg(x, ', ') INTO n FROM unnest(ARRAY[
     CASE WHEN has_function_privilege('anon', 'public.search_usernames(text)', 'EXECUTE') THEN 'anon search_usernames' END,
     CASE WHEN NOT has_function_privilege('authenticated', 'public.search_usernames(text)', 'EXECUTE') THEN 'authenticated lost search_usernames' END,

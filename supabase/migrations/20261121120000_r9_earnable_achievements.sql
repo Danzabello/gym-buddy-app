@@ -1,0 +1,311 @@
+-- P8 R9-EARNABLE (owner decision D7: earnable, not hidden). feeling_lucky and comeback_king were listed but no
+-- server branch paid them (verify_achievement_progress raised achievement_not_server_verifiable for both).
+--  1. record_randomiser_use(): the randomiser's server-side record. Sets user_achievements.progress for feeling_lucky,
+--     capped at target_value, so repeated calls cannot pass the target. Pays nothing. authenticated only.
+--  2. verify_achievement_progress: two ELSIF branches added before ELSE. No other line changes (md5 of
+--     pg_get_functiondef before: 181f6922beb937e7019dbecfa20e1352, last defined by 20261115170000).
+--  3. comeback_king description: "over 7 days" -> "7 days or more", to match the rule.
+-- Lock order unchanged: the new branches only read; record_randomiser_use does one L5 row write and takes no lock.
+-- Grants and SECURITY DEFINER / search_path are stated for both functions. No table, grant or policy changes.
+
+CREATE OR REPLACE FUNCTION public.record_randomiser_use()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_caller uuid := auth.uid();
+BEGIN
+  IF v_caller IS NULL THEN
+    RAISE EXCEPTION 'unauthenticated';
+  END IF;
+  -- ponytail: capped at target_value, so spam cannot pass the target; add a per-day bound (needs a date column)
+  -- if the target is ever raised above 1.
+  INSERT INTO user_achievements (user_id, achievement_id, progress)
+  SELECT v_caller, a.id, 1 FROM achievements a WHERE a.id = 'feeling_lucky'
+  ON CONFLICT (user_id, achievement_id) DO UPDATE
+    SET progress = LEAST(COALESCE(user_achievements.progress, 0) + 1,
+                         (SELECT target_value FROM achievements WHERE id = 'feeling_lucky'));
+END;
+$function$
+;
+
+REVOKE EXECUTE ON FUNCTION public.record_randomiser_use() FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION public.record_randomiser_use() TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.verify_achievement_progress(p_achievement_id text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_caller uuid := auth.uid();
+  v_category text;
+  v_target integer;
+  v_xp integer;
+  v_coins integer;
+  v_name text;
+  v_real_progress integer;
+  v_existing_unlocked timestamptz;
+  v_clamped integer;
+  v_did_unlock boolean;
+  v_account_age_days integer;
+BEGIN
+  IF v_caller IS NULL THEN
+    RAISE EXCEPTION 'unauthenticated';
+  END IF;
+
+  SELECT category, target_value, xp_reward, coin_reward, name
+  INTO v_category, v_target, v_xp, v_coins, v_name
+  FROM achievements WHERE id = p_achievement_id;
+
+  IF v_name IS NULL THEN
+    RAISE EXCEPTION 'unknown_achievement';
+  END IF;
+
+  SELECT unlocked_at INTO v_existing_unlocked
+  FROM user_achievements WHERE user_id = v_caller AND achievement_id = p_achievement_id;
+
+  IF v_existing_unlocked IS NOT NULL THEN
+    RETURN jsonb_build_object('already_unlocked', true);
+  END IF;
+
+  SELECT EXTRACT(DAY FROM now() - created_at)::integer INTO v_account_age_days
+  FROM auth.users WHERE id = v_caller;
+
+  IF p_achievement_id IN ('first_flame','week_warrior','two_weeks_strong','month_machine','unstoppable','century_club','half_year_hero','year_of_the_beast') THEN
+    SELECT COALESCE(MAX(ts.best_streak), 0) INTO v_real_progress
+    FROM team_streaks ts
+    JOIN team_members tm ON tm.team_id = ts.team_id
+    WHERE tm.user_id = v_caller;
+
+  ELSIF p_achievement_id = 'personal_best' THEN
+    SELECT (CASE WHEN COALESCE(MAX(ts.best_streak), 0) >= 2 THEN 1 ELSE 0 END) INTO v_real_progress
+    FROM team_streaks ts
+    JOIN team_members tm ON tm.team_id = ts.team_id
+    WHERE tm.user_id = v_caller;
+
+  ELSIF p_achievement_id IN ('first_rep','warm_up_done','ten_strong','fifty_club','century_lifter','workout_path_eagle','workout_path_gorilla') THEN
+    SELECT COUNT(*) INTO v_real_progress
+    FROM workouts WHERE user_id = v_caller AND status = 'completed';
+
+  ELSIF p_achievement_id = 'marathon' THEN
+    SELECT (CASE WHEN EXISTS(
+      SELECT 1 FROM workouts
+      WHERE user_id = v_caller AND status = 'completed' AND actual_duration_minutes > 90
+        AND NOT auto_completed
+    ) THEN 1 ELSE 0 END) INTO v_real_progress;
+
+  ELSIF p_achievement_id = 'mixed_bag' THEN
+    SELECT COUNT(DISTINCT workout_type) INTO v_real_progress
+    FROM workouts WHERE user_id = v_caller AND status = 'completed';
+
+  ELSIF p_achievement_id = 'iron_will' THEN
+    WITH dates AS (
+      SELECT DISTINCT (workout_completed_at AT TIME ZONE public.safe_user_tz(v_caller))::date AS d
+      FROM workouts
+      WHERE user_id = v_caller AND status = 'completed' AND workout_completed_at IS NOT NULL
+    ), grouped AS (
+      SELECT d, d - (row_number() OVER (ORDER BY d))::int AS grp FROM dates
+    )
+    SELECT COALESCE(MAX(cnt), 0) INTO v_real_progress
+    FROM (SELECT count(*) AS cnt FROM grouped GROUP BY grp) sub;
+
+  ELSIF p_achievement_id IN ('level_5','level_10','level_25','level_50','level_99') THEN
+    SELECT COALESCE(level, 1) INTO v_real_progress FROM user_profiles WHERE id = v_caller;
+
+  ELSIF p_achievement_id IN ('coin_collector','rich_in_spirit','loaded') THEN
+    SELECT COALESCE(SUM(amount), 0) INTO v_real_progress
+    FROM coin_transactions WHERE user_id = v_caller AND amount > 0;
+
+  ELSIF p_achievement_id IN ('collector','hoarder','full_wardrobe') THEN
+    SELECT COUNT(*) INTO v_real_progress FROM user_inventory WHERE user_id = v_caller;
+
+  ELSIF p_achievement_id IN ('first_friend','squad_goals','social_butterfly','influencer') THEN
+    SELECT COUNT(*) INTO v_real_progress
+    FROM friendships WHERE status = 'accepted' AND (user_id = v_caller OR friend_id = v_caller);
+
+  ELSIF p_achievement_id = 'connector' THEN
+    SELECT COUNT(*) INTO v_real_progress
+    FROM friendships WHERE status = 'accepted' AND (user_id = v_caller OR friend_id = v_caller);
+
+  ELSIF p_achievement_id IN ('day_one','veteran','og_member') THEN
+    v_real_progress := COALESCE(v_account_age_days, 0);
+
+  ELSIF p_achievement_id = 'dynamic_duo' THEN
+    SELECT (CASE WHEN EXISTS (
+      SELECT 1
+      FROM daily_team_checkins dtc1
+      WHERE dtc1.user_id = v_caller
+        AND dtc1.team_streak_id IN (
+          SELECT ts.id FROM team_streaks ts
+          JOIN team_members tm ON tm.team_id = ts.team_id
+          JOIN buddy_teams bt ON bt.id = ts.team_id
+          WHERE tm.user_id = v_caller AND bt.is_coach_max_team = false
+        )
+        AND EXISTS (
+          SELECT 1 FROM daily_team_checkins dtc2
+          WHERE dtc2.team_streak_id = dtc1.team_streak_id
+            AND dtc2.check_in_date = dtc1.check_in_date
+            AND dtc2.user_id <> v_caller
+        )
+    ) THEN 1 ELSE 0 END) INTO v_real_progress;
+
+  ELSIF p_achievement_id = 'in_sync' THEN
+    SELECT (CASE WHEN EXISTS (
+      SELECT 1
+      FROM daily_team_checkins dtc1
+      JOIN daily_team_checkins dtc2
+        ON dtc2.team_streak_id = dtc1.team_streak_id
+       AND dtc2.check_in_date = dtc1.check_in_date
+       AND dtc2.user_id <> dtc1.user_id
+      WHERE dtc1.user_id = v_caller
+        AND dtc1.team_streak_id IN (
+          SELECT ts.id FROM team_streaks ts
+          JOIN team_members tm ON tm.team_id = ts.team_id
+          JOIN buddy_teams bt ON bt.id = ts.team_id
+          WHERE tm.user_id = v_caller AND bt.is_coach_max_team = false
+        )
+        AND abs(extract(epoch from (dtc1.check_in_time - dtc2.check_in_time))) <= 1800
+    ) THEN 1 ELSE 0 END) INTO v_real_progress;
+
+  ELSIF p_achievement_id = 'early_bird' THEN
+    SELECT (CASE WHEN EXISTS (
+      SELECT 1 FROM daily_team_checkins
+      WHERE user_id = v_caller
+        AND team_streak_id IN (
+          SELECT ts.id FROM team_streaks ts
+          JOIN team_members tm ON tm.team_id = ts.team_id
+          JOIN buddy_teams bt ON bt.id = ts.team_id
+          WHERE tm.user_id = v_caller AND bt.is_coach_max_team = false
+        )
+        AND extract(hour from check_in_time at time zone public.safe_user_tz(v_caller)) < 8
+    ) THEN 1 ELSE 0 END) INTO v_real_progress;
+
+  ELSIF p_achievement_id = 'night_owl' THEN
+    SELECT (CASE WHEN EXISTS (
+      SELECT 1 FROM daily_team_checkins
+      WHERE user_id = v_caller
+        AND team_streak_id IN (
+          SELECT ts.id FROM team_streaks ts
+          JOIN team_members tm ON tm.team_id = ts.team_id
+          JOIN buddy_teams bt ON bt.id = ts.team_id
+          WHERE tm.user_id = v_caller AND bt.is_coach_max_team = false
+        )
+        AND extract(hour from check_in_time at time zone public.safe_user_tz(v_caller)) >= 22
+    ) THEN 1 ELSE 0 END) INTO v_real_progress;
+
+  ELSIF p_achievement_id IN ('reliable_partner','ride_or_die','power_couple') THEN
+    WITH my_teams AS (
+      SELECT ts.id AS streak_id
+      FROM team_streaks ts
+      JOIN team_members tm ON tm.team_id = ts.team_id
+      JOIN buddy_teams bt ON bt.id = ts.team_id
+      WHERE tm.user_id = v_caller AND bt.is_coach_max_team = false
+    ),
+    mutual_days AS (
+      SELECT team_streak_id, check_in_date, count(*) AS n
+      FROM daily_team_checkins
+      WHERE team_streak_id IN (SELECT streak_id FROM my_teams)
+      GROUP BY team_streak_id, check_in_date
+      HAVING count(*) >= 2
+    )
+    SELECT COALESCE(MAX(cnt), 0) INTO v_real_progress
+    FROM (SELECT team_streak_id, count(*) AS cnt FROM mutual_days GROUP BY team_streak_id) per_team;
+
+  ELSIF p_achievement_id = 'coach_max_grad' THEN
+    SELECT count(*) INTO v_real_progress
+    FROM daily_team_checkins dtc
+    WHERE dtc.user_id = v_caller
+      AND dtc.team_streak_id IN (
+        SELECT ts.id FROM team_streaks ts
+        JOIN team_members tm ON tm.team_id = ts.team_id
+        JOIN buddy_teams bt ON bt.id = ts.team_id
+        WHERE tm.user_id = v_caller AND bt.is_coach_max_team = true
+      );
+
+  ELSIF p_achievement_id IN ('coop_path_bison','coop_path_mammoth') THEN
+    SELECT COALESCE(MAX(ts.current_streak), 0) INTO v_real_progress
+    FROM team_streaks ts
+    JOIN team_members tm ON tm.team_id = ts.team_id
+    JOIN buddy_teams bt ON bt.id = ts.team_id
+    WHERE tm.user_id = v_caller AND bt.is_coach_max_team = false;
+
+  ELSIF p_achievement_id = 'special_path_robot' THEN
+    SELECT COUNT(*) INTO v_real_progress
+    FROM coach_max_schedule
+    WHERE user_id = v_caller AND has_checked_in = true;
+
+  ELSIF p_achievement_id = 'feeling_lucky' THEN
+    -- Written only by record_randomiser_use, capped at target_value; authenticated cannot write user_achievements.
+    SELECT COALESCE(MAX(progress), 0) INTO v_real_progress
+    FROM user_achievements WHERE user_id = v_caller AND achievement_id = 'feeling_lucky';
+
+  ELSIF p_achievement_id = 'comeback_king' THEN
+    -- A lost streak of 7 or more on a team whose active streak is back at 1 or more. Both loss paths leave the
+    -- streak at 0 (reconcile_stale_streaks) or at 1 with the new day (_recompute_team_streak), so >= 1 means a new day.
+    SELECT (CASE WHEN EXISTS (
+      SELECT 1 FROM streak_events e
+      JOIN team_streaks ts ON ts.team_id = e.team_id AND ts.is_active
+      WHERE e.user_id = v_caller AND e.lost_streak >= 7 AND ts.current_streak >= 1
+    ) THEN 1 ELSE 0 END) INTO v_real_progress;
+
+  ELSE
+    RAISE EXCEPTION 'achievement_not_server_verifiable: %', p_achievement_id;
+  END IF;
+
+  IF v_category IN ('streak', 'loyalty', 'coop') AND v_target > COALESCE(v_account_age_days, 0) + 1 THEN
+    RETURN jsonb_build_object('blocked', true, 'reason', 'account_too_new', 'account_age_days', v_account_age_days);
+  END IF;
+
+  v_clamped := LEAST(v_real_progress, v_target);
+  v_did_unlock := v_real_progress >= v_target;
+
+  INSERT INTO user_achievements (user_id, achievement_id, progress, unlocked_at)
+  VALUES (v_caller, p_achievement_id, v_clamped, CASE WHEN v_did_unlock THEN now() ELSE NULL END)
+  ON CONFLICT (user_id, achievement_id) DO UPDATE
+    SET progress = v_clamped,
+        unlocked_at = CASE WHEN v_did_unlock THEN now() ELSE user_achievements.unlocked_at END;
+
+  IF NOT v_did_unlock THEN
+    RETURN jsonb_build_object('unlocked', false, 'progress', v_clamped, 'target', v_target);
+  END IF;
+
+  -- LIVE-12 fix: the user_achievements row above is not a safe payout
+  -- gate on its own -- it's client-deletable (was; see policy/grant
+  -- changes above), so "currently unlocked" can be made false again and
+  -- this function re-called. Check the reward ledger itself, keyed by
+  -- the same reference_id convention already used everywhere else in
+  -- this codebase (checkin rewards, invite rewards, and the
+  -- feeling_lucky branch of award_achievement_rewards) before paying.
+  IF EXISTS (
+    SELECT 1 FROM xp_transactions
+    WHERE user_id = v_caller AND reference_id = 'achievement_' || p_achievement_id
+    UNION ALL
+    SELECT 1 FROM coin_transactions
+    WHERE user_id = v_caller AND reference_id = 'achievement_' || p_achievement_id
+  ) THEN
+    RETURN jsonb_build_object('unlocked', true, 'already_awarded', true);
+  END IF;
+
+  IF v_xp > 0 THEN
+    PERFORM award_xp(v_caller, v_xp, 'achievement', 'achievement_' || p_achievement_id);
+  END IF;
+  IF v_coins > 0 THEN
+    PERFORM award_coins(v_caller, v_coins, 'earn', 'Achievement: ' || v_name, 'achievement_' || p_achievement_id);
+  END IF;
+
+  RETURN jsonb_build_object('unlocked', true, 'xp_awarded', v_xp, 'coins_awarded', v_coins);
+END;
+$function$
+
+;
+
+REVOKE EXECUTE ON FUNCTION public.verify_achievement_progress(text) FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION public.verify_achievement_progress(text) TO authenticated;
+
+UPDATE public.achievements
+SET description = 'Start a new streak after losing one of 7 days or more'
+WHERE id = 'comeback_king' AND description = 'Start a new streak after losing one over 7 days';

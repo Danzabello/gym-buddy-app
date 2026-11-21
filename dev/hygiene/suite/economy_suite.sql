@@ -460,6 +460,9 @@ BEGIN
   r := r || pg_temp.is('G0.13 bodies pinned (20261105220000): _auto_credit, finish_checkin_session',
                        md5(pg_temp.def('public._auto_credit(uuid,timestamptz,integer,text,text)')) || ' ' || md5(pg_temp.def('public.finish_checkin_session(uuid)')),
                        '204300bd6cf943e1c73faf78b33a30a7 3cdf210622abd60288c26d7032eec4c8');
+  r := r || pg_temp.is('G0.14 bodies pinned (20261121120000): verify_achievement_progress, record_randomiser_use',
+                       md5(pg_temp.def('public.verify_achievement_progress(text)')) || ' ' || coalesce(md5(pg_temp.def('public.record_randomiser_use()')), 'missing'),
+                       '2311fbfac851e78708a9ad1fbb55bcba 83b9b0823f4597a97dc45b6ef87a27f4');
 
   -- ── G1 _credit_checkin (the L3 checks first: no paying credit has run in this phase yet) ──
   BEGIN
@@ -1346,6 +1349,107 @@ session_reminder2|1|Final reminder|This is the final reminder. Open the app and 
     RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
   EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL; WHEN OTHERS THEN r := r || ('FAIL G15.2 crashed: ' || SQLERRM);
   END;
+
+  -- ── G16 R9-EARNABLE (20261121120000): feeling_lucky (10 coins / 25 xp) and comeback_king (40 / 100) ──
+  -- Each block first clears the fixture's own rows for the id (earlier test runs may hold them), inside its rollback.
+  BEGIN
+    b := pg_temp.o2();
+    DELETE FROM user_achievements WHERE user_id = b AND achievement_id = 'feeling_lucky';
+    DELETE FROM coin_transactions WHERE user_id = b AND reference_id = 'achievement_feeling_lucky';
+    DELETE FROM xp_transactions WHERE user_id = b AND reference_id = 'achievement_feeling_lucky';
+    ca := pg_temp.coins(b); xa := pg_temp.xp(b);
+    j := pg_temp.js(pg_temp.u(b, 'SELECT public.verify_achievement_progress(''feeling_lucky'')::text'));
+    r := r || pg_temp.is('G16.1 feeling_lucky with no randomiser use: unlocked/progress/coins/xp',
+                         (j->>'unlocked') || '/' || (j->>'progress') || '/' || (pg_temp.coins(b) - ca) || '/' || (pg_temp.xp(b) - xa), 'false/0/0/0');
+    FOR k IN 1..5 LOOP
+      n := pg_temp.u(b, 'SELECT public.record_randomiser_use()::text');
+    END LOOP;
+    r := r || pg_temp.is('G16.2 five randomiser uses count once (capped at target_value), unlock nothing, pay nothing',
+                         (SELECT progress || '/' || coalesce(unlocked_at::text, 'locked') FROM user_achievements WHERE user_id = b AND achievement_id = 'feeling_lucky')
+                         || '/' || (pg_temp.coins(b) - ca) || '/' || (pg_temp.xp(b) - xa) || ' ' || coalesce(n, 'null'), '1/locked/0/0 ');
+    j := pg_temp.js(pg_temp.u(b, 'SELECT public.verify_achievement_progress(''feeling_lucky'')::text'));
+    r := r || pg_temp.is('G16.3 feeling_lucky at the threshold: unlocked once, paid 10 coins / 25 xp',
+                         (SELECT count(*) FROM user_achievements WHERE user_id = b AND achievement_id = 'feeling_lucky' AND unlocked_at IS NOT NULL) || '/'
+                         || (pg_temp.coins(b) - ca) || '/' || (pg_temp.xp(b) - xa), '1/10/25');
+    ca := pg_temp.coins(b); xa := pg_temp.xp(b);
+    n := pg_temp.u(b, 'SELECT public.record_randomiser_use()::text');
+    j := pg_temp.js(pg_temp.u(b, 'SELECT public.verify_achievement_progress(''feeling_lucky'')::text'));
+    r := r || pg_temp.is('G16.4 use and verify again: already_unlocked, progress still 1, nothing paid',
+                         (j->>'already_unlocked') || '/' || (SELECT progress FROM user_achievements WHERE user_id = b AND achievement_id = 'feeling_lucky')
+                         || '/' || (pg_temp.coins(b) - ca) || '/' || (pg_temp.xp(b) - xa), 'true/1/0/0');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL; WHEN OTHERS THEN r := r || ('FAIL G16.1-4 crashed: ' || SQLERRM);
+  END;
+  -- comeback_king, 6-day loss through the real _recompute_team_streak gap path (loss row and day 1 in one call): no unlock.
+  BEGIN
+    a := pg_temp.o1(); b := pg_temp.o2();
+    DELETE FROM streak_events WHERE user_id IN (a, b);
+    DELETE FROM user_achievements WHERE user_id IN (a, b) AND achievement_id = 'comeback_king';
+    DELETE FROM coin_transactions WHERE user_id IN (a, b) AND reference_id = 'achievement_comeback_king';
+    DELETE FROM xp_transactions WHERE user_id IN (a, b) AND reference_id = 'achievement_comeback_king';
+    s := pg_temp.team(a, b);
+    UPDATE team_streaks SET current_streak = 6, longest_streak = 6, best_streak = 6, last_workout_date = pg_temp.day(a) - 3 WHERE id = s;
+    j := public._credit_checkin(a, now(), true, now(), s);
+    j := public._credit_checkin(b, now(), true, now(), s);
+    ca := pg_temp.coins(a); xa := pg_temp.xp(a);
+    j := pg_temp.js(pg_temp.u(a, 'SELECT public.verify_achievement_progress(''comeback_king'')::text'));
+    r := r || pg_temp.is('G16.5 a lost 6-day streak then a new day: loss rows/streak/unlocked/coins/xp',
+                         (SELECT count(*) FROM streak_events WHERE team_id = (SELECT team_id FROM team_streaks WHERE id = s) AND lost_streak = 6) || '/'
+                         || (SELECT current_streak FROM team_streaks WHERE id = s) || '/' || (j->>'unlocked') || '/' || (pg_temp.coins(a) - ca) || '/' || (pg_temp.xp(a) - xa),
+                         '2/1/false/0/0');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL; WHEN OTHERS THEN r := r || ('FAIL G16.5 crashed: ' || SQLERRM);
+  END;
+  -- comeback_king, 7-day loss as reconcile_stale_streaks records it (reset to 0, then _record_streak_loss; only a missed), then a new day.
+  BEGIN
+    a := pg_temp.o1(); b := pg_temp.o2();
+    DELETE FROM streak_events WHERE user_id IN (a, b);
+    DELETE FROM user_achievements WHERE user_id IN (a, b) AND achievement_id = 'comeback_king';
+    DELETE FROM coin_transactions WHERE user_id IN (a, b) AND reference_id = 'achievement_comeback_king';
+    DELETE FROM xp_transactions WHERE user_id IN (a, b) AND reference_id = 'achievement_comeback_king';
+    s := pg_temp.team(a, b);
+    UPDATE team_streaks SET current_streak = 0, longest_streak = 7, best_streak = 7, last_workout_date = pg_temp.day(a) - 3 WHERE id = s;
+    PERFORM public._record_streak_loss((SELECT team_id FROM team_streaks WHERE id = s), 7, ARRAY[a]);
+    ca := pg_temp.coins(a); xa := pg_temp.xp(a);
+    j := pg_temp.js(pg_temp.u(a, 'SELECT public.verify_achievement_progress(''comeback_king'')::text'));
+    r := r || pg_temp.is('G16.6 a lost 7-day streak, no new day yet: unlocked/coins/xp', (j->>'unlocked') || '/' || (pg_temp.coins(a) - ca) || '/' || (pg_temp.xp(a) - xa), 'false/0/0');
+    j := public._credit_checkin(a, now(), true, now(), s);
+    j := public._credit_checkin(b, now(), true, now(), s);
+    ca := pg_temp.coins(a); xa := pg_temp.xp(a); cb := pg_temp.coins(b); xb := pg_temp.xp(b);
+    j := pg_temp.js(pg_temp.u(a, 'SELECT public.verify_achievement_progress(''comeback_king'')::text'));
+    j2 := pg_temp.js(pg_temp.u(b, 'SELECT public.verify_achievement_progress(''comeback_king'')::text'));
+    r := r || pg_temp.is('G16.7 then a new day: streak 1; the misser (own) and the partner (friend) are each paid 40 coins / 100 xp',
+                         (SELECT current_streak FROM team_streaks WHERE id = s) || ' ' || (pg_temp.coins(a) - ca) || '/' || (pg_temp.xp(a) - xa) || ' '
+                         || (pg_temp.coins(b) - cb) || '/' || (pg_temp.xp(b) - xb), '1 40/100 40/100');
+    ca := pg_temp.coins(a); xa := pg_temp.xp(a);
+    j := pg_temp.js(pg_temp.u(a, 'SELECT public.verify_achievement_progress(''comeback_king'')::text'));
+    r := r || pg_temp.is('G16.8 replay: already_unlocked, nothing paid, one ledger row each',
+                         (j->>'already_unlocked') || '/' || (pg_temp.coins(a) - ca) || '/' || (pg_temp.xp(a) - xa) || '/'
+                         || (SELECT count(*) FROM coin_transactions WHERE user_id IN (a, b) AND reference_id = 'achievement_comeback_king'), 'true/0/0/2');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL; WHEN OTHERS THEN r := r || ('FAIL G16.6-8 crashed: ' || SQLERRM);
+  END;
+  -- comeback_king, 7-day loss through the real _recompute_team_streak gap path: paid on that same day.
+  BEGIN
+    a := pg_temp.o1(); b := pg_temp.o2();
+    DELETE FROM streak_events WHERE user_id IN (a, b);
+    DELETE FROM user_achievements WHERE user_id IN (a, b) AND achievement_id = 'comeback_king';
+    DELETE FROM coin_transactions WHERE user_id IN (a, b) AND reference_id = 'achievement_comeback_king';
+    DELETE FROM xp_transactions WHERE user_id IN (a, b) AND reference_id = 'achievement_comeback_king';
+    s := pg_temp.team(a, b);
+    UPDATE team_streaks SET current_streak = 7, longest_streak = 7, best_streak = 7, last_workout_date = pg_temp.day(a) - 3 WHERE id = s;
+    j := public._credit_checkin(a, now(), true, now(), s);
+    j := public._credit_checkin(b, now(), true, now(), s);
+    ca := pg_temp.coins(a); xa := pg_temp.xp(a);
+    j := pg_temp.js(pg_temp.u(a, 'SELECT public.verify_achievement_progress(''comeback_king'')::text'));
+    r := r || pg_temp.is('G16.9 a lost 7-day streak through the recompute gap path: loss rows/streak/coins/xp',
+                         (SELECT count(*) FROM streak_events WHERE team_id = (SELECT team_id FROM team_streaks WHERE id = s) AND lost_streak = 7) || '/'
+                         || (SELECT current_streak FROM team_streaks WHERE id = s) || '/' || (pg_temp.coins(a) - ca) || '/' || (pg_temp.xp(a) - xa), '2/1/40/100');
+    RAISE EXCEPTION 'undo' USING ERRCODE = 'P0098';
+  EXCEPTION WHEN SQLSTATE 'P0098' THEN NULL; WHEN OTHERS THEN r := r || ('FAIL G16.9 crashed: ' || SQLERRM);
+  END;
+  r := r || pg_temp.is('G16.10 comeback_king description matches the 7-or-more rule',
+                       (SELECT description FROM achievements WHERE id = 'comeback_king'), 'Start a new streak after losing one of 7 days or more');
 
   RAISE EXCEPTION E'SUITE_RESULTS\n%', array_to_string(r, E'\n');
 END

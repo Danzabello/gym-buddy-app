@@ -156,76 +156,6 @@ class AchievementService {
     }
   }
 
-  // ── UPSERT PROGRESS + UNLOCK IF MET ─────────────────────────
-  Future<AchievementUnlockResult?> _upsertProgress(
-    String achievementId,
-    int newProgress,
-  ) async {
-    try {
-      final uid = _userId;
-      if (uid == null) return null;
-
-      final def = await _supabase
-          .from('achievements')
-          .select()
-          .eq('id', achievementId)
-          .maybeSingle();
-      if (def == null) return null;
-
-      final target = def['target_value'] as int;
-
-      final existing = await _supabase
-          .from('user_achievements')
-          .select()
-          .eq('user_id', uid)
-          .eq('achievement_id', achievementId)
-          .maybeSingle();
-
-      if (existing != null && existing['unlocked_at'] != null) return null;
-
-      final clamped   = newProgress.clamp(0, target);
-      final didUnlock = clamped >= target;
-
-      await _supabase.from('user_achievements').upsert({
-        'user_id':        uid,
-        'achievement_id': achievementId,
-        'progress':       clamped,
-        if (didUnlock) 'unlocked_at': DateTime.now().toUtc().toIso8601String(),
-      }, onConflict: 'user_id,achievement_id');
-
-      if (!didUnlock) return null;
-
-      final xp    = def['xp_reward'] as int;
-      final coins = def['coin_reward'] as int;
-
-      // Server looks up the correct xp_reward/coin_reward itself and
-      // pays out atomically — replaces the manual ledger writes + direct
-      // coin_balance update (S2 audit fix: client could previously pass
-      // any amount, not just the real reward value).
-      try {
-        await _supabase.rpc('award_achievement_rewards', params: {
-          'p_achievement_id': achievementId,
-        });
-      } catch (e) {
-        debugLog('❌ Error awarding achievement rewards ($achievementId): $e');
-      }
-
-      if (kDebugMode) debugLog('🏆 Unlocked: ${def['name']} (+$xp XP, +$coins coins)');
-
-      return AchievementUnlockResult(
-        achievement: Achievement.fromRow(def, {
-          'progress':    clamped,
-          'unlocked_at': DateTime.now().toUtc().toIso8601String(),
-        }),
-        xpAwarded:    xp,
-        coinsAwarded: coins,
-      );
-    } catch (e) {
-      if (kDebugMode) debugLog('❌ AchievementService._upsertProgress ($achievementId): $e');
-      return null;
-    }
-  }
-
   // ── SERVER-VERIFIED UNLOCK ──────────────────────────────────────
   // Calls verify_achievement_progress, which independently re-derives
   // real progress from the actual underlying tables server-side — the
@@ -290,6 +220,7 @@ class AchievementService {
       'half_year_hero',
       'year_of_the_beast',
       'personal_best',
+      'comeback_king',
     ]) {
       final r = await _verifyAndUnlock(id);
       if (r != null) results.add(r);
@@ -384,8 +315,16 @@ class AchievementService {
     return r != null ? [r] : [];
   }
 
+  /// Records the randomiser use server-side, then lets the verifier pay
+  /// feeling_lucky from that record.
   Future<List<AchievementUnlockResult>> checkFeelingLucky() async {
-    final r = await _upsertProgress('feeling_lucky', 1);
+    try {
+      await _supabase.rpc('record_randomiser_use');
+    } catch (e) {
+      if (kDebugMode) debugLog('❌ record_randomiser_use: $e');
+      return [];
+    }
+    final r = await _verifyAndUnlock('feeling_lucky');
     return r != null ? [r] : [];
   }
 
