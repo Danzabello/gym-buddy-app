@@ -162,6 +162,70 @@ WeeklyPlanStep weeklyPlanStep({required bool needsPlan, required bool screenFree
 bool weeklyPlanScreenIsFree(BuildContext context) =>
     ModalRoute.of(context)?.isCurrent == true && LiveEventToast.dashboardTabActive;
 
+/// Where the plan check stands, per account. A value kept for one account
+/// means nothing for the next one signed in during the same app run, so every
+/// question is asked with the current user id.
+@visibleForTesting
+class WeeklyPlanCheck {
+  String? _answeredFor;
+  String? _readingFor;
+  String? _waitingFor;
+
+  bool answered(String? uid) => uid != null && _answeredFor == uid;
+  bool reading(String? uid) => uid != null && _readingFor == uid;
+  String? get waitingFor => _waitingFor;
+
+  void beginRead(String uid) => _readingFor = uid;
+  void endRead(String uid) {
+    if (_readingFor == uid) _readingFor = null;
+  }
+
+  void markAnswered(String uid) => _answeredFor = uid;
+  void waitFor(String uid) => _waitingFor = uid;
+
+  /// The waiter has nothing left to do: it waits for no account, another
+  /// account is signed in now, or this account's check is answered.
+  bool waiterDone(String? current) =>
+      _waitingFor == null || _waitingFor != current || answered(current);
+
+  /// Sign-out: nothing is remembered.
+  void reset() {
+    _answeredFor = null;
+    _readingFor = null;
+    _waitingFor = null;
+  }
+}
+
+/// One plan check for the signed-in account: skipped when this account is
+/// already answered or its read is out; an answer for another account (one
+/// signed in while the read was out) is dropped.
+@visibleForTesting
+Future<void> runWeeklyPlanCheck({
+  required WeeklyPlanCheck check,
+  required WeeklyPlanWaiter waiter,
+  required String? Function() currentUser,
+  required Future<bool> Function() read,
+  required bool Function() mounted,
+  required bool Function() screenFree,
+  void Function(Object, StackTrace?, String)? report,
+}) async {
+  final uid = currentUser();
+  if (uid == null || check.answered(uid) || check.reading(uid)) return;
+  check.beginRead(uid);
+  try {
+    final needsPlan = await weeklyPlanNeeded(read, report: report);
+    if (needsPlan == null) return; // unknown: not remembered, asked again
+    if (!mounted()) return;
+    if (currentUser() != uid) return; // another account is signed in now
+    final step = weeklyPlanStep(needsPlan: needsPlan, screenFree: screenFree());
+    check.waitFor(uid);
+    if (step != WeeklyPlanStep.later) check.markAnswered(uid);
+    applyWeeklyPlanStep(step, waiter);
+  } finally {
+    check.endRead(uid);
+  }
+}
+
 /// Waits, with no network call, for the screen to be free, then shows the plan
 /// dialog once. Started when an answered check says the plan is needed but the
 /// screen is busy (a pushed page, the notice dialog, another tab): nothing
@@ -642,7 +706,6 @@ class _WeeklyPlanDialogState extends State<WeeklyPlanDialog> with TickerProvider
     final popT = (_pop.value / (520 / 650)).clamp(0.0, 1.0);
     final settle = Curves.easeOut.transform((popT / 0.4).clamp(0.0, 1.0));
     final popping = !_reduce && _pop.value < 1;
-    final blur = popping ? 6 * (1 - settle) : 0.0;
 
     Widget number = Text(
       '$_workoutDays',
@@ -652,15 +715,11 @@ class _WeeklyPlanDialogState extends State<WeeklyPlanDialog> with TickerProvider
         fontWeight: FontWeight.w900,
         height: 1,
         color: look.numberColor,
-        shadows: look.numberGlow < 0.5
-            ? null
-            : [Shadow(color: look.accent.withValues(alpha: 0.75), blurRadius: look.numberGlow)],
+        // No text shadow and no blur filter here: on a real phone a text shadow
+        // drew a ghost copy of the number at the wrong place. The glow is the
+        // gradient circle behind the number instead.
       ),
     );
-    if (blur > 0.05) {
-      number = ImageFiltered(
-          imageFilter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur), child: number);
-    }
     if (popping) {
       number = Opacity(
         opacity: 0.25 + 0.75 * settle,
@@ -692,6 +751,7 @@ class _WeeklyPlanDialogState extends State<WeeklyPlanDialog> with TickerProvider
     );
 
     return SizedBox(
+      key: const ValueKey('weekly_plan_number_box'),
       width: 140,
       height: 120,
       child: Semantics(
@@ -702,6 +762,27 @@ class _WeeklyPlanDialogState extends State<WeeklyPlanDialog> with TickerProvider
           alignment: Alignment.center,
           clipBehavior: Clip.none,
           children: [
+            // Soft glow: a radial gradient fill, strength from numberGlow
+            // (0 / 10 / 22 / 34), blended with the tier. Not clipped by the box.
+            if (look.numberGlow > 0.5)
+              Positioned(
+                left: (140 - 150) / 2,
+                top: (120 - 150) / 2,
+                width: 150,
+                height: 150,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    key: const ValueKey('weekly_plan_number_glow'),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(colors: [
+                        look.accent.withValues(alpha: 0.55 * (look.numberGlow / 34).clamp(0.0, 1.0)),
+                        look.accent.withValues(alpha: 0),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
             // Ring expanding behind the number
             if (popping)
               IgnorePointer(

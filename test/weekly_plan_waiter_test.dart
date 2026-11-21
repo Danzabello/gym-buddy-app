@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_buddy_app/home_screen.dart';
 
@@ -132,5 +134,134 @@ void main() {
     waiter.cancel();
     expect(waiter.waiting, isFalse);
     waiter.cancel(); // cancelling twice is fine
+  });
+
+  group('the check is per account', () {
+    late WeeklyPlanCheck check;
+    late String? user;
+    late bool free;
+    late int shown;
+    late int reads;
+    late Future<bool> Function() answer;
+    late WeeklyPlanWaiter acct;
+
+    setUp(() {
+      check = WeeklyPlanCheck();
+      user = 'a';
+      free = true;
+      shown = 0;
+      reads = 0;
+      answer = () async => true; // no plan row yet
+      acct = WeeklyPlanWaiter(
+        isMounted: () => true,
+        alreadyHandled: () => check.waiterDone(user),
+        screenFree: () => free,
+        // What the dashboard's show does: mark the waiting account answered, then show.
+        show: () {
+          final uid = check.waitingFor;
+          if (uid != null) check.markAnswered(uid);
+          shown++;
+        },
+      );
+    });
+
+    Future<void> run() => runWeeklyPlanCheck(
+          check: check,
+          waiter: acct,
+          currentUser: () => user,
+          read: () {
+            reads++;
+            return answer();
+          },
+          mounted: () => true,
+          screenFree: () => free,
+        );
+
+    test('the same account already checked is skipped, with no read', () async {
+      await run();
+      expect([reads, shown], [1, 1]);
+      await run();
+      await run();
+      expect([reads, shown], [1, 1]);
+    });
+
+    test('a different account is checked again', () async {
+      await run();
+      user = 'b';
+      await run();
+      expect([reads, shown], [2, 2]);
+    });
+
+    test('sign-out, then another account signs in: the dialog is shown to them', () async {
+      await run();
+      expect(shown, 1);
+
+      check.reset(); // what the dashboard does when it goes at sign-out
+      acct.cancel();
+      user = null;
+      await run(); // signed out: nothing to ask
+      expect([reads, shown], [1, 1]);
+
+      user = 'b';
+      await run();
+      expect([reads, shown], [2, 2]);
+    });
+
+    test('the same account signing back in after a sign-out is asked again', () async {
+      await run();
+      check.reset();
+      user = 'a';
+      await run();
+      expect(reads, 2);
+    });
+
+    test('a read still out for one account does not block the next, and its late answer is dropped', () async {
+      final late = Completer<bool>();
+      answer = () => late.future;
+      final first = run(); // account a, read out
+      await Future<void>.delayed(Duration.zero);
+      expect(check.reading('a'), isTrue);
+
+      user = 'b';
+      answer = () async => true;
+      await run(); // account b is not blocked by a's read
+      expect(shown, 1);
+      expect(check.answered('b'), isTrue);
+
+      late.complete(true); // a's answer arrives after b signed in
+      await first;
+      expect(shown, 1);
+      expect(check.answered('a'), isFalse);
+      expect(check.reading('a'), isFalse);
+    });
+
+    test('a null user asks nothing', () async {
+      user = null;
+      await run();
+      expect([reads, shown], [0, 0]);
+    });
+
+    testWidgets('a waiter holding one account\'s answer stops when another account is signed in', (t) async {
+      free = false;
+      await run(); // later: waiting for a
+      expect(acct.waiting, isTrue);
+
+      user = 'b';
+      free = true;
+      await t.pump(tick);
+      expect(shown, 0); // nothing shown to b on a's answer
+      expect(acct.waiting, isFalse);
+    });
+
+    test('reading is keyed by account', () {
+      final c = WeeklyPlanCheck();
+      c.beginRead('a');
+      expect(c.reading('a'), isTrue);
+      expect(c.reading('b'), isFalse);
+      c.endRead('b'); // another account's end does not clear it
+      expect(c.reading('a'), isTrue);
+      c.endRead('a');
+      expect(c.reading('a'), isFalse);
+    });
   });
 }

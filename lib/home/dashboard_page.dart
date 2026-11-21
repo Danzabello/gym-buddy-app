@@ -164,18 +164,19 @@ class _DashboardPageState extends State<DashboardPage>
   bool _isLoading = true;
   bool _isCheckingIn = false;
   bool _isBreakDialogOpen = false;
-  /// Set once the weekly-plan read has answered (not when it was unknown),
-  /// and held while one read is out.
-  static bool _weeklyPlanCheckedThisSession = false;
-  static bool _weeklyPlanChecking = false;
+  /// The weekly-plan check, per account: answered (not when it was unknown),
+  /// read in flight, and whose answer the waiter holds. Static, so it outlives
+  /// this State; an account signed in later in the same app run is asked again.
+  static final WeeklyPlanCheck _planCheck = WeeklyPlanCheck();
 
   /// Polls (no network) for a free screen after a check said "later".
   late final WeeklyPlanWaiter _planWaiter = WeeklyPlanWaiter(
     isMounted: () => mounted,
-    alreadyHandled: () => _weeklyPlanCheckedThisSession,
+    alreadyHandled: () => _planCheck.waiterDone(_supabase.auth.currentUser?.id),
     screenFree: () => weeklyPlanScreenIsFree(context),
     show: () {
-      _weeklyPlanCheckedThisSession = true;
+      final uid = _planCheck.waitingFor;
+      if (uid != null) _planCheck.markAnswered(uid);
       _showWeeklyPlanDialog();
     },
   );
@@ -497,7 +498,7 @@ class _DashboardPageState extends State<DashboardPage>
   void _refreshIfStale() {
     if (!LiveEventToast.dashboardTabActive) return;
     // Reads that were unknown at start-up (offline) are asked again.
-    if (!_weeklyPlanCheckedThisSession) unawaited(_checkWeeklyPlan());
+    if (!_planCheck.answered(_supabase.auth.currentUser?.id)) unawaited(_checkWeeklyPlan());
     if (!_bannerSettingKnown) unawaited(_loadLiveCheckinBannerSetting());
     // A write made elsewhere, or a wheel left empty by a failed load (every
     // account has Coach Max's team), means the data is stale.
@@ -577,6 +578,7 @@ class _DashboardPageState extends State<DashboardPage>
     _trayController.dispose();
     _countdownTimer?.cancel();
     _planWaiter.cancel();
+    _planCheck.reset(); // sign-out: the next account is asked again
     _minute.dispose();
     if (_checkinChannel != null) {
       _supabase.removeChannel(_checkinChannel!);
@@ -3472,25 +3474,14 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
-  Future<void> _checkWeeklyPlan() async {
-    // Once per app open, one read at a time (no second dialog).
-    if (_weeklyPlanCheckedThisSession || _weeklyPlanChecking) return;
-    _weeklyPlanChecking = true;
-    try {
-      final needsPlan = await weeklyPlanNeeded(_breakDayService.needsToSetWeeklyPlan);
-      // Unknown (offline or a failed read): no dialog, not remembered, so the
-      // next open or show asks again. Never a dialog the user cannot leave.
-      if (needsPlan == null) return;
-      if (!mounted) return;
-      // Not over a pushed page, a sheet, another dialog or another tab: the
-      // dialog cannot be left. Not remembered, so the next show asks again.
-      final step = weeklyPlanStep(needsPlan: needsPlan, screenFree: weeklyPlanScreenIsFree(context));
-      if (step != WeeklyPlanStep.later) _weeklyPlanCheckedThisSession = true;
-      applyWeeklyPlanStep(step, _planWaiter); // later: keeps polling for a free screen
-    } finally {
-      _weeklyPlanChecking = false;
-    }
-  }
+  Future<void> _checkWeeklyPlan() => runWeeklyPlanCheck(
+        check: _planCheck,
+        waiter: _planWaiter,
+        currentUser: () => _supabase.auth.currentUser?.id,
+        read: _breakDayService.needsToSetWeeklyPlan,
+        mounted: () => mounted,
+        screenFree: () => weeklyPlanScreenIsFree(context),
+      );
 
   Future<void> _showWeeklyPlanDialog() async {
     // The dialog saves the plan itself and returns the saved break days only

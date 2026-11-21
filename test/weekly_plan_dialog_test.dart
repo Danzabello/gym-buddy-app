@@ -426,6 +426,62 @@ void main() {
     });
   });
 
+  group('the glow behind the number', () {
+    const glowKey = ValueKey('weekly_plan_number_glow');
+    final dialog = find.byType(WeeklyPlanDialog);
+
+    double glowAlpha(WidgetTester t) {
+      final box = t.widget<DecoratedBox>(find.byKey(glowKey));
+      final gradient = (box.decoration as BoxDecoration).gradient as RadialGradient;
+      return gradient.colors.first.a;
+    }
+
+    Future<void> goTo(WidgetTester t, int n) async {
+      await t.tap(find.byKey(ValueKey('weekly_plan_segment_$n')));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 900)); // blend and pop done
+    }
+
+    testWidgets('the number has no text shadow at any tier, and nothing is blurred through a filter', (t) async {
+      await open(t, harness(save: (_) async {}));
+      for (final n in [4, 5, 6, 7]) {
+        await t.tap(find.byKey(ValueKey('weekly_plan_segment_$n')));
+        await t.pump(); // the first frame of the pop
+        expect(find.descendant(of: dialog, matching: find.byType(ImageFiltered)), findsNothing);
+        expect(find.descendant(of: dialog, matching: find.byType(BackdropFilter)), findsNothing);
+        await t.pump(const Duration(milliseconds: 900));
+        expect(t.widget<Text>(find.byKey(_number)).style!.shadows, isNull, reason: 'tier $n');
+      }
+    });
+
+    testWidgets('the glow is a gradient circle: none on Steady, then stronger at each tier', (t) async {
+      await open(t, harness(save: (_) async {}, initial: 4));
+      await wait(t);
+      expect(find.byKey(glowKey), findsNothing);
+
+      final alphas = <double>[];
+      for (final n in [5, 6, 7]) {
+        await goTo(t, n);
+        alphas.add(glowAlpha(t));
+      }
+      expect(alphas[0], greaterThan(0));
+      expect(alphas[1], greaterThan(alphas[0]));
+      expect(alphas[2], greaterThan(alphas[1]));
+    });
+
+    testWidgets('the glow is a 150 dp circle centred on the number box, not clipped by it', (t) async {
+      await open(t, harness(save: (_) async {}));
+      await wait(t);
+      final glow = t.getRect(find.byKey(glowKey));
+      final box = t.getRect(find.byKey(const ValueKey('weekly_plan_number_box')));
+      expect(glow.width, 150);
+      expect(glow.height, 150); // a circle, not squeezed to the 140x120 box
+      expect(glow.center.dx, closeTo(box.center.dx, 0.5));
+      expect(glow.center.dy, closeTo(box.center.dy, 0.5));
+      expect(glow.width, greaterThan(box.width)); // it reaches past the box, unclipped
+    });
+  });
+
   group('reduced motion', () {
     testWidgets('a change shows the new value and colours at once, with no animation left running', (t) async {
       await open(t, harness(save: (_) async {}, reduce: true));
