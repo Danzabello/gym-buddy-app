@@ -15,6 +15,13 @@ final _reported = <String>{};
 Object nonFatalPayload(Object error) =>
     error is PostgrestException ? 'PostgrestException code=${error.code}' : error;
 
+/// Whether an error is worth reporting: not the network being unavailable and
+/// not an expired session.
+bool isReportableError(Object error) =>
+    !isNetworkError(error) &&
+    error is! AuthException &&
+    !(error is PostgrestException && error.code == 'PGRST301'); // JWT expired
+
 /// Sends an error the app swallowed to Crashlytics as a non-fatal, so a bug
 /// that fails quietly is still seen. [reason] is a fixed label per call site
 /// (no user data). Expected failures are skipped: the network being
@@ -23,9 +30,7 @@ Object nonFatalPayload(Object error) =>
 /// never waits, and does nothing off a phone (tests, desktop) where Firebase
 /// is not started. Debug builds follow the collection setting in main.dart.
 void reportNonFatal(Object error, StackTrace? stack, String reason) {
-  if (isNetworkError(error)) return;
-  if (error is AuthException) return;
-  if (error is PostgrestException && error.code == 'PGRST301') return; // JWT expired
+  if (!isReportableError(error)) return;
   if (!(Platform.isAndroid || Platform.isIOS)) return;
   if (!_reported.add(reason)) return;
   try {

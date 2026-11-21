@@ -1,0 +1,460 @@
+part of '../home_screen.dart';
+
+// ═══════════════════════════════════════════════════════════════
+// STREAK SORT: the four sorts, their colours, what is saved, and the sheet
+// ═══════════════════════════════════════════════════════════════
+
+/// One soft colour per sort (owner spec, 2026-11-21). Raw hex on purpose, the
+/// same exception as the weekly plan tier colours: they are not theme colours.
+/// Everything else in the sheet comes from the theme.
+extension StreakSortColor on StreakSortMode {
+  Color get color {
+    switch (this) {
+      case StreakSortMode.highestCurrent:
+        return const Color(0xFF6FCF97);
+      case StreakSortMode.mostWorkouts:
+        return const Color(0xFFE8A56A);
+      case StreakSortMode.bestAllTime:
+        return const Color(0xFFE3C76B);
+      case StreakSortMode.custom:
+        return const Color(0xFF9C8FD6);
+    }
+  }
+}
+
+/// The failure line's colour: the same soft amber as Most Workouts.
+const Color kStreakSortWarnColor = Color(0xFFE8A56A);
+
+/// The real text of the long-press info dialog, per sort.
+extension StreakSortInfo on StreakSortMode {
+  String get longDescription {
+    switch (this) {
+      case StreakSortMode.highestCurrent:
+        return 'Shows buddies with the longest active streak first. '
+            'This highlights who you\'re currently working out with most consistently.';
+      case StreakSortMode.mostWorkouts:
+        return 'Ranks buddies by total number of workouts completed together. '
+            'Perfect for seeing your most dedicated long-term partners.';
+      case StreakSortMode.bestAllTime:
+        return 'Displays buddies based on your all-time best streak together. '
+            'Shows legendary partnerships even if the streak has broken.';
+      case StreakSortMode.custom:
+        return 'Manual selection mode. Scroll to view specific buddies in any order. '
+            'Activates automatically when you browse away from preset center.';
+    }
+  }
+
+  String get example {
+    switch (this) {
+      case StreakSortMode.highestCurrent:
+        return 'Example: Sarah (15 days) appears before Mike (8 days)';
+      case StreakSortMode.mostWorkouts:
+        return 'Example: Mike (124 workouts) appears before Sarah (89 workouts)';
+      case StreakSortMode.bestAllTime:
+        return 'Example: Sarah (best: 45 days) appears before Mike (best: 32 days)';
+      case StreakSortMode.custom:
+        return 'Scroll freely! Swipe left/right to browse all your workout partners.';
+    }
+  }
+}
+
+/// A saved value read back: one of the four, else Highest Streak (null, an old
+/// "mostRecent" or "favorites", anything unknown).
+@visibleForTesting
+StreakSortMode parseStreakSort(Object? raw) => StreakSortMode.values.firstWhere(
+      (m) => m.name == raw,
+      orElse: () => StreakSortMode.highestCurrent,
+    );
+
+/// The line under the grid, from state alone: [shown] against [saved]. Null
+/// while the saved value is not known (the read has not answered).
+@visibleForTesting
+String? streakSortStatus({required StreakSortMode shown, required StreakSortMode? saved}) {
+  if (saved == null) return null;
+  if (shown == saved) {
+    return 'Remembered. The app will open on ${shown.displayName} next time.';
+  }
+  return "Couldn't save. Showing ${shown.displayName} for now. "
+      'The app will open on ${saved.displayName} next time.';
+}
+
+/// The sort on screen and the sort saved, and the saving between them.
+/// Tapping applies at once; the write comes after and never holds the screen.
+@visibleForTesting
+class StreakSortController extends ChangeNotifier {
+  StreakSortController({
+    required this.write,
+    void Function(Object, StackTrace?, String)? report,
+  }) : _report = report ?? reportNonFatal;
+
+  /// Saves the sort (and, for Custom, its order). Throws when it fails.
+  final Future<void> Function(StreakSortMode mode, List<String>? customOrder) write;
+  final void Function(Object, StackTrace?, String) _report;
+
+  StreakSortMode _shown = StreakSortMode.highestCurrent;
+  StreakSortMode? _saved; // null until the server has answered
+  bool _touched = false; // the user chose a sort this session
+  int _seq = 0; // the newest save; an older one's result is ignored
+  int _pending = 0;
+
+  StreakSortMode get shown => _shown;
+
+  /// What the app opens on next time, as far as it is known.
+  StreakSortMode? get saved => _saved;
+
+  /// The first paint from the saved copy: what is shown, not what is saved.
+  void paint(Object? raw) {
+    if (_touched) return;
+    _shown = parseStreakSort(raw);
+    notifyListeners();
+  }
+
+  /// The server answered with [raw]. Nothing is written back, whatever it is:
+  /// an unknown value shows Highest Streak and stays as it is on the server.
+  /// After a tap this session the user's pick stays and this is ignored.
+  void loaded(Object? raw) {
+    if (_touched) return;
+    _shown = _saved = parseStreakSort(raw);
+    notifyListeners();
+  }
+
+  /// A tap (or, for Custom, the picker's Save with [customOrder]). Returns
+  /// whether it was saved. The sort shows at once and stays on screen if the
+  /// save fails; the saved value then stays as it was.
+  Future<bool> choose(StreakSortMode mode, {List<String>? customOrder}) async {
+    _touched = true;
+    if (_shown != mode) {
+      _shown = mode;
+      notifyListeners(); // on screen before anything is written
+    }
+    // The same as saved needs no write, unless a save of another sort is still
+    // out: then this tap has to win over it.
+    if (mode == _saved && customOrder == null && _pending == 0) return true;
+
+    final seq = ++_seq;
+    _pending++;
+    try {
+      await write(mode, customOrder);
+    } catch (e, st) {
+      _pending--;
+      if (isReportableError(e)) _report(e, st, 'streak_sort_save');
+      return false;
+    }
+    _pending--;
+    if (seq != _seq) return true; // a newer tap came after this one: its result decides
+    _saved = mode;
+    notifyListeners();
+    return true;
+  }
+}
+
+/// The sheet: four cards, a status line, no Save button. Tap applies.
+@visibleForTesting
+class StreakSortSheet extends StatelessWidget {
+  const StreakSortSheet({
+    super.key,
+    required this.controller,
+    required this.onPick,
+    required this.onCustom,
+  });
+
+  final StreakSortController controller;
+  final void Function(StreakSortMode mode) onPick;
+
+  /// Custom has its own picker: it is saved when that picker is saved.
+  final VoidCallback onCustom;
+
+  @override
+  Widget build(BuildContext context) {
+    final appColors = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final slow = MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 160);
+
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final shown = controller.shown;
+        final saved = controller.saved;
+        final status = streakSortStatus(shown: shown, saved: saved);
+        final failed = saved != null && saved != shown;
+        final tint = failed ? kStreakSortWarnColor : shown.color;
+
+        Widget row(StreakSortMode a, StreakSortMode b) => IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: _card(context, a, a == shown, appColors, cs, slow)),
+                  const SizedBox(width: 10),
+                  Expanded(child: _card(context, b, b == shown, appColors, cs, slow)),
+                ],
+              ),
+            );
+
+        const modes = StreakSortMode.values;
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: ColoredBox(
+            color: appColors.cardBackground,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // The sheet's top border follows the selected sort.
+                AnimatedContainer(
+                  key: const ValueKey('streak_sort_top_border'),
+                  duration: slow,
+                  height: 3,
+                  color: shown.color,
+                ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                        20, 18, 20, MediaQuery.paddingOf(context).bottom + 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Sort Your Streaks',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.w900, color: cs.onSurface),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Tap to select · Long-press for info',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontStyle: FontStyle.italic,
+                              color: appColors.subtleText),
+                        ),
+                        const SizedBox(height: 18),
+                        row(modes[0], modes[1]),
+                        const SizedBox(height: 10),
+                        row(modes[2], modes[3]),
+                        if (status != null) ...[
+                          const SizedBox(height: 14),
+                          // A live region, so a screen reader hears it change.
+                          Semantics(
+                            liveRegion: true,
+                            container: true,
+                            child: AnimatedContainer(
+                              key: const ValueKey('streak_sort_status'),
+                              duration: slow,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: tint.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: tint, width: 1.5),
+                              ),
+                              child: Text(
+                                status,
+                                style: TextStyle(fontSize: 14, height: 1.35, color: cs.onSurface),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _card(BuildContext context, StreakSortMode mode, bool selected, AppColors appColors,
+      ColorScheme cs, Duration slow) {
+    final color = mode.color;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '${mode.displayName}. ${mode.description}',
+      excludeSemantics: true,
+      child: GestureDetector(
+        key: ValueKey('streak_sort_card_${mode.name}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          if (mode == StreakSortMode.custom) {
+            onCustom();
+          } else {
+            onPick(mode);
+          }
+        },
+        // A long press shows the info and does not select.
+        onLongPress: () {
+          HapticFeedback.mediumImpact();
+          showDialog<void>(context: context, builder: (_) => StreakSortInfoDialog(mode: mode));
+        },
+        child: AnimatedContainer(
+          duration: slow,
+          constraints: const BoxConstraints(minHeight: 92),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: selected ? 0.22 : 0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: selected ? color : color.withValues(alpha: 0.33), width: 2),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                mode.displayName,
+                style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    color: selected ? cs.onSurface : color),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                mode.description,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: selected ? cs.onSurface.withValues(alpha: 0.85) : appColors.subtleText),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The long-press dialog: text only.
+@visibleForTesting
+class StreakSortInfoDialog extends StatelessWidget {
+  const StreakSortInfoDialog({super.key, required this.mode});
+  final StreakSortMode mode;
+
+  @override
+  Widget build(BuildContext context) {
+    final appColors = AppColors.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final color = mode.color;
+    // The box is labelled EXAMPLE, so a leading "Example: " is not said twice.
+    final example = mode.example.replaceFirst(RegExp(r'^Example:\s*'), '');
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: Container(
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: appColors.cardBackground,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: color, width: 2),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                mode.displayName,
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: color),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                mode.longDescription,
+                style: TextStyle(
+                    fontSize: 15, height: 1.55, color: cs.onSurface.withValues(alpha: 0.85)),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: color.withValues(alpha: 0.33)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'EXAMPLE',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.4,
+                          color: color),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(example, style: TextStyle(fontSize: 14, color: cs.onSurface)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              Semantics(
+                button: true,
+                label: 'Got it',
+                excludeSemantics: true,
+                child: GestureDetector(
+                  key: const ValueKey('streak_sort_got_it'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    height: 52,
+                    alignment: Alignment.center,
+                    decoration:
+                        BoxDecoration(color: color, borderRadius: BorderRadius.circular(14)),
+                    child: Text(
+                      'Got it',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: appColors.readableForeground(color)),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The sort button on the streaks screen: tinted in the selected sort's colour
+/// with a 2 px border in it.
+@visibleForTesting
+class StreakSortButton extends StatelessWidget {
+  const StreakSortButton({super.key, required this.controller, required this.onTap});
+  final StreakSortController controller;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final slow = MediaQuery.of(context).disableAnimations ? Duration.zero : const Duration(milliseconds: 160);
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final color = controller.shown.color;
+        return GestureDetector(
+          onTap: onTap,
+          child: Tooltip(
+            message: 'Sort streaks, ${controller.shown.displayName}',
+            child: AnimatedContainer(
+              key: const ValueKey('streak_sort_button'),
+              duration: slow,
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: 0.14),
+                border: Border.all(color: color, width: 2),
+              ),
+              child: Icon(Icons.tune_rounded, color: color, size: 22),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

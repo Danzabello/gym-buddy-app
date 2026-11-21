@@ -234,7 +234,10 @@ class _DashboardPageState extends State<DashboardPage>
 
   List<String> _customStreakOrder = [];
   List<TeamStreak> _customSelection = [];
-  StreakSortMode _streakSortMode = StreakSortMode.highestCurrent;
+
+  /// The sort on screen and the sort saved (see StreakSortController).
+  late final StreakSortController _sortCtl = StreakSortController(write: _writeSort);
+  StreakSortMode get _streakSortMode => _sortCtl.shown;
 
 
   late List<int> _trayOrder;
@@ -278,6 +281,7 @@ class _DashboardPageState extends State<DashboardPage>
     _trayOrder = [0, 1]..shuffle();
     _trayController = PageController();
 
+    _sortCtl.addListener(_onSortChanged);
     _subscribeToCheckIns();
     _loadLiveCheckinBannerSetting();
 
@@ -579,6 +583,8 @@ class _DashboardPageState extends State<DashboardPage>
     _countdownTimer?.cancel();
     _planWaiter.cancel();
     _planCheck.reset(); // sign-out: the next account is asked again
+    _sortCtl.removeListener(_onSortChanged);
+    _sortCtl.dispose();
     _minute.dispose();
     if (_checkinChannel != null) {
       _supabase.removeChannel(_checkinChannel!);
@@ -734,9 +740,7 @@ class _DashboardPageState extends State<DashboardPage>
 
 
   /// The wheel's slots: top 4 friends by the active sort + Coach Max.
-  /// Returns null when there is nothing to show a wheel for — the caller
-  /// decides which empty-state card to render.
-  List<dynamic>? _wheelItems() {
+  List<dynamic> _wheelItems() {
     // Coach Max always has a slot: he's the automatic buddy.
     final coachMaxStreak = _allStreaks.firstWhere(
       (s) => s.isCoachMaxTeam,
@@ -747,10 +751,6 @@ class _DashboardPageState extends State<DashboardPage>
     final friendStreaks = _streakSortMode == StreakSortMode.custom
       ? _allStreaks.where((s) => !s.isCoachMaxTeam).toList()  // Just filter, don't sort
       : sortStreaks(_allStreaks, _streakSortMode);
-
-    if (_streakSortMode == StreakSortMode.favorites && friendStreaks.isEmpty) {
-      return null;
-    }
 
     // Top 4 earn a wheel slot — the rest live in the full streak list
     final displayItems = <dynamic>[
@@ -771,8 +771,7 @@ class _DashboardPageState extends State<DashboardPage>
       items[_currentCarouselIndex.clamp(0, items.length - 1)];
 
   Widget _buildDashboardBody(List<dynamic>? displayItems) {
-    if (_allStreaks.isEmpty) return _buildNoStreaksCard();
-    if (displayItems == null) return _buildEmptyFavoritesCard();
+    if (_allStreaks.isEmpty || displayItems == null) return _buildNoStreaksCard();
 
     // ✅ Debug output
     debugLog('📊 WHEEL ITEMS (${displayItems.length}):');
@@ -972,11 +971,9 @@ class _DashboardPageState extends State<DashboardPage>
               const Spacer(),
               // Sort/filter lived in the old carousel header, which this
               // replaces; it keeps its own control so the modes stay reachable.
-              _clayCircleButton(
-                size: 44,
-                tooltip: 'Sort streaks',
+              StreakSortButton(
+                controller: _sortCtl,
                 onTap: () => _once.run(_showSortBottomSheet),
-                child: Icon(Icons.tune_rounded, color: c.inkMuted, size: 20),
               ),
               const SizedBox(width: 10),
               ValueListenableBuilder<bool?>(
@@ -3058,54 +3055,42 @@ class _DashboardPageState extends State<DashboardPage>
     if (result != null && result.isNotEmpty) {
       debugLog('💾 Custom selection received: ${result.map((s) => s.teamName).join(", ")}');
       
-      // ✅ 1. Update state
+      // ✅ 1. Update state (the sort shows at once)
       setState(() {
         _customSelection = result;
-        _streakSortMode = StreakSortMode.custom;
         _currentCarouselIndex = 0;  // Reset to top item
       });
       if (_carouselController.hasClients) {
         _carouselController.jumpToPage(10080);
       }
-      
-      // ✅ 2. Save to database (both mode AND order)
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId != null) {
-        try {
-          await Supabase.instance.client.from('user_profiles').update({
-            'preferred_streak_sort': 'custom',
-            'custom_streak_order': result.map((s) => s.teamId).toList(),
-          }).eq('id', userId);
-          markStale({AppTab.profile}); // Profile's All Streaks follows the sort
-          
-          debugLog('💾 Saved custom mode with order: ${result.map((s) => s.teamId).join(", ")}');
-          
-          // ✅ 3. Show success message
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.check_circle, color: Colors.white),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Custom order saved!',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+
+      // ✅ 2. Save both the mode AND the order, through the one save path
+      final saved = await _sortCtl.choose(StreakSortMode.custom,
+          customOrder: result.map((s) => s.teamId).toList());
+      debugLog('💾 Custom mode with order ${saved ? 'saved' : 'not saved'}: ${result.map((s) => s.teamId).join(", ")}');
+
+      // ✅ 3. Show success message
+      if (saved && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Custom order saved!',
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                backgroundColor: Colors.green[600],
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          }
-        } catch (e) {
-          debugLog('❌ Error saving custom order: $e');
-        }
+              ],
+            ),
+            backgroundColor: Colors.green[600],
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
-      
+
       // ✅ 4. Reload data to apply the new order
       await _loadStreakData();
       
@@ -3177,15 +3162,8 @@ class _DashboardPageState extends State<DashboardPage>
   
         _myZone = _profileZone(prefs['timezone'] as String?);
         profileZone = _myZone; // the other kept-alive tabs judge the day by it
-        final savedMode = prefs['preferred_streak_sort'];
-        if (savedMode != null && savedMode.toString().isNotEmpty) {
-          _streakSortMode = StreakSortMode.values.firstWhere(
-            (e) => e.name == savedMode,
-            orElse: () => StreakSortMode.highestCurrent,
-          );
-        } else {
-          _streakSortMode = StreakSortMode.highestCurrent;
-        }
+        // One of the four, else Highest Streak. Never written back.
+        _sortCtl.loaded(prefs['preferred_streak_sort']);
   
         if (_streakSortMode == StreakSortMode.custom &&
             prefs['custom_streak_order'] != null) {
@@ -3435,6 +3413,7 @@ class _DashboardPageState extends State<DashboardPage>
     // A part missing from the saved copy (its read had never answered) stays
     // as it starts out, as the load would leave it.
     final streaks = saved.streaks;
+    if (saved.sort != null) _sortCtl.paint(saved.sort);
     setState(() {
       _myZone = _profileZone(saved.zone);
       profileZone = _myZone;
@@ -3452,13 +3431,6 @@ class _DashboardPageState extends State<DashboardPage>
       }
       _hasCheckedInToday = saved.hasCheckedIn ?? _hasCheckedInToday;
       _todaysWorkouts = saved.workouts ?? _todaysWorkouts;
-      final sort = saved.sort;
-      if (sort != null) {
-        _streakSortMode = StreakSortMode.values.firstWhere(
-          (e) => e.name == sort,
-          orElse: () => StreakSortMode.highestCurrent,
-        );
-      }
       _customStreakOrder = saved.customOrder ?? _customStreakOrder;
       _todayShownAt = DateTime.now(); // read with sameDay: today's
       _isLoading = false;
@@ -3820,51 +3792,6 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
   
-  Widget _buildEmptyFavoritesCard() {
-    final c = AppColors.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 40, 20, 20),
-      child: _clayTraySlab(
-        padding: const EdgeInsets.all(30),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _trayGlyph('⭐', role: c.warn),
-            const SizedBox(height: 18),
-            Text(
-              'No Favorites Yet!',
-              style: TextStyle(
-                fontSize: 19,
-                fontWeight: FontWeight.w800,
-                color: c.readableForeground(c.claySurface),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Star your workout buddies to add them here.\nTap the ⭐ on their avatar when viewing them.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: c.inkMuted, height: 1.5),
-            ),
-            const SizedBox(height: 22),
-            _trayAction('View All Streaks', c.info, () {
-              // Switch back to Highest Streak mode
-              setState(() {
-                _streakSortMode = StreakSortMode.highestCurrent;
-              });
-              // Save preference
-              final userId = Supabase.instance.client.auth.currentUser?.id;
-              if (userId != null) {
-                Supabase.instance.client.from('user_profiles').update({
-                  'preferred_streak_sort': 'highestCurrent',
-                }).eq('id', userId);
-              }
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _showQuickCreateWorkoutDialog() {
     return ScheduleWorkoutSheet.show(
       context,
@@ -4180,12 +4107,37 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
+  /// Writes the sort (and for Custom its order). Throws when it fails.
+  Future<void> _writeSort(StreakSortMode mode, List<String>? customOrder) async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    await Supabase.instance.client.from('user_profiles').update({
+      'preferred_streak_sort': mode.name,
+      if (customOrder != null) 'custom_streak_order': customOrder,
+    }).eq('id', userId);
+    markStale({AppTab.profile}); // Profile's All Streaks follows the sort
+  }
+
+  /// The sort, or its save, changed: the wheel follows the sort on screen.
+  void _onSortChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// A tap on a sort in the sheet: it shows at once, the save comes after.
+  void _pickSort(StreakSortMode mode) {
+    setState(() => _currentCarouselIndex = 0);
+    unawaited(_sortCtl.choose(mode));
+    if (_carouselController.hasClients) {
+      _carouselController.jumpToPage(10080);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_carouselController.hasClients && mounted) {
+        _carouselController.jumpToPage(1000);
+      }
+    });
+  }
+
   Future<void> _showSortBottomSheet() {
-    assert(
-      _sortModeDisplayOrder.length == StreakSortMode.values.length,
-      'Every StreakSortMode must be listed in _sortModeDisplayOrder',
-    );
-    final appColors = AppColors.of(context);
     HapticFeedback.mediumImpact();
     _sortCustomLatch.dispose();
     _sortCustomLatch = RunOnce();
@@ -4193,299 +4145,18 @@ class _DashboardPageState extends State<DashboardPage>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => Container(
-        decoration: BoxDecoration(
-          color: appColors.cardBackground,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: EdgeInsets.fromLTRB(
-          24, 24, 24, MediaQuery.of(sheetContext).padding.bottom + 20,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Handle bar
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: appColors.divider,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              
-              // Title with info hint
-              Column(
-                children: [
-                  Text(
-                    '📊 Sort Your Streaks',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '👆 Tap to select • ✋ Long-press for info',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: appColors.subtleText,
-                      fontStyle: FontStyle.italic,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              
-              // Grid with long-press handlers
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-                childAspectRatio: 2.0,
-                physics: const NeverScrollableScrollPhysics(),
-                children: _sortModeDisplayOrder.map((mode) {
-                  final isSelected = mode == _streakSortMode;
-                  
-                  return GestureDetector(
-                    onTap: () async {
-                      HapticFeedback.selectionClick();
-                      
-                      if (mode == StreakSortMode.custom) {
-                        _sortCustomLatch.latch(() {
-                          Navigator.pop(context);
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            _showCustomModeSelector();
-                          });
-                        });
-                        return;
-                      }
-                      
-                      setState(() {
-                        _streakSortMode = mode;
-                        _currentCarouselIndex = 0;
-                      });
-                      if (_carouselController.hasClients) {
-                        _carouselController.jumpToPage(10080);
-                      }
-                      
-                      Navigator.pop(context);
-                      
-                      final userId = Supabase.instance.client.auth.currentUser?.id;
-                      if (userId != null) {
-                        await Supabase.instance.client.from('user_profiles').update({
-                          'preferred_streak_sort': mode.name,
-                        }).eq('id', userId);
-                        markStale({AppTab.profile}); // Profile's All Streaks follows the sort
-                      }
-                      
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (_carouselController.hasClients && mounted) {
-                          _carouselController.jumpToPage(1000);
-                        }
-                      });
-                    },
-                    
-                    onLongPress: () {
-                      HapticFeedback.mediumImpact();
-                      _showSortModeInfo(context, mode);
-                    },
-                    
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? appColors.avatarRing.withValues(alpha: 0.12)
-                            : appColors.sectionBackground,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected ? appColors.avatarRing : appColors.cardBorder,
-                          width: isSelected ? 2 : 1,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Text(mode.emoji, style: const TextStyle(fontSize: 24)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  mode.displayName,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                                    color: isSelected
-                                        ? appColors.avatarRing
-                                        : Theme.of(context).colorScheme.onSurface,
-                                  ),
-                                ),
-                                Text(
-                                  mode.description,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: appColors.subtleText,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        ),
+      builder: (sheetContext) => StreakSortSheet(
+        controller: _sortCtl,
+        onPick: _pickSort,
+        // Custom has its own picker, saved when that picker is saved.
+        onCustom: () => _sortCustomLatch.latch(() {
+          Navigator.pop(sheetContext);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _showCustomModeSelector();
+          });
+        }),
       ),
     );
-  }
-
-  void _showSortModeInfo(BuildContext context, StreakSortMode mode) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Text(mode.emoji, style: const TextStyle(fontSize: 28)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                mode.displayName,
-                style: TextStyle(
-                  fontSize: 20,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _getSortModeDetailedDescription(mode),
-              style: TextStyle(
-                fontSize: 15,
-                color: Theme.of(context).colorScheme.onSurface,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.lightbulb_outline, color: Colors.blue[400], size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _getSortModeExample(mode),
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.blue[400],
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Got it!'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getSortModeDetailedDescription(StreakSortMode mode) {
-    switch (mode) {
-      case StreakSortMode.highestCurrent:
-        return 'Shows buddies with the longest active streak first. '
-            'This highlights who you\'re currently working out with most consistently.';
-      
-      case StreakSortMode.mostWorkouts:
-        return 'Ranks buddies by total number of workouts completed together. '
-            'Perfect for seeing your most dedicated long-term partners.';
-      
-      case StreakSortMode.bestAllTime:
-        return 'Displays buddies based on your all-time best streak together. '
-            'Shows legendary partnerships even if the streak has broken.';
-      
-      case StreakSortMode.mostRecent:
-        return 'Sorts by who you worked out with most recently. '
-            'Great for keeping track of active partnerships.';
-      
-      case StreakSortMode.favorites:
-        return 'Shows only buddies you\'ve starred as favorites. '
-            'Use the ⭐ icon to mark your go-to workout partners!';
-      
-      case StreakSortMode.custom:
-        return 'Manual selection mode. Scroll to view specific buddies in any order. '
-            'Activates automatically when you browse away from preset center.';
-      
-      case StreakSortMode.mostUrgent:
-        return 'Puts streaks nobody has checked into today at the top. '
-            'Ties break by longest current streak, so you protect the biggest one first.';
-      
-      case StreakSortMode.alphabetical:
-        return 'Orders buddies by name, A to Z. '
-            'Handy when you know who you\'re looking for and just want to find them fast.';
-    }
-  }
-
-  String _getSortModeExample(StreakSortMode mode) {
-    switch (mode) {
-      case StreakSortMode.highestCurrent:
-        return 'Example: Sarah (15 days) appears before Mike (8 days)';
-      
-      case StreakSortMode.mostWorkouts:
-        return 'Example: Mike (124 workouts) appears before Sarah (89 workouts)';
-      
-      case StreakSortMode.bestAllTime:
-        return 'Example: Sarah (best: 45 days) appears before Mike (best: 32 days)';
-      
-      case StreakSortMode.mostRecent:
-        return 'Example: Today\'s partners appear first, then yesterday\'s, etc.';
-      
-      case StreakSortMode.favorites:
-        return 'Only your starred buddies appear. Star anyone with the ⭐ icon!';
-      
-      case StreakSortMode.custom:
-        return 'Scroll freely! Swipe left/right to browse all your workout partners.';
-      
-      case StreakSortMode.mostUrgent:
-        return 'Example: Sarah (12 days, nobody in yet) appears before Mike (30 days, done)';
-      
-      case StreakSortMode.alphabetical:
-        return 'Example: Alex appears before Mike, Mike before Sarah';
-    }
   }
 
   Future<void> _toggleFavorite(TeamStreak streak) async {

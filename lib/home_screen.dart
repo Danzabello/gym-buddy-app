@@ -81,6 +81,7 @@ part 'home/logout_button.dart';
 part 'home/nav_bar.dart';
 part 'home/profile_page.dart';
 part 'home/weekly_plan_dialog.dart';
+part 'home/streak_sort.dart';
 
 
 /// Second line of the buddy check-in banner. Only when the viewer is already
@@ -119,36 +120,17 @@ String titleIcon(String title) {
   return map[title] ?? '⭐';
 }
 
+/// The four sorts the picker offers, in the order it shows them. All four are
+/// saved to user_profiles.preferred_streak_sort by `.name`. A saved value that
+/// is not one of these (an old "mostRecent", "favorites", "mostUrgent",
+/// "alphabetical", null or anything else) reads as [highestCurrent].
 enum StreakSortMode {
-  highestCurrent,    // ⚡ Highest active streak (default)
-  mostWorkouts,      // 💪 Most workouts together
-  bestAllTime,       // 🏆 Longest streak ever
-  mostRecent,        // 🕐 Most recent workout
-  favorites,         // ⭐ User favorites (future)
-  custom,  // ✅ NEW!
-  mostUrgent,        // ⚠️ At-risk streaks first
-  alphabetical,      // 🔤 By team/buddy name
+  highestCurrent, // the default
+  mostWorkouts,
+  bestAllTime,
+  custom, // the user's own order, set in the Custom picker
 }
 
-/// Order the sort grid renders in — deliberately NOT the enum's declaration
-/// order. `custom` is a manual-reorder mode rather than an automatic sort, so
-/// it sits last. The enum order itself is load-bearing (persisted by `.name`,
-/// switch statements) and must not be changed to achieve this.
-///
-/// Every StreakSortMode must appear here or it silently vanishes from the UI;
-/// the assert in _showSortBottomSheet catches that in debug.
-const List<StreakSortMode> _sortModeDisplayOrder = [
-  StreakSortMode.highestCurrent,
-  StreakSortMode.mostWorkouts,
-  StreakSortMode.bestAllTime,
-  StreakSortMode.mostRecent,
-  StreakSortMode.favorites,
-  StreakSortMode.mostUrgent,
-  StreakSortMode.alphabetical,
-  StreakSortMode.custom,
-];
-
-// ✅ ADD EXTENSION HERE - OUTSIDE THE CLASS!
 extension StreakSortModeExtension on StreakSortMode {
   String get displayName {
     switch (this) {
@@ -158,50 +140,17 @@ extension StreakSortModeExtension on StreakSortMode {
         return 'Most Workouts';
       case StreakSortMode.bestAllTime:
         return 'Best All-Time';
-      case StreakSortMode.mostRecent:
-        return 'Most Recent';
-      case StreakSortMode.favorites:
-        return 'Favorites';
-      case StreakSortMode.custom: 
-        return 'Custom';  // ✅ NEW!
-      case StreakSortMode.mostUrgent:
-        return 'At Risk First';
-      case StreakSortMode.alphabetical:
-        return 'A to Z';
+      case StreakSortMode.custom:
+        return 'Custom';
     }
   }
-  
-  String get emoji {
-    switch (this) {
-      case StreakSortMode.highestCurrent:
-        return '⚡';
-      case StreakSortMode.mostWorkouts:
-        return '💪';
-      case StreakSortMode.bestAllTime:
-        return '🏆';
-      case StreakSortMode.mostRecent:
-        return '🕐';
-      case StreakSortMode.favorites:
-        return '⭐';
-      case StreakSortMode.custom: 
-        return '👤';  // ✅ NEW!
-      case StreakSortMode.mostUrgent:
-        return '⚠️';
-      case StreakSortMode.alphabetical:
-        return '🔤';
-    }
-  }
-  
+
   String get description {
     switch (this) {
       case StreakSortMode.highestCurrent: return 'View by current streak';
       case StreakSortMode.mostWorkouts: return 'Most active teammates';
       case StreakSortMode.bestAllTime: return 'All-time champions';
-      case StreakSortMode.mostRecent: return 'Recently active';
-      case StreakSortMode.favorites: return 'Your favorites';
-      case StreakSortMode.custom: return 'Manual selection';  // ✅ NEW!
-      case StreakSortMode.mostUrgent: return 'Nobody checked in yet';
-      case StreakSortMode.alphabetical: return 'By name, A to Z';
+      case StreakSortMode.custom: return 'Manual selection';
     }
   }
 }
@@ -296,38 +245,6 @@ List<TeamStreak> sortStreaks(List<TeamStreak> streaks, StreakSortMode mode) {
       debugLog('🏆 SORT: Best All-Time - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.bestStreak})').join(', ')}');
       break;
       
-    case StreakSortMode.mostRecent:
-      friendStreaks.sort((a, b) {
-        if (a.lastInteractionAt == null) return 1;  // ✅ Use real timestamps!
-        if (b.lastInteractionAt == null) return -1;
-        return b.lastInteractionAt!.compareTo(a.lastInteractionAt!);  // Most recent first
-      });
-      debugLog('🕐 SORT: Most Recent - Order: ${friendStreaks.map((s) => '${s.teamName}(${s.lastInteractionAt})').join(', ')}');
-      break;
-      
-    case StreakSortMode.favorites:
-      // ✨ Filter to only favorites
-      final favorites = friendStreaks.where((s) => s.isFavorite).toList();
-      favorites.sort((a, b) => b.currentStreak.compareTo(a.currentStreak));
-      debugLog('⭐ SORT: Favorites - Found ${favorites.length} favorite(s)');
-      return favorites; // ✅ Return empty list if no favorites
-      
-    case StreakSortMode.mostUrgent:
-      // At-risk first (nobody checked in today), longest streak as tiebreaker
-      // so the most valuable streak at risk sits at the top.
-      friendStreaks.sort((a, b) {
-        if (a.isAtRisk != b.isAtRisk) return a.isAtRisk ? -1 : 1;
-        return b.currentStreak.compareTo(a.currentStreak);
-      });
-      debugLog('⚠️ SORT: At Risk First - Order: ${friendStreaks.map((s) => '${s.teamName}(risk:${s.isAtRisk},${s.currentStreak})').join(', ')}');
-      break;
-
-    case StreakSortMode.alphabetical:
-      friendStreaks.sort((a, b) =>
-          a.teamName.toLowerCase().compareTo(b.teamName.toLowerCase()));
-      debugLog('🔤 SORT: A to Z - Order: ${friendStreaks.map((s) => s.teamName).join(', ')}');
-      break;
-
     case StreakSortMode.custom:
       // Don't need any code here for now
       break;
